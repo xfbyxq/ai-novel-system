@@ -1,0 +1,191 @@
+"""通义千问 LLM 客户端封装"""
+
+import logging
+import time
+from typing import Iterator
+
+import dashscope
+from dashscope import Generation
+from openai import OpenAI
+
+from backend.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class QwenClient:
+    """封装 DashScope API 调用，支持重试和流式输出。"""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ):
+        self.api_key = api_key or settings.DASHSCOPE_API_KEY
+        self.model = model or settings.DASHSCOPE_MODEL
+        self.base_url = base_url or settings.DASHSCOPE_BASE_URL
+        
+        # 判断是否使用 OpenAI 兼容模式
+        self.use_openai_mode = bool(self.base_url and 'coding.dashscope' in self.base_url)
+        
+        if self.use_openai_mode:
+            # 使用 OpenAI 兼容模式
+            self.openai_client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
+            logger.info(f"使用 OpenAI 兼容模式: {self.base_url}")
+        else:
+            # 使用标准 DashScope SDK
+            dashscope.api_key = self.api_key
+            if self.base_url:
+                dashscope.base_http_api_url = self.base_url
+                logger.info(f"使用自定义 base URL: {self.base_url}")
+
+    def chat(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        top_p: float = 0.9,
+        retries: int = 3,
+    ) -> dict:
+        """同步调用通义千问 API。
+
+        Returns:
+            dict: {"content": str, "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}}
+        """
+        if self.use_openai_mode:
+            return self._chat_openai(prompt, system, temperature, max_tokens, retries)
+        else:
+            return self._chat_dashscope(prompt, system, temperature, max_tokens, top_p, retries)
+    
+    def _chat_openai(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        retries: int = 3,
+    ) -> dict:
+        """使用 OpenAI 兼容模式调用 API。"""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        last_error = None
+        for attempt in range(retries):
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                
+                content = response.choices[0].message.content
+                usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+                return {"content": content, "usage": usage}
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
+
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                logger.info(f"Retrying in {wait}s...")
+                time.sleep(wait)
+
+        raise RuntimeError(f"QwenClient.chat (OpenAI mode) failed after {retries} attempts: {last_error}")
+    
+    def _chat_dashscope(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        top_p: float = 0.9,
+        retries: int = 3,
+    ) -> dict:
+        """使用标准 DashScope SDK 调用 API。"""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        last_error = None
+        for attempt in range(retries):
+            try:
+                response = Generation.call(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    top_p=top_p,
+                    result_format="message",
+                )
+
+                if response.status_code == 200:
+                    content = response.output.choices[0].message.content
+                    usage = {
+                        "prompt_tokens": response.usage.input_tokens,
+                        "completion_tokens": response.usage.output_tokens,
+                        "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+                    }
+                    return {"content": content, "usage": usage}
+                else:
+                    last_error = f"API error {response.status_code}: {response.message}"
+                    logger.warning(f"Attempt {attempt + 1}/{retries} failed: {last_error}")
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
+
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                logger.info(f"Retrying in {wait}s...")
+                time.sleep(wait)
+
+        raise RuntimeError(f"QwenClient.chat failed after {retries} attempts: {last_error}")
+
+    def stream_chat(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> Iterator[str]:
+        """流式调用通义千问 API，逐块返回文本。"""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        responses = Generation.call(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            result_format="message",
+            stream=True,
+            incremental_output=True,
+        )
+
+        for response in responses:
+            if response.status_code == 200:
+                content = response.output.choices[0].message.content
+                if content:
+                    yield content
+            else:
+                raise RuntimeError(f"Stream error {response.status_code}: {response.message}")
+
+
+# Module-level singleton
+qwen_client = QwenClient()

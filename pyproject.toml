@@ -1,0 +1,44 @@
+[tool.poetry]
+name = "novel-system"
+version = "0.1.0"
+description = "AI-powered novel generation system using CrewAI and Qwen"
+authors = ["Novel System"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.13"
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.34.0" }
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.0" }
+asyncpg = "^0.30.0"
+alembic = "^1.14.0"
+pydantic = "^2.0.0"
+pydantic-settings = "^2.0.0"
+redis = "^5.0.0"
+celery = { extras = ["redis"], version = "^5.4.0" }
+crewai = "^0.100.0"
+dashscope = "^1.20.0"
+websockets = "^14.0"
+python-dotenv = "^1.0.0"
+httpx = ">=0.23.0,<0.28.0"
+openai = "^2.21.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+ruff = "^0.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
