@@ -4,6 +4,10 @@ import { Layout, Menu, theme, Typography } from 'antd';
 import {
   DashboardOutlined,
   BookOutlined,
+  CloudDownloadOutlined,
+  LineChartOutlined,
+  UserOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
@@ -11,6 +15,10 @@ const { Sider, Content, Header } = Layout;
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: '仪表盘' },
   { key: '/novels', icon: <BookOutlined />, label: '小说管理' },
+  { key: '/crawler', icon: <CloudDownloadOutlined />, label: '爬虫任务' },
+  { key: '/market-data', icon: <LineChartOutlined />, label: '市场数据' },
+  { key: '/accounts', icon: <UserOutlined />, label: '平台账号' },
+  { key: '/publish', icon: <SendOutlined />, label: '发布管理' },
 ];
 
 export default function MainLayout() {

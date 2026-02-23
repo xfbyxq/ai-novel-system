@@ -55,3 +55,4 @@ class Novel(Base):
     plot_outline = relationship("PlotOutline", back_populates="novel", uselist=False, cascade="all, delete-orphan")
     chapters = relationship("Chapter", back_populates="novel", cascade="all, delete-orphan", order_by="Chapter.chapter_number")
     generation_tasks = relationship("GenerationTask", back_populates="novel", cascade="all, delete-orphan")
+    publish_tasks = relationship("PublishTask", back_populates="novel", cascade="all, delete-orphan")

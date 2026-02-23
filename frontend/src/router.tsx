@@ -4,6 +4,10 @@ import Dashboard from '@/pages/Dashboard';
 import NovelList from '@/pages/NovelList';
 import NovelDetail from '@/pages/NovelDetail/NovelDetail';
 import ChapterReader from '@/pages/ChapterReader';
+import CrawlerTasks from '@/pages/CrawlerTasks';
+import MarketData from '@/pages/MarketData';
+import PlatformAccounts from '@/pages/PlatformAccounts';
+import PublishTasks from '@/pages/PublishTasks';
 import NotFound from '@/pages/NotFound';
 
 const router = createBrowserRouter([
@@ -15,6 +19,10 @@ const router = createBrowserRouter([
       { path: 'novels', element: <NovelList /> },
       { path: 'novels/:id', element: <NovelDetail /> },
       { path: 'novels/:id/chapters/:number', element: <ChapterReader /> },
+      { path: 'crawler', element: <CrawlerTasks /> },
+      { path: 'market-data', element: <MarketData /> },
+      { path: 'accounts', element: <PlatformAccounts /> },
+      { path: 'publish', element: <PublishTasks /> },
       { path: '*', element: <NotFound /> },
     ],
   },

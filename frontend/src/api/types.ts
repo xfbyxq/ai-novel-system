@@ -174,3 +174,175 @@ export interface PaginatedResponse<T> {
   items: T[];
   total: number;
 }
+
+// ============================================================
+// 爬虫系统类型
+// ============================================================
+
+// --- CrawlerTask ---
+export type CrawlType = 'ranking' | 'trending_tags' | 'book_metadata' | 'genre_list';
+export type CrawlTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface CrawlerTask {
+  id: string;
+  task_name: string;
+  platform: string;
+  crawl_type: CrawlType;
+  config: Record<string, unknown> | null;
+  status: CrawlTaskStatus;
+  progress: Record<string, unknown> | null;
+  result_summary: Record<string, unknown> | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface CrawlerTaskCreate {
+  task_name: string;
+  platform?: string;
+  crawl_type: CrawlType;
+  config?: Record<string, unknown>;
+}
+
+// --- CrawlResult ---
+export interface CrawlResult {
+  id: string;
+  crawler_task_id: string;
+  platform: string;
+  data_type: string;
+  raw_data: Record<string, unknown> | null;
+  processed_data: Record<string, unknown> | null;
+  url: string | null;
+  created_at: string;
+}
+
+// --- MarketData ---
+export interface MarketDataItem {
+  book_id: string | null;
+  book_title: string | null;
+  author_name: string | null;
+  genre: string | null;
+  tags: string[] | null;
+  rating: number | null;
+  word_count: number | null;
+  trend_score: number | null;
+  source: string;
+  data_date: string | null;
+}
+
+// --- ReaderPreference ---
+export interface ReaderPreference {
+  id: string;
+  source: string;
+  genre: string | null;
+  tags: string[] | null;
+  ranking_data: Record<string, unknown> | null;
+  comment_sentiment: Record<string, unknown> | null;
+  trend_score: number | null;
+  data_date: string | null;
+  crawler_task_id: string | null;
+  book_id: string | null;
+  book_title: string | null;
+  author_name: string | null;
+  rating: number | null;
+  word_count: number | null;
+  created_at: string;
+}
+
+// ============================================================
+// 发布系统类型
+// ============================================================
+
+// --- PlatformAccount ---
+export type AccountStatus = 'active' | 'inactive' | 'invalid' | 'suspended';
+
+export interface PlatformAccount {
+  id: string;
+  platform: string;
+  account_name: string;
+  username: string;
+  status: AccountStatus;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface PlatformAccountCreate {
+  platform?: string;
+  account_name: string;
+  username: string;
+  password: string;
+  extra_credentials?: Record<string, unknown>;
+}
+
+export interface PlatformAccountUpdate {
+  account_name?: string;
+  password?: string;
+  extra_credentials?: Record<string, unknown>;
+  status?: string;
+}
+
+// --- PublishTask ---
+export type PublishType = 'create_book' | 'publish_chapter' | 'batch_publish';
+export type PublishTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface PublishTask {
+  id: string;
+  novel_id: string;
+  account_id: string;
+  publish_type: PublishType;
+  config: Record<string, unknown> | null;
+  status: PublishTaskStatus;
+  progress: Record<string, unknown> | null;
+  result_summary: Record<string, unknown> | null;
+  error_message: string | null;
+  platform_book_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface PublishTaskCreate {
+  novel_id: string;
+  account_id: string;
+  publish_type: PublishType;
+  config?: Record<string, unknown>;
+  from_chapter?: number;
+  to_chapter?: number;
+}
+
+// --- ChapterPublish ---
+export type ChapterPublishStatus = 'pending' | 'publishing' | 'published' | 'failed';
+
+export interface ChapterPublish {
+  id: string;
+  publish_task_id: string;
+  chapter_id: string;
+  chapter_number: number;
+  status: ChapterPublishStatus;
+  platform_chapter_id: string | null;
+  error_message: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+// --- PublishPreview ---
+export interface ChapterPreviewItem {
+  chapter_number: number;
+  title: string;
+  word_count: number;
+  status: string;
+  is_published: boolean;
+  published_at: string | null;
+}
+
+export interface PublishPreview {
+  novel_id: string;
+  novel_title: string;
+  total_chapters: number;
+  unpublished_count: number;
+  chapters: ChapterPreviewItem[];
+}
