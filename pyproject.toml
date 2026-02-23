@@ -23,6 +23,7 @@ python-dotenv = "^1.0.0"
 httpx = ">=0.23.0,<0.28.0"
 openai = "^2.21.0"
 beautifulsoup4 = "^4.14.3"
+lxml = "^5.0.0"
 aiofiles = "^25.1.0"
 tenacity = "^9.1.4"
 cryptography = "^46.0.5"
@@ -46,3 +47,10 @@ select = ["E", "F", "I", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "unit: unit tests with mocked data",
+    "network: requires network access",
+    "real_crawl: real crawl scenario tests",
+    "integration: integration tests requiring database",
+    "slow: slow tests",
+]
