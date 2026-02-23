@@ -68,38 +68,45 @@ async def create_generation_task(
     await db.commit()
     await db.refresh(task)
 
-    # 异步执行任务
+    # 在后台异步执行任务（立即返回，不阻塞）
+    from fastapi import BackgroundTasks
     import asyncio
+    from core.database import async_session_factory
 
-    async def _run_task():
-        """在后台执行生成任务。"""
-        from core.database import async_session_factory
+    def _run_task_sync():
+        """同步包装器，在新的事件循环中运行异步任务。"""
+        async def _run_task():
+            async with async_session_factory() as session:
+                service = GenerationService(session)
+                try:
+                    if task_in.task_type == "planning":
+                        await service.run_planning(task_in.novel_id, task.id)
+                    elif task_in.task_type == "writing":
+                        chapter_number = (task_in.input_data or {}).get("chapter_number", 1)
+                        volume_number = (task_in.input_data or {}).get("volume_number", 1)
+                        await service.run_chapter_writing(
+                            task_in.novel_id, task.id, chapter_number, volume_number
+                        )
+                    elif task_in.task_type == "batch_writing":
+                        await service.run_batch_writing(
+                            task_in.novel_id,
+                            task.id,
+                            task_in.from_chapter,
+                            task_in.to_chapter,
+                            task_in.volume_number or 1,
+                        )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Task {task.id} failed: {e}")
 
-        async with async_session_factory() as session:
-            service = GenerationService(session)
-            try:
-                if task_in.task_type == "planning":
-                    await service.run_planning(task_in.novel_id, task.id)
-                elif task_in.task_type == "writing":
-                    chapter_number = (task_in.input_data or {}).get("chapter_number", 1)
-                    volume_number = (task_in.input_data or {}).get("volume_number", 1)
-                    await service.run_chapter_writing(
-                        task_in.novel_id, task.id, chapter_number, volume_number
-                    )
-                elif task_in.task_type == "batch_writing":
-                    await service.run_batch_writing(
-                        task_in.novel_id,
-                        task.id,
-                        task_in.from_chapter,
-                        task_in.to_chapter,
-                        task_in.volume_number or 1,
-                    )
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Task {task.id} failed: {e}")
+        # 在新线程中创建新的事件循环运行任务
+        import threading
+        thread = threading.Thread(target=lambda: asyncio.run(_run_task()))
+        thread.daemon = True
+        thread.start()
 
-    # 在后台启动任务
-    asyncio.create_task(_run_task())
+    # 立即启动后台任务
+    _run_task_sync()
 
     return task
 
