@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Row, Col, Spin, Empty, Drawer, Descriptions, Typography, Button, Space, Modal, Form, Input, Select, InputNumber, message,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, RocketOutlined } from '@ant-design/icons';
 import type { Character } from '@/api/types';
 import { getCharacters, createCharacter, updateCharacter, deleteCharacter } from '@/api/characters';
 import CharacterCard from '@/components/CharacterCard';
@@ -113,10 +113,28 @@ export default function CharactersTab({ novelId }: Props) {
   if (loading) return <Spin />;
   if (characters.length === 0 && !createOpen) {
     return (
-      <Empty description="暂无角色数据，请先执行企划或手动添加">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          添加角色
-        </Button>
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          <div>
+            <Typography.Title level={5} style={{ marginBottom: 8 }}>角色尚未生成</Typography.Title>
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+              点击下方按钮前往「概览」标签页启动企划，或手动添加角色
+            </Typography.Text>
+            <Space>
+              <Button type="primary" icon={<RocketOutlined />} onClick={() => {
+                const overviewTab = document.querySelector('[data-node-key="overview"]') as HTMLElement;
+                overviewTab?.click();
+              }}>
+                前往开始企划
+              </Button>
+              <Button icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                手动添加角色
+              </Button>
+            </Space>
+          </div>
+        }
+      >
         <CreateModal
           open={createOpen}
           loading={createLoading}

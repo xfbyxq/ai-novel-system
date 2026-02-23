@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Spin, Collapse, Typography, Descriptions, Tag, Empty } from 'antd';
+import { Spin, Collapse, Typography, Descriptions, Tag, Empty, Button } from 'antd';
+import { RocketOutlined } from '@ant-design/icons';
 import type { WorldSetting } from '@/api/types';
 import { getWorldSetting } from '@/api/outlines';
 
@@ -73,7 +74,28 @@ export default function WorldSettingTab({ novelId }: Props) {
   }, [novelId, fetchWorldSetting]);
 
   if (loading) return <Spin />;
-  if (error || !ws) return <Empty description="暂无世界观数据，请先执行企划" />;
+  if (error || !ws) {
+    return (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          <div>
+            <Typography.Title level={5} style={{ marginBottom: 8 }}>世界观尚未生成</Typography.Title>
+            <Typography.Text type="secondary">
+              点击下方按钮前往「概览」标签页，启动企划任务后自动生成世界观设定
+            </Typography.Text>
+          </div>
+        }
+      >
+        <Button type="primary" icon={<RocketOutlined />} onClick={() => {
+          const overviewTab = document.querySelector('[data-node-key="overview"]') as HTMLElement;
+          overviewTab?.click();
+        }}>
+          前往开始企划
+        </Button>
+      </Empty>
+    );
+  }
 
   const sections = [
     { key: 'basic', label: '基本信息', children: (

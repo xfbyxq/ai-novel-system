@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Spin, Empty, Tree, Card, Typography, Descriptions } from 'antd';
+import { Spin, Empty, Tree, Card, Typography, Descriptions, Button } from 'antd';
+import { RocketOutlined } from '@ant-design/icons';
 import type { PlotOutline } from '@/api/types';
 import { getPlotOutline } from '@/api/outlines';
 
@@ -38,7 +39,28 @@ export default function PlotOutlineTab({ novelId }: Props) {
   }, [novelId, fetchOutline]);
 
   if (loading) return <Spin />;
-  if (error || !outline) return <Empty description="暂无大纲数据，请先执行企划" />;
+  if (error || !outline) {
+    return (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          <div>
+            <Typography.Title level={5} style={{ marginBottom: 8 }}>大纲尚未生成</Typography.Title>
+            <Typography.Text type="secondary">
+              点击下方按钮前往「概览」标签页，启动企划任务后自动生成大纲
+            </Typography.Text>
+          </div>
+        }
+      >
+        <Button type="primary" icon={<RocketOutlined />} onClick={() => {
+          const overviewTab = document.querySelector('[data-node-key="overview"]') as HTMLElement;
+          overviewTab?.click();
+        }}>
+          前往开始企划
+        </Button>
+      </Empty>
+    );
+  }
 
   const volumes = (outline.volumes || []) as VolumeItem[];
 
