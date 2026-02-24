@@ -170,11 +170,11 @@ class AgentDispatcher:
     
     async def _run_planning_with_crew_manager(self, novel_id: UUID, **kwargs) -> Dict[str, Any]:
         """使用CrewAI风格系统执行企划阶段
-        
+
         Args:
             novel_id: 小说ID
             **kwargs: 额外参数
-            
+
         Returns:
             Dict[str, Any]: 企划结果
         """
@@ -186,7 +186,7 @@ class AgentDispatcher:
         context = kwargs.get('context', '')
         
         # 使用CrewManager执行企划
-        return self.crew_manager.run_planning_phase(
+        return await self.crew_manager.run_planning_phase(
             genre=genre,
             tags=tags,
             context=context,
@@ -232,13 +232,13 @@ class AgentDispatcher:
     
     async def _run_chapter_writing_with_crew_manager(self, novel_id: UUID, chapter_number: int, volume_number: int = 1, **kwargs) -> Dict[str, Any]:
         """使用CrewAI风格系统执行单章写作
-        
+
         Args:
             novel_id: 小说ID
             chapter_number: 章节号
             volume_number: 卷号
             **kwargs: 额外参数
-            
+
         Returns:
             Dict[str, Any]: 写作结果
         """
@@ -251,7 +251,7 @@ class AgentDispatcher:
         writing_style = kwargs.get('writing_style', 'modern')
         
         # 使用CrewManager执行写作
-        return self.crew_manager.run_writing_phase(
+        return await self.crew_manager.run_writing_phase(
             novel_data=novel_data,
             chapter_number=chapter_number,
             volume_number=volume_number,

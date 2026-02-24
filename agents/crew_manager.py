@@ -101,7 +101,7 @@ class NovelCrewManager:
 
         raise ValueError(f"无法从响应中提取有效的 JSON: {response[:200]}...")
 
-    def _call_agent(
+    async def _call_agent(
         self,
         agent_name: str,
         system_prompt: str,
@@ -111,7 +111,7 @@ class NovelCrewManager:
         expect_json: bool = True,
     ) -> dict | str:
         """调用单个 Agent 并追踪成本
-        
+
         Args:
             agent_name: Agent 名称（用于日志和成本追踪）
             system_prompt: 系统提示词（定义 Agent 角色）
@@ -119,10 +119,10 @@ class NovelCrewManager:
             temperature: 温度参数
             max_tokens: 最大 token 数
             expect_json: 是否期望返回 JSON（True 则解析 JSON，False 则返回原文）
-            
+
         Returns:
             解析后的 JSON（dict）或原始文本（str）
-            
+
         Raises:
             RuntimeError: API 调用失败
             ValueError: JSON 解析失败（当 expect_json=True 时）
@@ -131,7 +131,7 @@ class NovelCrewManager:
         
         try:
             # 调用 LLM
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=task_prompt,
                 system=system_prompt,
                 temperature=temperature,
@@ -165,25 +165,25 @@ class NovelCrewManager:
     # 企划阶段
     # ============================================================
 
-    def run_planning_phase(
+    async def run_planning_phase(
         self,
         genre: str | None = None,
         tags: list[str] | None = None,
         context: str = "",
     ) -> dict[str, Any]:
         """执行完整的企划阶段
-        
+
         顺序执行以下步骤：
         1. 主题分析师：分析市场趋势，推荐选题
         2. 世界观架构师：构建世界观体系
         3. 角色设计师：设计主要角色
         4. 情节架构师：规划整体情节架构
-        
+
         Args:
             genre: 指定类型（可选，如不指定则由主题分析师推荐）
             tags: 指定标签（可选）
             context: 额外的上下文信息
-            
+
         Returns:
             包含以下键的字典：
             - topic_analysis: 主题分析结果
@@ -207,7 +207,7 @@ class NovelCrewManager:
             context=topic_context,
         )
         
-        topic_analysis = self._call_agent(
+        topic_analysis = await self._call_agent(
             agent_name="主题分析师",
             system_prompt=self.pm.TOPIC_ANALYST_SYSTEM,
             task_prompt=topic_task,
@@ -221,7 +221,7 @@ class NovelCrewManager:
             topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
         )
         
-        world_setting = self._call_agent(
+        world_setting = await self._call_agent(
             agent_name="世界观架构师",
             system_prompt=self.pm.WORLD_BUILDER_SYSTEM,
             task_prompt=world_task,
@@ -237,7 +237,7 @@ class NovelCrewManager:
             world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
         )
         
-        characters = self._call_agent(
+        characters = await self._call_agent(
             agent_name="角色设计师",
             system_prompt=self.pm.CHARACTER_DESIGNER_SYSTEM,
             task_prompt=character_task,
@@ -253,7 +253,7 @@ class NovelCrewManager:
             characters=json.dumps(characters, ensure_ascii=False, indent=2),
         )
         
-        plot_outline = self._call_agent(
+        plot_outline = await self._call_agent(
             agent_name="情节架构师",
             system_prompt=self.pm.PLOT_ARCHITECT_SYSTEM,
             task_prompt=plot_task,
@@ -277,7 +277,7 @@ class NovelCrewManager:
     # 写作阶段
     # ============================================================
 
-    def run_writing_phase(
+    async def run_writing_phase(
         self,
         novel_data: dict[str, Any],
         chapter_number: int,
@@ -287,20 +287,20 @@ class NovelCrewManager:
         writing_style: str = "modern",
     ) -> dict[str, Any]:
         """执行单章写作阶段
-        
+
         顺序执行以下步骤：
         1. 章节策划师：制定章节计划
         2. 作家：撰写章节初稿
         3. 编辑：润色和优化文本
         4. 连续性审查员：检查一致性和质量
-        
+
         Args:
             novel_data: 小说数据（包含 world_setting, characters, plot_outline 等）
             chapter_number: 章节号
             volume_number: 卷号
             previous_chapters_summary: 前几章摘要
             character_states: 当前角色状态
-            
+
         Returns:
             包含以下键的字典：
             - chapter_plan: 章节计划
@@ -353,7 +353,7 @@ class NovelCrewManager:
             character_states=character_states or "（初始状态）",
         )
         
-        chapter_plan = self._call_agent(
+        chapter_plan = await self._call_agent(
             agent_name="章节策划师",
             system_prompt=self.pm.CHAPTER_PLANNER_SYSTEM,
             task_prompt=planner_task,
@@ -391,7 +391,7 @@ class NovelCrewManager:
             genre=genre,
         )
         
-        draft = self._call_agent(
+        draft = await self._call_agent(
             agent_name="作家",
             system_prompt=writer_system,
             task_prompt=writer_task,
@@ -409,7 +409,7 @@ class NovelCrewManager:
             chapter_summary=chapter_plan.get("summary", ""),
         )
         
-        edited_content = self._call_agent(
+        edited_content = await self._call_agent(
             agent_name="编辑",
             system_prompt=self.pm.EDITOR_SYSTEM,
             task_prompt=editor_task,
@@ -427,7 +427,7 @@ class NovelCrewManager:
             previous_key_info=previous_chapters_summary or "（本章为第一章）",
         )
         
-        continuity_report = self._call_agent(
+        continuity_report = await self._call_agent(
             agent_name="连续性审查员",
             system_prompt=self.pm.CONTINUITY_CHECKER_SYSTEM,
             task_prompt=continuity_task,

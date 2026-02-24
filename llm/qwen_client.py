@@ -1,12 +1,12 @@
 """通义千问 LLM 客户端封装"""
 
+import asyncio
 import logging
-import time
 from typing import Iterator
 
 import dashscope
 from dashscope import Generation
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from backend.config import settings
 
@@ -30,8 +30,8 @@ class QwenClient:
         self.use_openai_mode = bool(self.base_url and 'coding.dashscope' in self.base_url)
         
         if self.use_openai_mode:
-            # 使用 OpenAI 兼容模式
-            self.openai_client = OpenAI(
+            # 使用 OpenAI 兼容模式（异步）
+            self.openai_client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url
             )
@@ -43,7 +43,7 @@ class QwenClient:
                 dashscope.base_http_api_url = self.base_url
                 logger.info(f"使用自定义 base URL: {self.base_url}")
 
-    def chat(
+    async def chat(
         self,
         prompt: str,
         system: str = "",
@@ -52,17 +52,17 @@ class QwenClient:
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
-        """同步调用通义千问 API。
+        """异步调用通义千问 API。
 
         Returns:
             dict: {"content": str, "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}}
         """
         if self.use_openai_mode:
-            return self._chat_openai(prompt, system, temperature, max_tokens, retries)
+            return await self._chat_openai(prompt, system, temperature, max_tokens, retries)
         else:
-            return self._chat_dashscope(prompt, system, temperature, max_tokens, top_p, retries)
+            return await self._chat_dashscope(prompt, system, temperature, max_tokens, top_p, retries)
     
-    def _chat_openai(
+    async def _chat_openai(
         self,
         prompt: str,
         system: str = "",
@@ -79,7 +79,7 @@ class QwenClient:
         last_error = None
         for attempt in range(retries):
             try:
-                response = self.openai_client.chat.completions.create(
+                response = await self.openai_client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     temperature=temperature,
@@ -101,11 +101,11 @@ class QwenClient:
             if attempt < retries - 1:
                 wait = 2 ** attempt
                 logger.info(f"Retrying in {wait}s...")
-                time.sleep(wait)
+                await asyncio.sleep(wait)
 
         raise RuntimeError(f"QwenClient.chat (OpenAI mode) failed after {retries} attempts: {last_error}")
     
-    def _chat_dashscope(
+    async def _chat_dashscope(
         self,
         prompt: str,
         system: str = "",
@@ -123,13 +123,18 @@ class QwenClient:
         last_error = None
         for attempt in range(retries):
             try:
-                response = Generation.call(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=top_p,
-                    result_format="message",
+                # 使用线程池执行同步调用，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: Generation.call(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        top_p=top_p,
+                        result_format="message",
+                    )
                 )
 
                 if response.status_code == 200:
@@ -151,11 +156,11 @@ class QwenClient:
             if attempt < retries - 1:
                 wait = 2 ** attempt
                 logger.info(f"Retrying in {wait}s...")
-                time.sleep(wait)
+                await asyncio.sleep(wait)
 
         raise RuntimeError(f"QwenClient.chat failed after {retries} attempts: {last_error}")
 
-    def stream_chat(
+    async def stream_chat(
         self,
         prompt: str,
         system: str = "",
@@ -168,14 +173,19 @@ class QwenClient:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        responses = Generation.call(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            result_format="message",
-            stream=True,
-            incremental_output=True,
+        # 使用线程池执行同步流式调用
+        loop = asyncio.get_event_loop()
+        responses = await loop.run_in_executor(
+            None,
+            lambda: Generation.call(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                result_format="message",
+                stream=True,
+                incremental_output=True,
+            )
         )
 
         for response in responses:
