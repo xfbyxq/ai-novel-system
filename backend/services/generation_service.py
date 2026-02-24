@@ -486,19 +486,25 @@ class GenerationService:
             }
             
             # 执行批量写作
-            batch_result = await self.dispatcher.run_batch_writing(
-                novel_id=novel_id,
-                task_id=task_id,
-                from_chapter=from_chapter,
-                to_chapter=to_chapter,
-                volume_number=volume_number,
-                novel_data=novel_data
-            )
+            all_results = []
+            failed_chapters_list = 0
             
-            # 处理批量写作结果
-            all_results = batch_result.get("results", [])
-            completed_chapters = batch_result.get("completed_chapters", 0)
-            failed_chapters_list = batch_result.get("failed_chapters", 0)
+            for chapter_num in range(from_chapter, to_chapter + 1):
+                try:
+                    result = await self.run_chapter_writing(
+                        novel_id=novel_id,
+                        task_id=task_id,
+                        chapter_number=chapter_num,
+                        volume_number=volume_number
+                    )
+                    all_results.append(result)
+                    logger.info(f"✅ 第{chapter_num}章生成并保存成功")
+                except Exception as e:
+                    logger.error(f"❌ 第{chapter_num}章生成失败: {e}")
+                    all_results.append({"error": str(e), "chapter_number": chapter_num})
+                    failed_chapters_list += 1
+            
+            completed_chapters = len([r for r in all_results if "error" not in r])
             
             # 更新任务进度
             if task:
