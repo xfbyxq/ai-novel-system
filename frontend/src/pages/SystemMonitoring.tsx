@@ -266,8 +266,10 @@ const SystemMonitoring = () => {
                 value={metrics.disk_usage}
                 suffix="%"
                 precision={1}
-                valueStyle={{
-                  color: metrics.disk_usage > 80 ? '#ff4d4f' : '#52c41a',
+                styles={{
+                  content: {
+                    color: metrics.disk_usage > 80 ? '#ff4d4f' : '#52c41a',
+                  },
                 }}
               />
               <Progress
@@ -287,8 +289,10 @@ const SystemMonitoring = () => {
                 value={successRate}
                 suffix="%"
                 precision={1}
-                valueStyle={{
-                  color: successRate < 80 ? '#ff4d4f' : '#52c41a',
+                styles={{
+                  content: {
+                    color: successRate < 80 ? '#ff4d4f' : '#52c41a',
+                  },
                 }}
               />
               <Progress
