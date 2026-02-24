@@ -8,6 +8,7 @@ import CrawlerTasks from '@/pages/CrawlerTasks';
 import MarketData from '@/pages/MarketData';
 import PlatformAccounts from '@/pages/PlatformAccounts';
 import PublishTasks from '@/pages/PublishTasks';
+import SystemMonitoring from '@/pages/SystemMonitoring';
 import NotFound from '@/pages/NotFound';
 
 const router = createBrowserRouter([
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: 'market-data', element: <MarketData /> },
       { path: 'accounts', element: <PlatformAccounts /> },
       { path: 'publish', element: <PublishTasks /> },
+      { path: 'monitoring', element: <SystemMonitoring /> },
       { path: '*', element: <NotFound /> },
     ],
   },

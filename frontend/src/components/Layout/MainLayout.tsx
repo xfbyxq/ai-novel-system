@@ -8,6 +8,7 @@ import {
   LineChartOutlined,
   UserOutlined,
   SendOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
@@ -19,6 +20,7 @@ const menuItems = [
   { key: '/market-data', icon: <LineChartOutlined />, label: '市场数据' },
   { key: '/accounts', icon: <UserOutlined />, label: '平台账号' },
   { key: '/publish', icon: <SendOutlined />, label: '发布管理' },
+  { key: '/monitoring', icon: <MonitorOutlined />, label: '系统监控' },
 ];
 
 export default function MainLayout() {

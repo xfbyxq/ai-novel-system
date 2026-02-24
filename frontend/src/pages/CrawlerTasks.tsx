@@ -19,6 +19,7 @@ import {
   ReloadOutlined,
   StopOutlined,
   EyeOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { CrawlerTask, CrawlerTaskCreate, CrawlType } from '@/api/types';
@@ -28,6 +29,7 @@ import {
   cancelCrawlerTask,
   getCrawlerTask,
 } from '@/api/crawler';
+import AIChatDrawer from '@/components/AIChatDrawer';
 
 const { Text } = Typography;
 
@@ -71,6 +73,7 @@ export default function CrawlerTasks() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<CrawlerTask | null>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [form] = Form.useForm();
   const [selectedCrawlType, setSelectedCrawlType] = useState<CrawlType>('ranking');
 
@@ -263,6 +266,9 @@ export default function CrawlerTasks() {
             >
               新建任务
             </Button>
+            <Button icon={<RobotOutlined />} onClick={() => setAiChatOpen(true)}>
+              AI 辅助
+            </Button>
           </Space>
         }
       >
@@ -390,6 +396,12 @@ export default function CrawlerTasks() {
           </Descriptions>
         )}
       </Modal>
+
+      <AIChatDrawer
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        scene="crawler_task"
+      />
     </div>
   );
 }

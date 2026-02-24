@@ -21,7 +21,7 @@ from backend.schemas.crawler import (
     ReaderPreferenceListResponse,
 )
 from backend.services.crawler_service import CrawlerService
-from core.models.crawler_task import CrawlerTask, CrawlType, CrawlTaskStatus
+from core.models.crawler_task import CrawlerTask, CRAWL_TYPES, CrawlTaskStatus
 from core.models.crawl_result import CrawlResult
 from core.models.reader_preference import ReaderPreference
 
@@ -41,7 +41,7 @@ async def create_crawler_task(
     - crawl_type=genre_list: 爬取分类列表
     """
     # 验证爬取类型
-    valid_types = [t.value for t in CrawlType]
+    valid_types = list(CRAWL_TYPES.keys())
     if task_in.crawl_type not in valid_types:
         raise HTTPException(
             status_code=400,
@@ -52,7 +52,7 @@ async def create_crawler_task(
     task = CrawlerTask(
         task_name=task_in.task_name,
         platform=task_in.platform,
-        crawl_type=CrawlType(task_in.crawl_type),
+        crawl_type=task_in.crawl_type,  # 直接使用字符串类型
         config=task_in.config,
         status=CrawlTaskStatus.pending,
     )

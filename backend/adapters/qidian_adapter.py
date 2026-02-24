@@ -17,6 +17,7 @@ from backend.adapters.base_adapter import (
     ChapterInfo,
     PublishResult,
 )
+from backend.adapters.douyin_adapter import DouyinAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,7 @@ def get_adapter(platform: str, credentials: dict) -> BasePlatformAdapter:
     """
     adapters = {
         "qidian": QidianAdapter,
+        "douyin": DouyinAdapter,
     }
     
     adapter_class = adapters.get(platform.lower())

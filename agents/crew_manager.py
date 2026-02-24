@@ -284,6 +284,7 @@ class NovelCrewManager:
         volume_number: int = 1,
         previous_chapters_summary: str = "",
         character_states: str = "",
+        writing_style: str = "modern",
     ) -> dict[str, Any]:
         """执行单章写作阶段
         

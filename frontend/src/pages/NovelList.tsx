@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   Typography, Table, Button, Space, Select, Modal, Form, Input, message,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EyeOutlined, RobotOutlined } from '@ant-design/icons';
 import type { Novel, NovelCreate } from '@/api/types';
 import { getNovels, createNovel, deleteNovel } from '@/api/novels';
 import StatusBadge from '@/components/StatusBadge';
+import AIChatDrawer from '@/components/AIChatDrawer';
 import { formatWordCount, formatDate, formatCost } from '@/utils/format';
 import { GENRE_OPTIONS, NOVEL_STATUS_MAP } from '@/utils/constants';
 
@@ -19,6 +20,7 @@ export default function NovelList() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [form] = Form.useForm<NovelCreate>();
 
   const load = useCallback(async () => {
@@ -80,6 +82,9 @@ export default function NovelList() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
             创建小说
           </Button>
+          <Button icon={<RobotOutlined />} onClick={() => setAiChatOpen(true)}>
+            AI 辅助
+          </Button>
         </Space>
       </Space>
 
@@ -138,6 +143,12 @@ export default function NovelList() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <AIChatDrawer
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        scene="novel_creation"
+      />
     </div>
   );
 }

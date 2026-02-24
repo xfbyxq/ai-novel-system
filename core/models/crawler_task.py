@@ -10,12 +10,21 @@ from sqlalchemy.sql import func
 from core.database import Base
 
 
-class CrawlType(str, enum.Enum):
-    """爬取类型"""
-    ranking = "ranking"              # 排行榜
-    trending_tags = "trending_tags"  # 热门标签
-    book_metadata = "book_metadata"  # 书籍元数据
-    genre_list = "genre_list"        # 分类列表
+# 爬取类型常量
+CRAWL_TYPES = {
+    "ranking": "ranking",              # 排行榜
+    "trending_tags": "trending_tags",  # 热门标签
+    "book_metadata": "book_metadata",  # 书籍元数据
+    "genre_list": "genre_list",        # 分类列表
+    "douyin_hot": "douyin_hot",        # 抖音热门
+    "douyin_search": "douyin_search",  # 抖音搜索趋势
+    "douyin_creators": "douyin_creators",  # 抖音创作者
+    "fanqie_ranking": "fanqie_ranking",  # 番茄小说排行榜
+    "zongheng_ranking": "zongheng_ranking",  # 纵横中文网排行榜
+}
+
+# 类型别名
+CrawlType = str
 
 
 class CrawlTaskStatus(str, enum.Enum):
@@ -34,7 +43,7 @@ class CrawlerTask(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     task_name = Column(String(100), nullable=False)
     platform = Column(String(50), nullable=False, default="qidian")
-    crawl_type = Column(Enum(CrawlType), nullable=False)
+    crawl_type = Column(String(50), nullable=False)  # 使用字符串类型代替枚举
     config = Column(JSONB, default=dict)  # 爬取配置（URL、筛选条件等）
     status = Column(Enum(CrawlTaskStatus), default=CrawlTaskStatus.pending)
     progress = Column(JSONB, default=dict)  # {current_page, total_pages, items_crawled}
