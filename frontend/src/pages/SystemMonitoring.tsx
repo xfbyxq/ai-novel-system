@@ -4,7 +4,7 @@ import {
   ApiOutlined,
   HistoryOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
+import apiClient from '@/api/client';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -61,7 +61,7 @@ const SystemMonitoring = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/v1/monitoring/system-status');
+      const response = await apiClient.get('/monitoring/system-status');
       const data = response.data.data || {};
       
       // 获取Agent状态数据
@@ -90,7 +90,7 @@ const SystemMonitoring = () => {
   const fetchTaskHistory = async (agentId: string) => {
     try {
       setHistoryLoading(true);
-      const response = await axios.get(`/api/v1/monitoring/agent-history/${agentId}`);
+      const response = await apiClient.get(`/monitoring/agent-history/${agentId}`);
       setTaskHistory(response.data || []);
     } catch (err) {
       console.error('Error fetching task history:', err);

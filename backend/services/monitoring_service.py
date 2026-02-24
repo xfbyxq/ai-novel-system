@@ -78,6 +78,43 @@ class MonitoringService:
         # 这里使用模拟数据
         return AGENTS
     
+    async def get_agent_history(self, agent_id: str) -> List[Dict[str, Any]]:
+        """获取Agent历史任务
+        
+        Args:
+            agent_id: Agent ID
+            
+        Returns:
+            Agent历史任务列表
+        """
+        # 实际项目中应该从数据库或日志系统获取历史任务
+        # 这里使用模拟数据
+        import random
+        from datetime import datetime, timedelta
+        
+        task_types = ["内容生成", "市场分析", "发布任务", "编辑任务", "角色分析"]
+        statuses = ["completed", "failed", "running", "pending"]
+        
+        history = []
+        for i in range(10):
+            start_time = datetime.now() - timedelta(hours=random.randint(1, 100))
+            duration = random.randint(10, 300)
+            end_time = start_time + timedelta(seconds=duration)
+            
+            task = {
+                "task_id": f"task_{random.randint(1000, 9999)}",
+                "agent_name": next((a["agent_name"] for a in AGENTS if a["agent_id"] == agent_id), "未知Agent"),
+                "task_type": random.choice(task_types),
+                "status": random.choice(statuses),
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat() if random.choice([True, False]) else None,
+                "duration": duration if random.choice([True, False]) else None,
+                "error_message": "模拟错误信息" if random.choice([True, False]) and random.choice(statuses) == "failed" else None,
+            }
+            history.append(task)
+        
+        return history
+    
     async def get_system_status(self) -> Dict[str, Any]:
         """获取系统状态
         

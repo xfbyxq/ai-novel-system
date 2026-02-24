@@ -87,3 +87,14 @@ async def get_agent_status(
         "success": True,
         "data": agent_status,
     }
+
+
+@router.get("/agent-history/{agent_id}")
+async def get_agent_history(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取Agent历史任务"""
+    service = MonitoringService(db)
+    agent_history = await service.get_agent_history(agent_id)
+    return agent_history
