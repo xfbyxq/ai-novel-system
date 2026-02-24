@@ -1,11 +1,11 @@
 """Agent间通信机制"""
 import asyncio
 import json
-import logging
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4
 
-logger = logging.getLogger(__name__)
+# Use the project-wide logger
+from core.logging_config import logger
 
 
 class Message:

@@ -1,13 +1,13 @@
 """Agent调度系统"""
 import asyncio
-import logging
 from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
 from uuid import UUID, uuid4
 
 from agents.agent_communicator import AgentCommunicator, Message
 
-logger = logging.getLogger(__name__)
+# Use the project-wide logger
+from core.logging_config import logger
 
 
 class AgentStatus(str, Enum):
@@ -196,6 +196,27 @@ class BaseAgent:
         """
         # 这里应该由具体的Agent子类实现
         logger.warning(f"⚠️  Agent '{self.name}' 未实现任务处理方法")
+        
+        # 模拟任务完成，避免任务一直处于运行状态
+        task_id = task_data.get("task_id")
+        if task_id:
+            try:
+                from uuid import UUID
+                task_id_uuid = UUID(task_id)
+                await self.communicator.send_message(
+                    Message(
+                        sender=self.name,
+                        receiver="scheduler",
+                        message_type="task_completion",
+                        content={
+                            "task_id": task_id,
+                            "status": "completed",
+                            "result": {}
+                        }
+                    )
+                )
+            except Exception as e:
+                logger.error(f"❌ Agent '{self.name}' 发送任务完成消息失败: {e}")
 
 
 class AgentScheduler:
@@ -212,6 +233,10 @@ class AgentScheduler:
         self.pending_tasks: List[AgentTask] = []
         self.running_tasks: List[AgentTask] = []
         self._lock = asyncio.Lock()
+        self._running = True
+        
+        # 启动消息处理循环
+        asyncio.create_task(self._message_loop())
 
     async def register_agent(self, agent: BaseAgent):
         """注册Agent
@@ -243,6 +268,59 @@ class AgentScheduler:
         await self._schedule_tasks()
         return task.task_id
 
+    async def _message_loop(self):
+        """消息处理循环"""
+        # 注册调度器自身到通信系统
+        await self.communicator.register_agent("scheduler")
+        
+        while self._running:
+            try:
+                message = await self.communicator.receive_message("scheduler", timeout=1.0)
+                if message:
+                    await self._handle_message(message)
+            except Exception as e:
+                logger.error(f"❌ 调度器消息处理错误: {e}")
+    
+    async def _handle_message(self, message: Message):
+        """处理消息
+        
+        Args:
+            message: 消息对象
+        """
+        logger.debug(f"🎮 调度器处理消息: {message.message_type} from {message.sender}")
+        
+        # 处理不同类型的消息
+        if message.message_type == "task_completion":
+            # 任务完成消息
+            await self._handle_task_completion(message)
+        elif message.message_type == "agent_status":
+            # Agent状态消息
+            logger.debug(f"🎮 收到Agent状态消息: {message.content}")
+        
+    async def _handle_task_completion(self, message: Message):
+        """处理任务完成消息
+        
+        Args:
+            message: 任务完成消息
+        """
+        task_id = message.content.get("task_id")
+        status = message.content.get("status")
+        result = message.content.get("result")
+        
+        if not task_id:
+            logger.error("❌ 任务完成消息缺少task_id")
+            return
+        
+        try:
+            task_id_uuid = UUID(task_id)
+            await self.update_task_status(
+                task_id_uuid,
+                TaskStatus.COMPLETED if status == "completed" else TaskStatus.FAILED,
+                result=result
+            )
+        except Exception as e:
+            logger.error(f"❌ 处理任务完成消息失败: {e}")
+    
     async def _schedule_tasks(self):
         """调度任务
         
@@ -403,6 +481,7 @@ class AgentScheduler:
                         logger.error(f"❌ 任务回调执行错误: {e}")
                 
                 # 重新调度任务
-                await self._schedule_tasks()
+                # 在锁外调用，避免死锁
+                asyncio.create_task(self._schedule_tasks())
 
             logger.info(f"🎮 任务状态更新: {task_id} -> {status.value}")

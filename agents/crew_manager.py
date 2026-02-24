@@ -5,7 +5,6 @@
 """
 
 import json
-import logging
 import re
 from typing import Any
 
@@ -13,7 +12,8 @@ from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager
 from llm.qwen_client import QwenClient
 
-logger = logging.getLogger(__name__)
+# Use the project-wide logger
+from core.logging_config import logger
 
 
 class NovelCrewManager:

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from agents.crew_manager import NovelCrewManager
+from agents.agent_dispatcher import AgentDispatcher
 from core.models.chapter import Chapter, ChapterStatus
 from core.models.character import Character, RoleType, Gender
 from core.models.generation_task import GenerationTask, TaskStatus, TaskType
@@ -20,7 +20,8 @@ from core.models.world_setting import WorldSetting
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-logger = logging.getLogger(__name__)
+# Use the project-wide logger
+from core.logging_config import logger
 
 
 class GenerationService:
@@ -30,7 +31,7 @@ class GenerationService:
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
-        self.crew = NovelCrewManager(self.client, self.cost_tracker)
+        self.dispatcher = AgentDispatcher(self.client, self.cost_tracker)
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行企划阶段并保存结果到数据库。"""
@@ -47,15 +48,32 @@ class GenerationService:
             select(GenerationTask).where(GenerationTask.id == task_id)
         )
         task = task_result.scalar_one_or_none()
-        if task:
+        if not task:
+            # 创建新任务记录
+            task = GenerationTask(
+                id=task_id,
+                novel_id=novel_id,
+                task_type="planning",
+                phase="planning",
+                input_data={},
+                status=TaskStatus.running,
+                started_at=datetime.now(timezone.utc)
+            )
+            self.db.add(task)
+        else:
             task.status = TaskStatus.running
             task.started_at = datetime.now(timezone.utc)
-            await self.db.commit()
+        await self.db.commit()
 
         try:
+            # 初始化Agent调度器
+            await self.dispatcher.initialize()
+            
             # 执行企划阶段
             self.cost_tracker.reset()
-            planning_result = self.crew.run_planning_phase(
+            planning_result = await self.dispatcher.run_planning(
+                novel_id=novel_id,
+                task_id=task_id,
                 genre=novel.genre,
                 tags=novel.tags or [],
                 context=novel.synopsis or "",
@@ -212,13 +230,25 @@ class GenerationService:
             select(GenerationTask).where(GenerationTask.id == task_id)
         )
         task = task_result.scalar_one_or_none()
-        if task:
+        if not task:
+            # 创建新任务记录
+            task = GenerationTask(
+                id=task_id,
+                novel_id=novel_id,
+                task_type="writing",
+                phase="planning",
+                input_data={},
+                status=TaskStatus.running,
+                started_at=datetime.now(timezone.utc)
+            )
+            self.db.add(task)
+        else:
             task.status = TaskStatus.running
             task.started_at = datetime.now(timezone.utc)
-            await self.db.commit()
+        await self.db.commit()
 
         try:
-            # 构建 novel_data 给 crew_manager
+            # 构建 novel_data 给 dispatcher
             world_setting_dict = {}
             if novel.world_setting:
                 ws = novel.world_setting
@@ -267,12 +297,17 @@ class GenerationService:
                 "plot_outline": plot_outline_dict,
             }
 
+            # 初始化Agent调度器
+            await self.dispatcher.initialize()
+            
             # 执行写作阶段
             self.cost_tracker.reset()
-            writing_result = self.crew.run_writing_phase(
-                novel_data=novel_data,
+            writing_result = await self.dispatcher.run_chapter_writing(
+                novel_id=novel_id,
+                task_id=task_id,
                 chapter_number=chapter_number,
                 volume_number=volume_number,
+                novel_data=novel_data,
                 previous_chapters_summary=previous_summary,
             )
 
@@ -362,10 +397,22 @@ class GenerationService:
             select(GenerationTask).where(GenerationTask.id == task_id)
         )
         task = task_result.scalar_one_or_none()
-        if task:
+        if not task:
+            # 创建新任务记录
+            task = GenerationTask(
+                id=task_id,
+                novel_id=novel_id,
+                task_type="writing",
+                phase="planning",
+                input_data={},
+                status=TaskStatus.running,
+                started_at=datetime.now(timezone.utc)
+            )
+            self.db.add(task)
+        else:
             task.status = TaskStatus.running
             task.started_at = datetime.now(timezone.utc)
-            await self.db.commit()
+        await self.db.commit()
 
         try:
             total_chapters = to_chapter - from_chapter + 1
@@ -378,79 +425,125 @@ class GenerationService:
                 f"共 {total_chapters} 章"
             )
 
-            # 逐章生成
-            for chapter_num in range(from_chapter, to_chapter + 1):
-                try:
-                    logger.info(f"正在生成第 {chapter_num} 章...")
+            # 初始化Agent调度器
+            await self.dispatcher.initialize()
+            
+            # 构建小说数据
+            novel_result = await self.db.execute(
+                select(Novel)
+                .where(Novel.id == novel_id)
+                .options(
+                    selectinload(Novel.world_setting),
+                    selectinload(Novel.characters),
+                    selectinload(Novel.plot_outline),
+                    selectinload(Novel.chapters),
+                )
+            )
+            novel = novel_result.scalar_one_or_none()
+            if not novel:
+                raise ValueError(f"小说 {novel_id} 不存在")
+            
+            # 构建 novel_data
+            world_setting_dict = {}
+            if novel.world_setting:
+                ws = novel.world_setting
+                world_setting_dict = {
+                    "world_name": ws.world_name,
+                    "world_type": ws.world_type,
+                    "power_system": ws.power_system or {},
+                    "geography": ws.geography or {},
+                    "factions": ws.factions or {},
+                    "rules": ws.rules or [],
+                }
 
-                    # 检查章节是否已存在
-                    existing_chapter = await self.db.execute(
-                        select(Chapter).where(
-                            Chapter.novel_id == novel_id,
-                            Chapter.chapter_number == chapter_num
-                        )
-                    )
-                    if existing_chapter.scalar_one_or_none():
-                        logger.warning(f"第 {chapter_num} 章已存在，跳过")
-                        completed_chapters += 1
-                        continue
+            characters_list = []
+            for char in novel.characters:
+                characters_list.append({
+                    "name": char.name,
+                    "role_type": char.role_type.value if char.role_type else "minor",
+                    "personality": char.personality or "",
+                    "background": char.background or "",
+                    "abilities": char.abilities or {},
+                })
 
-                    # 调用单章生成逻辑
-                    result = await self._write_single_chapter(
-                        novel_id, chapter_num, volume_number
-                    )
-                    all_results.append(result)
-                    completed_chapters += 1
+            plot_outline_dict = {}
+            if novel.plot_outline:
+                po = novel.plot_outline
+                plot_outline_dict = {
+                    "structure_type": po.structure_type,
+                    "volumes": po.volumes or [],
+                    "main_plot": po.main_plot or {},
+                    "sub_plots": po.sub_plots or [],
+                    "key_turning_points": po.key_turning_points or [],
+                }
 
-                    # 更新任务进度
-                    if task:
-                        task.output_data = {
-                            "total_chapters": total_chapters,
-                            "completed_chapters": completed_chapters,
-                            "failed_chapters": failed_chapters,
-                            "progress": f"{completed_chapters}/{total_chapters}",
-                        }
-                        await self.db.commit()
+            novel_data = {
+                "title": novel.title,
+                "genre": novel.genre,
+                "world_setting": world_setting_dict,
+                "characters": characters_list,
+                "plot_outline": plot_outline_dict,
+            }
+            
+            # 执行批量写作
+            batch_result = await self.dispatcher.run_batch_writing(
+                novel_id=novel_id,
+                task_id=task_id,
+                from_chapter=from_chapter,
+                to_chapter=to_chapter,
+                volume_number=volume_number,
+                novel_data=novel_data
+            )
+            
+            # 处理批量写作结果
+            all_results = batch_result.get("results", [])
+            completed_chapters = batch_result.get("completed_chapters", 0)
+            failed_chapters_list = batch_result.get("failed_chapters", 0)
+            
+            # 更新任务进度
+            if task:
+                task.output_data = {
+                    "total_chapters": total_chapters,
+                    "completed_chapters": completed_chapters,
+                    "failed_chapters": failed_chapters_list,
+                    "progress": f"{completed_chapters}/{total_chapters}",
+                }
+                await self.db.commit()
 
-                    logger.info(
-                        f"第 {chapter_num} 章生成成功 "
-                        f"({completed_chapters}/{total_chapters})"
-                    )
-
-                except Exception as e:
-                    logger.error(f"第 {chapter_num} 章生成失败: {e}")
-                    failed_chapters.append({"chapter": chapter_num, "error": str(e)})
-                    continue
+            logger.info(
+                f"批量生成完成 "
+                f"({completed_chapters}/{total_chapters})"
+            )
 
             # 更新任务状态
             if task:
                 total_tokens = sum(r.get("token_usage", 0) for r in all_results)
                 total_cost = sum(r.get("cost", 0) for r in all_results)
 
-                task.status = TaskStatus.completed if not failed_chapters else TaskStatus.failed
+                task.status = TaskStatus.completed if failed_chapters_list == 0 else TaskStatus.failed
                 task.completed_at = datetime.now(timezone.utc)
                 task.output_data = {
                     "total_chapters": total_chapters,
                     "completed_chapters": completed_chapters,
-                    "failed_chapters": failed_chapters,
-                    "summary": f"成功 {completed_chapters} 章，失败 {len(failed_chapters)} 章",
+                    "failed_chapters": failed_chapters_list,
+                    "summary": f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章",
                 }
                 task.token_usage = total_tokens
                 task.cost = total_cost
                 task.error_message = (
-                    f"{len(failed_chapters)} 章生成失败" if failed_chapters else None
+                    f"{failed_chapters_list} 章生成失败" if failed_chapters_list > 0 else None
                 )
                 await self.db.commit()
 
             logger.info(
                 f"批量生成完成: 成功 {completed_chapters} 章，"
-                f"失败 {len(failed_chapters)} 章"
+                f"失败 {failed_chapters_list} 章"
             )
 
             return {
                 "total_chapters": total_chapters,
                 "completed_chapters": completed_chapters,
-                "failed_chapters": failed_chapters,
+                "failed_chapters": failed_chapters_list,
                 "results": all_results,
             }
 
@@ -532,12 +625,17 @@ class GenerationService:
             "plot_outline": plot_outline_dict,
         }
 
+        # 初始化Agent调度器
+        await self.dispatcher.initialize()
+        
         # 执行写作阶段
         self.cost_tracker.reset()
-        writing_result = self.crew.run_writing_phase(
-            novel_data=novel_data,
+        writing_result = await self.dispatcher.run_chapter_writing(
+            novel_id=novel_id,
+            task_id=None,  # 内部方法调用，无任务ID
             chapter_number=chapter_number,
             volume_number=volume_number,
+            novel_data=novel_data,
             previous_chapters_summary=previous_summary,
         )
 

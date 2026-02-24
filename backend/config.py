@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DB_USER: str = "novel_user"
     DB_PASSWORD: str = "novel_pass"
     DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
+    DB_PORT: int = 5434  # 从 .env 文件中看到实际使用的端口
     DB_NAME: str = "novel_system"
     
     @property

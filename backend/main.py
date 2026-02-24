@@ -8,6 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.v1 import api_router
 from backend.config import settings
 
+# Setup logging
+from core.logging_config import setup_logging
+setup_logging()
+
 app = FastAPI(
     title="小说生成系统 API",
     version="0.1.0",

@@ -1,6 +1,5 @@
 """具体的Agent实现"""
 import asyncio
-import logging
 from typing import Dict, Any, List, Optional
 
 from agents.agent_communicator import AgentCommunicator
@@ -9,7 +8,8 @@ from llm.qwen_client import QwenClient
 from llm.prompt_manager import PromptManager
 from llm.cost_tracker import CostTracker
 
-logger = logging.getLogger(__name__)
+# Use the project-wide logger
+from core.logging_config import logger
 
 
 class MarketAnalysisAgent(BaseAgent):
@@ -89,14 +89,20 @@ class MarketAnalysisAgent(BaseAgent):
             logger.info(f"📊 市场分析任务完成: {task_name}")
             
             # 发送任务完成消息
-            completion_message = {
-                "task_id": task_id,
-                "status": "completed",
-                "result": analysis_result,
-            }
+            from agents.agent_communicator import Message
+            completion_message = Message(
+                sender=self.name,
+                receiver="scheduler",
+                message_type="task_completion",
+                content={
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": analysis_result,
+                }
+            )
             
-            # 这里应该发送消息给调度器或其他相关Agent
-            # 暂时先打印结果
+            # 发送消息给调度器
+            await self.communicator.send_message(completion_message)
             logger.debug(f"📊 市场分析结果: {analysis_result}")
             
         except Exception as e:
@@ -184,14 +190,20 @@ class ContentPlanningAgent(BaseAgent):
             logger.info(f"🎯 内容策划任务完成: {task_name}")
             
             # 发送任务完成消息
-            completion_message = {
-                "task_id": task_id,
-                "status": "completed",
-                "result": planning_result,
-            }
+            from agents.agent_communicator import Message
+            completion_message = Message(
+                sender=self.name,
+                receiver="scheduler",
+                message_type="task_completion",
+                content={
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": planning_result,
+                }
+            )
             
-            # 这里应该发送消息给调度器或其他相关Agent
-            # 暂时先打印结果
+            # 发送消息给调度器
+            await self.communicator.send_message(completion_message)
             logger.debug(f"🎯 内容策划结果: {planning_result}")
             
         except Exception as e:
@@ -284,14 +296,20 @@ class WritingAgent(BaseAgent):
             logger.info(f"✍️  创作任务完成: {task_name}")
             
             # 发送任务完成消息
-            completion_message = {
-                "task_id": task_id,
-                "status": "completed",
-                "result": writing_result,
-            }
+            from agents.agent_communicator import Message
+            completion_message = Message(
+                sender=self.name,
+                receiver="scheduler",
+                message_type="task_completion",
+                content={
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": writing_result,
+                }
+            )
             
-            # 这里应该发送消息给调度器或其他相关Agent
-            # 暂时先打印结果
+            # 发送消息给调度器
+            await self.communicator.send_message(completion_message)
             logger.debug(f"✍️  创作结果: 第{chapter_number}章，{len(response['content'])}字")
             
         except Exception as e:
@@ -381,14 +399,20 @@ class EditingAgent(BaseAgent):
             logger.info(f"📝 编辑任务完成: {task_name}")
             
             # 发送任务完成消息
-            completion_message = {
-                "task_id": task_id,
-                "status": "completed",
-                "result": editing_result,
-            }
+            from agents.agent_communicator import Message
+            completion_message = Message(
+                sender=self.name,
+                receiver="scheduler",
+                message_type="task_completion",
+                content={
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": editing_result,
+                }
+            )
             
-            # 这里应该发送消息给调度器或其他相关Agent
-            # 暂时先打印结果
+            # 发送消息给调度器
+            await self.communicator.send_message(completion_message)
             logger.debug(f"📝 编辑结果: {len(response['content'])}字")
             
         except Exception as e:
@@ -457,14 +481,20 @@ class PublishingAgent(BaseAgent):
             logger.info(f"🚀 发布任务完成: {task_name}")
             
             # 发送任务完成消息
-            completion_message = {
-                "task_id": task_id,
-                "status": "completed",
-                "result": publish_result,
-            }
+            from agents.agent_communicator import Message
+            completion_message = Message(
+                sender=self.name,
+                receiver="scheduler",
+                message_type="task_completion",
+                content={
+                    "task_id": task_id,
+                    "status": "completed",
+                    "result": publish_result,
+                }
+            )
             
-            # 这里应该发送消息给调度器或其他相关Agent
-            # 暂时先打印结果
+            # 发送消息给调度器
+            await self.communicator.send_message(completion_message)
             logger.debug(f"🚀 发布结果: {platform} 平台发布成功")
             
         except Exception as e:
