@@ -20,6 +20,7 @@ from backend.services.ai_chat_service import (
     AiChatService,
     SCENE_NOVEL_CREATION,
     SCENE_CRAWLER_TASK,
+    SCENE_NOVEL_REVISION,
 )
 
 router = APIRouter(prefix="/ai-chat", tags=["ai-chat"])
@@ -40,13 +41,13 @@ async def create_session(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """创建新的 AI 对话会话"""
-    if session_in.scene not in [SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK]:
+    if session_in.scene not in [SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK, SCENE_NOVEL_REVISION]:
         raise HTTPException(
             status_code=400,
-            detail=f"无效的场景。可选: {SCENE_NOVEL_CREATION}, {SCENE_CRAWLER_TASK}"
+            detail=f"无效的场景。可选: {SCENE_NOVEL_CREATION}, {SCENE_CRAWLER_TASK}, {SCENE_NOVEL_REVISION}"
         )
     
-    session = service.create_session(
+    session = await service.create_session(
         scene=session_in.scene,
         context=session_in.context,
     )
@@ -153,3 +154,70 @@ async def parse_crawler_intent(
         return CrawlerParseResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+
+@router.get("/sessions")
+async def list_sessions(
+    scene: Optional[str] = None,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """获取会话列表"""
+    try:
+        sessions = await service.get_sessions(scene)
+        return {"sessions": sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """获取会话详情"""
+    try:
+        # 先尝试从内存中获取
+        session = service.get_session(session_id)
+        if not session:
+            # 从数据库加载
+            session = await service.load_session(session_id)
+            if session:
+                # 加载到内存
+                service.sessions[session_id] = session
+        
+        if not session:
+            raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+        
+        return {
+            "session_id": session.session_id,
+            "scene": session.scene,
+            "context": session.context,
+            "messages": [msg.to_dict() for msg in session.messages],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取会话失败: {str(e)}")
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """删除会话"""
+    try:
+        # 从内存中删除
+        if session_id in service.sessions:
+            del service.sessions[session_id]
+        
+        # 从数据库删除
+        success = await service.delete_session(session_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+        
+        return {"message": "会话删除成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")

@@ -24,7 +24,7 @@ export default function NovelCard({ novel }: Props) {
           <StatusBadge type="novel" status={novel.status} />
         </Space>
         <Typography.Text type="secondary">{novel.genre}</Typography.Text>
-        <Space split={<Typography.Text type="secondary">|</Typography.Text>}>
+        <Space separator={<Typography.Text type="secondary">|</Typography.Text>}>
           <Typography.Text>{formatWordCount(novel.word_count)} 字</Typography.Text>
           <Typography.Text>{novel.chapter_count} 章</Typography.Text>
           <Typography.Text>{formatDate(novel.created_at)}</Typography.Text>

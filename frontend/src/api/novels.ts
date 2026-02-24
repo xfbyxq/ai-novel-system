@@ -30,3 +30,27 @@ export async function updateNovel(id: string, payload: NovelUpdate): Promise<Nov
 export async function deleteNovel(id: string): Promise<void> {
   await apiClient.delete(`/novels/${id}`);
 }
+
+// 世界观相关
+export async function updateWorldSetting(novelId: string, payload: any): Promise<any> {
+  const { data } = await apiClient.patch(`/novels/${novelId}/world-setting`, payload);
+  return data;
+}
+
+// 大纲相关
+export async function updatePlotOutline(novelId: string, payload: any): Promise<any> {
+  const { data } = await apiClient.patch(`/novels/${novelId}/outline`, payload);
+  return data;
+}
+
+// 角色相关
+export async function updateCharacter(novelId: string, characterId: string, payload: any): Promise<any> {
+  const { data } = await apiClient.patch(`/novels/${novelId}/characters/${characterId}`, payload);
+  return data;
+}
+
+// 章节相关
+export async function updateChapter(novelId: string, chapterNumber: number, payload: any): Promise<any> {
+  const { data } = await apiClient.patch(`/novels/${novelId}/chapters/${chapterNumber}`, payload);
+  return data;
+}

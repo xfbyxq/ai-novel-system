@@ -1,7 +1,7 @@
 import apiClient from './client';
 
 export interface AIChatSessionCreate {
-  scene: 'novel_creation' | 'crawler_task';
+  scene: 'novel_creation' | 'crawler_task' | 'novel_revision';
   context?: Record<string, unknown>;
 }
 
@@ -74,5 +74,21 @@ export const parseNovelIntent = async (data: NovelParseRequest): Promise<NovelPa
 
 export const parseCrawlerIntent = async (data: CrawlerParseRequest): Promise<CrawlerParseResponse> => {
   const response = await apiClient.post<CrawlerParseResponse>('/ai-chat/parse-crawler', data);
+  return response.data;
+};
+
+export const listSessions = async (scene?: string): Promise<{ sessions: any[] }> => {
+  const params = scene ? { scene } : {};
+  const response = await apiClient.get<{ sessions: any[] }>('/ai-chat/sessions', { params });
+  return response.data;
+};
+
+export const getSession = async (sessionId: string): Promise<any> => {
+  const response = await apiClient.get<any>(`/ai-chat/sessions/${sessionId}`);
+  return response.data;
+};
+
+export const deleteSession = async (sessionId: string): Promise<{ message: string }> => {
+  const response = await apiClient.delete<{ message: string }>(`/ai-chat/sessions/${sessionId}`);
   return response.data;
 };

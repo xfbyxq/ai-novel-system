@@ -11,6 +11,7 @@ from core.models.crawl_result import CrawlResult
 from core.models.platform_account import PlatformAccount, AccountStatus
 from core.models.publish_task import PublishTask, PublishType, PublishTaskStatus
 from core.models.chapter_publish import ChapterPublish, PublishStatus
+from core.models.ai_chat_session import AIChatSession, AIChatMessage
 
 __all__ = [
     "Novel",
@@ -41,4 +42,7 @@ __all__ = [
     "PublishTaskStatus",
     "ChapterPublish",
     "PublishStatus",
+    # AI Chat models
+    "AIChatSession",
+    "AIChatMessage",
 ]

@@ -26,7 +26,7 @@ import {
 import { getTrendAnalysis, getGenreTrendComparison, generateTrendReport } from '@/api/crawler';
 
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
+
 
 export default function TrendAnalysis() {
   const [loading, setLoading] = useState(false);

@@ -30,7 +30,7 @@ import {
 import { getReaderPreferences, getTrendingTags, getRecommendedGenres } from '@/api/crawler';
 
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
+
 
 export default function ChartAnalysis() {
   const [loading, setLoading] = useState(false);

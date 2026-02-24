@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Tabs, Spin, Breadcrumb, Card, Descriptions, Space, Typography } from 'antd';
-import { HomeOutlined } from '@ant-design/icons';
+import { Tabs, Spin, Breadcrumb, Card, Descriptions, Space, Typography, Button } from 'antd';
+import { HomeOutlined, RobotOutlined } from '@ant-design/icons';
 import type { Novel } from '@/api/types';
 import { getNovel } from '@/api/novels';
 import StatusBadge from '@/components/StatusBadge';
+import AIChatDrawer from '@/components/AIChatDrawer';
 import { formatWordCount, formatCost, formatDate } from '@/utils/format';
 import OverviewTab from './OverviewTab';
 import WorldSettingTab from './WorldSettingTab';
@@ -18,6 +19,8 @@ export default function NovelDetail() {
   const navigate = useNavigate();
   const [novel, setNovel] = useState<Novel | null>(null);
   const [loading, setLoading] = useState(true);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [currentTab, setCurrentTab] = useState('overview');
 
   const loadNovel = useCallback(async () => {
     if (!id) return;
@@ -45,7 +48,18 @@ export default function NovelDetail() {
         ]}
       />
 
-      <Card style={{ marginBottom: 16 }}>
+      <Card 
+        style={{ marginBottom: 16 }}
+        extra={
+          <Button 
+            type="primary" 
+            icon={<RobotOutlined />}
+            onClick={() => setAiChatOpen(true)}
+          >
+            AI助手
+          </Button>
+        }
+      >
         <Descriptions column={{ xs: 1, sm: 2, md: 4 }}>
           <Descriptions.Item label="标题">
             <Typography.Text strong>{novel.title}</Typography.Text>
@@ -72,6 +86,8 @@ export default function NovelDetail() {
 
       <Tabs
         defaultActiveKey="overview"
+        activeKey={currentTab}
+        onChange={setCurrentTab}
         items={[
           { key: 'overview', label: '概览', children: <OverviewTab novel={novel} onRefresh={loadNovel} /> },
           { key: 'world', label: '世界观', children: <WorldSettingTab novelId={id} /> },
@@ -80,6 +96,13 @@ export default function NovelDetail() {
           { key: 'chapters', label: '章节', children: <ChaptersTab novelId={id} /> },
           { key: 'generation', label: '生成历史', children: <GenerationHistoryTab novelId={id} onNovelRefresh={loadNovel} /> },
         ]}
+      />
+
+      <AIChatDrawer
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        scene="novel_revision"
+        novelId={id}
       />
     </div>
   );
