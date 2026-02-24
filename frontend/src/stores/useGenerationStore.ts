@@ -18,6 +18,9 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
     try {
       const res = await getGenerationTasks(novelId, undefined, 1, 100);
       set({ tasks: res.items });
+    } catch (error) {
+      console.error('Failed to fetch generation tasks:', error);
+      set({ tasks: [] });
     } finally {
       set({ loading: false });
     }

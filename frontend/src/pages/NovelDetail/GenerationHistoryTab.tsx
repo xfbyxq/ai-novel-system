@@ -15,13 +15,10 @@ interface Props {
 
 export default function GenerationHistoryTab({ novelId, onNovelRefresh }: Props) {
   const { tasks, loading, fetchTasks, refreshTask } = useGenerationStore();
-  // 记录已通知的任务 ID，避免重复通知
   const notifiedTaskIds = useRef(new Set<string>());
 
-  // Initial load
   useEffect(() => {
     void fetchTasks(novelId);
-    // 组件卸载时清理
     return () => {
       notifiedTaskIds.current.clear();
     };
@@ -32,13 +29,11 @@ export default function GenerationHistoryTab({ novelId, onNovelRefresh }: Props)
     await fetchTasks(novelId);
     const currentTasks = useGenerationStore.getState().tasks;
     
-    // 只检查状态变化的任务
     for (const task of currentTasks) {
       const prevTask = prevTasks.find(t => t.id === task.id);
       const isNewlyCompleted = task.status === 'completed' && prevTask?.status === 'running';
       const isNewlyFailed = task.status === 'failed' && prevTask?.status === 'running';
       
-      // 只在状态刚变为完成或失败时通知一次
       if (isNewlyCompleted && !notifiedTaskIds.current.has(task.id)) {
         notifiedTaskIds.current.add(task.id);
         onNovelRefresh();
