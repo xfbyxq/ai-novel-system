@@ -223,7 +223,7 @@ const SystemMonitoring = () => {
         {/* 系统健康度卡片 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} sm={12} md={8}>
-            <Card title="CPU 使用率" bordered={false}>
+            <Card title="CPU 使用率" variant="borderless">
               <Statistic
                 value={metrics.cpu_usage}
                 suffix="%"
@@ -240,7 +240,7 @@ const SystemMonitoring = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} md={8}>
-            <Card title="内存使用率" bordered={false}>
+            <Card title="内存使用率" variant="borderless">
               <Statistic
                 value={metrics.memory_usage}
                 suffix="%"
@@ -257,7 +257,7 @@ const SystemMonitoring = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} md={8}>
-            <Card title="磁盘使用率" bordered={false}>
+            <Card title="磁盘使用率" variant="borderless">
               <Statistic
                 value={metrics.disk_usage}
                 suffix="%"
@@ -278,7 +278,7 @@ const SystemMonitoring = () => {
         {/* 任务统计卡片 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} sm={12} md={8}>
-            <Card title="任务成功率" bordered={false}>
+            <Card title="任务成功率" variant="borderless">
               <Statistic
                 value={successRate}
                 suffix="%"
@@ -295,7 +295,7 @@ const SystemMonitoring = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} md={8}>
-            <Card title="系统运行时间" bordered={false}>
+            <Card title="系统运行时间" variant="borderless">
               <Statistic
                 value={Math.floor(metrics.uptime / 3600)}
                 suffix="小时"
@@ -307,7 +307,7 @@ const SystemMonitoring = () => {
             </Card>
           </Col>
           <Col xs={24} sm={12} md={8}>
-            <Card title="任务状态" bordered={false}>
+            <Card title="任务状态" variant="borderless">
               <Space orientation="vertical" style={{ width: '100%' }}>
                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                   <Text>成功: {metrics.successful_tasks}</Text>
@@ -334,7 +334,7 @@ const SystemMonitoring = () => {
                     <Text strong>{agent.agent_name}</Text>
                   </Space>
                 }
-                bordered={false}
+                variant="borderless"
                 extra={
                   <Tag color={getStatusColor(agent.status)}>
                     {getStatusText(agent.status)}
