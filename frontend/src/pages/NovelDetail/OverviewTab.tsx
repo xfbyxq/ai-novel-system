@@ -175,7 +175,7 @@ export default function OverviewTab({ novel, onRefresh }: Props) {
         onCancel={() => setWritingModalOpen(false)}
         okText="开始写作"
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Typography.Text>请输入要生成的章节号：</Typography.Text>
           <InputNumber
             min={1}
@@ -195,7 +195,7 @@ export default function OverviewTab({ novel, onRefresh }: Props) {
         okText="开始批量生成"
         width={500}
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
+        <Space orientation="vertical" style={{ width: '100%' }} size="large">
           <div>
             <Typography.Text strong>章节范围：</Typography.Text>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: '8px' }}>

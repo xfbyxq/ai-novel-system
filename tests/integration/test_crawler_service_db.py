@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from backend.services.crawler_service import CrawlerService
-from core.models.crawler_task import CrawlerTask, CrawlType, CrawlTaskStatus
+from core.models.crawler_task import CrawlerTask, CrawlTaskStatus
 from tests.fixtures.html_samples import RANKING_PAGE_HTML
 
 
@@ -18,7 +18,7 @@ class TestCrawlerServiceDB:
         task = CrawlerTask(
             task_name="测试任务",
             platform="qidian",
-            crawl_type=CrawlType.ranking,
+            crawl_type="ranking",
             status=CrawlTaskStatus.pending,
         )
         db_session.add(task)
@@ -47,7 +47,7 @@ class TestCrawlerServiceDB:
         task = CrawlerTask(
             task_name="测试任务",
             platform="qidian",
-            crawl_type=CrawlType.ranking,
+            crawl_type="ranking",
             status=CrawlTaskStatus.pending,
         )
         db_session.add(task)
@@ -77,7 +77,7 @@ class TestCrawlerServiceDB:
         task = CrawlerTask(
             task_name="测试排行榜爬取",
             platform="qidian",
-            crawl_type=CrawlType.ranking,
+            crawl_type="ranking",
             config={"ranking_type": "yuepiao", "max_pages": 1},
             status=CrawlTaskStatus.pending,
         )

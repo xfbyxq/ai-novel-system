@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from backend.config import settings
+from backend.services.proxy_service import ProxyService
+from backend.services.browser_crawler import browser_crawler_service
+from backend.services.anti_crawler_service import anti_crawler_service
+from backend.services.data_deduplication_service import data_deduplication_service
 from core.models.crawler_task import CrawlerTask, CrawlTaskStatus
 from core.models.crawl_result import CrawlResult
 from core.models.reader_preference import ReaderPreference
@@ -30,11 +34,86 @@ USER_AGENTS = [
 
 class CrawlerService:
     """爬虫服务"""
-
+    
     def __init__(self, db: AsyncSession):
         self.db = db
         self.request_delay = settings.CRAWLER_REQUEST_DELAY
         self.timeout = settings.CRAWLER_TIMEOUT
+        self.proxy_service = ProxyService(db)
+        self.current_proxy = None
+
+    def _needs_javascript(self, url: str, crawl_type: str) -> bool:
+        """判断是否需要JavaScript渲染
+        
+        Args:
+            url: 目标URL
+            crawl_type: 爬取类型
+            
+        Returns:
+            是否需要JavaScript渲染
+        """
+        # 基于URL和爬取类型判断是否需要JavaScript渲染
+        js_required_domains = [
+            "douyin.com",
+            "kuaishou.com",
+            "weixin.qq.com",
+            "xiaohongshu.com",
+            "zhihu.com",
+            "twitter.com",
+            "facebook.com",
+            "instagram.com"
+        ]
+        
+        # 基于爬取类型判断
+        js_required_types = [
+            "douyin_hot",
+            "douyin_search",
+            "douyin_creators",
+            "kuaishou_hot",
+            "weibo_hot",
+            "zhihu_hot",
+            "xiaohongshu_hot"
+        ]
+        
+        # 检查域名
+        for domain in js_required_domains:
+            if domain in url:
+                return True
+        
+        # 检查爬取类型
+        if crawl_type in js_required_types:
+            return True
+        
+        return False
+    
+    async def _fetch_page_with_fallback(self, url: str, crawl_type: str) -> Optional[str]:
+        """获取页面内容，支持自动切换爬虫
+        
+        Args:
+            url: 目标URL
+            crawl_type: 爬取类型
+            
+        Returns:
+            页面HTML内容
+        """
+        # 判断是否需要JavaScript渲染
+        needs_js = self._needs_javascript(url, crawl_type)
+        
+        if needs_js:
+            logger.info(f"使用浏览器爬虫获取页面: {url}")
+            # 使用浏览器爬虫
+            content = await browser_crawler_service.crawl(url)
+            if content:
+                return content
+            else:
+                logger.warning(f"浏览器爬虫失败，尝试使用普通爬虫: {url}")
+        
+        # 使用普通爬虫（带代理）
+        logger.info(f"使用普通爬虫获取页面: {url}")
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            content = await self._fetch_page(client, url)
+        
+        return content
 
     async def run_crawler_task(self, task_id: UUID) -> None:
         """执行爬虫任务（后台运行）"""
@@ -54,27 +133,40 @@ class CrawlerService:
         await self.db.commit()
 
         try:
-            # 根据爬取类型分发
-            if task.crawl_type == "ranking":
-                await self._crawl_qidian_ranking(task)
-            elif task.crawl_type == "trending_tags":
-                await self._crawl_qidian_tags(task)
-            elif task.crawl_type == "book_metadata":
-                await self._crawl_qidian_book(task)
-            elif task.crawl_type == "genre_list":
-                await self._crawl_qidian_genres(task)
-            elif task.crawl_type == "douyin_hot":
-                await self._crawl_douyin_hot(task)
-            elif task.crawl_type == "douyin_search":
-                await self._crawl_douyin_search(task)
-            elif task.crawl_type == "douyin_creators":
-                await self._crawl_douyin_creators(task)
-            elif task.crawl_type == "fanqie_ranking":
-                await self._crawl_fanqie_ranking(task)
-            elif task.crawl_type == "zongheng_ranking":
-                await self._crawl_zongheng_ranking(task)
+            # 初始化代理服务
+            await self.proxy_service.initialize()
+            
+            # 根据平台和爬取类型分发
+            if task.platform == "qidian":
+                if task.crawl_type == "ranking":
+                    await self._crawl_qidian_ranking(task)
+                elif task.crawl_type == "trending_tags":
+                    await self._crawl_qidian_tags(task)
+                elif task.crawl_type == "book_metadata":
+                    await self._crawl_qidian_book(task)
+                elif task.crawl_type == "genre_list":
+                    await self._crawl_qidian_genres(task)
+                else:
+                    raise ValueError(f"起点中文网不支持的爬取类型: {task.crawl_type}")
+            elif task.platform == "douyin":
+                if task.crawl_type == "ranking":
+                    await self._crawl_douyin_hot(task)
+                elif task.crawl_type == "trending_tags":
+                    await self._crawl_douyin_search(task)
+                else:
+                    raise ValueError(f"抖音不支持的爬取类型: {task.crawl_type}")
+            elif task.platform == "fanqie":
+                if task.crawl_type == "ranking":
+                    await self._crawl_fanqie_ranking(task)
+                else:
+                    raise ValueError(f"番茄小说不支持的爬取类型: {task.crawl_type}")
+            elif task.platform == "zongheng":
+                if task.crawl_type == "ranking":
+                    await self._crawl_zongheng_ranking(task)
+                else:
+                    raise ValueError(f"纵横中文网不支持的爬取类型: {task.crawl_type}")
             else:
-                raise ValueError(f"不支持的爬取类型: {task.crawl_type}")
+                raise ValueError(f"不支持的平台: {task.platform}")
 
             # 更新状态为完成
             task.status = CrawlTaskStatus.completed
@@ -108,54 +200,54 @@ class CrawlerService:
         success_count = 0
         error_count = 0
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            for page in range(1, max_pages + 1):
-                try:
-                    # 更新进度
-                    task.progress = {
-                        "current_page": page,
-                        "total_pages": max_pages,
-                        "items_crawled": items_crawled,
-                    }
-                    await self.db.commit()
+        for page in range(1, max_pages + 1):
+            try:
+                # 更新进度
+                task.progress = {
+                    "current_page": page,
+                    "total_pages": max_pages,
+                    "items_crawled": items_crawled,
+                }
+                await self.db.commit()
 
-                    # 发送请求
-                    url = f"{base_url}?page={page}"
-                    html = await self._fetch_page(client, url)
+                # 发送请求
+                url = f"{base_url}?page={page}"
+                html = await self._fetch_page_with_fallback(url, task.crawl_type)
 
-                    if not html:
-                        error_count += 1
-                        continue
+                if not html:
+                    error_count += 1
+                    continue
 
-                    # 解析页面
-                    books = self._parse_qidian_ranking_page(html)
+                # 解析页面
+                books = self._parse_qidian_ranking_page(html)
 
-                    # 保存结果
-                    for book in books:
-                        await self._save_crawl_result(
-                            task_id=task.id,
-                            platform="qidian",
-                            data_type="ranking",
-                            raw_data=book,
-                            processed_data=book,
-                            url=url,
-                        )
-                        
+                # 保存结果
+                for book in books:
+                    saved = await self._save_crawl_result(
+                        task_id=task.id,
+                        platform="qidian",
+                        data_type="ranking",
+                        raw_data=book,
+                        processed_data=book,
+                        url=url,
+                    )
+
+                    if saved:
                         # 同时更新 ReaderPreference
                         await self._update_reader_preference(
                             task_id=task.id,
                             book_data=book,
                         )
-                        
+
                         items_crawled += 1
                         success_count += 1
 
-                    # 请求间隔
-                    await asyncio.sleep(self.request_delay)
+                # 请求间隔
+                await asyncio.sleep(self.request_delay)
 
-                except Exception as e:
-                    logger.error(f"爬取第 {page} 页失败: {e}")
-                    error_count += 1
+            except Exception as e:
+                logger.error(f"爬取第 {page} 页失败: {e}")
+                error_count += 1
 
         # 更新结果摘要
         task.result_summary = {
@@ -163,6 +255,9 @@ class CrawlerService:
             "success_count": success_count,
             "error_count": error_count,
         }
+        
+        # 更新上次爬取时间
+        await data_deduplication_service.update_last_crawl_time("qidian", "ranking")
 
     async def _crawl_qidian_tags(self, task: CrawlerTask) -> None:
         """爬取起点热门标签"""
@@ -174,36 +269,39 @@ class CrawlerService:
         # 起点分类/标签页面
         url = "https://www.qidian.com/all/"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                task.progress = {"status": "fetching_tags", "items_crawled": 0}
-                await self.db.commit()
+        try:
+            task.progress = {"status": "fetching_tags", "items_crawled": 0}
+            await self.db.commit()
 
-                html = await self._fetch_page(client, url)
-                if html:
-                    tags = self._parse_qidian_tags_page(html)
+            html = await self._fetch_page_with_fallback(url, task.crawl_type)
+            if html:
+                tags = self._parse_qidian_tags_page(html)
 
-                    for tag in tags:
-                        await self._save_crawl_result(
-                            task_id=task.id,
-                            platform="qidian",
-                            data_type="tag",
-                            raw_data=tag,
-                            processed_data=tag,
-                            url=url,
-                        )
+                for tag in tags:
+                    saved = await self._save_crawl_result(
+                        task_id=task.id,
+                        platform="qidian",
+                        data_type="tag",
+                        raw_data=tag,
+                        processed_data=tag,
+                        url=url,
+                    )
+                    if saved:
                         items_crawled += 1
                         success_count += 1
 
-            except Exception as e:
-                logger.error(f"爬取标签失败: {e}")
-                error_count += 1
+        except Exception as e:
+            logger.error(f"爬取标签失败: {e}")
+            error_count += 1
 
         task.result_summary = {
             "items_count": items_crawled,
             "success_count": success_count,
             "error_count": error_count,
         }
+        
+        # 更新上次爬取时间
+        await data_deduplication_service.update_last_crawl_time("qidian", "tag")
 
     async def _crawl_qidian_book(self, task: CrawlerTask) -> None:
         """爬取起点书籍详情"""
@@ -213,43 +311,42 @@ class CrawlerService:
         success_count = 0
         error_count = 0
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            for i, book_id in enumerate(book_ids):
-                try:
-                    task.progress = {
-                        "current": i + 1,
-                        "total": len(book_ids),
-                        "items_crawled": items_crawled,
-                    }
-                    await self.db.commit()
+        for i, book_id in enumerate(book_ids):
+            try:
+                task.progress = {
+                    "current": i + 1,
+                    "total": len(book_ids),
+                    "items_crawled": items_crawled,
+                }
+                await self.db.commit()
 
-                    url = f"https://book.qidian.com/info/{book_id}/"
-                    html = await self._fetch_page(client, url)
+                url = f"https://book.qidian.com/info/{book_id}/"
+                html = await self._fetch_page_with_fallback(url, task.crawl_type)
 
-                    if html:
-                        book_info = self._parse_qidian_book_page(html, book_id)
-                        await self._save_crawl_result(
-                            task_id=task.id,
-                            platform="qidian",
-                            data_type="book",
-                            raw_data=book_info,
-                            processed_data=book_info,
-                            url=url,
-                        )
-                        
-                        await self._update_reader_preference(
-                            task_id=task.id,
-                            book_data=book_info,
-                        )
-                        
-                        items_crawled += 1
-                        success_count += 1
+                if html:
+                    book_info = self._parse_qidian_book_page(html, book_id)
+                    await self._save_crawl_result(
+                        task_id=task.id,
+                        platform="qidian",
+                        data_type="book",
+                        raw_data=book_info,
+                        processed_data=book_info,
+                        url=url,
+                    )
 
-                    await asyncio.sleep(self.request_delay)
+                    await self._update_reader_preference(
+                        task_id=task.id,
+                        book_data=book_info,
+                    )
 
-                except Exception as e:
-                    logger.error(f"爬取书籍 {book_id} 失败: {e}")
-                    error_count += 1
+                    items_crawled += 1
+                    success_count += 1
+
+                await asyncio.sleep(self.request_delay)
+
+            except Exception as e:
+                logger.error(f"爬取书籍 {book_id} 失败: {e}")
+                error_count += 1
 
         task.result_summary = {
             "items_count": items_crawled,
@@ -449,17 +546,68 @@ class CrawlerService:
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def _fetch_page(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         """获取页面 HTML（带重试）"""
-        headers = {
-            "User-Agent": random.choice(USER_AGENTS),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-        }
+        # 使用反爬虫服务获取 headers
+        headers = await anti_crawler_service.get_headers(url)
+        
+        # 使用反爬虫服务获取 cookies
+        cookies = await anti_crawler_service.get_cookies(url)
 
-        response = await client.get(url, headers=headers, follow_redirects=True)
-        response.raise_for_status()
-        return response.text
+        # 请求前等待，避免请求过快
+        await anti_crawler_service.wait_before_request(url)
+
+        # 获取代理
+        proxy = await self.proxy_service.get_proxy()
+        if proxy:
+            self.current_proxy = proxy
+            logger.info(f"使用代理: {proxy}")
+
+        try:
+            if proxy:
+                response = await client.get(
+                    url, 
+                    headers=headers, 
+                    cookies=cookies,
+                    follow_redirects=True,
+                    proxies={"all://": proxy},
+                    timeout=self.timeout
+                )
+            else:
+                response = await client.get(
+                    url, 
+                    headers=headers, 
+                    cookies=cookies,
+                    follow_redirects=True,
+                    timeout=self.timeout
+                )
+            response.raise_for_status()
+            
+            # 更新 cookies
+            await anti_crawler_service.update_cookies(url, response)
+            
+            # 检查是否被封禁
+            if anti_crawler_service.is_ip_blocked(response):
+                logger.warning(f"IP 可能被封禁: {url}")
+                # 如果使用了代理，标记为失败
+                if proxy:
+                    await self.proxy_service.mark_proxy_result(proxy, False)
+                    self.current_proxy = None
+                return None
+            
+            # 标记代理使用成功
+            if proxy:
+                await self.proxy_service.mark_proxy_result(proxy, True)
+            
+            return response.text
+        except Exception as e:
+            logger.error(f"请求失败 {url}: {e}")
+            
+            # 标记代理使用失败
+            if proxy:
+                await self.proxy_service.mark_proxy_result(proxy, False)
+                # 切换代理
+                self.current_proxy = None
+            
+            return None
 
     def _parse_qidian_ranking_page(self, html: str) -> list[dict]:
         """解析起点排行榜页面"""
@@ -623,8 +771,13 @@ class CrawlerService:
         raw_data: dict,
         processed_data: dict,
         url: str,
-    ) -> CrawlResult:
+    ) -> Optional[CrawlResult]:
         """保存爬取结果"""
+        # 检查数据是否重复
+        if await data_deduplication_service.is_duplicate(platform, data_type, processed_data):
+            logger.info(f"数据重复，跳过保存: {platform}:{data_type}")
+            return None
+        
         result = CrawlResult(
             crawler_task_id=task_id,
             platform=platform,
@@ -635,6 +788,10 @@ class CrawlerService:
         )
         self.db.add(result)
         await self.db.flush()
+        
+        # 标记数据为已处理
+        await data_deduplication_service.mark_processed(platform, data_type, processed_data)
+        
         return result
 
     async def _update_reader_preference(
@@ -749,43 +906,42 @@ class CrawlerService:
         # 抖音热门内容 URL
         url = "https://www.douyin.com/hot"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                task.progress = {"status": "fetching_douyin_hot", "items_crawled": 0}
-                await self.db.commit()
+        try:
+            task.progress = {"status": "fetching_douyin_hot", "items_crawled": 0}
+            await self.db.commit()
 
-                html = await self._fetch_page(client, url)
+            html = await self._fetch_page_with_fallback(url, task.crawl_type)
 
-                if not html:
-                    error_count += 1
-                else:
-                    # 解析抖音热门页面
-                    hot_items = self._parse_douyin_hot_page(html)
-
-                    # 保存结果
-                    for item in hot_items[:max_items]:
-                        await self._save_crawl_result(
-                            task_id=task.id,
-                            platform="douyin",
-                            data_type="hot",
-                            raw_data=item,
-                            processed_data=item,
-                            url=url,
-                        )
-                        
-                        # 同时更新 ReaderPreference
-                        await self._update_reader_preference(
-                            task_id=task.id,
-                            book_data=item,
-                            source="douyin",
-                        )
-                        
-                        items_crawled += 1
-                        success_count += 1
-
-            except Exception as e:
-                logger.error(f"爬取抖音热门失败: {e}")
+            if not html:
                 error_count += 1
+            else:
+                # 解析抖音热门页面
+                hot_items = self._parse_douyin_hot_page(html)
+
+                # 保存结果
+                for item in hot_items[:max_items]:
+                    await self._save_crawl_result(
+                        task_id=task.id,
+                        platform="douyin",
+                        data_type="hot",
+                        raw_data=item,
+                        processed_data=item,
+                        url=url,
+                    )
+                    
+                    # 同时更新 ReaderPreference
+                    await self._update_reader_preference(
+                        task_id=task.id,
+                        book_data=item,
+                        source="douyin",
+                    )
+                    
+                    items_crawled += 1
+                    success_count += 1
+
+        except Exception as e:
+            logger.error(f"爬取抖音热门失败: {e}")
+            error_count += 1
 
         task.result_summary = {
             "items_count": items_crawled,

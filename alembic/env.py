@@ -16,6 +16,7 @@ from core.database import Base
 from core.models import (  # noqa: F401
     Novel, WorldSetting, Character, PlotOutline,
     Chapter, ReaderPreference, GenerationTask, TokenUsage,
+    CrawlerTask, CrawlResult, PlatformAccount, PublishTask, ChapterPublish,
 )
 
 config = context.config

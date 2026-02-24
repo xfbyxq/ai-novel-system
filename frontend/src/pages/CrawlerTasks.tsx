@@ -40,6 +40,13 @@ const crawlTypeOptions: { value: CrawlType; label: string }[] = [
   { value: 'genre_list', label: '分类列表' },
 ];
 
+const platformOptions = [
+  { value: 'qidian', label: '起点中文网' },
+  { value: 'douyin', label: '抖音' },
+  { value: 'fanqie', label: '番茄小说' },
+  { value: 'zongheng', label: '纵横中文网' },
+];
+
 const rankingTypeOptions = [
   { value: 'yuepiao', label: '月票榜' },
   { value: 'hotsales', label: '畅销榜' },
@@ -116,7 +123,7 @@ export default function CrawlerTasks() {
 
       await createCrawlerTask({
         task_name: values.task_name,
-        platform: 'qidian',
+        platform: values.platform,
         crawl_type: values.crawl_type,
         config: Object.keys(config).length > 0 ? config : undefined,
       });
@@ -192,7 +199,7 @@ export default function CrawlerTasks() {
           };
           if (current_page && total_pages) {
             return (
-              <Space direction="vertical" size={0}>
+              <Space orientation="vertical" size={0}>
                 <Progress
                   percent={Math.round((current_page / total_pages) * 100)}
                   size="small"
@@ -307,7 +314,7 @@ export default function CrawlerTasks() {
           form={form}
           layout="vertical"
           onFinish={handleCreate}
-          initialValues={{ crawl_type: 'ranking', ranking_type: 'yuepiao' }}
+          initialValues={{ platform: 'qidian', crawl_type: 'ranking', ranking_type: 'yuepiao' }}
         >
           <Form.Item
             name="task_name"
@@ -315,6 +322,13 @@ export default function CrawlerTasks() {
             rules={[{ required: true, message: '请输入任务名称' }]}
           >
             <Input placeholder="例如：起点月票榜爬取" />
+          </Form.Item>
+          <Form.Item
+            name="platform"
+            label="平台"
+            rules={[{ required: true }]}
+          >
+            <Select options={platformOptions} />
           </Form.Item>
           <Form.Item
             name="crawl_type"

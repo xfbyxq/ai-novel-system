@@ -6,6 +6,7 @@ import {
   BookOutlined,
   CloudDownloadOutlined,
   LineChartOutlined,
+  BarChartOutlined,
   UserOutlined,
   SendOutlined,
   MonitorOutlined,
@@ -18,6 +19,7 @@ const menuItems = [
   { key: '/novels', icon: <BookOutlined />, label: '小说管理' },
   { key: '/crawler', icon: <CloudDownloadOutlined />, label: '爬虫任务' },
   { key: '/market-data', icon: <LineChartOutlined />, label: '市场数据' },
+  { key: '/chart-analysis', icon: <BarChartOutlined />, label: '图表分析' },
   { key: '/accounts', icon: <UserOutlined />, label: '平台账号' },
   { key: '/publish', icon: <SendOutlined />, label: '发布管理' },
   { key: '/monitoring', icon: <MonitorOutlined />, label: '系统监控' },
@@ -77,7 +79,7 @@ export default function MainLayout() {
             AI 小说生成系统
           </Typography.Title>
         </Header>
-        <Content style={{ margin: 16 }}>
+        <Content style={{ margin: 16, padding: 16, background: '#fff', borderRadius: 8 }}>
           <Outlet />
         </Content>
       </Layout>

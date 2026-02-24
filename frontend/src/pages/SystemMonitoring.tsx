@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Typography, Spin, Alert, Table, Modal, Tag, Space, Descriptions, Progress, Statistic, Button } from 'antd';
-import { ApiOutlined, HeartOutlined, ClockCircleOutlined, AlertOutlined, HistoryOutlined } from '@ant-design/icons';
+import {
+  ApiOutlined,
+  HistoryOutlined,
+} from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 
@@ -208,7 +211,7 @@ const SystemMonitoring = () => {
       
       {error && (
         <Alert
-          message="错误"
+          title="错误"
           description={error}
           type="error"
           showIcon
@@ -216,7 +219,7 @@ const SystemMonitoring = () => {
         />
       )}
 
-      <Spin spinning={loading} tip="加载系统状态...">
+      <Spin spinning={loading} description="加载系统状态...">
         {/* 系统健康度卡片 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} sm={12} md={8}>
@@ -231,7 +234,7 @@ const SystemMonitoring = () => {
               />
               <Progress
                 percent={metrics.cpu_usage}
-                status={metrics.cpu_usage > 80 ? 'exception' : metrics.cpu_usage > 60 ? 'warning' : 'normal'}
+                status={metrics.cpu_usage > 80 ? 'exception' : metrics.cpu_usage > 60 ? 'active' : 'normal'}
                 style={{ marginTop: 16 }}
               />
             </Card>
@@ -248,7 +251,7 @@ const SystemMonitoring = () => {
               />
               <Progress
                 percent={metrics.memory_usage}
-                status={metrics.memory_usage > 80 ? 'exception' : metrics.memory_usage > 60 ? 'warning' : 'normal'}
+                status={metrics.memory_usage > 80 ? 'exception' : metrics.memory_usage > 60 ? 'active' : 'normal'}
                 style={{ marginTop: 16 }}
               />
             </Card>
@@ -265,7 +268,7 @@ const SystemMonitoring = () => {
               />
               <Progress
                 percent={metrics.disk_usage}
-                status={metrics.disk_usage > 80 ? 'exception' : metrics.disk_usage > 60 ? 'warning' : 'normal'}
+                status={metrics.disk_usage > 80 ? 'exception' : metrics.disk_usage > 60 ? 'active' : 'normal'}
                 style={{ marginTop: 16 }}
               />
             </Card>
@@ -286,7 +289,7 @@ const SystemMonitoring = () => {
               />
               <Progress
                 percent={successRate}
-                status={successRate < 60 ? 'exception' : successRate < 80 ? 'warning' : 'normal'}
+                status={successRate < 60 ? 'exception' : successRate < 80 ? 'active' : 'normal'}
                 style={{ marginTop: 16 }}
               />
             </Card>
@@ -305,7 +308,7 @@ const SystemMonitoring = () => {
           </Col>
           <Col xs={24} sm={12} md={8}>
             <Card title="任务状态" bordered={false}>
-              <Space direction="vertical" style={{ width: '100%' }}>
+              <Space orientation="vertical" style={{ width: '100%' }}>
                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                   <Text>成功: {metrics.successful_tasks}</Text>
                   <Text>失败: {metrics.failed_tasks}</Text>
@@ -380,7 +383,7 @@ const SystemMonitoring = () => {
         footer={null}
         width={800}
       >
-        <Spin spinning={historyLoading} tip="加载历史任务...">
+        <Spin spinning={historyLoading} description="加载历史任务...">
           <Table
             columns={taskHistoryColumns}
             dataSource={taskHistory}

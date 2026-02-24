@@ -16,7 +16,7 @@ export default function NovelCard({ novel }: Props) {
       onClick={() => navigate(`/novels/${novel.id}`)}
       style={{ height: '100%' }}
     >
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <Space>
           <Typography.Text strong style={{ fontSize: 16 }}>
             {novel.title}

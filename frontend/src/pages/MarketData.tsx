@@ -11,6 +11,7 @@ import {
   Statistic,
   InputNumber,
   Button,
+  Form,
 } from 'antd';
 import {
   SearchOutlined,
@@ -18,6 +19,7 @@ import {
   BookOutlined,
   UserOutlined,
   FileTextOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { MarketDataItem } from '@/api/types';
@@ -31,15 +33,42 @@ export default function MarketData() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [platform, setPlatform] = useState<string>('qidian');
   const [genre, setGenre] = useState<string | undefined>();
   const [minWordCount, setMinWordCount] = useState<number | undefined>();
   const [maxWordCount, setMaxWordCount] = useState<number | undefined>();
+  const [minRating, setMinRating] = useState<number | undefined>();
+
+  // 平台选项
+  const platformOptions = [
+    { value: 'qidian', label: '起点中文网' },
+    { value: 'douyin', label: '抖音' },
+    { value: 'fanqie', label: '番茄小说' },
+    { value: 'zongheng', label: '纵横中文网' },
+  ];
+
+  // 分类选项
+  const genreOptions = [
+    { value: '玄幻', label: '玄幻' },
+    { value: '奇幻', label: '奇幻' },
+    { value: '武侠', label: '武侠' },
+    { value: '仙侠', label: '仙侠' },
+    { value: '都市', label: '都市' },
+    { value: '现实', label: '现实' },
+    { value: '军事', label: '军事' },
+    { value: '历史', label: '历史' },
+    { value: '游戏', label: '游戏' },
+    { value: '体育', label: '体育' },
+    { value: '科幻', label: '科幻' },
+    { value: '悬疑', label: '悬疑' },
+    { value: '轻小说', label: '轻小说' },
+  ];
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const res = await getMarketData({
-        platform: 'qidian',
+        platform,
         genre,
         min_word_count: minWordCount,
         max_word_count: maxWordCount,
@@ -48,8 +77,8 @@ export default function MarketData() {
       });
       setData(res.items);
       setTotal(res.total);
-    } catch {
-      // Error handled silently
+    } catch (error) {
+      console.error('获取市场数据失败:', error);
     } finally {
       setLoading(false);
     }
@@ -57,9 +86,18 @@ export default function MarketData() {
 
   useEffect(() => {
     fetchData();
-  }, [page, pageSize]);
+  }, [page, pageSize, platform]);
 
   const handleSearch = () => {
+    setPage(1);
+    fetchData();
+  };
+
+  const handleReset = () => {
+    setGenre(undefined);
+    setMinWordCount(undefined);
+    setMaxWordCount(undefined);
+    setMinRating(undefined);
     setPage(1);
     fetchData();
   };
@@ -79,7 +117,7 @@ export default function MarketData() {
       key: 'book_title',
       width: 200,
       render: (v, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text strong>{v || '-'}</Text>
           {record.author_name && (
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -90,11 +128,30 @@ export default function MarketData() {
       ),
     },
     {
+      title: '平台',
+      dataIndex: 'source',
+      key: 'source',
+      width: 100,
+      render: (v) => {
+        const platformMap: Record<string, string> = {
+          'qidian': '起点',
+          'douyin': '抖音',
+          'fanqie': '番茄',
+          'zongheng': '纵横',
+        };
+        return v ? <Tag color="green">{platformMap[v] || v}</Tag> : '-';
+      },
+      filters: platformOptions.map(opt => ({ text: opt.label, value: opt.value })),
+      onFilter: (value, record) => record.source === value,
+    },
+    {
       title: '类型',
       dataIndex: 'genre',
       key: 'genre',
       width: 100,
       render: (v) => v ? <Tag color="blue">{v}</Tag> : '-',
+      filters: genreOptions.map(opt => ({ text: opt.label, value: opt.value })),
+      onFilter: (value, record) => record.genre === value,
     },
     {
       title: '标签',
@@ -142,6 +199,11 @@ export default function MarketData() {
       key: 'data_date',
       width: 120,
       render: (v) => v || '-',
+      sorter: (a, b) => {
+        const dateA = a.data_date || '';
+        const dateB = b.data_date || '';
+        return dateA.localeCompare(dateB);
+      },
     },
   ];
 
@@ -151,6 +213,9 @@ export default function MarketData() {
     : 0;
   const avgRating = data.length > 0
     ? (data.reduce((sum, item) => sum + (item.rating || 0), 0) / data.filter(d => d.rating).length).toFixed(2)
+    : '0';
+  const avgTrendScore = data.length > 0
+    ? (data.reduce((sum, item) => sum + (item.trend_score || 0), 0) / data.length).toFixed(2)
     : '0';
 
   return (
@@ -192,8 +257,10 @@ export default function MarketData() {
         <Col span={6}>
           <Card size="small">
             <Statistic
-              title="数据来源"
-              value="起点中文网"
+              title="平均趋势"
+              value={avgTrendScore}
+              precision={2}
+              suffix="分"
             />
           </Card>
         </Col>
@@ -201,50 +268,69 @@ export default function MarketData() {
 
       {/* 筛选和数据表 */}
       <Card>
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Select
-            placeholder="选择类型"
-            allowClear
-            style={{ width: 150 }}
-            value={genre}
-            onChange={setGenre}
-            options={[
-              { value: '玄幻', label: '玄幻' },
-              { value: '奇幻', label: '奇幻' },
-              { value: '武侠', label: '武侠' },
-              { value: '仙侠', label: '仙侠' },
-              { value: '都市', label: '都市' },
-              { value: '现实', label: '现实' },
-              { value: '军事', label: '军事' },
-              { value: '历史', label: '历史' },
-              { value: '游戏', label: '游戏' },
-              { value: '体育', label: '体育' },
-              { value: '科幻', label: '科幻' },
-              { value: '悬疑', label: '悬疑' },
-              { value: '轻小说', label: '轻小说' },
-            ]}
-          />
-          <InputNumber
-            placeholder="最小字数(万)"
-            style={{ width: 130 }}
-            value={minWordCount ? minWordCount / 10000 : undefined}
-            onChange={(v) => setMinWordCount(v ? v * 10000 : undefined)}
-            min={0}
-          />
-          <InputNumber
-            placeholder="最大字数(万)"
-            style={{ width: 130 }}
-            value={maxWordCount ? maxWordCount / 10000 : undefined}
-            onChange={(v) => setMaxWordCount(v ? v * 10000 : undefined)}
-            min={0}
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            搜索
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={fetchData}>
-            刷新
-          </Button>
-        </Space>
+        <Form layout="inline" style={{ marginBottom: 16 }}>
+          <Form.Item label="平台">
+            <Select
+              style={{ width: 150 }}
+              value={platform}
+              onChange={setPlatform}
+              options={platformOptions}
+            />
+          </Form.Item>
+          <Form.Item label="分类">
+            <Select
+              placeholder="选择类型"
+              allowClear
+              style={{ width: 150 }}
+              value={genre}
+              onChange={setGenre}
+              options={genreOptions}
+            />
+          </Form.Item>
+          <Form.Item label="字数范围(万)">
+            <Space>
+              <InputNumber
+                placeholder="最小"
+                style={{ width: 100 }}
+                value={minWordCount ? minWordCount / 10000 : undefined}
+                onChange={(v) => setMinWordCount(v ? v * 10000 : undefined)}
+                min={0}
+              />
+              <Text>至</Text>
+              <InputNumber
+                placeholder="最大"
+                style={{ width: 100 }}
+                value={maxWordCount ? maxWordCount / 10000 : undefined}
+                onChange={(v) => setMaxWordCount(v ? v * 10000 : undefined)}
+                min={0}
+              />
+            </Space>
+          </Form.Item>
+          <Form.Item label="最低评分">
+            <InputNumber
+                placeholder="评分"
+                style={{ width: 100 }}
+                value={minRating}
+                onChange={(v) => setMinRating(v || undefined)}
+                min={0}
+                max={10}
+                step={0.1}
+              />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                搜索
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                重置
+              </Button>
+              <Button icon={<BarChartOutlined />}>
+                图表分析
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
 
         <Table
           columns={columns}
@@ -263,6 +349,7 @@ export default function MarketData() {
             },
           }}
           size="middle"
+          scroll={{ x: 1000 }}
         />
       </Card>
     </div>

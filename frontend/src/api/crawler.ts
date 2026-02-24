@@ -4,7 +4,6 @@ import type {
   CrawlerTaskCreate,
   CrawlResult,
   MarketDataItem,
-  ReaderPreference,
   PaginatedResponse,
 } from './types';
 
@@ -75,12 +74,56 @@ export async function getMarketData(params?: {
 // ============================================================
 
 export async function getReaderPreferences(params?: {
-  source?: string;
+  platform?: string;
   genre?: string;
-  crawler_task_id?: string;
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedResponse<ReaderPreference>> {
-  const { data } = await apiClient.get('/crawler/preferences', { params });
+  days?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/reader-preferences', { params });
+  return data;
+}
+
+export async function getTrendingTags(params?: {
+  platform?: string;
+  days?: number;
+  limit?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/trending-tags', { params });
+  return data;
+}
+
+export async function getRecommendedGenres(params?: {
+  platform?: string;
+  days?: number;
+  limit?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/recommended-genres', { params });
+  return data;
+}
+
+export async function getTrendAnalysis(params?: {
+  platform?: string;
+  genre?: string;
+  metric?: string;
+  days?: number;
+  forecast_days?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/trend-analysis', { params });
+  return data;
+}
+
+export async function getGenreTrendComparison(params?: {
+  genres?: string[];
+  days?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/genre-trend-comparison', { params });
+  return data;
+}
+
+export async function generateTrendReport(params?: {
+  platform?: string;
+  days?: number;
+  forecast_days?: number;
+}): Promise<any> {
+  const { data } = await apiClient.get('/market-analysis/trend-report', { params });
   return data;
 }

@@ -12,7 +12,7 @@ export default function CharacterCard({ character, onClick }: Props) {
 
   return (
     <Card hoverable size="small" onClick={onClick}>
-      <Space direction="vertical" size={2} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={2} style={{ width: '100%' }}>
         <Space>
           <Typography.Text strong>{character.name}</Typography.Text>
           <Tag color={role.color}>{role.label}</Tag>
