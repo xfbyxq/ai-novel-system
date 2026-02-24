@@ -73,11 +73,13 @@ const SystemMonitoring = () => {
         memory_usage: data.system?.memory?.percent || 0,
         disk_usage: data.system?.disk?.percent || 0,
         uptime: data.system?.uptime_seconds || 0,
-        total_tasks: data.tasks?.generation?.total || 0 + 
-                   data.tasks?.publish?.total || 0 + 
-                   data.tasks?.crawler?.total || 0,
-        successful_tasks: 0, // 后端暂时没有提供
-        failed_tasks: 0, // 后端暂时没有提供
+        total_tasks: (data.tasks?.generation?.total || 0) + 
+                   (data.tasks?.publish?.total || 0) + 
+                   (data.tasks?.crawler?.total || 0),
+        successful_tasks: (data.tasks?.generation?.completed || 0) + 
+                        (data.tasks?.publish?.completed || 0),
+        failed_tasks: (data.tasks?.generation?.failed || 0) + 
+                     (data.tasks?.publish?.failed || 0),
       });
     } catch (err) {
       setError('获取系统状态失败');

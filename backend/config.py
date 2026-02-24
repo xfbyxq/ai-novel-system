@@ -9,8 +9,21 @@ class Settings(BaseSettings):
     DASHSCOPE_BASE_URL: str = ""  # Coding Plan Pro 的 base URL
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://novel_user:novel_pass@localhost:5432/novel_system"
-    DATABASE_URL_SYNC: str = "postgresql://novel_user:novel_pass@localhost:5432/novel_system"
+    DB_USER: str = "novel_user"
+    DB_PASSWORD: str = "novel_pass"
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    DB_NAME: str = "novel_system"
+    
+    @property
+    def DATABASE_URL(self) -> str:
+        """动态构建数据库连接URL"""
+        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    
+    @property
+    def DATABASE_URL_SYNC(self) -> str:
+        """动态构建同步数据库连接URL"""
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
