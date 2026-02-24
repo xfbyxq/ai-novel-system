@@ -228,8 +228,10 @@ const SystemMonitoring = () => {
                 value={metrics.cpu_usage}
                 suffix="%"
                 precision={1}
-                valueStyle={{
-                  color: metrics.cpu_usage > 80 ? '#ff4d4f' : '#52c41a',
+                styles={{
+                  content: {
+                    color: metrics.cpu_usage > 80 ? '#ff4d4f' : '#52c41a',
+                  },
                 }}
               />
               <Progress
@@ -245,8 +247,10 @@ const SystemMonitoring = () => {
                 value={metrics.memory_usage}
                 suffix="%"
                 precision={1}
-                valueStyle={{
-                  color: metrics.memory_usage > 80 ? '#ff4d4f' : '#52c41a',
+                styles={{
+                  content: {
+                    color: metrics.memory_usage > 80 ? '#ff4d4f' : '#52c41a',
+                  },
                 }}
               />
               <Progress
