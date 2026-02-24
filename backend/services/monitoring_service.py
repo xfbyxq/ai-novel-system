@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.models.token_usage import TokenUsage
 from core.models.generation_task import GenerationTask, TaskStatus
 from core.models.publish_task import PublishTask, PublishTaskStatus
-from core.models.crawler_task import CrawlerTask, CrawlTaskStatus
 
 # 模拟Agent状态数据，实际项目中应该从Agent系统获取
 AGENTS = [
@@ -190,17 +189,8 @@ class MonitoringService:
         )
         publish_stats = publish_tasks_result.first()
         
-        # 获取爬虫任务状态
-        crawler_tasks_result = await self.db.execute(
-            select(
-                func.count(CrawlerTask.id),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.completed, 1), else_=0)),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.failed, 1), else_=0)),
-            ).where(
-                CrawlerTask.created_at >= cutoff_date,
-            )
-        )
-        crawler_stats = crawler_tasks_result.first()
+        # 模拟爬虫任务状态
+        crawler_stats = (0, 0, 0)
         
         # 构建性能指标
         performance_metrics = {
@@ -267,15 +257,8 @@ class MonitoringService:
         )
         failed_publish_tasks = failed_publish_result.scalars().all()
         
-        # 获取失败的爬虫任务
-        failed_crawler_result = await self.db.execute(
-            select(CrawlerTask).where(
-                CrawlerTask.status == CrawlTaskStatus.failed,
-                CrawlerTask.created_at >= cutoff_date,
-                CrawlerTask.error_message.isnot(None),
-            ).order_by(CrawlerTask.created_at.desc())
-        )
-        failed_crawler_tasks = failed_crawler_result.scalars().all()
+        # 模拟失败的爬虫任务
+        failed_crawler_tasks = []
         
         # 分析错误类型
         error_analysis = {
@@ -436,17 +419,8 @@ class MonitoringService:
         )
         pub_stats = publish_result.first()
         
-        # 获取爬虫任务状态
-        crawler_result = await self.db.execute(
-            select(
-                func.count(CrawlerTask.id),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.pending, 1), else_=0)),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.running, 1), else_=0)),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.completed, 1), else_=0)),
-                func.sum(case((CrawlerTask.status == CrawlTaskStatus.failed, 1), else_=0)),
-            )
-        )
-        crawler_stats = crawler_result.first()
+        # 模拟爬虫任务状态
+        crawler_stats = (0, 0, 0, 0, 0)
         
         return {
             "generation": {
