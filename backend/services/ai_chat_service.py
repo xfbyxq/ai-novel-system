@@ -1058,25 +1058,35 @@ class AiChatService:
         prompt = user_message
         if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
             novel_info = session.context.get("novel_info", {})
+            novel_id = novel_info.get('id') if novel_info else None
             
-            # 检查小说信息是否需要刷新（版本号变化）
-            if novel_info and "error" not in novel_info:
-                novel_id = novel_info.get('id')
-                if novel_id:
-                    # 获取当前记忆版本
-                    current_version = self.memory_service.get_novel_version(novel_id)
-                    session_version = session.context.get('novel_version', 0)
-                    
-                    # 如果版本号不一致，重新加载小说信息
-                    if current_version != session_version:
-                        logger.info(f"检测到小说 {novel_id} 数据更新（版本 {session_version} -> {current_version}），重新加载小说信息")
-                        chapter_start = session.context.get("chapter_range", {}).get("start", 1)
-                        chapter_end = session.context.get("chapter_range", {}).get("end", 10)
-                        # 强制从数据库加载最新数据
-                        novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end, force_db=True)
-                        session.context["novel_info"] = novel_info
-                        session.context['novel_version'] = current_version
-                        logger.info(f"小说 {novel_id} 信息已从数据库刷新到最新版本")
+            # 检查小说信息是否需要刷新（版本号变化或数据为空）
+            if novel_id:
+                # 获取当前记忆版本
+                current_version = self.memory_service.get_novel_version(novel_id)
+                session_version = session.context.get('novel_version', 0)
+                
+                # 如果版本号不一致，重新加载小说信息
+                if current_version != session_version:
+                    logger.info(f"检测到小说 {novel_id} 数据更新（版本 {session_version} -> {current_version}），重新加载小说信息")
+                    chapter_start = session.context.get("chapter_range", {}).get("start", 1)
+                    chapter_end = session.context.get("chapter_range", {}).get("end", 10)
+                    # 强制从数据库加载最新数据
+                    novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end, force_db=True)
+                    session.context["novel_info"] = novel_info
+                    session.context['novel_version'] = current_version
+                    logger.info(f"小说 {novel_id} 信息已从数据库刷新到最新版本")
+            else:
+                # novel_id 为空，说明 novel_info 数据为空，需要重新加载
+                stored_novel_id = session.context.get('novel_id')
+                if stored_novel_id:
+                    logger.warning(f"会话 {session.session_id} 的 novel_info 为空，重新加载小说 {stored_novel_id} 信息")
+                    chapter_start = session.context.get("chapter_range", {}).get("start", 1)
+                    chapter_end = session.context.get("chapter_range", {}).get("end", 10)
+                    novel_info = await self.get_novel_info(stored_novel_id, chapter_start, chapter_end, force_db=True)
+                    session.context["novel_info"] = novel_info
+                    session.context['novel_version'] = self.memory_service.get_novel_version(stored_novel_id)
+                    logger.info(f"小说 {stored_novel_id} 信息已重新加载")
             
             if novel_info and "error" not in novel_info:
                 # 检查用户是否询问世界观相关问题
