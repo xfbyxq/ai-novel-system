@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message,
+  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Select, Form, Card,
 } from 'antd';
-import { SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, CheckCircleOutlined, BookOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { createChatSession, getWebSocketUrl, sendChatMessage, listSessions, deleteSession as deleteSessionApi } from '@/api/aiChat';
 import { updateWorldSetting, updatePlotOutline } from '@/api/novels';
 
 const { TextArea } = Input;
+const { Option } = Select;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -16,17 +17,19 @@ interface Message {
 interface Props {
   open: boolean;
   onClose: () => void;
-  scene: 'novel_creation' | 'crawler_task' | 'novel_revision';
+  scene: 'novel_creation' | 'crawler_task' | 'novel_revision' | 'novel_analysis';
   novelId?: string;
+  novelTitle?: string;
 }
 
-export default function AIChatDrawer({ open, onClose, scene, novelId }: Props) {
+export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sessions, setSessions] = useState<any[]>([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [chapterRange, setChapterRange] = useState({ start: 1, end: 10 });
 
   const [streaming, setStreaming] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -34,12 +37,17 @@ export default function AIChatDrawer({ open, onClose, scene, novelId }: Props) {
 
   const initSession = async () => {
     try {
-      const context = novelId ? { novel_id: novelId } : undefined;
+      const context = novelId ? { 
+        novel_id: novelId, 
+        chapter_start: chapterRange.start, 
+        chapter_end: chapterRange.end 
+      } : undefined;
       const response = await createChatSession({ scene, context });
       setSessionId(response.session_id);
       setMessages([{ role: 'assistant', content: response.welcome_message }]);
     } catch (error) {
       console.error('创建会话失败:', error);
+      message.error('创建会话失败，请重试');
     }
   };
 
@@ -253,25 +261,77 @@ export default function AIChatDrawer({ open, onClose, scene, novelId }: Props) {
     }
   };
 
-  const title = scene === 'novel_creation' ? '小说创作助手' : scene === 'novel_revision' ? '小说修订助手' : '爬虫策略助手';
+  const getSceneTitle = () => {
+    switch (scene) {
+      case 'novel_creation':
+        return '小说创作助手';
+      case 'novel_revision':
+        return '小说修订助手';
+      case 'novel_analysis':
+        return '小说分析助手';
+      case 'crawler_task':
+        return '爬虫策略助手';
+      default:
+        return 'AI助手';
+    }
+  };
+
+  const title = getSceneTitle();
 
   return (
     <>
       <Drawer
         title={
-          <Space>
-            <RobotOutlined />
-            <span>{title}</span>
-            <Button size="small" icon={<HistoryOutlined />} onClick={() => {
-              loadSessions();
-              setHistoryModalOpen(true);
-            }} />
-            <Button size="small" icon={<ReloadOutlined />} onClick={handleRestart} />
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space>
+              <RobotOutlined />
+              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{title}</span>
+              {novelTitle && (
+                <Card size="small" style={{ marginLeft: 'auto', background: '#f0f9ff' }}>
+                  <Space>
+                    <BookOutlined />
+                    <Typography.Text ellipsis style={{ maxWidth: 200 }}>{novelTitle}</Typography.Text>
+                  </Space>
+                </Card>
+              )}
+            </Space>
+            {(scene === 'novel_revision' || scene === 'novel_analysis') && novelId && (
+              <Space style={{ marginTop: 8, justifyContent: 'space-between', width: '100%' }}>
+                <Typography.Text type="secondary">章节范围</Typography.Text>
+                <Space>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={chapterRange.start}
+                    onChange={(e) => setChapterRange({ ...chapterRange, start: parseInt(e.target.value) || 1 })}
+                    style={{ width: 80 }}
+                  />
+                  <span>至</span>
+                  <Input
+                    type="number"
+                    min={chapterRange.start}
+                    value={chapterRange.end}
+                    onChange={(e) => setChapterRange({ ...chapterRange, end: parseInt(e.target.value) || chapterRange.start })}
+                    style={{ width: 80 }}
+                  />
+                  <Button size="small" onClick={handleRestart}>
+                    应用
+                  </Button>
+                </Space>
+              </Space>
+            )}
+            <Space style={{ marginTop: 8 }}>
+              <Button size="small" icon={<HistoryOutlined />} onClick={() => {
+                loadSessions();
+                setHistoryModalOpen(true);
+              }} />
+              <Button size="small" icon={<ReloadOutlined />} onClick={handleRestart} />
+            </Space>
           </Space>
         }
         placement="right"
         size="large"
-        style={{ width: 480 }}
+        style={{ width: 560 }}
         open={open}
         onClose={onClose}
       >

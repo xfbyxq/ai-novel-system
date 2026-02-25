@@ -29,3 +29,19 @@ export async function updateChapter(
   );
   return data;
 }
+
+export async function deleteChapter(
+  novelId: string,
+  chapterNumber: number,
+): Promise<void> {
+  await apiClient.delete(`/novels/${novelId}/chapters/${chapterNumber}`);
+}
+
+export async function batchDeleteChapters(
+  novelId: string,
+  chapterNumbers: number[],
+): Promise<void> {
+  await apiClient.post(`/novels/${novelId}/chapters/batch-delete`, {
+    chapter_numbers: chapterNumbers,
+  });
+}

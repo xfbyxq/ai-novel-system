@@ -77,6 +77,7 @@ class GenerationService:
                 genre=novel.genre,
                 tags=novel.tags or [],
                 context=novel.synopsis or "",
+                length_type=novel.length_type.value if novel.length_type else "medium",
             )
 
             # 保存世界观设定（LLM 可能返回非标准结构）

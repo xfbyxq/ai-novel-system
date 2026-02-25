@@ -17,6 +17,11 @@ from backend.schemas.outline import (
 )
 from core.models.chapter import Chapter
 from core.models.novel import Novel
+from pydantic import BaseModel
+
+
+class BatchDeleteRequest(BaseModel):
+    chapter_numbers: list[int]
 
 router = APIRouter(prefix="/novels/{novel_id}/chapters", tags=["chapters"])
 
@@ -131,3 +136,64 @@ async def update_chapter(
     await db.commit()
     await db.refresh(chapter)
     return chapter
+
+
+@router.delete("/{chapter_number}", status_code=204)
+async def delete_chapter(
+    novel_id: UUID,
+    chapter_number: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    删除章节.
+    """
+    query = select(Chapter).where(
+        Chapter.novel_id == novel_id,
+        Chapter.chapter_number == chapter_number,
+    )
+    result = await db.execute(query)
+    chapters = result.scalars().all()
+    
+    if not chapters:
+        raise HTTPException(
+            status_code=404,
+            detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+        )
+    
+    for chapter in chapters:
+        await db.delete(chapter)
+    
+    await db.commit()
+    return None
+
+
+@router.post("/batch-delete", status_code=204)
+async def batch_delete_chapters(
+    novel_id: UUID,
+    request: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    批量删除章节.
+    """
+    # Verify novel exists
+    novel_query = select(Novel).where(Novel.id == novel_id)
+    novel_result = await db.execute(novel_query)
+    novel = novel_result.scalar_one_or_none()
+    
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+    
+    # Delete chapters
+    query = select(Chapter).where(
+        Chapter.novel_id == novel_id,
+        Chapter.chapter_number.in_(request.chapter_numbers)
+    )
+    result = await db.execute(query)
+    chapters = result.scalars().all()
+    
+    for chapter in chapters:
+        await db.delete(chapter)
+    
+    await db.commit()
+    return None

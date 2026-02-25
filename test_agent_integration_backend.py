@@ -3,14 +3,13 @@
 import asyncio
 import logging
 import time
-from uuid import uuid4
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import async_session_factory
 from core.models.novel import Novel, NovelStatus
-from core.models.generation_task import GenerationTask, TaskStatus
+from core.models.generation_task import GenerationTask
 from backend.config import settings
 
 # 配置日志
@@ -40,23 +39,19 @@ async def create_test_novel():
 
 async def delete_test_data(novel_id):
     """清理测试数据"""
+    from sqlalchemy import delete
+    
     async with async_session_factory() as session:
         try:
             # 先删除相关任务
-            task_result = await session.execute(
-                GenerationTask.__table__.select().where(GenerationTask.novel_id == novel_id)
+            await session.execute(
+                delete(GenerationTask).where(GenerationTask.novel_id == novel_id)
             )
-            tasks = task_result.all()
-            for task in tasks:
-                await session.delete(GenerationTask(id=task.id))
             
             # 再删除小说
-            novel_result = await session.execute(
-                Novel.__table__.select().where(Novel.id == novel_id)
+            await session.execute(
+                delete(Novel).where(Novel.id == novel_id)
             )
-            novel = novel_result.scalar_one_or_none()
-            if novel:
-                await session.delete(novel)
             
             await session.commit()
             logger.info("清理测试数据完成")
@@ -152,7 +147,6 @@ async def test_agent_integration_backend():
             logger.info("写作任务执行完成！")
             
         logger.info("✅ Agent集成测试 (后端模式) 成功！")
-        
     except Exception as e:
         logger.error(f"❌ Agent集成测试 (后端模式) 失败: {e}")
         raise

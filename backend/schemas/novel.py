@@ -12,6 +12,7 @@ class NovelCreate(BaseModel):
     tags: Optional[list[str]] = Field(default=None, description="标签列表")
     synopsis: Optional[str] = Field(default=None, description="简介")
     target_platform: str = Field(default="番茄小说", description="目标平台")
+    length_type: str = Field(default="medium", description="小说篇幅类型: short(短文), medium(中篇小说), long(长篇小说)")
 
 
 class NovelUpdate(BaseModel):
@@ -23,6 +24,7 @@ class NovelUpdate(BaseModel):
     status: Optional[str] = Field(default=None, description="小说状态")
     cover_url: Optional[str] = Field(default=None, description="封面URL")
     target_platform: Optional[str] = Field(default=None, description="目标平台")
+    length_type: Optional[str] = Field(default=None, description="小说篇幅类型: short(短文), medium(中篇小说), long(长篇小说)")
 
 
 class NovelResponse(BaseModel):
@@ -33,6 +35,7 @@ class NovelResponse(BaseModel):
     genre: str = Field(..., description="小说类型")
     tags: Optional[list[str]] = Field(default=None, description="标签列表")
     status: str = Field(..., description="小说状态")
+    length_type: str = Field(..., description="小说篇幅类型")
     word_count: int = Field(..., description="字数")
     chapter_count: int = Field(..., description="章节数")
     cover_url: Optional[str] = Field(default=None, description="封面URL")

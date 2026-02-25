@@ -184,12 +184,14 @@ class AgentDispatcher:
         genre = kwargs.get('genre')
         tags = kwargs.get('tags', [])
         context = kwargs.get('context', '')
+        length_type = kwargs.get('length_type', 'medium')
         
         # 使用CrewManager执行企划
         return await self.crew_manager.run_planning_phase(
             genre=genre,
             tags=tags,
             context=context,
+            length_type=length_type,
         )
     
     async def run_chapter_writing(self, novel_id: UUID, task_id: UUID, chapter_number: int, volume_number: int = 1, **kwargs) -> Dict[str, Any]:

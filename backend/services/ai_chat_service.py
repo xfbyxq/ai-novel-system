@@ -9,12 +9,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llm.qwen_client import QwenClient
+from .memory_service import get_novel_memory_service
 
 logger = logging.getLogger(__name__)
 
 SCENE_NOVEL_CREATION = "novel_creation"
 SCENE_CRAWLER_TASK = "crawler_task"
 SCENE_NOVEL_REVISION = "novel_revision"
+SCENE_NOVEL_ANALYSIS = "novel_analysis"
 
 NOVEL_GENRES = ["玄幻", "都市", "仙侠", "历史", "军事", "游戏", "科幻", "悬疑", "都市", "轻小说"]
 CRAWLER_TYPES = ["ranking", "trending_tags", "book_metadata", "genre_list"]
@@ -47,6 +49,15 @@ SYSTEM_PROMPTS = {
 4. **章节内容修订**：情节逻辑、描写细节、人物对话、节奏控制的优化
 
 请用中文回复，语气专业但亲切。分析现有内容的问题，并提供具体的修订建议。可以主动询问用户更多细节以便给出更好的建议。""",
+    
+    SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。你需要根据小说的现有内容，提供全面的分析和建议，包括但不限于：
+
+1. **整体结构分析**：小说结构的合理性、节奏的把控、情节的连贯性
+2. **元素分析**：世界观、角色、大纲、章节内容的质量和协调性
+3. **市场定位分析**：目标受众、竞争优势、潜在风险
+4. **改进建议**：具体的优化方向、实施步骤、预期效果
+
+请用中文回复，语气专业但亲切。提供客观、全面的分析，并给出有针对性的建议。可以主动询问用户更多细节以便给出更准确的分析。""",
 }
 
 WELCOME_MESSAGES = {
@@ -55,6 +66,8 @@ WELCOME_MESSAGES = {
     SCENE_CRAWLER_TASK: "你好！我是爬虫策略AI助手。你可以告诉我你想爬取什么数据，或者想了解哪些市场趋势，我来帮你分析并制定合适的爬取方案。",
     
     SCENE_NOVEL_REVISION: "你好！我是小说修订AI助手。你可以告诉我你对小说的哪些部分不满意，无论是世界观、角色、大纲还是章节内容，我都会根据现有内容提供专业的修订建议。",
+    
+    SCENE_NOVEL_ANALYSIS: "你好！我是小说分析AI助手。我可以帮你全面分析小说的整体情况，包括结构、元素、市场定位等方面，并提供有针对性的改进建议。请选择你想分析的小说。",
 }
 
 
@@ -75,21 +88,58 @@ class ChatSession:
         self.scene = scene
         self.context = context or {}
         self.messages: list[ChatMessage] = []
+        self.dialogue_state = "active"  # active, waiting_for_clarification, completed
+        self.pending_questions = []
+        self.conversation_history = []
+        self.last_user_intent = None
+        self.follow_up_questions = []
         
         welcome = WELCOME_MESSAGES.get(scene, "你好！有什么我可以帮助你的？")
         self.messages.append(ChatMessage("assistant", welcome))
     
     def add_user_message(self, content: str) -> None:
         self.messages.append(ChatMessage("user", content))
+        self.conversation_history.append({"role": "user", "content": content})
     
     def add_assistant_message(self, content: str) -> None:
         self.messages.append(ChatMessage("assistant", content))
+        self.conversation_history.append({"role": "assistant", "content": content})
     
     def get_messages_for_api(self) -> list[dict]:
         result = []
         for msg in self.messages:
             result.append(msg.to_dict())
         return result
+    
+    def get_conversation_history(self, limit: int = 10) -> list[dict]:
+        """获取最近的对话历史"""
+        return self.conversation_history[-limit:]
+    
+    def set_dialogue_state(self, state: str) -> None:
+        """设置对话状态"""
+        self.dialogue_state = state
+    
+    def add_pending_question(self, question: str) -> None:
+        """添加待处理的问题"""
+        self.pending_questions.append(question)
+    
+    def get_pending_question(self) -> Optional[str]:
+        """获取待处理的问题"""
+        if self.pending_questions:
+            return self.pending_questions.pop(0)
+        return None
+    
+    def set_last_user_intent(self, intent: str) -> None:
+        """设置用户的最后意图"""
+        self.last_user_intent = intent
+    
+    def add_follow_up_question(self, question: str) -> None:
+        """添加后续问题"""
+        self.follow_up_questions.append(question)
+    
+    def get_follow_up_questions(self) -> list[str]:
+        """获取后续问题"""
+        return self.follow_up_questions
 
 
 class AiChatService:
@@ -99,6 +149,7 @@ class AiChatService:
         self.db = db
         self.client = QwenClient()
         self.sessions: dict[str, ChatSession] = {}
+        self.memory_service = get_novel_memory_service()
     
     def _get_system_prompt(self, scene: str) -> str:
         return SYSTEM_PROMPTS.get(scene, "你是一位AI助手，请帮助用户解决问题。")
@@ -106,8 +157,17 @@ class AiChatService:
     def _get_welcome_message(self, scene: str) -> str:
         return WELCOME_MESSAGES.get(scene, "你好！有什么我可以帮助你的？")
     
-    async def get_novel_info(self, novel_id: str) -> dict:
-        """获取小说的完整信息，包括世界观、角色、大纲和章节"""
+    async def get_novel_info(self, novel_id: str, chapter_start: int = 1, chapter_end: int = 10) -> dict:
+        """获取小说的完整信息，包括世界观、角色、大纲和章节
+        
+        Args:
+            novel_id: 小说ID
+            chapter_start: 开始章节（默认1）
+            chapter_end: 结束章节（默认10）
+        
+        Returns:
+            小说信息字典，包含一个额外的'has_changes'字段表示内容是否有变化
+        """
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
         from core.models.novel import Novel
@@ -120,7 +180,36 @@ class AiChatService:
             logger.error(f"无效的小说 ID 格式: {novel_id}")
             return {"error": "无效的小说 ID 格式"}
         
-        logger.info(f"获取小说信息: {novel_id}")
+        # 首先尝试从记忆服务获取
+        memory_data = self.memory_service.get_novel_memory(novel_id)
+        if memory_data:
+            logger.info(f"从记忆服务获取小说信息: {novel_id}")
+            # 转换为预期的格式
+            novel_info = {
+                "id": memory_data['base']['id'],
+                "title": memory_data['base']['title'],
+                "author": memory_data['base'].get('author'),
+                "genre": memory_data['base']['genre'],
+                "tags": memory_data['base'].get('tags', []),
+                "status": memory_data['base']['status'],
+                "length_type": memory_data['base'].get('length_type'),
+                "word_count": memory_data['base'].get('word_count'),
+                "chapter_count": memory_data['base'].get('chapter_count'),
+                "cover_url": memory_data['base'].get('cover_url'),
+                "synopsis": memory_data['base']['synopsis'],
+                "target_platform": memory_data['base'].get('target_platform'),
+                "world_setting": memory_data['details']['world_setting'],
+                "characters": memory_data['details']['characters'],
+                "plot_outline": memory_data['details']['plot_outline'],
+                "chapters": memory_data['chapters'],
+                "metadata": memory_data['base'].get('metadata', {}),
+                "created_at": memory_data['base'].get('created_at'),
+                "updated_at": memory_data['base'].get('updated_at'),
+                "has_changes": False,  # 从记忆服务获取，视为无变化
+            }
+            return novel_info
+        
+        logger.info(f"从数据库获取小说信息: {novel_id}")
         
         try:
             # 使用类实例的数据库会话
@@ -145,21 +234,32 @@ class AiChatService:
             novel_info = {
                 "id": str(novel.id),
                 "title": novel.title,
+                "author": novel.author,
                 "genre": novel.genre,
+                "tags": novel.tags or [],
                 "status": novel.status.value if hasattr(novel.status, 'value') else novel.status,
+                "length_type": novel.length_type.value if hasattr(novel.length_type, 'value') else novel.length_type,
+                "word_count": novel.word_count,
+                "chapter_count": novel.chapter_count,
+                "cover_url": novel.cover_url,
                 "synopsis": novel.synopsis,
+                "target_platform": novel.target_platform,
                 "world_setting": None,
                 "characters": [],
                 "plot_outline": None,
                 "chapters": [],
+                "metadata": novel.metadata_ or {},
+                "created_at": novel.created_at.isoformat() if novel.created_at else None,
+                "updated_at": novel.updated_at.isoformat() if novel.updated_at else None,
             }
             
             # 添加世界观信息
             if novel.world_setting:
+                # 保持raw_content为字符串，以便在提示词中正确使用
                 novel_info["world_setting"] = {
                     "id": str(novel.world_setting.id),
-                    "setting_type": novel.world_setting.setting_type,
-                    "content": novel.world_setting.content,
+                    "setting_type": novel.world_setting.world_type,
+                    "content": novel.world_setting.raw_content or "",
                 }
             
             # 添加角色信息（限制最多20个角色）
@@ -168,7 +268,7 @@ class AiChatService:
                     "id": str(character.id),
                     "name": character.name,
                     "role_type": character.role_type,
-                    "description": character.description,
+                    "description": character.appearance or character.personality or "",
                     "personality": character.personality,
                     "background": character.background,
                 })
@@ -177,11 +277,13 @@ class AiChatService:
             if novel.plot_outline:
                 novel_info["plot_outline"] = {
                     "id": str(novel.plot_outline.id),
-                    "content": novel.plot_outline.content,
+                    "content": novel.plot_outline.raw_content or "",
                 }
             
             # 优化章节内容截断逻辑
             def truncate_content(content, max_length=500):
+                if content is None:
+                    return ""
                 if len(content) <= max_length:
                     return content
                 # 尝试在句子边界截断
@@ -191,16 +293,27 @@ class AiChatService:
                     return truncated[:last_period+1] + "..."
                 return truncated + "..."
             
-            # 添加章节信息（只取前10章，避免内容过多）
-            for chapter in novel.chapters[:10]:
-                novel_info["chapters"].append({
-                    "id": str(chapter.id),
-                    "chapter_number": chapter.chapter_number,
-                    "title": chapter.title,
-                    "content": truncate_content(chapter.content),
-                })
+            # 添加章节信息（根据指定范围加载）
+            for chapter in novel.chapters:
+                if chapter_start <= chapter.chapter_number <= chapter_end:
+                    novel_info["chapters"].append({
+                        "id": str(chapter.id),
+                        "chapter_number": chapter.chapter_number,
+                        "title": chapter.title,
+                        "content": truncate_content(chapter.content),
+                    })
             
-            logger.info(f"成功获取小说信息: {novel.title}")
+            # 存储到记忆服务并检测变化
+            has_changes = self.memory_service.set_novel_memory(novel_id, novel_info)
+            
+            # 添加变化状态到返回结果
+            novel_info["has_changes"] = has_changes
+            
+            if has_changes:
+                logger.info(f"成功获取小说信息并检测到变化: {novel.title}, 版本已更新")
+            else:
+                logger.info(f"成功获取小说信息: {novel.title}, 内容无变化")
+            
             return novel_info
         except Exception as e:
             logger.error(f"获取小说信息失败: {e}")
@@ -238,20 +351,23 @@ class AiChatService:
                     # 插入新会话
                     await db.execute(insert(AIChatSession).values(**session_data))
                 
-                # 保存消息
-                for msg in session.messages:
-                    # 检查消息是否已存在（这里简化处理，只保存新消息）
-                    msg_count = await db.execute(
-                        select(AIChatMessage)
-                        .where(AIChatMessage.session_id == session.session_id)
-                    )
-                    if msg_count.scalar_one_or_none() is None:
-                        msg_data = {
-                            "session_id": session.session_id,
-                            "role": msg.role,
-                            "content": msg.content,
-                        }
-                        await db.execute(insert(AIChatMessage).values(**msg_data))
+                # 保存消息 - 获取已存在的消息数量，只保存新消息
+                existing_msgs = await db.execute(
+                    select(AIChatMessage)
+                    .where(AIChatMessage.session_id == session.session_id)
+                    .order_by(AIChatMessage.created_at)
+                )
+                existing_msg_list = existing_msgs.scalars().all()
+                existing_count = len(existing_msg_list)
+                
+                # 只保存新消息（跳过已存在的消息）
+                for msg in session.messages[existing_count:]:
+                    msg_data = {
+                        "session_id": session.session_id,
+                        "role": msg.role,
+                        "content": msg.content,
+                    }
+                    await db.execute(insert(AIChatMessage).values(**msg_data))
                 
                 await db.commit()
             except Exception as e:
@@ -281,6 +397,10 @@ class AiChatService:
                     session_data.scene,
                     session_data.context
                 )
+                
+                # 清空构造函数自动添加的欢迎消息，避免重复
+                session.messages.clear()
+                session.conversation_history.clear()
                 
                 # 加载消息
                 messages_result = await db.execute(
@@ -363,12 +483,35 @@ class AiChatService:
         session_id = str(uuid.uuid4())
         session = ChatSession(session_id, scene, context)
         
-        # 如果是小说修订场景，加载小说信息
-        if scene == SCENE_NOVEL_REVISION and context and "novel_id" in context:
+        # 如果是小说相关场景，加载小说信息
+        if context and "novel_id" in context:
             novel_id = context["novel_id"]
-            novel_info = await self.get_novel_info(novel_id)
+            chapter_start = context.get("chapter_start", 1)
+            chapter_end = context.get("chapter_end", 10)
+            novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end)
             session.context["novel_info"] = novel_info
-            logger.info(f"为小说修订场景加载小说信息: {novel_id}")
+            session.context["chapter_range"] = {"start": chapter_start, "end": chapter_end}
+            
+            # 获取变化状态
+            has_changes = novel_info.get("has_changes", False)
+            
+            logger.info(f"为场景 {scene} 加载小说信息: {novel_id}, 章节范围: {chapter_start}-{chapter_end}, 有变化: {has_changes}")
+            
+            # 生成并存储分析结果到记忆服务
+            analysis = self._analyze_novel_content(novel_info)
+            session.context["analysis"] = analysis
+            
+            # 检测小说内容变化并更新记忆
+            current_memory = self.memory_service.get_novel_memory(novel_id)
+            if current_memory:
+                # 只有在内容有变化时才更新分析结果
+                if has_changes:
+                    current_memory['analysis'] = analysis
+                    self.memory_service.set_novel_memory(novel_id, current_memory)
+                    logger.info(f"小说分析结果已更新: {novel_id}")
+            else:
+                novel_info['analysis'] = analysis
+                self.memory_service.set_novel_memory(novel_id, novel_info)
         
         self.sessions[session_id] = session
         
@@ -381,6 +524,37 @@ class AiChatService:
     
     def get_session(self, session_id: str) -> Optional[ChatSession]:
         return self.sessions.get(session_id)
+    
+    def _analyze_user_intent(self, user_message: str, scene: str) -> str:
+        """分析用户的意图，识别用户需求类型"""
+        if scene == SCENE_NOVEL_REVISION:
+            return self._analyze_revision_intent(user_message)
+        elif scene == SCENE_NOVEL_CREATION:
+            # 分析创作意图
+            if any(keyword in user_message for keyword in ["世界观", "世界设定", "背景"]):
+                return "world_creation"
+            elif any(keyword in user_message for keyword in ["角色", "人物", "主角"]):
+                return "character_creation"
+            elif any(keyword in user_message for keyword in ["大纲", "剧情", "情节"]):
+                return "plot_creation"
+            elif any(keyword in user_message for keyword in ["类型", "风格", "定位"]):
+                return "genre_creation"
+            else:
+                return "general_creation"
+        elif scene == SCENE_NOVEL_ANALYSIS:
+            # 分析分析意图
+            if any(keyword in user_message for keyword in ["结构", "整体", "框架"]):
+                return "structure_analysis"
+            elif any(keyword in user_message for keyword in ["市场", "定位", "读者"]):
+                return "market_analysis"
+            elif any(keyword in user_message for keyword in ["优势", "不足", "问题"]):
+                return "strengths_weaknesses"
+            elif any(keyword in user_message for keyword in ["建议", "改进", "优化"]):
+                return "improvement_suggestions"
+            else:
+                return "general_analysis"
+        else:
+            return "general"
     
     def _analyze_revision_intent(self, user_message: str) -> str:
         """分析用户的修订意图，识别修订类型"""
@@ -464,34 +638,233 @@ class AiChatService:
         
         return "general"  # 通用修订
     
+    def _generate_follow_up_questions(self, intent: str, scene: str, novel_info: Optional[dict] = None) -> list[str]:
+        """根据用户意图生成后续问题"""
+        questions = []
+        
+        if scene == SCENE_NOVEL_REVISION:
+            if intent == "world_setting":
+                questions.append("你希望在世界观设定中重点改进哪个方面？（如修炼体系、地理环境、势力划分等）")
+                questions.append("你对当前世界观设定有什么具体的不满意之处？")
+            elif intent == "character":
+                questions.append("你希望重点改进哪个角色？")
+                questions.append("你觉得该角色当前存在哪些问题？")
+            elif intent == "outline":
+                questions.append("你希望改进剧情的哪个部分？（如主线、支线、高潮等）")
+                questions.append("你对当前剧情发展有什么具体的想法？")
+            elif intent == "chapter":
+                questions.append("你希望改进哪个章节？")
+                questions.append("你觉得该章节存在哪些具体问题？")
+            else:
+                questions.append("你对小说的哪些方面不满意？")
+                questions.append("你希望达到什么样的改进效果？")
+        
+        elif scene == SCENE_NOVEL_CREATION:
+            if intent == "world_creation":
+                questions.append("你希望创建什么样的世界观？（如玄幻、科幻、历史等）")
+                questions.append("你对世界观有什么具体的设定想法？")
+            elif intent == "character_creation":
+                questions.append("你希望创建什么样的角色？")
+                questions.append("角色的性格和背景是怎样的？")
+            elif intent == "plot_creation":
+                questions.append("你希望讲述什么样的故事？")
+                questions.append("故事的主要冲突和高潮是什么？")
+            elif intent == "genre_creation":
+                questions.append("你希望创作什么类型的小说？")
+                questions.append("你对该类型小说有什么特别的要求？")
+            else:
+                questions.append("你希望创作什么类型的小说？")
+                questions.append("你对小说有什么具体的创意想法？")
+        
+        elif scene == SCENE_NOVEL_ANALYSIS:
+            if intent == "structure_analysis":
+                questions.append("你对小说的结构有什么具体的关注点？")
+                questions.append("你希望分析小说的哪些结构要素？")
+            elif intent == "market_analysis":
+                questions.append("你希望了解小说在哪个市场的表现？")
+                questions.append("你对小说的市场定位有什么疑问？")
+            elif intent == "strengths_weaknesses":
+                questions.append("你特别关注小说的哪些优势或不足？")
+                questions.append("你希望在哪些方面得到改进建议？")
+            elif intent == "improvement_suggestions":
+                questions.append("你希望在哪些方面得到具体的改进建议？")
+                questions.append("你对改进的优先级有什么想法？")
+            else:
+                questions.append("你希望从哪些方面分析这部小说？")
+                questions.append("你对分析结果有什么特别的期望？")
+        
+        return questions
+    
+    def _check_need_clarification(self, user_message: str, scene: str) -> bool:
+        """检查是否需要澄清用户意图"""
+        # 检查用户输入是否过于简短或模糊
+        if len(user_message) < 10:
+            return True
+        
+        # 检查是否包含模糊词汇
+        vague_terms = ["帮忙", "改进", "分析", "建议", "看看", "检查"]
+        if any(term in user_message for term in vague_terms):
+            # 如果只是模糊请求，需要澄清
+            if all(term not in user_message for term in ["世界观", "角色", "剧情", "章节", "结构", "市场"]):
+                return True
+        
+        return False
+    
+    def _analyze_novel_content(self, novel_info: dict) -> dict:
+        """分析小说内容，生成分析结果"""
+        analysis = {
+            "strengths": [],
+            "weaknesses": [],
+            "suggestions": [],
+            "genre_specific": [],
+        }
+        
+        # 分析世界观
+        if novel_info.get('world_setting'):
+            world_content = novel_info['world_setting'].get('content', '') or ''
+            if len(world_content) > 500:
+                analysis['strengths'].append("世界观设定详细丰富")
+            else:
+                analysis['weaknesses'].append("世界观设定可能过于简单")
+                analysis['suggestions'].append("建议扩展世界观设定，增加更多细节和深度")
+        else:
+            analysis['weaknesses'].append("缺乏世界观设定")
+            analysis['suggestions'].append("建议添加详细的世界观设定")
+        
+        # 分析角色
+        characters = novel_info.get('characters', [])
+        if len(characters) >= 3:
+            analysis['strengths'].append(f"角色数量充足（{len(characters)}个）")
+        else:
+            analysis['weaknesses'].append("角色数量较少")
+            analysis['suggestions'].append("建议增加更多有特色的角色")
+        
+        # 分析大纲
+        if novel_info.get('plot_outline'):
+            outline_content = novel_info['plot_outline'].get('content', '') or ''
+            if len(outline_content) > 300:
+                analysis['strengths'].append("剧情大纲完整")
+            else:
+                analysis['weaknesses'].append("剧情大纲可能过于简单")
+                analysis['suggestions'].append("建议扩展剧情大纲，增加更多情节细节")
+        else:
+            analysis['weaknesses'].append("缺乏剧情大纲")
+            analysis['suggestions'].append("建议添加详细的剧情大纲")
+        
+        # 分析章节
+        chapters = novel_info.get('chapters', [])
+        if len(chapters) >= 3:
+            analysis['strengths'].append(f"章节数量充足（{len(chapters)}章）")
+        else:
+            analysis['weaknesses'].append("章节数量较少")
+            analysis['suggestions'].append("建议增加更多章节内容")
+        
+        # 基于小说类型的分析
+        genre = novel_info.get('genre', '')
+        if genre == "玄幻":
+            analysis['genre_specific'].append("作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写")
+        elif genre == "都市":
+            analysis['genre_specific'].append("作为都市小说，建议加强人物关系和现实感的描写")
+        elif genre == "仙侠":
+            analysis['genre_specific'].append("作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定")
+        elif genre == "历史":
+            analysis['genre_specific'].append("作为历史小说，建议加强历史细节的准确性和时代背景的描写")
+        
+        return analysis
+    
     def _generate_revision_prompt(self, user_message: str, revision_type: str, novel_info: dict) -> str:
         """根据修订类型和小说内容生成针对性的提示词"""
+        # 生成小说分析
+        analysis = self._analyze_novel_content(novel_info)
+        
         # 构建基础提示
         prompt = f"# 用户修订需求\n{user_message}\n"
         
         # 添加修订目标说明
         prompt += "\n# 修订目标\n"
         
-        # 根据修订类型添加针对性的提示
-        if revision_type == "world_setting":
-            prompt += "请重点分析小说的世界观设定，包括修炼体系、地理环境、势力划分等方面的合理性和连贯性，并提供具体的修订建议。\n"
+        # 添加小说分析结果
+        prompt += "\n# 小说分析\n"
+        if analysis['strengths']:
+            prompt += "## 优势\n"
+            for strength in analysis['strengths']:
+                prompt += f"- {strength}\n"
+        if analysis['weaknesses']:
+            prompt += "\n## 不足\n"
+            for weakness in analysis['weaknesses']:
+                prompt += f"- {weakness}\n"
+        if analysis['suggestions']:
+            prompt += "\n## 初步建议\n"
+            for suggestion in analysis['suggestions']:
+                prompt += f"- {suggestion}\n"
+        if analysis['genre_specific']:
+            prompt += "\n## 类型特定建议\n"
+            for suggestion in analysis['genre_specific']:
+                prompt += f"- {suggestion}\n"
+        
+        # 检查用户是否询问世界观相关问题
+        is_worldview_question = any(keyword in user_message for keyword in ["世界观", "世界设定", "背景", "修炼体系", "地理环境", "势力划分"])
+        
+        # 无论修订类型如何，只要用户询问世界观问题，就添加世界观信息
+        if is_worldview_question or revision_type == "world_setting":
+            prompt += "\n# 详细分析要求\n"
+            prompt += "请重点分析小说的世界观设定，包括以下方面：\n"
+            prompt += "1. 修炼体系的合理性和层次感\n"
+            prompt += "2. 地理环境的丰富性和独特性\n"
+            prompt += "3. 势力划分的逻辑性和平衡性\n"
+            prompt += "4. 世界规则的一致性和创新性\n"
+            prompt += "并提供具体的修订建议，包括如何扩展世界观深度和广度。\n"
             if novel_info.get('world_setting'):
                 prompt += "\n## 当前世界观\n"
-                world_content = novel_info.get('world_setting', {}).get('content', '无')
+                world_content = novel_info.get('world_setting', {}).get('content', '') or ''
                 # 优化内容呈现，确保重要信息不被截断
                 if len(world_content) > 600:
                     # 提取关键信息
-                    key_points = []
-                    lines = world_content.split('\n')
-                    for line in lines:
-                        if line.strip() and len(' '.join(key_points)) < 500:
-                            key_points.append(line.strip())
-                    prompt += '\n'.join(key_points[:10]) + '...\n'
+                    try:
+                        import json
+                        # 尝试解析JSON格式的世界观内容
+                        world_data = json.loads(world_content)
+                        # 提取关键信息
+                        key_points = []
+                        if 'world_name' in world_data:
+                            key_points.append(f"世界名称: {world_data['world_name']}")
+                        if 'world_type' in world_data:
+                            key_points.append(f"世界类型: {world_data['world_type']}")
+                        if 'power_system' in world_data:
+                            power_system = world_data['power_system']
+                            key_points.append(f"修炼体系: {power_system.get('name', '未知')}")
+                            if 'levels' in power_system:
+                                levels = power_system['levels'][:3]  # 只取前3个境界
+                                for level in levels:
+                                    key_points.append(f"  - {level.get('name', '未知')}: {level.get('description', '无描述')}")
+                        if 'geography' in world_data:
+                            geography = world_data['geography'] or ''
+                            if geography:
+                                key_points.append(f"地理环境: {geography[:100]}...")
+                        if 'factions' in world_data:
+                            factions = world_data['factions'] or ''
+                            if factions:
+                                key_points.append(f"势力划分: {factions[:100]}...")
+                        prompt += '\n'.join(key_points) + '...\n'
+                    except json.JSONDecodeError:
+                        # 如果不是JSON格式，按普通文本处理
+                        lines = world_content.split('\n')
+                        key_points = []
+                        for line in lines:
+                            if line.strip() and len(' '.join(key_points)) < 500:
+                                key_points.append(line.strip())
+                        prompt += '\n'.join(key_points[:10]) + '...\n'
                 else:
                     prompt += world_content + '\n'
         
         elif revision_type == "character":
-            prompt += "请重点分析小说的角色设定，包括性格、背景、能力、成长路线等方面的塑造和发展，并提供具体的修订建议。\n"
+            prompt += "\n# 详细分析要求\n"
+            prompt += "请重点分析小说的角色设定，包括以下方面：\n"
+            prompt += "1. 角色性格的鲜明性和一致性\n"
+            prompt += "2. 角色背景的丰富性和合理性\n"
+            prompt += "3. 角色能力的平衡性和成长性\n"
+            prompt += "4. 角色关系的复杂性和真实性\n"
+            prompt += "并提供具体的修订建议，包括如何让角色更加立体和有吸引力。\n"
             if novel_info.get('characters'):
                 prompt += "\n## 当前主要角色\n"
                 for char in novel_info.get('characters', [])[:3]:
@@ -507,10 +880,16 @@ class AiChatService:
                     prompt += '\n'
         
         elif revision_type == "outline":
-            prompt += "请重点分析小说的剧情大纲，包括主线剧情、支线故事、关键转折点、高潮设计等方面的逻辑性和吸引力，并提供具体的修订建议。\n"
+            prompt += "\n# 详细分析要求\n"
+            prompt += "请重点分析小说的剧情大纲，包括以下方面：\n"
+            prompt += "1. 主线剧情的逻辑性和吸引力\n"
+            prompt += "2. 支线故事的丰富性和关联性\n"
+            prompt += "3. 关键转折点的合理性和冲击力\n"
+            prompt += "4. 高潮设计的震撼性和满意度\n"
+            prompt += "并提供具体的修订建议，包括如何让剧情更加紧凑和引人入胜。\n"
             if novel_info.get('plot_outline'):
                 prompt += "\n## 当前大纲\n"
-                outline_content = novel_info.get('plot_outline', {}).get('content', '无')
+                outline_content = novel_info.get('plot_outline', {}).get('content', '') or ''
                 if len(outline_content) > 600:
                     # 提取关键信息
                     key_points = []
@@ -523,12 +902,18 @@ class AiChatService:
                     prompt += outline_content + '\n'
         
         elif revision_type == "chapter":
-            prompt += "请重点分析小说的章节内容，包括情节逻辑、描写细节、人物对话、节奏控制等方面的优化，并提供具体的修订建议。\n"
+            prompt += "\n# 详细分析要求\n"
+            prompt += "请重点分析小说的章节内容，包括以下方面：\n"
+            prompt += "1. 情节逻辑的连贯性和合理性\n"
+            prompt += "2. 描写细节的生动性和准确性\n"
+            prompt += "3. 人物对话的自然性和个性化\n"
+            prompt += "4. 节奏控制的张弛度和吸引力\n"
+            prompt += "并提供具体的修订建议，包括如何让章节内容更加精彩和流畅。\n"
             if novel_info.get('chapters'):
                 prompt += "\n## 当前章节\n"
                 for chapter in novel_info.get('chapters', [])[:2]:
                     prompt += f"### 第{chapter.get('chapter_number', '未知')}章: {chapter.get('title', '未知')}\n"
-                    chapter_content = chapter.get('content', '无')
+                    chapter_content = chapter.get('content', '') or ''
                     if len(chapter_content) > 400:
                         # 提取关键段落
                         paragraphs = chapter_content.split('\n')
@@ -542,46 +927,177 @@ class AiChatService:
                     prompt += '\n'
         
         else:  # general
+            prompt += "\n# 详细分析要求\n"
             prompt += "请分析小说的整体情况，包括世界观、角色、大纲和章节等方面，并根据用户的需求提供综合性的修订建议。\n"
+            prompt += "建议从以下几个方面进行分析：\n"
+            prompt += "1. 小说整体结构的合理性\n"
+            prompt += "2. 各元素之间的协调性\n"
+            prompt += "3. 类型特点的体现程度\n"
+            prompt += "4. 潜在的改进空间\n"
             # 添加小说概览
             if novel_info.get('title'):
                 prompt += f"\n## 小说概览\n"
                 prompt += f"- 标题: {novel_info.get('title', '未知')}\n"
                 prompt += f"- 类型: {novel_info.get('genre', '未知')}\n"
                 prompt += f"- 状态: {novel_info.get('status', '未知')}\n"
+                prompt += f"- 章节数: {novel_info.get('chapter_count', 0)}\n"
+                prompt += f"- 字数: {novel_info.get('word_count', 0)}\n"
                 if novel_info.get('synopsis'):
                     prompt += f"- 简介: {novel_info.get('synopsis')[:200]}...\n"
         
+        # 添加输出格式要求
+        prompt += "\n# 输出格式\n"
+        prompt += "请按照以下格式输出分析结果：\n"
+        prompt += "1. 分析结论：简要总结分析结果\n"
+        prompt += "2. 具体建议：详细列出修订建议，每条建议要有具体的改进方向\n"
+        prompt += "3. 实施步骤：提供实施这些建议的具体步骤\n"
+        
         return prompt
     
-    def send_message(self, session_id: str, user_message: str) -> str:
+    async def send_message(self, session_id: str, user_message: str) -> str:
         session = self.get_session(session_id)
         if not session:
             raise ValueError(f"会话 {session_id} 不存在")
         
         session.add_user_message(user_message)
         
+        # 分析用户意图
+        user_intent = self._analyze_user_intent(user_message, session.scene)
+        session.set_last_user_intent(user_intent)
+        
+        # 检查是否需要澄清
+        # 如果是小说相关场景且包含小说信息，直接回答而不澄清
+        is_novel_related = session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]
+        has_novel_info = session.context.get("novel_info", {}) and "error" not in session.context.get("novel_info", {})
+        
+        # 只有在非小说场景或没有小说信息时才需要澄清
+        need_clarification = self._check_need_clarification(user_message, session.scene)
+        if is_novel_related and has_novel_info:
+            # 有小说信息时，不需要澄清，直接基于小说信息回答
+            need_clarification = False
+        
+        if need_clarification:
+            # 生成追问
+            follow_up_questions = self._generate_follow_up_questions(user_intent, session.scene, session.context.get("novel_info"))
+            session.add_follow_up_question(follow_up_questions[0] if follow_up_questions else "")
+            
+            # 生成追问回复
+            clarification_message = "为了给你提供更准确的帮助，我需要了解更多信息。"
+            if follow_up_questions:
+                clarification_message += f" {follow_up_questions[0]}"
+            session.add_assistant_message(clarification_message)
+            
+            # 异步保存会话到数据库
+            import asyncio
+            asyncio.create_task(self.save_session(session))
+            
+            logger.info(f"会话 {session_id} 需要澄清: {user_message[:50]}...")
+            return clarification_message
+        
         messages = session.get_messages_for_api()
         system_prompt = self._get_system_prompt(session.scene)
         
-        # 如果是小说修订场景，添加小说信息到提示词
+        # 如果是小说相关场景，添加小说信息到提示词
         prompt = user_message
-        if session.scene == SCENE_NOVEL_REVISION:
+        if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
             novel_info = session.context.get("novel_info", {})
             if novel_info and "error" not in novel_info:
-                # 分析用户修订意图
-                revision_type = self._analyze_revision_intent(user_message)
+                # 检查用户是否询问世界观相关问题
+                is_worldview_question = any(keyword in user_message for keyword in ["世界观", "世界设定", "背景", "修炼体系", "地理环境", "势力划分"])
                 
-                # 生成针对性的提示词（已包含小说信息）
-                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                if session.scene == SCENE_NOVEL_REVISION:
+                    # 分析用户修订意图
+                    revision_type = self._analyze_revision_intent(user_message)
+                    
+                    # 生成针对性的提示词（已包含小说信息）
+                    prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                    
+                    # 生成并存储分析结果到记忆服务
+                    analysis = self._analyze_novel_content(novel_info)
+                    novel_id = novel_info.get('id')
+                    if novel_id:
+                        # 更新记忆服务中的分析结果
+                        current_memory = self.memory_service.get_novel_memory(novel_id)
+                        if current_memory:
+                            current_memory['analysis'] = analysis
+                            self.memory_service.set_novel_memory(novel_id, current_memory)
+                        else:
+                            # 如果记忆中没有，创建新的记忆
+                            novel_info['analysis'] = analysis
+                            self.memory_service.set_novel_memory(novel_id, novel_info)
+                elif session.scene == SCENE_NOVEL_ANALYSIS:
+                    # 生成小说分析提示词
+                    analysis = session.context.get("analysis", self._analyze_novel_content(novel_info))
+                    
+                    prompt = f"# 用户分析需求\n{user_message}\n"
+                    prompt += "\n# 小说分析\n"
+                    prompt += "## 小说概览\n"
+                    prompt += f"- 标题: {novel_info.get('title', '未知')}\n"
+                    prompt += f"- 类型: {novel_info.get('genre', '未知')}\n"
+                    prompt += f"- 章节数: {novel_info.get('chapter_count', 0)}\n"
+                    prompt += f"- 字数: {novel_info.get('word_count', 0)}\n"
+                    
+                    # 特别添加世界观信息
+                    if is_worldview_question and novel_info.get('world_setting'):
+                        prompt += "\n## 世界观信息\n"
+                        world_content = novel_info.get('world_setting', {}).get('content', '') or ''
+                        if len(world_content) > 500:
+                            # 提取关键信息
+                            key_points = []
+                            lines = world_content.split('\n')
+                            for line in lines:
+                                if line.strip() and len(' '.join(key_points)) < 400:
+                                    key_points.append(line.strip())
+                            prompt += '\n'.join(key_points[:8]) + '...\n'
+                        else:
+                            prompt += world_content + '\n'
+                    
+                    if analysis:
+                        if analysis.get('strengths'):
+                            prompt += "\n## 优势\n"
+                            for strength in analysis['strengths']:
+                                prompt += f"- {strength}\n"
+                        if analysis.get('weaknesses'):
+                            prompt += "\n## 不足\n"
+                            for weakness in analysis['weaknesses']:
+                                prompt += f"- {weakness}\n"
+                        if analysis.get('suggestions'):
+                            prompt += "\n## 建议\n"
+                            for suggestion in analysis['suggestions']:
+                                prompt += f"- {suggestion}\n"
+                        if analysis.get('genre_specific'):
+                            prompt += "\n## 类型特定建议\n"
+                            for suggestion in analysis['genre_specific']:
+                                prompt += f"- {suggestion}\n"
+                    
+                    prompt += "\n# 分析要求\n"
+                    prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
+                    prompt += "1. 整体结构分析\n"
+                    prompt += "2. 各元素质量评估\n"
+                    prompt += "3. 市场定位分析\n"
+                    prompt += "4. 具体改进建议\n"
+                    prompt += "5. 实施步骤\n"
+                    
+                    prompt += "\n# 输出格式\n"
+                    prompt += "请按照以下格式输出分析结果：\n"
+                    prompt += "1. 分析结论：简要总结分析结果\n"
+                    prompt += "2. 详细分析：分点详细分析小说各方面\n"
+                    prompt += "3. 改进建议：具体的优化方向和实施步骤\n"
+                    prompt += "4. 预期效果：实施建议后的预期改进效果\n"
         
-        response = self.client.chat(
+        response = await self.client.chat(
             prompt=prompt,
             system=system_prompt,
             temperature=0.8,
         )
         
         assistant_message = response.get("content", "抱歉，我暂时无法回答这个问题。")
+        
+        # 生成后续问题
+        follow_up_questions = self._generate_follow_up_questions(user_intent, session.scene, session.context.get("novel_info"))
+        if follow_up_questions:
+            assistant_message += f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+        
         session.add_assistant_message(assistant_message)
         
         # 异步保存会话到数据库
@@ -599,30 +1115,148 @@ class AiChatService:
         
         session.add_user_message(user_message)
         
+        # 分析用户意图
+        user_intent = self._analyze_user_intent(user_message, session.scene)
+        session.set_last_user_intent(user_intent)
+        
+        # 检查是否需要澄清
+        # 如果是小说相关场景且包含小说信息，直接回答而不澄清
+        is_novel_related = session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]
+        has_novel_info = session.context.get("novel_info", {}) and "error" not in session.context.get("novel_info", {})
+        
+        # 只有在非小说场景或没有小说信息时才需要澄清
+        need_clarification = self._check_need_clarification(user_message, session.scene)
+        if is_novel_related and has_novel_info:
+            # 有小说信息时，不需要澄清，直接基于小说信息回答
+            need_clarification = False
+        
+        if need_clarification:
+            # 生成追问
+            follow_up_questions = self._generate_follow_up_questions(user_intent, session.scene, session.context.get("novel_info"))
+            session.add_follow_up_question(follow_up_questions[0] if follow_up_questions else "")
+            
+            # 生成追问回复
+            clarification_message = "为了给你提供更准确的帮助，我需要了解更多信息。"
+            if follow_up_questions:
+                clarification_message += f" {follow_up_questions[0]}"
+            
+            session.add_assistant_message(clarification_message)
+            logger.info(f"会话 {session_id} 需要澄清: {user_message[:50]}...")
+            
+            # 保存会话到数据库
+            await self.save_session(session)
+            
+            yield clarification_message
+            return
+        
         messages = session.get_messages_for_api()
         system_prompt = self._get_system_prompt(session.scene)
         
-        # 如果是小说修订场景，添加小说信息到提示词
+        # 如果是小说相关场景，添加小说信息到提示词
         prompt = user_message
-        if session.scene == SCENE_NOVEL_REVISION:
+        if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
             novel_info = session.context.get("novel_info", {})
             if novel_info and "error" not in novel_info:
-                # 分析用户修订意图
-                revision_type = self._analyze_revision_intent(user_message)
+                # 检查用户是否询问世界观相关问题
+                is_worldview_question = any(keyword in user_message for keyword in ["世界观", "世界设定", "背景", "修炼体系", "地理环境", "势力划分"])
                 
-                # 生成针对性的提示词（已包含小说信息）
-                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                if session.scene == SCENE_NOVEL_REVISION:
+                    # 分析用户修订意图
+                    revision_type = self._analyze_revision_intent(user_message)
+                    
+                    # 生成针对性的提示词（已包含小说信息）
+                    prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                    
+                    # 生成并存储分析结果到记忆服务
+                    analysis = self._analyze_novel_content(novel_info)
+                    novel_id = novel_info.get('id')
+                    if novel_id:
+                        # 更新记忆服务中的分析结果
+                        current_memory = self.memory_service.get_novel_memory(novel_id)
+                        if current_memory:
+                            current_memory['analysis'] = analysis
+                            self.memory_service.set_novel_memory(novel_id, current_memory)
+                        else:
+                            # 如果记忆中没有，创建新的记忆
+                            novel_info['analysis'] = analysis
+                            self.memory_service.set_novel_memory(novel_id, novel_info)
+                elif session.scene == SCENE_NOVEL_ANALYSIS:
+                    # 生成小说分析提示词
+                    analysis = session.context.get("analysis", self._analyze_novel_content(novel_info))
+                    
+                    prompt = f"# 用户分析需求\n{user_message}\n"
+                    prompt += "\n# 小说分析\n"
+                    prompt += "## 小说概览\n"
+                    prompt += f"- 标题: {novel_info.get('title', '未知')}\n"
+                    prompt += f"- 类型: {novel_info.get('genre', '未知')}\n"
+                    prompt += f"- 章节数: {novel_info.get('chapter_count', 0)}\n"
+                    prompt += f"- 字数: {novel_info.get('word_count', 0)}\n"
+                    
+                    # 特别添加世界观信息
+                    if is_worldview_question and novel_info.get('world_setting'):
+                        prompt += "\n## 世界观信息\n"
+                        world_content = novel_info.get('world_setting', {}).get('content', '') or ''
+                        if len(world_content) > 500:
+                            # 提取关键信息
+                            key_points = []
+                            lines = world_content.split('\n')
+                            for line in lines:
+                                if line.strip() and len(' '.join(key_points)) < 400:
+                                    key_points.append(line.strip())
+                            prompt += '\n'.join(key_points[:8]) + '...\n'
+                        else:
+                            prompt += world_content + '\n'
+                    
+                    if analysis:
+                        if analysis.get('strengths'):
+                            prompt += "\n## 优势\n"
+                            for strength in analysis['strengths']:
+                                prompt += f"- {strength}\n"
+                        if analysis.get('weaknesses'):
+                            prompt += "\n## 不足\n"
+                            for weakness in analysis['weaknesses']:
+                                prompt += f"- {weakness}\n"
+                        if analysis.get('suggestions'):
+                            prompt += "\n## 建议\n"
+                            for suggestion in analysis['suggestions']:
+                                prompt += f"- {suggestion}\n"
+                        if analysis.get('genre_specific'):
+                            prompt += "\n## 类型特定建议\n"
+                            for suggestion in analysis['genre_specific']:
+                                prompt += f"- {suggestion}\n"
+                    
+                    prompt += "\n# 分析要求\n"
+                    prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
+                    prompt += "1. 整体结构分析\n"
+                    prompt += "2. 各元素质量评估\n"
+                    prompt += "3. 市场定位分析\n"
+                    prompt += "4. 具体改进建议\n"
+                    prompt += "5. 实施步骤\n"
+                    
+                    prompt += "\n# 输出格式\n"
+                    prompt += "请按照以下格式输出分析结果：\n"
+                    prompt += "1. 分析结论：简要总结分析结果\n"
+                    prompt += "2. 详细分析：分点详细分析小说各方面\n"
+                    prompt += "3. 改进建议：具体的优化方向和实施步骤\n"
+                    prompt += "4. 预期效果：实施建议后的预期改进效果\n"
         
         full_response = ""
         
         try:
-            for chunk in self.client.stream_chat(
+            async for chunk in self.client.stream_chat(
                 prompt=prompt,
                 system=system_prompt,
                 temperature=0.8,
             ):
                 full_response += chunk
                 yield chunk
+            
+            # 生成后续问题
+            follow_up_questions = self._generate_follow_up_questions(user_intent, session.scene, session.context.get("novel_info"))
+            if follow_up_questions:
+                follow_up_text = f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+                full_response += follow_up_text
+                yield follow_up_text
             
             session.add_assistant_message(full_response)
             logger.info(f"会话 {session_id} 流式响应完成，共 {len(full_response)} 字符")
@@ -631,15 +1265,16 @@ class AiChatService:
             await self.save_session(session)
             
         except Exception as e:
-            logger.error(f"流式响应出错: {e}")
+            logger.error(f"流式响应出错: {e}", exc_info=True)
             error_msg = "抱歉，响应生成过程中出现错误，请稍后重试。"
             yield error_msg
             session.add_assistant_message(error_msg)
-            # 保存错误信息到数据库
-            await self.save_session(session)
-            raise
+            try:
+                await self.save_session(session)
+            except Exception as save_error:
+                logger.error(f"保存会话失败: {save_error}")
 
-    def parse_novel_intent(self, user_input: str) -> dict:
+    async def parse_novel_intent(self, user_input: str) -> dict:
         """解析小说创建意图，将用户自然语言转换为结构化数据"""
         
         parse_prompt = f"""请分析以下用户输入，提取小说创建所需的信息。
@@ -654,7 +1289,7 @@ class AiChatService:
 请只返回 JSON，不要其他内容。"""
 
         try:
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=parse_prompt,
                 system="你是一个信息提取助手，请从用户输入中提取结构化信息。",
                 temperature=0.3,
@@ -690,7 +1325,7 @@ class AiChatService:
             logger.error(f"小说意图解析失败: {e}")
             return {"title": "", "genre": "", "tags": [], "synopsis": ""}
 
-    def parse_crawler_intent(self, user_input: str) -> dict:
+    async def parse_crawler_intent(self, user_input: str) -> dict:
         """解析爬虫任务意图，将用户自然语言转换为结构化数据"""
         
         parse_prompt = f"""请分析以下用户输入，提取爬虫任务创建所需的信息。
@@ -705,7 +1340,7 @@ class AiChatService:
 请只返回 JSON，不要其他内容。"""
 
         try:
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=parse_prompt,
                 system="你是一个信息提取助手，请从用户输入中提取结构化信息。",
                 temperature=0.3,

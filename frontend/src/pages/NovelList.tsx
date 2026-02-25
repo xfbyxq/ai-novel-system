@@ -141,6 +141,13 @@ export default function NovelList() {
           <Form.Item name="synopsis" label="简介">
             <Input.TextArea rows={3} placeholder="简要描述小说的核心设定和故事主线" />
           </Form.Item>
+          <Form.Item name="length_type" label="篇幅类型" initialValue="medium">
+            <Select placeholder="选择篇幅类型" options={[
+              { value: 'short', label: '短文' },
+              { value: 'medium', label: '中篇小说' },
+              { value: 'long', label: '长篇小说' }
+            ]} />
+          </Form.Item>
         </Form>
       </Modal>
 

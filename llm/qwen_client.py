@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Iterator
+from typing import AsyncIterator, Iterator
 
 import dashscope
 from dashscope import Generation
@@ -166,35 +166,65 @@ class QwenClient:
         system: str = "",
         temperature: float = 0.7,
         max_tokens: int = 4096,
-    ) -> Iterator[str]:
+    ) -> "AsyncIterator[str]":
         """流式调用通义千问 API，逐块返回文本。"""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        # 使用线程池执行同步流式调用
-        loop = asyncio.get_event_loop()
-        responses = await loop.run_in_executor(
-            None,
-            lambda: Generation.call(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                result_format="message",
-                stream=True,
-                incremental_output=True,
+        # 处理不同模式的流式调用
+        if self.use_openai_mode:
+            # 使用 OpenAI 兼容模式的流式调用
+            async for chunk in self._stream_chat_openai(prompt, system, temperature, max_tokens):
+                yield chunk
+        else:
+            # 使用标准 DashScope SDK 的流式调用
+            # 使用线程池执行同步流式调用
+            loop = asyncio.get_event_loop()
+            responses = await loop.run_in_executor(
+                None,
+                lambda: Generation.call(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    result_format="message",
+                    stream=True,
+                    incremental_output=True,
+                )
             )
-        )
 
-        for response in responses:
-            if response.status_code == 200:
-                content = response.output.choices[0].message.content
-                if content:
-                    yield content
-            else:
-                raise RuntimeError(f"Stream error {response.status_code}: {response.message}")
+            for response in responses:
+                if response.status_code == 200:
+                    content = response.output.choices[0].message.content
+                    if content:
+                        yield content
+                else:
+                    raise RuntimeError(f"Stream error {response.status_code}: {response.message}")
+
+    async def _stream_chat_openai(
+        self,
+        prompt: str,
+        system: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> "AsyncIterator[str]":
+        """使用 OpenAI 兼容模式进行流式调用"""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        async for chunk in self.openai_client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        ):
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
 # Module-level singleton

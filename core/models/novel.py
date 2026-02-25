@@ -28,6 +28,12 @@ class NovelStatus(str, enum.Enum):
     published = "published"
 
 
+class NovelLengthType(str, enum.Enum):
+    short = "short"  # 短文
+    medium = "medium"  # 中篇小说
+    long = "long"  # 长篇小说
+
+
 class Novel(Base):
     __tablename__ = "novels"
 
@@ -37,6 +43,7 @@ class Novel(Base):
     genre = Column(String(50), nullable=False)
     tags = Column(ARRAY(String), default=list)
     status = Column(Enum(NovelStatus), default=NovelStatus.planning)
+    length_type = Column(Enum(NovelLengthType), default=NovelLengthType.medium)  # 默认为中篇小说
     word_count = Column(Integer, default=0)
     chapter_count = Column(Integer, default=0)
     cover_url = Column(String(500), nullable=True)

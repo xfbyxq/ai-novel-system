@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.dependencies import get_db
 
 from backend.schemas.ai_chat import (
     AIChatSessionCreate,
@@ -21,6 +23,7 @@ from backend.services.ai_chat_service import (
     SCENE_NOVEL_CREATION,
     SCENE_CRAWLER_TASK,
     SCENE_NOVEL_REVISION,
+    SCENE_NOVEL_ANALYSIS,
 )
 
 router = APIRouter(prefix="/ai-chat", tags=["ai-chat"])
@@ -28,10 +31,13 @@ router = APIRouter(prefix="/ai-chat", tags=["ai-chat"])
 _ai_chat_service_instance: Optional[AiChatService] = None
 
 
-def get_ai_chat_service() -> AiChatService:
+def get_ai_chat_service(db: AsyncSession = Depends(get_db)) -> AiChatService:
     global _ai_chat_service_instance
     if _ai_chat_service_instance is None:
-        _ai_chat_service_instance = AiChatService(db=None)
+        _ai_chat_service_instance = AiChatService(db=db)
+    else:
+        # 更新数据库会话
+        _ai_chat_service_instance.db = db
     return _ai_chat_service_instance
 
 
@@ -41,10 +47,10 @@ async def create_session(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """创建新的 AI 对话会话"""
-    if session_in.scene not in [SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK, SCENE_NOVEL_REVISION]:
+    if session_in.scene not in [SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK, SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
         raise HTTPException(
             status_code=400,
-            detail=f"无效的场景。可选: {SCENE_NOVEL_CREATION}, {SCENE_CRAWLER_TASK}, {SCENE_NOVEL_REVISION}"
+            detail=f"无效的场景。可选: {SCENE_NOVEL_CREATION}, {SCENE_CRAWLER_TASK}, {SCENE_NOVEL_REVISION}, {SCENE_NOVEL_ANALYSIS}"
         )
     
     session = await service.create_session(
@@ -67,8 +73,11 @@ async def send_message(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """发送消息并获取 AI 回复"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
-        response_text = service.send_message(session_id, message_in.message)
+        response_text = await service.send_message(session_id, message_in.message)
         
         return AIChatMessageResponse(
             session_id=session_id,
@@ -77,8 +86,10 @@ async def send_message(
             created_at=datetime.now(timezone.utc).isoformat(),
         )
     except ValueError as e:
+        logger.error(f"发送消息失败 (ValueError): {e}", exc_info=True)
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        logger.error(f"发送消息失败 (Exception): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"生成回复失败: {str(e)}")
 
 
@@ -137,7 +148,7 @@ async def parse_novel_intent(
 ):
     """解析小说创建意图，将自然语言转换为结构化数据"""
     try:
-        result = service.parse_novel_intent(request.user_input)
+        result = await service.parse_novel_intent(request.user_input)
         return NovelParseResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
@@ -150,7 +161,7 @@ async def parse_crawler_intent(
 ):
     """解析爬虫任务意图，将自然语言转换为结构化数据"""
     try:
-        result = service.parse_crawler_intent(request.user_input)
+        result = await service.parse_crawler_intent(request.user_input)
         return CrawlerParseResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")

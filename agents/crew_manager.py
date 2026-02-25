@@ -170,6 +170,7 @@ class NovelCrewManager:
         genre: str | None = None,
         tags: list[str] | None = None,
         context: str = "",
+        length_type: str = "medium",
     ) -> dict[str, Any]:
         """执行完整的企划阶段
 
@@ -201,10 +202,19 @@ class NovelCrewManager:
             topic_context += f"\n\n期望类型：{genre}"
         if tags:
             topic_context += f"\n期望标签：{', '.join(tags)}"
+        if length_type:
+            topic_context += f"\n\n篇幅类型：{length_type}（{'长篇小说' if length_type == 'long' else '中篇小说' if length_type == 'medium' else '短文'}）"
+
+        # 根据篇幅类型调整提示词
+        length_instructions = ""
+        if length_type == "long":
+            length_instructions = "\n\n重要要求：这是一部长篇小说，需要设计宏大的世界观、复杂的人物关系和多层次的剧情架构，确保有足够的内容支撑长期连载。"
+        elif length_type == "short":
+            length_instructions = "\n\n重要要求：这是一部短文，需要紧凑的剧情结构，集中的人物冲突，在有限篇幅内完成完整的故事弧。"
 
         topic_task = self.pm.format(
             self.pm.TOPIC_ANALYST_TASK,
-            context=topic_context,
+            context=topic_context + length_instructions,
         )
         
         topic_analysis = await self._call_agent(
@@ -216,10 +226,16 @@ class NovelCrewManager:
         )
 
         # 2. 世界观构建
+        world_length_instructions = ""
+        if length_type == "long":
+            world_length_instructions = "\n\n重要要求：为长篇小说设计宏大而详细的世界观，包括完整的历史背景、复杂的力量体系、多样的地理区域和丰富的势力组织，确保有足够的扩展空间。"
+        elif length_type == "short":
+            world_length_instructions = "\n\n重要要求：为短文设计简洁但完整的世界观，聚焦核心设定，避免过于复杂的背景，确保故事能在有限篇幅内展开。"
+
         world_task = self.pm.format(
             self.pm.WORLD_BUILDER_TASK,
             topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
-        )
+        ) + world_length_instructions
         
         world_setting = await self._call_agent(
             agent_name="世界观架构师",
@@ -231,11 +247,17 @@ class NovelCrewManager:
         )
 
         # 3. 角色设计
+        character_length_instructions = ""
+        if length_type == "long":
+            character_length_instructions = "\n\n重要要求：为长篇小说设计丰富多样的角色群像，包括主角、多个重要配角、反派势力等，每个主要角色都要有完整的背景故事和成长弧。"
+        elif length_type == "short":
+            character_length_instructions = "\n\n重要要求：为短文聚焦核心角色，主要围绕少数几个关键人物展开，确保角色关系清晰，性格鲜明。"
+
         character_task = self.pm.format(
             self.pm.CHARACTER_DESIGNER_TASK,
             topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
             world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
-        )
+        ) + character_length_instructions
         
         characters = await self._call_agent(
             agent_name="角色设计师",
@@ -247,11 +269,17 @@ class NovelCrewManager:
         )
 
         # 4. 情节架构
+        plot_length_instructions = ""
+        if length_type == "long":
+            plot_length_instructions = "\n\n重要要求：为长篇小说设计宏大的多卷情节架构，包括主线剧情、多条副线、多个高潮点和足够的伏笔，确保故事有长期发展的潜力。"
+        elif length_type == "short":
+            plot_length_instructions = "\n\n重要要求：为短文设计紧凑的单卷情节结构，有明确的开始、发展、高潮和结局，确保故事在有限篇幅内完整呈现。"
+
         plot_task = self.pm.format(
             self.pm.PLOT_ARCHITECT_TASK,
             world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
             characters=json.dumps(characters, ensure_ascii=False, indent=2),
-        )
+        ) + plot_length_instructions
         
         plot_outline = await self._call_agent(
             agent_name="情节架构师",

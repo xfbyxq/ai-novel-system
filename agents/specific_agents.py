@@ -62,7 +62,7 @@ class MarketAnalysisAgent(BaseAgent):
             )
             
             # 调用LLM进行分析
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=analysis_task,
                 system=self.pm.MARKET_ANALYST_SYSTEM,
                 temperature=0.7,
@@ -162,7 +162,7 @@ class ContentPlanningAgent(BaseAgent):
             )
             
             # 调用LLM进行策划
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=planning_task,
                 system=self.pm.CONTENT_PLANNER_SYSTEM,
                 temperature=0.8,
@@ -270,7 +270,7 @@ class WritingAgent(BaseAgent):
             )
             
             # 调用LLM进行创作
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=writing_task,
                 system=self.pm.WRITER_SYSTEM,
                 temperature=0.85,
@@ -373,7 +373,7 @@ class EditingAgent(BaseAgent):
             )
             
             # 调用LLM进行编辑
-            response = self.client.chat(
+            response = await self.client.chat(
                 prompt=editing_task,
                 system=self.pm.EDITOR_SYSTEM,
                 temperature=0.6,

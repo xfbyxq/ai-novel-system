@@ -10,6 +10,7 @@ export interface Novel {
   genre: string;
   tags: string[];
   status: 'planning' | 'writing' | 'completed' | 'published';
+  length_type: 'short' | 'medium' | 'long';
   word_count: number;
   chapter_count: number;
   cover_url: string | null;
@@ -28,6 +29,7 @@ export interface NovelCreate {
   tags?: string[];
   synopsis?: string;
   target_platform?: string;
+  length_type?: 'short' | 'medium' | 'long';
 }
 
 export interface NovelUpdate {
@@ -38,6 +40,7 @@ export interface NovelUpdate {
   status?: string;
   cover_url?: string;
   target_platform?: string;
+  length_type?: 'short' | 'medium' | 'long';
 }
 
 // --- Character ---
