@@ -17,6 +17,16 @@ from backend.schemas.ai_chat import (
     NovelParseResponse,
     CrawlerParseRequest,
     CrawlerParseResponse,
+    ExtractSuggestionsRequest,
+    ExtractSuggestionsResponse,
+    ApplySuggestionRequest,
+    ApplySuggestionsRequest,
+    ApplySuggestionsResponse,
+    RevisionSuggestion,
+    NovelCharactersResponse,
+    NovelChaptersResponse,
+    CharacterListItem,
+    ChapterListItem,
 )
 from backend.services.ai_chat_service import (
     AiChatService,
@@ -232,3 +242,158 @@ async def delete_session(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
+
+
+@router.post("/extract-suggestions", response_model=ExtractSuggestionsResponse)
+async def extract_suggestions(
+    request: ExtractSuggestionsRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """从AI响应中提取结构化的修订建议"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # 获取小说信息
+        novel_info = await service.get_novel_info(request.novel_id)
+        if "error" in novel_info:
+            raise HTTPException(status_code=404, detail=novel_info["error"])
+        
+        # 提取结构化建议
+        suggestions = await service.extract_structured_suggestions(
+            request.ai_response,
+            novel_info,
+            request.revision_type
+        )
+        
+        # 转换为响应格式
+        suggestion_models = [
+            RevisionSuggestion(
+                type=s.get('type'),
+                target_id=s.get('target_id'),
+                target_name=s.get('target_name'),
+                field=s.get('field'),
+                suggested_value=s.get('suggested_value'),
+                description=s.get('description', ''),
+                confidence=s.get('confidence', 0.8)
+            )
+            for s in suggestions
+        ]
+        
+        return ExtractSuggestionsResponse(suggestions=suggestion_models)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"提取建议失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"提取建议失败: {str(e)}")
+
+
+@router.post("/apply-suggestion")
+async def apply_suggestion(
+    request: ApplySuggestionRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """应用单个修订建议到数据库"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        result = await service.apply_suggestion_to_database(
+            request.novel_id,
+            request.suggestion.model_dump()
+        )
+        
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('error', '应用失败'))
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"应用建议失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"应用建议失败: {str(e)}")
+
+
+@router.post("/apply-suggestions", response_model=ApplySuggestionsResponse)
+async def apply_suggestions_batch(
+    request: ApplySuggestionsRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """批量应用修订建议到数据库"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        suggestions_dicts = [s.model_dump() for s in request.suggestions]
+        result = await service.apply_suggestions_batch(
+            request.novel_id,
+            suggestions_dicts
+        )
+        
+        return ApplySuggestionsResponse(
+            total=result['total'],
+            success_count=result['success_count'],
+            failed_count=result['failed_count'],
+            details=result['details']
+        )
+    except Exception as e:
+        logger.error(f"批量应用建议失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"批量应用建议失败: {str(e)}")
+
+
+@router.get("/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse)
+async def get_novel_characters_for_revision(
+    novel_id: str,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """获取小说的角色列表（用于修订时选择角色）"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        characters = await service.get_novel_characters(novel_id)
+        
+        character_items = [
+            CharacterListItem(
+                id=c['id'],
+                name=c['name'],
+                role_type=c.get('role_type'),
+                personality=c.get('personality'),
+                background=c.get('background')
+            )
+            for c in characters
+        ]
+        
+        return NovelCharactersResponse(characters=character_items)
+    except Exception as e:
+        logger.error(f"获取角色列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取角色列表失败: {str(e)}")
+
+
+@router.get("/novels/{novel_id}/chapters-list", response_model=NovelChaptersResponse)
+async def get_novel_chapters_for_revision(
+    novel_id: str,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """获取小说的章节列表（用于修订时选择章节）"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        chapters = await service.get_novel_chapters(novel_id)
+        
+        chapter_items = [
+            ChapterListItem(
+                id=c['id'],
+                chapter_number=c['chapter_number'],
+                title=c.get('title'),
+                word_count=c.get('word_count', 0),
+                status=c.get('status')
+            )
+            for c in chapters
+        ]
+        
+        return NovelChaptersResponse(chapters=chapter_items)
+    except Exception as e:
+        logger.error(f"获取章节列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"获取章节列表失败: {str(e)}")

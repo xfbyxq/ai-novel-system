@@ -3,15 +3,52 @@
 import json
 import logging
 import re
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, List, Dict, Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from llm.qwen_client import QwenClient
 from .memory_service import get_novel_memory_service
 
 logger = logging.getLogger(__name__)
+
+
+# 结构化修订建议类型
+class RevisionSuggestion:
+    """结构化的修订建议"""
+    def __init__(
+        self,
+        suggestion_type: str,
+        target_id: Optional[str] = None,
+        target_name: Optional[str] = None,
+        field: Optional[str] = None,
+        original_value: Optional[str] = None,
+        suggested_value: Optional[str] = None,
+        description: str = "",
+        confidence: float = 0.8
+    ):
+        self.suggestion_type = suggestion_type  # world_setting, character, outline, chapter
+        self.target_id = target_id  # 目标对象ID（如角色ID、章节ID）
+        self.target_name = target_name  # 目标对象名称（如角色名、章节标题）
+        self.field = field  # 要修改的字段
+        self.original_value = original_value  # 原始值
+        self.suggested_value = suggested_value  # 建议的新值
+        self.description = description  # 建议描述
+        self.confidence = confidence  # 置信度
+    
+    def to_dict(self) -> dict:
+        return {
+            "type": self.suggestion_type,
+            "target_id": self.target_id,
+            "target_name": self.target_name,
+            "field": self.field,
+            "original_value": self.original_value,
+            "suggested_value": self.suggested_value,
+            "description": self.description,
+            "confidence": self.confidence,
+        }
 
 SCENE_NOVEL_CREATION = "novel_creation"
 SCENE_CRAWLER_TASK = "crawler_task"
@@ -1398,3 +1435,343 @@ class AiChatService:
         except Exception as e:
             logger.error(f"爬虫意图解析失败: {e}")
             return {"crawl_type": "", "ranking_type": "yuepiao", "max_pages": 3, "book_ids": ""}
+
+    async def extract_structured_suggestions(
+        self, 
+        ai_response: str, 
+        novel_info: dict,
+        revision_type: str
+    ) -> List[Dict[str, Any]]:
+        """从AI响应中提取结构化的修订建议
+        
+        Args:
+            ai_response: AI的回复文本
+            novel_info: 小说信息
+            revision_type: 修订类型 (world_setting, character, outline, chapter, general)
+        
+        Returns:
+            结构化建议列表
+        """
+        extract_prompt = f"""请分析以下AI修订建议，提取出具体的、可执行的修改建议。
+
+AI修订建议内容：
+{ai_response[:3000]}
+
+小说当前信息：
+- 标题: {novel_info.get('title', '未知')}
+- 类型: {novel_info.get('genre', '未知')}
+- 修订类型: {revision_type}
+
+当前角色列表：
+{json.dumps([{{'id': c.get('id'), 'name': c.get('name')}} for c in novel_info.get('characters', [])[:10]], ensure_ascii=False)}
+
+当前章节列表：
+{json.dumps([{{'chapter_number': c.get('chapter_number'), 'title': c.get('title')}} for c in novel_info.get('chapters', [])[:10]], ensure_ascii=False)}
+
+请以JSON数组格式返回提取的建议，每个建议包含以下字段：
+- type: 建议类型（world_setting/character/outline/chapter）
+- target_id: 目标对象ID（如角色ID、章节号），如果是世界观或大纲则为null
+- target_name: 目标对象名称（如角色名、章节标题）
+- field: 要修改的字段名（如personality、content、raw_content等）
+- suggested_value: 建议的新值（简洁明了，不超过500字）
+- description: 修改描述（说明为什么要这样修改）
+- confidence: 置信度（0-1之间的数字）
+
+只返回JSON数组，不要其他内容。如果没有可提取的具体建议，返回空数组[]。"""
+
+        try:
+            response = await self.client.chat(
+                prompt=extract_prompt,
+                system="你是一个专业的文本分析助手，擅长从文本中提取结构化信息。请准确提取修订建议中的具体修改内容。",
+                temperature=0.3,
+            )
+            
+            content = response.get("content", "[]")
+            content = content.strip()
+            
+            # 清理JSON格式
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            suggestions = json.loads(content)
+            
+            # 验证和清理建议
+            valid_suggestions = []
+            for suggestion in suggestions:
+                if isinstance(suggestion, dict) and suggestion.get('type') in ['world_setting', 'character', 'outline', 'chapter']:
+                    valid_suggestions.append({
+                        'type': suggestion.get('type'),
+                        'target_id': suggestion.get('target_id'),
+                        'target_name': suggestion.get('target_name'),
+                        'field': suggestion.get('field'),
+                        'suggested_value': suggestion.get('suggested_value', '')[:2000],  # 限制长度
+                        'description': suggestion.get('description', '')[:500],
+                        'confidence': min(max(float(suggestion.get('confidence', 0.7)), 0), 1),
+                    })
+            
+            logger.info(f"提取到 {len(valid_suggestions)} 条结构化建议")
+            return valid_suggestions
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"提取结构化建议时JSON解析失败: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"提取结构化建议失败: {e}")
+            return []
+
+    async def apply_suggestion_to_database(
+        self,
+        novel_id: str,
+        suggestion: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """将单个修订建议应用到数据库
+        
+        Args:
+            novel_id: 小说ID
+            suggestion: 结构化建议
+        
+        Returns:
+            应用结果
+        """
+        from core.models.novel import Novel
+        from core.models.world_setting import WorldSetting
+        from core.models.character import Character
+        from core.models.plot_outline import PlotOutline
+        from core.models.chapter import Chapter
+        from core.database import async_session_factory
+        
+        suggestion_type = suggestion.get('type')
+        field = suggestion.get('field')
+        suggested_value = suggestion.get('suggested_value')
+        target_id = suggestion.get('target_id')
+        target_name = suggestion.get('target_name')
+        
+        if not field or not suggested_value:
+            return {'success': False, 'error': '缺少必要的字段或建议值'}
+        
+        async with async_session_factory() as db:
+            try:
+                if suggestion_type == 'world_setting':
+                    # 更新世界观设定
+                    query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+                    result = await db.execute(query)
+                    world_setting = result.scalar_one_or_none()
+                    
+                    if not world_setting:
+                        return {'success': False, 'error': '世界观设定不存在'}
+                    
+                    # 根据字段更新
+                    if field == 'raw_content' or field == 'content':
+                        world_setting.raw_content = suggested_value
+                    elif hasattr(world_setting, field):
+                        setattr(world_setting, field, suggested_value)
+                    else:
+                        return {'success': False, 'error': f'无效的字段: {field}'}
+                    
+                    await db.commit()
+                    logger.info(f"已更新小说 {novel_id} 的世界观设定字段 {field}")
+                    return {'success': True, 'type': 'world_setting', 'field': field}
+                
+                elif suggestion_type == 'character':
+                    # 更新角色信息
+                    if target_id:
+                        query = select(Character).where(
+                            Character.id == target_id,
+                            Character.novel_id == novel_id
+                        )
+                    elif target_name:
+                        query = select(Character).where(
+                            Character.name == target_name,
+                            Character.novel_id == novel_id
+                        )
+                    else:
+                        return {'success': False, 'error': '需要指定角色ID或角色名称'}
+                    
+                    result = await db.execute(query)
+                    character = result.scalar_one_or_none()
+                    
+                    if not character:
+                        return {'success': False, 'error': f'角色不存在: {target_name or target_id}'}
+                    
+                    if hasattr(character, field):
+                        setattr(character, field, suggested_value)
+                    else:
+                        return {'success': False, 'error': f'无效的字段: {field}'}
+                    
+                    await db.commit()
+                    logger.info(f"已更新角色 {character.name} 的字段 {field}")
+                    return {'success': True, 'type': 'character', 'character_name': character.name, 'field': field}
+                
+                elif suggestion_type == 'outline':
+                    # 更新大纲
+                    query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+                    result = await db.execute(query)
+                    plot_outline = result.scalar_one_or_none()
+                    
+                    if not plot_outline:
+                        return {'success': False, 'error': '大纲不存在'}
+                    
+                    if field == 'raw_content' or field == 'content':
+                        plot_outline.raw_content = suggested_value
+                    elif hasattr(plot_outline, field):
+                        setattr(plot_outline, field, suggested_value)
+                    else:
+                        return {'success': False, 'error': f'无效的字段: {field}'}
+                    
+                    await db.commit()
+                    logger.info(f"已更新小说 {novel_id} 的大纲字段 {field}")
+                    return {'success': True, 'type': 'outline', 'field': field}
+                
+                elif suggestion_type == 'chapter':
+                    # 更新章节
+                    if target_id:
+                        # target_id 可能是章节号
+                        try:
+                            chapter_number = int(target_id)
+                            query = select(Chapter).where(
+                                Chapter.chapter_number == chapter_number,
+                                Chapter.novel_id == novel_id
+                            )
+                        except (ValueError, TypeError):
+                            query = select(Chapter).where(
+                                Chapter.id == target_id,
+                                Chapter.novel_id == novel_id
+                            )
+                    elif target_name:
+                        query = select(Chapter).where(
+                            Chapter.title == target_name,
+                            Chapter.novel_id == novel_id
+                        )
+                    else:
+                        return {'success': False, 'error': '需要指定章节ID或章节标题'}
+                    
+                    result = await db.execute(query)
+                    chapter = result.scalar_one_or_none()
+                    
+                    if not chapter:
+                        return {'success': False, 'error': f'章节不存在: {target_name or target_id}'}
+                    
+                    if hasattr(chapter, field):
+                        setattr(chapter, field, suggested_value)
+                        # 如果更新了内容，同时更新字数
+                        if field == 'content' and suggested_value:
+                            chapter.word_count = len(suggested_value)
+                    else:
+                        return {'success': False, 'error': f'无效的字段: {field}'}
+                    
+                    await db.commit()
+                    logger.info(f"已更新章节 {chapter.chapter_number} 的字段 {field}")
+                    return {'success': True, 'type': 'chapter', 'chapter_number': chapter.chapter_number, 'field': field}
+                
+                else:
+                    return {'success': False, 'error': f'不支持的建议类型: {suggestion_type}'}
+                    
+            except Exception as e:
+                logger.error(f"应用建议到数据库失败: {e}")
+                await db.rollback()
+                return {'success': False, 'error': str(e)}
+
+    async def apply_suggestions_batch(
+        self,
+        novel_id: str,
+        suggestions: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """批量应用修订建议到数据库
+        
+        Args:
+            novel_id: 小说ID
+            suggestions: 建议列表
+        
+        Returns:
+            批量应用结果
+        """
+        results = {
+            'total': len(suggestions),
+            'success_count': 0,
+            'failed_count': 0,
+            'details': []
+        }
+        
+        for suggestion in suggestions:
+            result = await self.apply_suggestion_to_database(novel_id, suggestion)
+            results['details'].append(result)
+            if result.get('success'):
+                results['success_count'] += 1
+            else:
+                results['failed_count'] += 1
+        
+        # 应用成功后，使记忆服务缓存失效，确保下次获取最新数据
+        if results['success_count'] > 0:
+            self.memory_service.invalidate_novel_memory(novel_id)
+            logger.info(f"已使小说 {novel_id} 的记忆缓存失效")
+        
+        return results
+
+    async def get_novel_characters(self, novel_id: str) -> List[Dict[str, Any]]:
+        """获取小说的所有角色
+        
+        Args:
+            novel_id: 小说ID
+        
+        Returns:
+            角色列表
+        """
+        from core.models.character import Character
+        from core.database import async_session_factory
+        
+        async with async_session_factory() as db:
+            try:
+                query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
+                result = await db.execute(query)
+                characters = result.scalars().all()
+                
+                return [
+                    {
+                        'id': str(char.id),
+                        'name': char.name,
+                        'role_type': char.role_type.value if hasattr(char.role_type, 'value') else char.role_type,
+                        'personality': char.personality,
+                        'background': char.background,
+                    }
+                    for char in characters
+                ]
+            except Exception as e:
+                logger.error(f"获取角色列表失败: {e}")
+                return []
+
+    async def get_novel_chapters(self, novel_id: str) -> List[Dict[str, Any]]:
+        """获取小说的所有章节
+        
+        Args:
+            novel_id: 小说ID
+        
+        Returns:
+            章节列表
+        """
+        from core.models.chapter import Chapter
+        from core.database import async_session_factory
+        
+        async with async_session_factory() as db:
+            try:
+                query = select(Chapter).where(Chapter.novel_id == novel_id).order_by(Chapter.chapter_number)
+                result = await db.execute(query)
+                chapters = result.scalars().all()
+                
+                return [
+                    {
+                        'id': str(chap.id),
+                        'chapter_number': chap.chapter_number,
+                        'title': chap.title,
+                        'word_count': chap.word_count,
+                        'status': chap.status.value if hasattr(chap.status, 'value') else chap.status,
+                    }
+                    for chap in chapters
+                ]
+            except Exception as e:
+                logger.error(f"获取章节列表失败: {e}")
+                return []
