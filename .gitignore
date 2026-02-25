@@ -20,13 +20,18 @@ node_modules/
 *.log
 
 # Playwright
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-/playwright/.auth/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
 
-# Trae
+# IDE & Tools
 .trae/
 .qoder/
 .github/
+
+# 临时测试文件
+check_*.py
+test_*.py
+create_test_*.py

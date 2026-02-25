@@ -274,13 +274,22 @@ async def extract_suggestions(
             if target_id is not None and not isinstance(target_id, str):
                 target_id = str(target_id)
             
+            # 处理 suggested_value，确保是字符串类型
+            suggested_value = s.get('suggested_value')
+            if isinstance(suggested_value, list):
+                # 如果是列表，用换行符连接成字符串
+                suggested_value = '\n'.join(str(item) for item in suggested_value)
+            elif suggested_value is not None and not isinstance(suggested_value, str):
+                # 如果是其他类型，转为字符串
+                suggested_value = str(suggested_value)
+            
             suggestion_models.append(
                 RevisionSuggestion(
                     type=s.get('type'),
                     target_id=target_id,
                     target_name=s.get('target_name'),
                     field=s.get('field'),
-                    suggested_value=s.get('suggested_value'),
+                    suggested_value=suggested_value,
                     description=s.get('description', ''),
                     confidence=s.get('confidence', 0.8)
                 )

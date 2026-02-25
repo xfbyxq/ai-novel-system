@@ -59,7 +59,7 @@ class CrawlerParseResponse(BaseModel):
 # 新增：结构化建议相关Schema
 class RevisionSuggestion(BaseModel):
     """单个修订建议"""
-    type: str = Field(..., description="建议类型: world_setting/character/outline/chapter")
+    type: str = Field(..., description="建议类型: novel/world_setting/character/outline/chapter")
     target_id: Optional[str] = Field(None, description="目标对象ID")
     target_name: Optional[str] = Field(None, description="目标对象名称")
     field: Optional[str] = Field(None, description="要修改的字段")

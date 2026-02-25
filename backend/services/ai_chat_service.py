@@ -78,14 +78,21 @@ SYSTEM_PROMPTS = {
 
 请且务实。可以主动询问用户想了解哪方面的数据。""",
     
-    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑顾问，专门帮助作者修订和完善小说内容。你需要根据用户的需求和小说的现有内容，提供专业的修订建议，包括但不限于：
+    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑助手，专门帮助作者修订和完善小说内容。根据用户的需求和小说的现有内容，**直接生成具体的修订内容**，包括但不限于：
 
-1. **世界观修订**：修炼体系、地理环境、势力划分、规则设定的合理性和连贯性
-2. **角色修订**：主角/配角的性格、背景、能力、成长路线的塑造和发展
-3. **大纲修订**：主线剧情、支线故事、关键转折点、高潮设计的逻辑性和吸引力
-4. **章节内容修订**：情节逻辑、描写细节、人物对话、节奏控制的优化
+1. **世界观修订**：直接生成优化后的修炼体系、地理环境、势力划分、规则设定内容
+2. **角色修订**：直接生成优化后的角色性格、背景、能力、成长路线描述
+3. **大纲修订**：直接生成优化后的主线剧情、支线故事、关键转折点、高潮设计
+4. **简介优化**：直接生成新的小说简介，结合现有的世界观、角色、大纲信息
+5. **章节内容修订**：直接生成优化后的章节内容、对话、描写
 
-请用中文回复，语气专业但亲切。分析现有内容的问题，并提供具体的修订建议。可以主动询问用户更多细节以便给出更好的建议。""",
+**重要原则**：
+- **直接输出结果**：不要只提供分析和建议，而是直接生成可用的内容
+- **简洁明了**：避免冗长的分析，直接给出优化后的成果
+- **结合背景**：充分利用小说现有的世界观、角色、大纲信息，保持一致性
+- **直接可用**：生成的内容应该能直接替换原有内容使用
+
+请用中文回复，语气专业但亲切。如果用户需求不明确，可以简短询问确认，但不要过度分析。""",
     
     SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。你需要根据小说的现有内容，提供全面的分析和建议，包括但不限于：
 
@@ -102,7 +109,7 @@ WELCOME_MESSAGES = {
     
     SCENE_CRAWLER_TASK: "你好！我是爬虫策略AI助手。你可以告诉我你想爬取什么数据，或者想了解哪些市场趋势，我来帮你分析并制定合适的爬取方案。",
     
-    SCENE_NOVEL_REVISION: "你好！我是小说修订AI助手。你可以告诉我你对小说的哪些部分不满意，无论是世界观、角色、大纲还是章节内容，我都会根据现有内容提供专业的修订建议。",
+    SCENE_NOVEL_REVISION: "你好！我是小说修订AI助手。告诉我你想修订什么内容，比如「优化下小说简介」、「丰富世界观设定」、「完善主角背景」等，我会直接生成优化后的内容。",
     
     SCENE_NOVEL_ANALYSIS: "你好！我是小说分析AI助手。我可以帮你全面分析小说的整体情况，包括结构、元素、市场定位等方面，并提供有针对性的改进建议。请选择你想分析的小说。",
 }
@@ -194,13 +201,14 @@ class AiChatService:
     def _get_welcome_message(self, scene: str) -> str:
         return WELCOME_MESSAGES.get(scene, "你好！有什么我可以帮助你的？")
     
-    async def get_novel_info(self, novel_id: str, chapter_start: int = 1, chapter_end: int = 10) -> dict:
+    async def get_novel_info(self, novel_id: str, chapter_start: int = 1, chapter_end: int = 10, force_db: bool = False) -> dict:
         """获取小说的完整信息，包括世界观、角色、大纲和章节
         
         Args:
             novel_id: 小说ID
             chapter_start: 开始章节（默认1）
             chapter_end: 结束章节（默认10）
+            force_db: 强制从数据库加载，忽略记忆缓存（默认False）
         
         Returns:
             小说信息字典，包含一个额外的'has_changes'字段表示内容是否有变化
@@ -217,8 +225,8 @@ class AiChatService:
             logger.error(f"无效的小说 ID 格式: {novel_id}")
             return {"error": "无效的小说 ID 格式"}
         
-        # 首先尝试从记忆服务获取
-        memory_data = self.memory_service.get_novel_memory(novel_id)
+        # 首先尝试从记忆服务获取（除非强制使用数据库）
+        memory_data = None if force_db else self.memory_service.get_novel_memory(novel_id)
         if memory_data:
             logger.info(f"从记忆服务获取小说信息: {novel_id}")
             # 转换为预期的格式
@@ -528,6 +536,8 @@ class AiChatService:
             novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end)
             session.context["novel_info"] = novel_info
             session.context["chapter_range"] = {"start": chapter_start, "end": chapter_end}
+            # 记录当前版本号
+            session.context['novel_version'] = self.memory_service.get_novel_version(novel_id)
             
             # 获取变化状态
             has_changes = novel_info.get("has_changes", False)
@@ -1048,6 +1058,26 @@ class AiChatService:
         prompt = user_message
         if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
             novel_info = session.context.get("novel_info", {})
+            
+            # 检查小说信息是否需要刷新（版本号变化）
+            if novel_info and "error" not in novel_info:
+                novel_id = novel_info.get('id')
+                if novel_id:
+                    # 获取当前记忆版本
+                    current_version = self.memory_service.get_novel_version(novel_id)
+                    session_version = session.context.get('novel_version', 0)
+                    
+                    # 如果版本号不一致，重新加载小说信息
+                    if current_version != session_version:
+                        logger.info(f"检测到小说 {novel_id} 数据更新（版本 {session_version} -> {current_version}），重新加载小说信息")
+                        chapter_start = session.context.get("chapter_range", {}).get("start", 1)
+                        chapter_end = session.context.get("chapter_range", {}).get("end", 10)
+                        # 强制从数据库加载最新数据
+                        novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end, force_db=True)
+                        session.context["novel_info"] = novel_info
+                        session.context['novel_version'] = current_version
+                        logger.info(f"小说 {novel_id} 信息已从数据库刷新到最新版本")
+            
             if novel_info and "error" not in novel_info:
                 # 检查用户是否询问世界观相关问题
                 is_worldview_question = any(keyword in user_message for keyword in ["世界观", "世界设定", "背景", "修炼体系", "地理环境", "势力划分"])
@@ -1469,10 +1499,13 @@ AI修订建议内容：
 {json.dumps([{'chapter_number': c.get('chapter_number'), 'title': c.get('title')} for c in novel_info.get('chapters', [])[:10]], ensure_ascii=False)}
 
 请以JSON数组格式返回提取的建议，每个建议包含以下字段：
-- type: 建议类型（world_setting/character/outline/chapter）
-- target_id: 目标对象ID（如角色ID、章节号），如果是世界观或大纲则为null
+- type: 建议类型（novel/world_setting/character/outline/chapter）
+- target_id: 目标对象ID（如角色ID、章节号），如果是小说基本信息、世界观或大纲则为null
+  * 对于角色类型，target_id 必须是上面「当前角色列表」中已存在角色的真实UUID，不要使用虚拟标识符如'new_xxx'
+  * 如果建议创建新角色，请忽略该建议，只针对已存在的角色提供修订建议
 - target_name: 目标对象名称（如角色名、章节标题）
 - field: 要修改的字段名，必须使用以下有效字段名：
+  * 小说基本信息(novel): title, author, synopsis, genre, tags, status, length_type, target_platform
   * 世界观(world_setting): power_system, geography, factions, rules, timeline, special_elements, raw_content
   * 角色(character): name, role_type, gender, age, appearance, personality, background, goals, abilities, relationships, growth_arc
   * 大纲(outline): structure_type, volumes, main_plot, sub_plots, key_turning_points, climax_chapter, raw_content
@@ -1507,7 +1540,7 @@ AI修订建议内容：
             # 验证和清理建议
             valid_suggestions = []
             for suggestion in suggestions:
-                if isinstance(suggestion, dict) and suggestion.get('type') in ['world_setting', 'character', 'outline', 'chapter']:
+                if isinstance(suggestion, dict) and suggestion.get('type') in ['novel', 'world_setting', 'character', 'outline', 'chapter']:
                     valid_suggestions.append({
                         'type': suggestion.get('type'),
                         'target_id': suggestion.get('target_id'),
@@ -1578,7 +1611,26 @@ AI修订建议内容：
         
         async with async_session_factory() as db:
             try:
-                if suggestion_type == 'world_setting':
+                if suggestion_type == 'novel':
+                    # 更新小说基本信息
+                    query = select(Novel).where(Novel.id == novel_id)
+                    result = await db.execute(query)
+                    novel = result.scalar_one_or_none()
+                    
+                    if not novel:
+                        return {'success': False, 'error': '小说不存在'}
+                    
+                    # 根据字段更新
+                    if hasattr(novel, field):
+                        setattr(novel, field, suggested_value)
+                    else:
+                        return {'success': False, 'error': f'无效的字段: {field}'}
+                    
+                    await db.commit()
+                    logger.info(f"已更新小说 {novel_id} 的字段 {field}")
+                    return {'success': True, 'type': 'novel', 'field': field}
+                
+                elif suggestion_type == 'world_setting':
                     # 更新世界观设定
                     query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
                     result = await db.execute(query)
@@ -1601,6 +1653,12 @@ AI修订建议内容：
                 
                 elif suggestion_type == 'character':
                     # 更新角色信息
+                    # 检查是否是创建新角色的建议（target_id 为虚拟标识符）
+                    if target_id and (target_id.startswith('new_') or len(target_id) < 32):
+                        # 这是创建新角色的建议，跳过
+                        logger.warning(f"跳过创建新角色的建议: {target_name}, 需要手动创建角色")
+                        return {'success': False, 'error': f'请先创建角色: {target_name}，然后再应用修订建议', 'skip': True}
+                    
                     if target_id:
                         query = select(Character).where(
                             Character.id == target_id,
@@ -1730,7 +1788,10 @@ AI修订建议内容：
         # 应用成功后，使记忆服务缓存失效，确保下次获取最新数据
         if results['success_count'] > 0:
             self.memory_service.invalidate_novel_memory(novel_id)
-            logger.info(f"已使小说 {novel_id} 的记忆缓存失效")
+            # 增加版本号
+            current_version = self.memory_service.get_novel_version(novel_id)
+            self.memory_service.version_map[novel_id] = current_version + 1
+            logger.info(f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}")
         
         return results
 
