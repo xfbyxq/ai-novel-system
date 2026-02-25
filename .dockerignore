@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Virtual environments
+env/
+.venv/
+venv/
+
+# IDE & Tools
+.trae/
+.qoder/
+.github/
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+novel_system.log
+
+# Test files
+test-results/
+playwright-report/
+blob-report/
+tests/
+check_*.py
+test_*.py
+create_test_*.py
+
+# Node.js (仅在后端镜像构建时忽略)
+node_modules/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Frontend build (后端镜像不需要)
+frontend/dist/
+frontend/node_modules/
