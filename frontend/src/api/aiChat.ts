@@ -205,6 +205,3 @@ export const getNovelChaptersForRevision = async (novelId: string): Promise<Nove
   const response = await apiClient.get<NovelChaptersResponse>(`/ai-chat/novels/${novelId}/chapters-list`);
   return response.data;
 };
-
-// 确保类型被正确导出
-export type { CharacterListItem, ChapterListItem };

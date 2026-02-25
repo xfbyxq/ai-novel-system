@@ -1463,16 +1463,20 @@ AI修订建议内容：
 - 修订类型: {revision_type}
 
 当前角色列表：
-{json.dumps([{{'id': c.get('id'), 'name': c.get('name')}} for c in novel_info.get('characters', [])[:10]], ensure_ascii=False)}
+{json.dumps([{'id': c.get('id'), 'name': c.get('name')} for c in novel_info.get('characters', [])[:10]], ensure_ascii=False)}
 
 当前章节列表：
-{json.dumps([{{'chapter_number': c.get('chapter_number'), 'title': c.get('title')}} for c in novel_info.get('chapters', [])[:10]], ensure_ascii=False)}
+{json.dumps([{'chapter_number': c.get('chapter_number'), 'title': c.get('title')} for c in novel_info.get('chapters', [])[:10]], ensure_ascii=False)}
 
 请以JSON数组格式返回提取的建议，每个建议包含以下字段：
 - type: 建议类型（world_setting/character/outline/chapter）
 - target_id: 目标对象ID（如角色ID、章节号），如果是世界观或大纲则为null
 - target_name: 目标对象名称（如角色名、章节标题）
-- field: 要修改的字段名（如personality、content、raw_content等）
+- field: 要修改的字段名，必须使用以下有效字段名：
+  * 世界观(world_setting): power_system, geography, factions, rules, timeline, special_elements, raw_content
+  * 角色(character): name, role_type, gender, age, appearance, personality, background, goals, abilities, relationships, growth_arc
+  * 大纲(outline): structure_type, volumes, main_plot, sub_plots, key_turning_points, climax_chapter, raw_content
+  * 章节(chapter): title, content, outline
 - suggested_value: 建议的新值（简洁明了，不超过500字）
 - description: 修改描述（说明为什么要这样修改）
 - confidence: 置信度（0-1之间的数字）
@@ -1551,8 +1555,26 @@ AI修订建议内容：
         target_id = suggestion.get('target_id')
         target_name = suggestion.get('target_name')
         
+        # 详细日志：输出建议内容
+        logger.info(f"应用建议: type={suggestion_type}, field={field}, target_id={target_id}, target_name={target_name}, value_length={len(str(suggested_value)) if suggested_value else 0}")
+        
         if not field or not suggested_value:
-            return {'success': False, 'error': '缺少必要的字段或建议值'}
+            error_msg = f'缺少必要的字段或建议值: field={field}, suggested_value={suggested_value}'
+            logger.warning(error_msg)
+            return {'success': False, 'error': error_msg}
+        
+        # 处理建议值：确保 JSONB 字段使用正确的数据结构
+        # 如果是字符串，需要包装成 dict 或 list
+        if isinstance(suggested_value, str):
+            # 需要 dict 的字段
+            dict_fields = ['power_system', 'geography', 'abilities', 'relationships', 'growth_arc', 'main_plot']
+            # 需要 list 的字段  
+            list_fields = ['factions', 'rules', 'timeline', 'special_elements', 'volumes', 'sub_plots', 'key_turning_points']
+            
+            if field in dict_fields:
+                suggested_value = {'content': suggested_value}
+            elif field in list_fields:
+                suggested_value = [suggested_value]
         
         async with async_session_factory() as db:
             try:

@@ -14,9 +14,9 @@ import {
   applySuggestions,
   getNovelCharactersForRevision,
   getNovelChaptersForRevision,
-  RevisionSuggestion,
-  CharacterListItem,
-  ChapterListItem,
+  type RevisionSuggestion,
+  type CharacterListItem,
+  type ChapterListItem,
 } from '@/api/aiChat';
 import { updateWorldSetting, updatePlotOutline } from '@/api/novels';
 

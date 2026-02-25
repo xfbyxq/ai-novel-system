@@ -267,18 +267,24 @@ async def extract_suggestions(
         )
         
         # 转换为响应格式
-        suggestion_models = [
-            RevisionSuggestion(
-                type=s.get('type'),
-                target_id=s.get('target_id'),
-                target_name=s.get('target_name'),
-                field=s.get('field'),
-                suggested_value=s.get('suggested_value'),
-                description=s.get('description', ''),
-                confidence=s.get('confidence', 0.8)
+        suggestion_models = []
+        for s in suggestions:
+            # 处理 target_id，确保是字符串类型
+            target_id = s.get('target_id')
+            if target_id is not None and not isinstance(target_id, str):
+                target_id = str(target_id)
+            
+            suggestion_models.append(
+                RevisionSuggestion(
+                    type=s.get('type'),
+                    target_id=target_id,
+                    target_name=s.get('target_name'),
+                    field=s.get('field'),
+                    suggested_value=s.get('suggested_value'),
+                    description=s.get('description', ''),
+                    confidence=s.get('confidence', 0.8)
+                )
             )
-            for s in suggestions
-        ]
         
         return ExtractSuggestionsResponse(suggestions=suggestion_models)
     except HTTPException:
