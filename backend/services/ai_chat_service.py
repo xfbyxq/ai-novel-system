@@ -838,13 +838,23 @@ class AiChatService:
                                 for level in levels:
                                     key_points.append(f"  - {level.get('name', '未知')}: {level.get('description', '无描述')}")
                         if 'geography' in world_data:
-                            geography = world_data['geography'] or ''
+                            geography = world_data['geography']
                             if geography:
-                                key_points.append(f"地理环境: {geography[:100]}...")
+                                # 安全处理 geography，可能是字典、列表或字符串
+                                if isinstance(geography, (dict, list)):
+                                    geography_str = json.dumps(geography, ensure_ascii=False)
+                                else:
+                                    geography_str = str(geography)
+                                key_points.append(f"地理环境: {geography_str[:100]}...")
                         if 'factions' in world_data:
-                            factions = world_data['factions'] or ''
+                            factions = world_data['factions']
                             if factions:
-                                key_points.append(f"势力划分: {factions[:100]}...")
+                                # 安全处理 factions，可能是字典、列表或字符串
+                                if isinstance(factions, (dict, list)):
+                                    factions_str = json.dumps(factions, ensure_ascii=False)
+                                else:
+                                    factions_str = str(factions)
+                                key_points.append(f"势力划分: {factions_str[:100]}...")
                         prompt += '\n'.join(key_points) + '...\n'
                     except json.JSONDecodeError:
                         # 如果不是JSON格式，按普通文本处理

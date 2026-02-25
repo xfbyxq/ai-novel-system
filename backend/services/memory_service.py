@@ -105,9 +105,12 @@ class NovelMemoryService:
             if current_chapter_count != new_chapter_count:
                 has_changes = True
             
-            # 比较角色数量
-            current_character_count = len(current_memory['details'].get('characters', []))
-            new_character_count = len(novel_data.get('characters', []))
+            # 比较角色数量（安全访问 details 和 characters）
+            current_details = current_memory.get('details') or {}
+            current_characters = current_details.get('characters') or []
+            current_character_count = len(current_characters)
+            new_characters = novel_data.get('characters') or []
+            new_character_count = len(new_characters)
             if current_character_count != new_character_count:
                 has_changes = True
         else:
@@ -181,7 +184,7 @@ class NovelMemoryService:
             },
             'details': {
                 'world_setting': novel_data.get('world_setting'),
-                'characters': novel_data.get('characters'),
+                'characters': novel_data.get('characters') or [],  # 确保不为 None
                 'plot_outline': novel_data.get('plot_outline'),
             },
             'chapters': novel_data.get('chapters', []),
@@ -189,8 +192,8 @@ class NovelMemoryService:
             'metadata': {
                 'version': novel_data.get('version', 1),
                 'last_updated': novel_data.get('last_updated'),
-                'character_count': len(novel_data.get('characters', [])),
-                'chapter_count': len(novel_data.get('chapters', [])),
+                'character_count': len(novel_data.get('characters') or []),
+                'chapter_count': len(novel_data.get('chapters') or []),
                 'chapter_range': novel_data.get('chapter_range', {'start': 1, 'end': 10}),
             }
         }
