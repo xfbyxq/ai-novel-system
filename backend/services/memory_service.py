@@ -1,7 +1,9 @@
 """小说记忆模块服务 - 高效存储和管理小说相关信息"""
 
+import hashlib
+import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,58 @@ class NovelMemoryService:
         self.cache = MemoryCache()
         self.version_map: Dict[str, int] = {}  # 小说ID -> 版本号
     
+    def _compute_content_hash(self, data: Any) -> str:
+        """计算内容哈希用于变化检测"""
+        if data is None:
+            return ""
+        try:
+            content = json.dumps(data, sort_keys=True, ensure_ascii=False)
+            return hashlib.md5(content.encode()).hexdigest()
+        except (TypeError, ValueError):
+            # 如果数据无法序列化，返回空字符串
+            return ""
+    
+    def _detect_changes(self, novel_data: Dict, current_memory: Dict) -> bool:
+        """深度变化检测 - 检测所有关键字段的变化"""
+        # 基础字段比较
+        basic_fields = ['title', 'genre', 'synopsis']
+        for field in basic_fields:
+            if novel_data.get(field) != current_memory['base'].get(field):
+                return True
+        
+        # 复杂字段哈希比较
+        current_details = current_memory.get('details') or {}
+        
+        # 世界观变化检测
+        new_world_hash = self._compute_content_hash(novel_data.get('world_setting'))
+        old_world_hash = self._compute_content_hash(current_details.get('world_setting'))
+        if new_world_hash != old_world_hash:
+            return True
+        
+        # 情节大纲变化检测
+        new_outline_hash = self._compute_content_hash(novel_data.get('plot_outline'))
+        old_outline_hash = self._compute_content_hash(current_details.get('plot_outline'))
+        if new_outline_hash != old_outline_hash:
+            return True
+        
+        # 角色变化检测（数量和内容）
+        new_chars = novel_data.get('characters') or []
+        old_chars = current_details.get('characters') or []
+        if len(new_chars) != len(old_chars):
+            return True
+        new_chars_hash = self._compute_content_hash(new_chars)
+        old_chars_hash = self._compute_content_hash(old_chars)
+        if new_chars_hash != old_chars_hash:
+            return True
+        
+        # 章节变化检测
+        new_chapters = novel_data.get('chapters') or []
+        old_chapters = current_memory.get('chapters') or []
+        if len(new_chapters) != len(old_chapters):
+            return True
+        
+        return False
+    
     def get_novel_memory(self, novel_id: str) -> Optional[Dict[str, Any]]:
         """获取小说记忆"""
         cache_key = f"novel:{novel_id}"
@@ -89,30 +143,9 @@ class NovelMemoryService:
         current_memory = self.get_novel_memory(novel_id)
         has_changes = False
         
-        # 检查内容是否有变化
+        # 检查内容是否有变化（使用深度变化检测）
         if current_memory:
-            # 比较关键字段
-            if novel_data.get('title') != current_memory['base'].get('title'):
-                has_changes = True
-            if novel_data.get('genre') != current_memory['base'].get('genre'):
-                has_changes = True
-            if novel_data.get('synopsis') != current_memory['base'].get('synopsis'):
-                has_changes = True
-            
-            # 比较章节数量
-            current_chapter_count = len(current_memory.get('chapters', []))
-            new_chapter_count = len(novel_data.get('chapters', []))
-            if current_chapter_count != new_chapter_count:
-                has_changes = True
-            
-            # 比较角色数量（安全访问 details 和 characters）
-            current_details = current_memory.get('details') or {}
-            current_characters = current_details.get('characters') or []
-            current_character_count = len(current_characters)
-            new_characters = novel_data.get('characters') or []
-            new_character_count = len(new_characters)
-            if current_character_count != new_character_count:
-                has_changes = True
+            has_changes = self._detect_changes(novel_data, current_memory)
         else:
             # 新的记忆，视为有变化
             has_changes = True
@@ -188,10 +221,17 @@ class NovelMemoryService:
                 'plot_outline': novel_data.get('plot_outline'),
             },
             'chapters': novel_data.get('chapters', []),
+            'chapter_summaries': novel_data.get('chapter_summaries', {}),  # 结构化章节摘要
+            'character_states': novel_data.get('character_states', {}),    # 角色状态追踪
             'analysis': novel_data.get('analysis', {}),
             'metadata': {
                 'version': novel_data.get('version', 1),
                 'last_updated': novel_data.get('last_updated'),
+                'content_hashes': {  # 内容哈希用于增量检测
+                    'world_setting': self._compute_content_hash(novel_data.get('world_setting')),
+                    'characters': self._compute_content_hash(novel_data.get('characters')),
+                    'plot_outline': self._compute_content_hash(novel_data.get('plot_outline')),
+                },
                 'character_count': len(novel_data.get('characters') or []),
                 'chapter_count': len(novel_data.get('chapters') or []),
                 'chapter_range': novel_data.get('chapter_range', {'start': 1, 'end': 10}),
@@ -214,11 +254,135 @@ class NovelMemoryService:
         if 'chapters' in updated:
             current['chapters'] = updated['chapters']
         
+        # 合并章节摘要
+        if 'chapter_summaries' in updated:
+            if 'chapter_summaries' not in current:
+                current['chapter_summaries'] = {}
+            current['chapter_summaries'].update(updated['chapter_summaries'])
+        
+        # 合并角色状态
+        if 'character_states' in updated:
+            if 'character_states' not in current:
+                current['character_states'] = {}
+            current['character_states'].update(updated['character_states'])
+        
         # 合并分析结果
         if 'analysis' in updated:
             current['analysis'].update(updated['analysis'])
         
         return current
+    
+    # ==================== 章节摘要管理方法 ====================
+    
+    def update_chapter_summary(self, novel_id: str, chapter_number: int, summary: Dict[str, Any]) -> None:
+        """更新单个章节的结构化摘要
+        
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            summary: 章节摘要，包含 key_events, character_changes, plot_progress, foreshadowing, ending_state
+        """
+        cache_key = f"novel:{novel_id}"
+        memory = self.get_novel_memory(novel_id)
+        if memory:
+            if 'chapter_summaries' not in memory:
+                memory['chapter_summaries'] = {}
+            memory['chapter_summaries'][str(chapter_number)] = summary
+            # 直接更新缓存，不触发版本号递增
+            self.cache.set(cache_key, memory)
+            logger.info(f"Updated chapter {chapter_number} summary for novel {novel_id}")
+        else:
+            logger.warning(f"Cannot update chapter summary: novel {novel_id} not in memory")
+    
+    def get_chapter_summaries(self, novel_id: str, max_chapters: int = 20) -> Dict[str, Dict]:
+        """获取章节摘要
+        
+        Args:
+            novel_id: 小说ID
+            max_chapters: 最大返回章节数（默认20）
+            
+        Returns:
+            章节摘要字典，键为章节号字符串
+        """
+        memory = self.get_novel_memory(novel_id)
+        if memory and 'chapter_summaries' in memory:
+            summaries = memory['chapter_summaries']
+            if not summaries:
+                return {}
+            # 按章节号排序，返回最近的章节摘要
+            try:
+                sorted_keys = sorted(summaries.keys(), key=lambda x: int(x))[-max_chapters:]
+                return {k: summaries[k] for k in sorted_keys}
+            except (ValueError, TypeError):
+                return summaries
+        return {}
+    
+    def get_chapter_summary(self, novel_id: str, chapter_number: int) -> Optional[Dict[str, Any]]:
+        """获取单个章节的摘要
+        
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            
+        Returns:
+            章节摘要或None
+        """
+        summaries = self.get_chapter_summaries(novel_id)
+        return summaries.get(str(chapter_number))
+    
+    # ==================== 角色状态管理方法 ====================
+    
+    def update_character_state(self, novel_id: str, character_name: str, state: Dict[str, Any]) -> None:
+        """更新角色状态
+        
+        Args:
+            novel_id: 小说ID
+            character_name: 角色名称
+            state: 角色状态，包含 last_appearance_chapter, current_location, cultivation_level, 
+                   emotional_state, relationships, status, pending_events 等
+        """
+        cache_key = f"novel:{novel_id}"
+        memory = self.get_novel_memory(novel_id)
+        if memory:
+            if 'character_states' not in memory:
+                memory['character_states'] = {}
+            # 合并状态而非完全覆盖
+            if character_name in memory['character_states']:
+                memory['character_states'][character_name].update(state)
+            else:
+                memory['character_states'][character_name] = state
+            # 直接更新缓存
+            self.cache.set(cache_key, memory)
+            logger.info(f"Updated character '{character_name}' state for novel {novel_id}")
+        else:
+            logger.warning(f"Cannot update character state: novel {novel_id} not in memory")
+    
+    def get_character_states(self, novel_id: str) -> Dict[str, Dict]:
+        """获取所有角色状态
+        
+        Args:
+            novel_id: 小说ID
+            
+        Returns:
+            角色状态字典，键为角色名称
+        """
+        memory = self.get_novel_memory(novel_id)
+        if memory:
+            return memory.get('character_states', {})
+        return {}
+    
+    def get_character_state(self, novel_id: str, character_name: str) -> Optional[Dict[str, Any]]:
+        """获取单个角色的状态
+        
+        Args:
+            novel_id: 小说ID
+            character_name: 角色名称
+            
+        Returns:
+            角色状态或None
+        """
+        states = self.get_character_states(novel_id)
+        return states.get(character_name)
 
 
 # 全局记忆服务实例

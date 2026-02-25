@@ -570,14 +570,21 @@ class AiChatService:
             analysis = self._analyze_novel_content(novel_info)
             session.context["analysis"] = analysis
             
-            # 检测小说内容变化并更新记忆
+            # 检测小说内容变化并更新记忆（使用增量合并）
             current_memory = self.memory_service.get_novel_memory(novel_id)
             if current_memory:
-                # 只有在内容有变化时才更新分析结果
+                # 获取现有分析结果
+                existing_analysis = current_memory.get('analysis', {})
+                # 增量合并分析结果
+                merged_analysis = self._merge_analysis(existing_analysis, analysis)
+                current_memory['analysis'] = merged_analysis
+                # 只有在内容有变化时才更新记忆
                 if has_changes:
-                    current_memory['analysis'] = analysis
                     self.memory_service.set_novel_memory(novel_id, current_memory)
-                    logger.info(f"小说分析结果已更新: {novel_id}")
+                    logger.info(f"小说分析结果已增量更新: {novel_id}")
+                else:
+                    # 即使内容没变化，也更新分析（直接更新缓存，不触发版本递增）
+                    self.memory_service.cache.set(f"novel:{novel_id}", current_memory)
             else:
                 novel_info['analysis'] = analysis
                 self.memory_service.set_novel_memory(novel_id, novel_info)
@@ -859,6 +866,62 @@ class AiChatService:
         
         return False
     
+    def _safe_get(self, data: dict, path: str, default: Any = "") -> Any:
+        """安全访问嵌套字典字段
+        
+        Args:
+            data: 字典数据
+            path: 点分隔的路径，如 'world_setting.content'
+            default: 默认值
+            
+        Returns:
+            字段值或默认值
+        """
+        if not data or not isinstance(data, dict):
+            return default
+        
+        keys = path.split('.')
+        current = data
+        for key in keys:
+            if not isinstance(current, dict):
+                return default
+            current = current.get(key)
+            if current is None:
+                return default
+        return current if current is not None else default
+    
+    def _merge_analysis(self, existing: dict, new: dict) -> dict:
+        """增量合并分析结果
+        
+        strengths/weaknesses/suggestions 追加不重复项，
+        genre_specific 替换为新值。
+        
+        Args:
+            existing: 现有分析结果
+            new: 新的分析结果
+            
+        Returns:
+            合并后的分析结果
+        """
+        if not existing:
+            return new.copy() if new else {}
+        if not new:
+            return existing.copy()
+        
+        merged = existing.copy()
+        
+        # strengths/weaknesses/suggestions 追加不重复项
+        for key in ['strengths', 'weaknesses', 'suggestions']:
+            existing_items = set(existing.get(key, []))
+            new_items = set(new.get(key, []))
+            merged[key] = list(existing_items | new_items)
+        
+        # genre_specific 替换（因为类型特定建议应该更新）
+        if new.get('genre_specific'):
+            merged['genre_specific'] = new['genre_specific']
+        
+        return merged
+    
     def _analyze_novel_content(self, novel_info: dict) -> dict:
         """分析小说内容，生成分析结果"""
         analysis = {
@@ -868,9 +931,9 @@ class AiChatService:
             "genre_specific": [],
         }
         
-        # 分析世界观
-        if novel_info.get('world_setting'):
-            world_content = novel_info['world_setting'].get('content', '') or ''
+        # 分析世界观（使用安全访问）
+        world_content = self._safe_get(novel_info, 'world_setting.content', '')
+        if world_content:
             if len(world_content) > 500:
                 analysis['strengths'].append("世界观设定详细丰富")
             else:
@@ -881,16 +944,16 @@ class AiChatService:
             analysis['suggestions'].append("建议添加详细的世界观设定")
         
         # 分析角色
-        characters = novel_info.get('characters', [])
+        characters = novel_info.get('characters') or []
         if len(characters) >= 3:
             analysis['strengths'].append(f"角色数量充足（{len(characters)}个）")
         else:
             analysis['weaknesses'].append("角色数量较少")
             analysis['suggestions'].append("建议增加更多有特色的角色")
         
-        # 分析大纲
-        if novel_info.get('plot_outline'):
-            outline_content = novel_info['plot_outline'].get('content', '') or ''
+        # 分析大纲（使用安全访问）
+        outline_content = self._safe_get(novel_info, 'plot_outline.content', '')
+        if outline_content:
             if len(outline_content) > 300:
                 analysis['strengths'].append("剧情大纲完整")
             else:
@@ -901,7 +964,7 @@ class AiChatService:
             analysis['suggestions'].append("建议添加详细的剧情大纲")
         
         # 分析章节
-        chapters = novel_info.get('chapters', [])
+        chapters = novel_info.get('chapters') or []
         if len(chapters) >= 3:
             analysis['strengths'].append(f"章节数量充足（{len(chapters)}章）")
         else:
