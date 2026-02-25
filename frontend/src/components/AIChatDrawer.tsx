@@ -38,6 +38,8 @@ interface Props {
 interface SessionItem {
   session_id: string;
   scene: string;
+  novel_id?: string | null;
+  title?: string | null;
   context?: {
     novel_id?: string;
   };
@@ -195,7 +197,8 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const loadSessions = async () => {
     try {
       setLoadingSessions(true);
-      const response = await listSessions(scene);
+      // 按场景和小说ID过滤历史会话
+      const response = await listSessions(scene, novelId);
       setSessions(response.sessions);
     } catch (error) {
       console.error('加载会话失败:', error);
@@ -696,7 +699,9 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                 <List.Item.Meta
                   title={
                     <div>
-                      <Typography.Text strong>{session.scene === 'novel_creation' ? '小说创作' : session.scene === 'novel_revision' ? '小说修订' : '爬虫策略'}</Typography.Text>
+                      <Typography.Text strong>
+                        {session.title || (session.scene === 'novel_creation' ? '小说创作' : session.scene === 'novel_revision' ? '小说修订' : session.scene === 'novel_analysis' ? '小说分析' : '爬虫策略')}
+                      </Typography.Text>
                       <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
                         {new Date(session.created_at).toLocaleString()}
                       </Typography.Text>
@@ -704,9 +709,15 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                   }
                   description={
                     <div>
-                      {session.context?.novel_id && (
-                        <Typography.Text type="secondary">小说ID: {session.context.novel_id}</Typography.Text>
-                      )}
+                      <Tag color={
+                        session.scene === 'novel_creation' ? 'blue' :
+                        session.scene === 'novel_revision' ? 'green' :
+                        session.scene === 'novel_analysis' ? 'orange' : 'purple'
+                      }>
+                        {session.scene === 'novel_creation' ? '创作' : 
+                         session.scene === 'novel_revision' ? '修订' : 
+                         session.scene === 'novel_analysis' ? '分析' : '爬虫'}
+                      </Tag>
                     </div>
                   }
                 />

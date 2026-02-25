@@ -153,16 +153,9 @@ class AgentDispatcher:
             
             content_planning = content_task_result.result or {}
             
-            # 构建企划结果
-            planning_result = {
-                "topic_analysis": market_analysis,
-                "world_setting": {},  # 这里需要扩展世界观构建
-                "characters": [],  # 这里需要扩展角色设计
-                "plot_outline": {},  # 这里需要扩展情节架构
-            }
-            
-            logger.info("✅ 基于调度器的企划阶段执行完成")
-            return planning_result
+            # 当前调度器实现还不完善，降级到 CrewManager
+            logger.warning("⚠️  调度器当前仅支持市场分析，降级到 CrewManager 执行完整企划")
+            return await self._run_planning_with_crew_manager(novel_id, **kwargs)
             
         except Exception as e:
             logger.error(f"❌ 基于调度器的企划阶段执行失败: {e}")

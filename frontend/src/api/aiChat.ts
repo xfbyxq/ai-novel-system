@@ -152,6 +152,8 @@ export interface SessionListItem {
   id: string;
   session_id: string;
   scene: string;
+  novel_id?: string | null;
+  title?: string | null;
   context?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -164,8 +166,10 @@ export interface SessionDetail {
   messages: Array<{ role: string; content: string }>;
 }
 
-export const listSessions = async (scene?: string): Promise<{ sessions: SessionListItem[] }> => {
-  const params = scene ? { scene } : {};
+export const listSessions = async (scene?: string, novelId?: string): Promise<{ sessions: SessionListItem[] }> => {
+  const params: Record<string, string> = {};
+  if (scene) params.scene = scene;
+  if (novelId) params.novel_id = novelId;
   const response = await apiClient.get<{ sessions: SessionListItem[] }>('/ai-chat/sessions', { params });
   return response.data;
 };

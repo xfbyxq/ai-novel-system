@@ -180,11 +180,17 @@ async def parse_crawler_intent(
 @router.get("/sessions")
 async def list_sessions(
     scene: Optional[str] = None,
+    novel_id: Optional[str] = None,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """获取会话列表"""
+    """获取会话列表
+    
+    Args:
+        scene: 可选的场景过滤
+        novel_id: 可选的小说ID过滤，用于按小说隔离会话
+    """
     try:
-        sessions = await service.get_sessions(scene)
+        sessions = await service.get_sessions(scene, novel_id)
         return {"sessions": sessions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")

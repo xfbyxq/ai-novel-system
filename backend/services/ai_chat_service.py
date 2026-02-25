@@ -127,10 +127,13 @@ class ChatMessage:
 
 class ChatSession:
     """对话会话"""
-    def __init__(self, session_id: str, scene: str, context: Optional[dict] = None):
+    def __init__(self, session_id: str, scene: str, context: Optional[dict] = None, 
+                 novel_id: Optional[str] = None, title: Optional[str] = None):
         self.session_id = session_id
         self.scene = scene
         self.context = context or {}
+        self.novel_id = novel_id  # 关联的小说ID
+        self.title = title  # 会话标题
         self.messages: list[ChatMessage] = []
         self.dialogue_state = "active"  # active, waiting_for_clarification, completed
         self.pending_questions = []
@@ -372,11 +375,13 @@ class AiChatService:
         
         async with async_session_factory() as db:
             try:
-                # 保存会话信息
+                # 保存会话信息，包含 novel_id 和 title
                 session_data = {
                     "session_id": session.session_id,
                     "scene": session.scene,
                     "context": session.context,
+                    "novel_id": session.novel_id,
+                    "title": session.title,
                 }
                 
                 # 检查会话是否已存在
@@ -436,11 +441,13 @@ class AiChatService:
                 if not session_data:
                     return None
                 
-                # 创建会话对象
+                # 创建会话对象，包含 novel_id 和 title
                 session = ChatSession(
                     session_data.session_id,
                     session_data.scene,
-                    session_data.context
+                    session_data.context,
+                    novel_id=str(session_data.novel_id) if session_data.novel_id else None,
+                    title=session_data.title
                 )
                 
                 # 清空构造函数自动添加的欢迎消息，避免重复
@@ -466,8 +473,13 @@ class AiChatService:
                 logger.error(f"加载会话失败: {e}")
                 return None
     
-    async def get_sessions(self, scene: Optional[str] = None) -> list[dict]:
-        """获取会话列表"""
+    async def get_sessions(self, scene: Optional[str] = None, novel_id: Optional[str] = None) -> list[dict]:
+        """获取会话列表
+        
+        Args:
+            scene: 场景过滤
+            novel_id: 小说ID过滤，用于按小说隔离会话
+        """
         from sqlalchemy import select
         from core.models.ai_chat_session import AIChatSession
         from core.database import async_session_factory
@@ -477,6 +489,11 @@ class AiChatService:
                 query = select(AIChatSession)
                 if scene:
                     query = query.where(AIChatSession.scene == scene)
+                if novel_id:
+                    # 按小说ID过滤会话
+                    from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+                    import uuid as uuid_module
+                    query = query.where(AIChatSession.novel_id == uuid_module.UUID(novel_id))
                 query = query.order_by(AIChatSession.updated_at.desc())
                 
                 result = await db.execute(query)
@@ -488,6 +505,8 @@ class AiChatService:
                         "id": str(session.id),
                         "session_id": session.session_id,
                         "scene": session.scene,
+                        "novel_id": str(session.novel_id) if session.novel_id else None,
+                        "title": session.title,
                         "context": session.context,
                         "created_at": session.created_at.isoformat(),
                         "updated_at": session.updated_at.isoformat(),
@@ -526,11 +545,14 @@ class AiChatService:
     async def create_session(self, scene: str, context: Optional[dict] = None) -> ChatSession:
         import uuid
         session_id = str(uuid.uuid4())
-        session = ChatSession(session_id, scene, context)
+        
+        # 提取 novel_id 用于会话隔离
+        novel_id = context.get("novel_id") if context else None
+        
+        session = ChatSession(session_id, scene, context, novel_id=novel_id)
         
         # 如果是小说相关场景，加载小说信息
         if context and "novel_id" in context:
-            novel_id = context["novel_id"]
             chapter_start = context.get("chapter_start", 1)
             chapter_end = context.get("chapter_end", 10)
             novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end)
@@ -566,12 +588,92 @@ class AiChatService:
         import asyncio
         asyncio.create_task(self.save_session(session))
         
-        logger.info(f"创建AI对话会话: {session_id}, 场景: {scene}")
+        logger.info(f"创建AI对话会话: {session_id}, 场景: {scene}, 小说ID: {novel_id}")
         return session
     
     def get_session(self, session_id: str) -> Optional[ChatSession]:
         return self.sessions.get(session_id)
     
+    async def _generate_session_title(self, session: ChatSession) -> str:
+        """使用 AI 从对话内容中生成会话标题"""
+        # 获取对话内容用于生成标题
+        conversation_content = []
+        for msg in session.messages[:6]:  # 只取前6条消息
+            if msg.role == "user":
+                conversation_content.append(f"用户: {msg.content[:200]}")
+            else:
+                conversation_content.append(f"助手: {msg.content[:200]}")
+        
+        if not conversation_content:
+            return "新会话"
+        
+        prompt = f"""请根据以下对话内容，生成一个简洁的会话标题（10-20个字符），用于识别这次对话的主题。
+
+对话内容:
+{chr(10).join(conversation_content)}
+
+要求:
+1. 标题要简洁明了，能概括对话主题
+2. 不超过20个字符
+3. 直接输出标题，不需要任何解释或前缀
+
+标题:"""
+        
+        try:
+            response = await self.client.chat(
+                prompt=prompt,
+                system="你是一个专业的内容总结助手，擅长从对话中提炼出简洁的标题。",
+                temperature=0.3,
+            )
+            title = response.get("content", "").strip()
+            # 清理可能的前缀和多余内容
+            title = title.replace("标题:", "").replace("标题：", "").strip()
+            # 限制长度
+            if len(title) > 50:
+                title = title[:50]
+            if not title:
+                title = "新会话"
+            return title
+        except Exception as e:
+            logger.error(f"生成会话标题失败: {e}")
+            # 回退方案：从第一条用户消息截取
+            for msg in session.messages:
+                if msg.role == "user":
+                    return msg.content[:20] + "..." if len(msg.content) > 20 else msg.content
+            return "新会话"
+    
+    async def _update_session_title(self, session: ChatSession) -> None:
+        """更新会话标题到数据库"""
+        if session.title:
+            return  # 已有标题，不更新
+        
+        # 只有当有用户消息时才生成标题
+        user_messages = [m for m in session.messages if m.role == "user"]
+        if not user_messages:
+            return
+        
+        # 生成标题
+        title = await self._generate_session_title(session)
+        session.title = title
+        
+        # 更新数据库
+        from sqlalchemy import update
+        from core.models.ai_chat_session import AIChatSession
+        from core.database import async_session_factory
+        
+        async with async_session_factory() as db:
+            try:
+                await db.execute(
+                    update(AIChatSession)
+                    .where(AIChatSession.session_id == session.session_id)
+                    .values(title=title)
+                )
+                await db.commit()
+                logger.info(f"会话 {session.session_id} 标题已更新为: {title}")
+            except Exception as e:
+                logger.error(f"更新会话标题失败: {e}")
+                await db.rollback()
+
     def _analyze_user_intent(self, user_message: str, scene: str) -> str:
         """分析用户的意图，识别用户需求类型"""
         if scene == SCENE_NOVEL_REVISION:
@@ -1191,6 +1293,10 @@ class AiChatService:
         import asyncio
         asyncio.create_task(self.save_session(session))
         
+        # 如果会话没有标题，异步生成标题
+        if not session.title:
+            asyncio.create_task(self._update_session_title(session))
+        
         logger.info(f"会话 {session_id} 收到用户消息: {user_message[:50]}...")
         
         return assistant_message
@@ -1350,6 +1456,11 @@ class AiChatService:
             
             # 保存会话到数据库
             await self.save_session(session)
+            
+            # 如果会话没有标题，异步生成标题
+            if not session.title:
+                import asyncio
+                asyncio.create_task(self._update_session_title(session))
             
         except Exception as e:
             logger.error(f"流式响应出错: {e}", exc_info=True)
