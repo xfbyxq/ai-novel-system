@@ -44,7 +44,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - APP_ENV=development
-      - APP_DEBUG=true
+      - APP_DEBUG=false
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
       - DASHSCOPE_API_KEY=sk-sp-234a1a7dfc5b4ecaaa21cfa08cc4e584
