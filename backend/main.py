@@ -14,7 +14,7 @@ setup_logging()
 
 app = FastAPI(
     title="小说生成系统 API",
-    version="0.1.0",
+    version="1.0.0",
     description="AI-powered novel generation system API",
     debug=settings.APP_DEBUG,
     redirect_slashes=False,  # 禁用尾部斜杠重定向，避免307导致浏览器访问Docker内部地址
