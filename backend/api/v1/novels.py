@@ -22,7 +22,7 @@ from core.models.novel import Novel
 router = APIRouter(prefix="/novels", tags=["novels"])
 
 
-@router.get("/", response_model=NovelListResponse)
+@router.get("", response_model=NovelListResponse)
 async def list_novels(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
@@ -63,7 +63,7 @@ async def list_novels(
     )
 
 
-@router.post("/", response_model=NovelResponse, status_code=201)
+@router.post("", response_model=NovelResponse, status_code=201)
 async def create_novel(
     novel_in: NovelCreate,
     db: AsyncSession = Depends(get_db),

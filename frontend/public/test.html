@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Axios 测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Axios 请求测试</h1>
+    <button onclick="testRequest()">测试请求</button>
+    <pre id="result"></pre>
+    
+    <script>
+        async function testRequest() {
+            try {
+                const response = await axios.get('/api/v1/novels/?page=1&page_size=1');
+                document.getElementById('result').textContent = 'Success: ' + JSON.stringify(response.data, null, 2);
+            } catch (error) {
+                document.getElementById('result').textContent = 'Error: ' + error.message + '\n\nRequest URL: ' + error.config?.url;
+                console.error('完整错误:', error);
+            }
+        }
+    </script>
+</body>
+</html>

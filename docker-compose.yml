@@ -35,8 +35,11 @@ services:
       dockerfile: Dockerfile.backend
     container_name: novel_backend
     environment:
-      - DATABASE_URL=postgresql+asyncpg://novel_user:novel_pass@postgres:5432/novel_system
-      - DATABASE_URL_SYNC=postgresql://novel_user:novel_pass@postgres:5432/novel_system
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=novel_user
+      - DB_PASSWORD=novel_pass
+      - DB_NAME=novel_system
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
@@ -44,8 +47,9 @@ services:
       - APP_DEBUG=true
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-    env_file:
-      - .env
+      - DASHSCOPE_API_KEY=sk-sp-234a1a7dfc5b4ecaaa21cfa08cc4e584
+      - DASHSCOPE_MODEL=qwen3-coder-plus
+      - DASHSCOPE_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
     ports:
       - "8000:8000"
     volumes:
@@ -67,7 +71,7 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: novel_frontend
     environment:
-      - VITE_API_BASE_URL=http://localhost:8000
+      - API_PROXY_TARGET=http://backend:8000
     ports:
       - "3000:3000"
     volumes:

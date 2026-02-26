@@ -9,10 +9,11 @@ class Base(DeclarativeBase):
 
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.DATABASE_URL.split('?')[0],  # 移除 URL 中的查询参数
     echo=settings.APP_DEBUG,
     pool_size=10,
     max_overflow=20,
+    connect_args={"ssl": False},  # asyncpg 参数：禁用 SSL
 )
 
 async_session_factory = async_sessionmaker(

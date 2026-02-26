@@ -21,7 +21,7 @@ from core.models.novel import Novel
 router = APIRouter(prefix="/novels/{novel_id}/characters", tags=["characters"])
 
 
-@router.get("/", response_model=list[CharacterResponse])
+@router.get("", response_model=list[CharacterResponse])
 async def list_characters(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -45,7 +45,7 @@ async def list_characters(
     return characters
 
 
-@router.post("/", response_model=CharacterResponse, status_code=201)
+@router.post("", response_model=CharacterResponse, status_code=201)
 async def create_character(
     novel_id: UUID,
     character_in: CharacterCreate,

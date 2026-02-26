@@ -26,7 +26,7 @@ class BatchDeleteRequest(BaseModel):
 router = APIRouter(prefix="/novels/{novel_id}/chapters", tags=["chapters"])
 
 
-@router.get("/", response_model=ChapterListResponse)
+@router.get("", response_model=ChapterListResponse)
 async def list_chapters(
     novel_id: UUID,
     page: int = Query(1, ge=1, description="页码"),
