@@ -244,6 +244,7 @@ class AgentDispatcher:
         previous_chapters_summary = kwargs.get('previous_chapters_summary', '')
         character_states = kwargs.get('character_states', '')
         writing_style = kwargs.get('writing_style', 'modern')
+        team_context = kwargs.get('team_context', None)
         
         # 使用CrewManager执行写作
         return await self.crew_manager.run_writing_phase(
@@ -253,6 +254,7 @@ class AgentDispatcher:
             previous_chapters_summary=previous_chapters_summary,
             character_states=character_states,
             writing_style=writing_style,
+            team_context=team_context,
         )
     
     async def run_batch_writing(self, novel_id: UUID, task_id: UUID, from_chapter: int, to_chapter: int, volume_number: int = 1, **kwargs) -> Dict[str, Any]:

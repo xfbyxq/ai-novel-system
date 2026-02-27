@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agents.agent_dispatcher import AgentDispatcher
+from agents.team_context import NovelTeamContext
+from agents.foreshadowing_tracker import ForeshadowingTracker
 from core.models.chapter import Chapter, ChapterStatus
 from core.models.character import Character, RoleType, Gender
 from core.models.generation_task import GenerationTask, TaskStatus, TaskType
@@ -20,6 +22,7 @@ from core.models.world_setting import WorldSetting
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 from .memory_service import get_novel_memory_service
+from .agentmesh_memory_adapter import get_novel_memory_adapter, NovelMemoryAdapter
 
 # Use the project-wide logger
 from core.logging_config import logger
@@ -34,6 +37,10 @@ class GenerationService:
         self.cost_tracker = CostTracker()
         self.dispatcher = AgentDispatcher(self.client, self.cost_tracker)
         self.memory_service = get_novel_memory_service()
+        # 新增：持久化记忆适配器（SQLite + FTS5）
+        self.persistent_memory = get_novel_memory_adapter()
+        # 新增：TeamContext 缓存（按 novel_id 索引）
+        self._team_contexts: dict[str, NovelTeamContext] = {}
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行企划阶段并保存结果到数据库。"""
@@ -163,6 +170,12 @@ class GenerationService:
             # 更新小说状态
             novel.status = NovelStatus.writing
 
+            # 初始化持久化记忆（长期记忆：世界观、角色、大纲）
+            await self._initialize_novel_persistent_memory(
+                novel_id=novel_id,
+                planning_result=planning_result
+            )
+
             # 保存 token 使用记录
             cost_summary = self.cost_tracker.get_summary()
             for record in self.cost_tracker.records:
@@ -285,15 +298,18 @@ class GenerationService:
                     "key_turning_points": po.key_turning_points or [],
                 }
 
-            # 构建前几章摘要（使用增强的结构化摘要）
-            previous_summary = self._build_previous_context(
+            # 构建前几章摘要（优先使用持久化记忆，回退到内存缓存）
+            previous_summary = await self._build_previous_context_enhanced(
                 novel_id=novel_id,
                 novel=novel,
                 chapter_number=chapter_number
             )
             
-            # 获取角色状态
-            character_states = self.memory_service.get_character_states(str(novel_id))
+            # 获取角色状态（优先从持久化记忆获取）
+            character_states = self.persistent_memory.storage.get_all_character_states(str(novel_id))
+            if not character_states:
+                # 回退到内存缓存
+                character_states = self.memory_service.get_character_states(str(novel_id))
 
             novel_data = {
                 "title": novel.title,
@@ -303,10 +319,17 @@ class GenerationService:
                 "plot_outline": plot_outline_dict,
             }
 
+            # 获取或创建 TeamContext
+            team_context = self._get_or_create_team_context(
+                novel_id=str(novel_id),
+                novel_title=novel.title,
+                novel_data=novel_data
+            )
+
             # 初始化Agent调度器
             await self.dispatcher.initialize()
             
-            # 执行写作阶段
+            # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
             writing_result = await self.dispatcher.run_chapter_writing(
                 novel_id=novel_id,
@@ -316,6 +339,7 @@ class GenerationService:
                 novel_data=novel_data,
                 previous_chapters_summary=previous_summary,
                 character_states=character_states,
+                team_context=team_context,
             )
 
             # 保存章节
@@ -347,10 +371,25 @@ class GenerationService:
             )
             self.memory_service.update_chapter_summary(str(novel_id), chapter_number, chapter_summary)
             
+            # 同时保存到持久化记忆系统
+            await self.persistent_memory.save_chapter_memory(
+                novel_id=str(novel_id),
+                chapter_number=chapter_number,
+                content=final_content,
+                summary=chapter_summary
+            )
+            
             # 更新角色状态（如果 writing_result 中包含角色更新信息）
             character_updates = writing_result.get("character_updates", {})
             for char_name, state in character_updates.items():
                 self.memory_service.update_character_state(str(novel_id), char_name, state)
+                # 同时更新持久化记忆
+                await self.persistent_memory.update_character_state(
+                    novel_id=str(novel_id),
+                    character_name=char_name,
+                    chapter_number=chapter_number,
+                    updates=state
+                )
 
             # 更新小说统计
             novel.chapter_count = (novel.chapter_count or 0) + 1
@@ -906,3 +945,108 @@ class GenerationService:
                         break
         
         return "; ".join(found_changes) if found_changes else ""
+
+    # ==================== 新增：持久化记忆集成方法 ====================
+    
+    def _get_or_create_team_context(
+        self,
+        novel_id: str,
+        novel_title: str,
+        novel_data: dict
+    ) -> NovelTeamContext:
+        """获取或创建小说的 TeamContext
+        
+        TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享。
+        
+        Args:
+            novel_id: 小说ID
+            novel_title: 小说标题
+            novel_data: 小说数据字典
+            
+        Returns:
+            NovelTeamContext 实例
+        """
+        if novel_id not in self._team_contexts:
+            team_context = NovelTeamContext(novel_id, novel_title)
+            team_context.set_novel_data(novel_data)
+            
+            # 集成伏笔追踪器
+            team_context.foreshadowing_tracker = ForeshadowingTracker()
+            
+            self._team_contexts[novel_id] = team_context
+            logger.info(f"Created new TeamContext for novel {novel_id}")
+        
+        return self._team_contexts[novel_id]
+    
+    async def _initialize_novel_persistent_memory(
+        self,
+        novel_id: UUID,
+        planning_result: dict
+    ):
+        """初始化小说的持久化长期记忆
+        
+        在企划阶段完成后调用，保存世界观、角色、大纲等核心设定。
+        
+        Args:
+            novel_id: 小说ID
+            planning_result: 企划结果
+        """
+        novel_id_str = str(novel_id)
+        
+        # 提取核心数据
+        world_setting = planning_result.get("world_setting", {})
+        characters = planning_result.get("characters", [])
+        plot_outline = planning_result.get("plot_outline", {})
+        topic_analysis = planning_result.get("topic_analysis", {})
+        
+        # 初始化持久化记忆
+        await self.persistent_memory.initialize_novel_memory(
+            novel_id=novel_id_str,
+            novel_data={
+                "title": topic_analysis.get("recommended_title", ""),
+                "genre": topic_analysis.get("genre", ""),
+                "synopsis": topic_analysis.get("synopsis", ""),
+                "world_setting": world_setting,
+                "characters": characters,
+                "plot_outline": plot_outline
+            }
+        )
+        
+        logger.info(f"Initialized persistent memory for novel {novel_id}")
+    
+    async def _build_previous_context_enhanced(
+        self,
+        novel_id: UUID,
+        novel: Novel,
+        chapter_number: int
+    ) -> str:
+        """构建增强的前置章节上下文
+        
+        优先使用持久化记忆系统，回退到内存缓存和数据库。
+        
+        Args:
+            novel_id: 小说ID
+            novel: Novel对象
+            chapter_number: 当前章节号
+            
+        Returns:
+            前置章节上下文字符串
+        """
+        novel_id_str = str(novel_id)
+        
+        # 1. 首先尝试从持久化记忆获取上下文
+        try:
+            persistent_context = await self.persistent_memory.get_chapter_context(
+                novel_id=novel_id_str,
+                chapter_number=chapter_number,
+                context_chapters=5
+            )
+            if persistent_context:
+                logger.debug(f"Using persistent memory context for chapter {chapter_number}")
+                return persistent_context
+        except Exception as e:
+            logger.warning(f"Failed to get persistent memory context: {e}")
+        
+        # 2. 回退到原有的内存缓存实现
+        return self._build_previous_context(novel_id, novel, chapter_number)
+

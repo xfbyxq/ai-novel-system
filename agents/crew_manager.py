@@ -2,11 +2,13 @@
 
 采用直接编排模式，通过 QwenClient 调用通义千问模型，
 而非使用 CrewAI 的内置 LLM 集成。
+
+集成 TeamContext 实现 Agent 间的信息共享和状态追踪。
 """
 
 import json
 import re
-from typing import Any
+from typing import Any, Optional
 
 from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager
@@ -14,6 +16,9 @@ from llm.qwen_client import QwenClient
 
 # Use the project-wide logger
 from core.logging_config import logger
+
+# TeamContext 用于 Agent 间信息共享
+from agents.team_context import NovelTeamContext
 
 
 class NovelCrewManager:
@@ -313,6 +318,7 @@ class NovelCrewManager:
         previous_chapters_summary: str = "",
         character_states: str = "",
         writing_style: str = "modern",
+        team_context: Optional[NovelTeamContext] = None,
     ) -> dict[str, Any]:
         """执行单章写作阶段
 
@@ -328,6 +334,8 @@ class NovelCrewManager:
             volume_number: 卷号
             previous_chapters_summary: 前几章摘要
             character_states: 当前角色状态
+            writing_style: 写作风格
+            team_context: 团队共享上下文（可选，用于增强信息共享）
 
         Returns:
             包含以下键的字典：
@@ -351,6 +359,13 @@ class NovelCrewManager:
         novel_title = novel_data.get("title", "未命名小说")
         genre = novel_data.get("genre") or world_setting.get("world_type", "玄幻")
 
+        # 初始化或更新 TeamContext
+        if team_context:
+            team_context.set_current_chapter(chapter_number, volume_number)
+            if not team_context.world_setting:
+                team_context.set_novel_data(novel_data)
+            logger.info(f"使用 TeamContext，当前步数: {team_context.current_steps}")
+
         # 从大纲中找到当前章节所属的卷
         volumes = plot_outline.get("volumes", [])
         current_volume = None
@@ -359,8 +374,10 @@ class NovelCrewManager:
                 current_volume = vol
                 break
         
-        plot_context = ""
-        if current_volume:
+        # 构建情节上下文（优先使用 TeamContext 的增强上下文）
+        if team_context:
+            plot_context = team_context.build_enhanced_context(chapter_number)
+        elif current_volume:
             plot_context = f"""
 当前卷：第 {volume_number} 卷 - {current_volume.get('title', '')}
 卷概要：{current_volume.get('summary', '')}
@@ -368,6 +385,10 @@ class NovelCrewManager:
 """
         else:
             plot_context = json.dumps(plot_outline, ensure_ascii=False, indent=2)
+
+        # 使用 TeamContext 的角色状态（如果可用）
+        if team_context and not character_states:
+            character_states = team_context.format_character_states()
 
         # 1. 章节策划
         planner_task = self.pm.format(
@@ -388,6 +409,10 @@ class NovelCrewManager:
             temperature=0.7,
             expect_json=True,
         )
+        
+        # 记录到 TeamContext
+        if team_context:
+            team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
 
         # 2. 撰写初稿
         # 构建世界观简要
@@ -427,6 +452,10 @@ class NovelCrewManager:
             max_tokens=4096,
             expect_json=False,  # 返回纯文本
         )
+        
+        # 记录到 TeamContext
+        if team_context:
+            team_context.add_agent_output("作家", {"draft_length": len(draft)}, f"第{chapter_number}章初稿")
 
         # 3. 编辑润色
         editor_task = self.pm.format(
@@ -445,6 +474,10 @@ class NovelCrewManager:
             max_tokens=4096,
             expect_json=False,
         )
+        
+        # 记录到 TeamContext
+        if team_context:
+            team_context.add_agent_output("编辑", {"edited_length": len(edited_content)}, f"第{chapter_number}章润色")
 
         # 4. 连续性检查
         continuity_task = self.pm.format(
@@ -462,6 +495,23 @@ class NovelCrewManager:
             temperature=0.5,
             expect_json=True,
         )
+        
+        # 记录到 TeamContext
+        if team_context:
+            team_context.add_agent_output("连续性审查员", continuity_report, f"第{chapter_number}章检查")
+            # 更新本章出场角色的状态
+            for char_name in chapter_characters:
+                team_context.update_character_state(
+                    char_name, 
+                    last_appearance_chapter=chapter_number
+                )
+            # 添加时间线事件
+            if chapter_plan.get("summary"):
+                team_context.add_timeline_event(
+                    chapter_number=chapter_number,
+                    event=chapter_plan.get("summary", "")[:100],
+                    characters=chapter_characters
+                )
 
         logger.info("=" * 60)
         logger.info(f"🎉 第 {chapter_number} 章写作完成！")
