@@ -170,10 +170,23 @@ class NovelTeamContext:
             char_name = char.get("name", "")
             if char_name and char_name not in self.character_states:
                 self.character_states[char_name] = CharacterState(char_name)
-                # 从角色设定初始化状态
+                # 从角色设定初始化状态（兼容不同的数据格式）
+                abilities = char.get("abilities", {})
+                background = char.get("background", {})
+                
+                # abilities 可能是字典或字符串
+                cultivation_level = ""
+                if isinstance(abilities, dict):
+                    cultivation_level = abilities.get("level", "")
+                
+                # background 可能是字典或字符串
+                starting_location = ""
+                if isinstance(background, dict):
+                    starting_location = background.get("starting_location", "")
+                
                 self.character_states[char_name].update(
-                    cultivation_level=char.get("abilities", {}).get("level", ""),
-                    current_location=char.get("background", {}).get("starting_location", "")
+                    cultivation_level=cultivation_level,
+                    current_location=starting_location
                 )
 
         logger.info(f"Novel data set: {len(self.characters)} characters initialized")

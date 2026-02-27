@@ -306,8 +306,11 @@ class GenerationService:
             )
             
             # 获取角色状态（优先从持久化记忆获取）
-            character_states = self.persistent_memory.storage.get_all_character_states(str(novel_id))
-            if not character_states:
+            character_states_dict = self.persistent_memory.storage.get_all_character_states(str(novel_id))
+            if character_states_dict:
+                # 将字典格式转换为字符串格式（用于提示词）
+                character_states = self._format_character_states(character_states_dict)
+            else:
                 # 回退到内存缓存
                 character_states = self.memory_service.get_character_states(str(novel_id))
 
@@ -905,6 +908,37 @@ class GenerationService:
             "ending_state": ending_state,  # 结尾状态
         }
     
+    def _format_character_states(self, states_dict: dict) -> str:
+        """将角色状态字典格式化为提示词字符串
+        
+        Args:
+            states_dict: 角色状态字典 {角色名: 状态信息}
+            
+        Returns:
+            格式化的角色状态字符串
+        """
+        if not states_dict:
+            return ""
+        
+        parts = []
+        for name, state in states_dict.items():
+            info = [f"**{name}**"]
+            if state.get('current_location'):
+                info.append(f"  - 位置: {state['current_location']}")
+            if state.get('cultivation_level'):
+                info.append(f"  - 修为: {state['cultivation_level']}")
+            if state.get('emotional_state'):
+                info.append(f"  - 情绪: {state['emotional_state']}")
+            if state.get('status') and state['status'] != 'active':
+                info.append(f"  - 状态: {state['status']}")
+            if state.get('pending_events'):
+                events = state['pending_events']
+                if isinstance(events, list) and events:
+                    info.append(f"  - 待办: {', '.join(str(e) for e in events[:3])}")
+            parts.append("\n".join(info))
+        
+        return "\n\n".join(parts) if parts else ""
+    
     def _extract_character_mentions(self, content: str) -> str:
         """提取角色变化描述
         
@@ -971,7 +1005,7 @@ class GenerationService:
             team_context.set_novel_data(novel_data)
             
             # 集成伏笔追踪器
-            team_context.foreshadowing_tracker = ForeshadowingTracker()
+            team_context.foreshadowing_tracker = ForeshadowingTracker(novel_id)
             
             self._team_contexts[novel_id] = team_context
             logger.info(f"Created new TeamContext for novel {novel_id}")
