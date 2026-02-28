@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from llm.qwen_client import QwenClient
 from .memory_service import get_novel_memory_service
+from .agentmesh_memory_adapter import NovelMemoryAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,8 @@ class AiChatService:
         self.client = QwenClient()
         self.sessions: dict[str, ChatSession] = {}
         self.memory_service = get_novel_memory_service()
+        # 初始化持久化记忆适配器
+        self.persistent_memory = NovelMemoryAdapter()
     
     def _get_system_prompt(self, scene: str) -> str:
         return SYSTEM_PROMPTS.get(scene, "你是一位AI助手，请帮助用户解决问题。")
@@ -565,6 +568,10 @@ class AiChatService:
             has_changes = novel_info.get("has_changes", False)
             
             logger.info(f"为场景 {scene} 加载小说信息: {novel_id}, 章节范围: {chapter_start}-{chapter_end}, 有变化: {has_changes}")
+            
+            # 初始化持久化记忆（如果还没有）
+            if novel_info and "error" not in novel_info:
+                self._initialize_persistent_memory_for_novel(novel_id, novel_info)
             
             # 生成并存储分析结果到记忆服务
             analysis = self._analyze_novel_content(novel_info)
@@ -984,6 +991,119 @@ class AiChatService:
         
         return analysis
     
+    def _get_persistent_memory_context(self, novel_id: str, current_chapter: int = 0) -> str:
+        """从持久化记忆获取增强上下文信息
+        
+        Args:
+            novel_id: 小说ID
+            current_chapter: 当前章节号（用于获取相关章节摘要）
+            
+        Returns:
+            格式化的上下文信息字符串
+        """
+        context_parts = []
+        
+        try:
+            # 1. 获取章节摘要（最近10章）- 直接使用 storage 的同步方法
+            recent_summaries = self.persistent_memory.storage.get_recent_chapter_summaries(
+                novel_id, 
+                current_chapter or 100,  # 如果未指定章节，假设获取最近章节
+                count=10
+            )
+            if recent_summaries:
+                context_parts.append("## 章节摘要（最近章节）")
+                for summary in recent_summaries[:5]:  # 只取最近5章摘要
+                    chapter_num = summary.get('chapter_number', '?')
+                    key_events = summary.get('key_events', [])
+                    if key_events:
+                        events_str = '、'.join(key_events[:3])
+                        context_parts.append(f"- 第{chapter_num}章: {events_str}")
+            
+            # 2. 获取角色状态
+            character_states = self.persistent_memory.storage.get_all_character_states(novel_id)
+            if character_states:
+                context_parts.append("\n## 主要角色当前状态")
+                for name, state in list(character_states.items())[:5]:  # 只取5个主要角色
+                    location = state.get('current_location', '未知')
+                    level = state.get('cultivation_level', '')
+                    emotional = state.get('emotional_state', '')
+                    status_parts = [f"位置: {location}"]
+                    if level:
+                        status_parts.append(f"境界: {level}")
+                    if emotional:
+                        status_parts.append(f"状态: {emotional}")
+                    context_parts.append(f"- {name}: {', '.join(status_parts)}")
+            
+            # 3. 获取未解决的伏笔
+            foreshadowing_list = self.persistent_memory.storage.get_foreshadowing(novel_id, status='planted')
+            if foreshadowing_list:
+                context_parts.append("\n## 待解决的伏笔")
+                for fs in foreshadowing_list[:5]:  # 只取5个伏笔
+                    desc = fs.get('description', '未知')
+                    planted_ch = fs.get('planted_chapter', '?')
+                    context_parts.append(f"- 第{planted_ch}章埋下: {desc[:50]}...")
+            
+            # 4. 获取时间线事件
+            timeline = self.persistent_memory.storage.get_timeline_events(novel_id, limit=5)
+            if timeline:
+                context_parts.append("\n## 关键时间线")
+                for event in timeline:
+                    chapter = event.get('chapter_number', '?')
+                    desc = event.get('description', '未知')
+                    context_parts.append(f"- 第{chapter}章: {desc[:30]}")
+            
+        except Exception as e:
+            logger.warning(f"获取持久化记忆上下文失败: {e}")
+            return ""
+        
+        if context_parts:
+            return "\n".join(context_parts)
+        return ""
+    
+    def _initialize_persistent_memory_for_novel(self, novel_id: str, novel_info: dict) -> None:
+        """为小说初始化持久化记忆
+        
+        Args:
+            novel_id: 小说ID
+            novel_info: 小说信息字典
+        """
+        try:
+            # 保存小说元数据
+            metadata = {
+                'title': novel_info.get('title', ''),
+                'genre': novel_info.get('genre', ''),
+                'synopsis': novel_info.get('synopsis', ''),
+                'status': novel_info.get('status', ''),
+                'word_count': novel_info.get('word_count', 0),
+                'chapter_count': novel_info.get('chapter_count', 0),
+            }
+            self.persistent_memory.storage.save_novel_metadata(novel_id, metadata)
+            
+            # 保存角色状态（从现有角色信息初始化）
+            characters = novel_info.get('characters', [])
+            for char in characters[:20]:  # 最多20个角色
+                char_name = char.get('name', '')
+                if char_name:
+                    # 解析背景信息
+                    background = char.get('background', '')
+                    starting_location = ''
+                    if isinstance(background, dict):
+                        starting_location = background.get('starting_location', '')
+                    
+                    state = {
+                        'role_type': char.get('role_type', ''),
+                        'current_location': starting_location or '未知',
+                        'cultivation_level': '',
+                        'emotional_state': '正常',
+                        'last_appearance_chapter': 0,
+                    }
+                    self.persistent_memory.storage.save_character_state(novel_id, char_name, state)
+            
+            logger.info(f"为小说 {novel_id} 初始化持久化记忆完成")
+            
+        except Exception as e:
+            logger.warning(f"初始化持久化记忆失败: {e}")
+    
     def _generate_revision_prompt(self, user_message: str, revision_type: str, novel_info: dict) -> str:
         """根据修订类型和小说内容生成针对性的提示词"""
         # 生成小说分析
@@ -1013,6 +1133,14 @@ class AiChatService:
             prompt += "\n## 类型特定建议\n"
             for suggestion in analysis['genre_specific']:
                 prompt += f"- {suggestion}\n"
+        
+        # 添加持久化记忆上下文（章节摘要、角色状态、伏笔等）
+        novel_id = novel_info.get('id')
+        if novel_id:
+            persistent_context = self._get_persistent_memory_context(novel_id)
+            if persistent_context:
+                prompt += "\n# 持久化记忆上下文\n"
+                prompt += persistent_context + "\n"
         
         # 检查用户是否询问世界观相关问题
         is_worldview_question = any(keyword in user_message for keyword in ["世界观", "世界设定", "背景", "修炼体系", "地理环境", "势力划分"])
@@ -1322,6 +1450,12 @@ class AiChatService:
                             for suggestion in analysis['genre_specific']:
                                 prompt += f"- {suggestion}\n"
                     
+                    # 添加持久化记忆上下文
+                    persistent_context = self._get_persistent_memory_context(novel_id)
+                    if persistent_context:
+                        prompt += "\n# 持久化记忆上下文\n"
+                        prompt += persistent_context + "\n"
+                    
                     prompt += "\n# 分析要求\n"
                     prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
                     prompt += "1. 整体结构分析\n"
@@ -1480,6 +1614,14 @@ class AiChatService:
                             prompt += "\n## 类型特定建议\n"
                             for suggestion in analysis['genre_specific']:
                                 prompt += f"- {suggestion}\n"
+                    
+                    # 添加持久化记忆上下文
+                    novel_id = novel_info.get('id')
+                    if novel_id:
+                        persistent_context = self._get_persistent_memory_context(novel_id)
+                        if persistent_context:
+                            prompt += "\n# 持久化记忆上下文\n"
+                            prompt += persistent_context + "\n"
                     
                     prompt += "\n# 分析要求\n"
                     prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
@@ -1785,13 +1927,60 @@ AI修订建议内容：
         if isinstance(suggested_value, str):
             # 需要 dict 的字段
             dict_fields = ['power_system', 'geography', 'abilities', 'relationships', 'growth_arc', 'main_plot']
-            # 需要 list 的字段  
+            # 需要 list 的字段（关键结构化数据）
             list_fields = ['factions', 'rules', 'timeline', 'special_elements', 'volumes', 'sub_plots', 'key_turning_points']
             
             if field in dict_fields:
-                suggested_value = {'content': suggested_value}
+                # 尝试解析 JSON 字符串
+                try:
+                    parsed = json.loads(suggested_value)
+                    if isinstance(parsed, dict):
+                        suggested_value = parsed
+                    else:
+                        suggested_value = {'content': suggested_value}
+                except json.JSONDecodeError:
+                    suggested_value = {'content': suggested_value}
             elif field in list_fields:
-                suggested_value = [suggested_value]
+                # 对于关键的 list 字段，拒绝简单的字符串替换
+                # 尝试解析 JSON 字符串
+                try:
+                    parsed = json.loads(suggested_value)
+                    if isinstance(parsed, list):
+                        suggested_value = parsed
+                    else:
+                        # 尝试解析多行字典格式
+                        import ast
+                        items = []
+                        for line in suggested_value.strip().split('\n'):
+                            line = line.strip()
+                            if line.startswith('{') and line.endswith('}'):
+                                try:
+                                    items.append(ast.literal_eval(line))
+                                except:
+                                    continue
+                        if items:
+                            suggested_value = items
+                        else:
+                            # 无法解析为结构化数据，拒绝更新
+                            logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
+                            return {'success': False, 'error': f'字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。', 'skip': True}
+                except json.JSONDecodeError:
+                    # 尝试解析多行字典格式
+                    import ast
+                    items = []
+                    for line in suggested_value.strip().split('\n'):
+                        line = line.strip()
+                        if line.startswith('{') and line.endswith('}'):
+                            try:
+                                items.append(ast.literal_eval(line))
+                            except:
+                                continue
+                    if items:
+                        suggested_value = items
+                    else:
+                        # 无法解析为结构化数据，拒绝更新
+                        logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
+                        return {'success': False, 'error': f'字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。', 'skip': True}
         
         async with async_session_factory() as db:
             try:
