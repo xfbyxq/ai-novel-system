@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "novel-system"
-version = "1.0.0"
+version = "1.1.0"
 description = "AI-powered novel generation system using CrewAI and Qwen"
 authors = ["Novel System"]
 package-mode = false
