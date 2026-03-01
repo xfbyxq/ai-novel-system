@@ -769,6 +769,114 @@ class NovelMemoryStorage:
             for row in rows
         ]
 
+    # ==================== 伏笔查询 ====================
+
+    def get_foreshadowing(
+        self, novel_id: str, status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """查询伏笔列表
+
+        Args:
+            novel_id: 小说ID
+            status: 可选状态过滤（'PENDING', 'RESOLVED', 'planted' 等）
+
+        Returns:
+            伏笔字典列表
+        """
+        conn = self._get_connection()
+
+        # 兼容 ai_chat_service 传入的 'planted' 映射到 'PENDING'
+        status_map = {'planted': 'PENDING', 'resolved': 'RESOLVED', 'abandoned': 'ABANDONED'}
+        db_status = status_map.get(status, status) if status else None
+
+        if db_status:
+            rows = conn.execute(
+                'SELECT * FROM foreshadowing WHERE novel_id = ? AND status = ? ORDER BY planted_chapter DESC',
+                (novel_id, db_status)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT * FROM foreshadowing WHERE novel_id = ? ORDER BY planted_chapter DESC',
+                (novel_id,)
+            ).fetchall()
+
+        return [
+            {
+                'id': row['id'],
+                'novel_id': row['novel_id'],
+                'planted_chapter': row['planted_chapter'],
+                'description': row['content'],
+                'content': row['content'],
+                'foreshadowing_type': row['foreshadowing_type'],
+                'importance': row['importance'],
+                'expected_resolve_chapter': row['expected_resolve_chapter'],
+                'resolved_chapter': row['resolved_chapter'],
+                'related_characters': row['related_characters'],
+                'notes': row['notes'],
+                'status': row['status'],
+            }
+            for row in rows
+        ]
+
+    # ==================== 时间线查询 ====================
+
+    def get_timeline_events(
+        self, novel_id: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """从章节摘要中提取关键事件作为时间线
+
+        由于没有独立的 timeline 表，直接从 chapter_summaries
+        中提取每章的 key_events 作为时间线事件。
+
+        Args:
+            novel_id: 小说ID
+            limit: 返回最近 N 章的事件
+
+        Returns:
+            时间线事件列表
+        """
+        conn = self._get_connection()
+
+        rows = conn.execute(
+            '''SELECT chapter_number, key_events, plot_progress
+               FROM chapter_summaries
+               WHERE novel_id = ?
+               ORDER BY chapter_number DESC
+               LIMIT ?''',
+            (novel_id, limit)
+        ).fetchall()
+
+        events = []
+        for row in rows:
+            chapter_number = row['chapter_number']
+            # 优先使用 key_events
+            key_events_raw = row['key_events']
+            if key_events_raw:
+                try:
+                    key_events = json.loads(key_events_raw)
+                    if isinstance(key_events, list):
+                        for evt in key_events[:2]:  # 每章最多取 2 个事件
+                            desc = evt if isinstance(evt, str) else str(evt)
+                            events.append({
+                                'chapter_number': chapter_number,
+                                'description': desc,
+                            })
+                        continue
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # 回退到 plot_progress
+            plot_progress = row['plot_progress']
+            if plot_progress:
+                events.append({
+                    'chapter_number': chapter_number,
+                    'description': plot_progress[:80],
+                })
+
+        # 按章节正序返回
+        events.sort(key=lambda x: x['chapter_number'])
+        return events
+
     # ==================== 工具方法 ====================
 
     def get_statistics(self, novel_id: str) -> Dict[str, Any]:

@@ -229,11 +229,19 @@ class PromptManager:
 角色状态：
 {character_states}
 
+【重要】情节连续性要求：
+- 你必须明确指出上一章的结束状态（角色位置、情绪、正在发生的事件）
+- 你必须明确本章从哪里开始（紧接上章的哪个场景/事件）
+- 本章必须有明确的情节推进，不能重复上一章已经发生的事件
+- 每个 plot_point 必须是全新的情节发展
+
 请输出章节计划（JSON格式）：
 {{
     "chapter_number": {chapter_number},
     "title": "章节标题",
-    "summary": "章节概要（100字以内）",
+    "previous_chapter_ending": "上一章结束时的状态（一句话描述角色处境和悬念）",
+    "this_chapter_starts_from": "本章开篇从哪里开始（紧接上章的什么事件/场景）",
+    "summary": "章节概要（100字以内，说明本章要推进到哪里）",
     "scenes": [
         {{
             "scene_num": 1,
@@ -243,7 +251,7 @@ class PromptManager:
             "purpose": "场景目的（推动情节/角色发展/伏笔等）"
         }}
     ],
-    "plot_points": ["本章要推进的情节点"],
+    "plot_points": ["本章要推进的全新情节点（不得重复前章已发生的事）"],
     "foreshadowing": ["本章埋的伏笔"],
     "cliffhanger": "章末悬念（吸引读者继续阅读）",
     "target_word_count": 2500
@@ -292,16 +300,21 @@ class PromptManager:
 角色信息：
 {character_info}
 
-前一章的结尾：
+前一章的结尾（你必须从这里接续写起）：
 {previous_ending}
+
+前几章关键事件（避免重复这些已发生的内容）：
+{previous_key_events}
 
 写作要求：
 1. 字数控制在2000-3000字
 2. 以"第{chapter_number}章 {chapter_title}"作为标题
 3. 段落间空一行
 4. 对话使用引号
-5. 确保情节流畅、引人入胜
-6. 章末留下悬念
+5. 【关键】开篇必须自然衔接上一章结尾，不能重复上一章已写过的场景
+6. 【关键】本章的情节必须有实质性推进，不能停留在上一章的状态
+7. 确保情节流畅、引人入胜
+8. 章末留下悬念
 
 请直接输出章节内容，不要输出JSON或其他格式标记。"""
 
@@ -477,6 +490,25 @@ class PromptManager:
             "affected_volumes": [卷号]
         }}
     ]
+}}"""
+
+    # ── LLM 摘要生成器 ──────────────────────────────────────
+    CHAPTER_SUMMARY_SYSTEM = """你是一位精准的小说内容分析师。你的任务是从章节内容中提取结构化摘要信息。
+你必须客观准确地总结内容，不遗漏关键情节点，不添加原文没有的信息。"""
+
+    CHAPTER_SUMMARY_TASK = """请阅读以下章节内容，生成结构化摘要。
+
+第{chapter_number}章内容：
+{chapter_content}
+
+请以JSON格式输出（不要输出其他内容）：
+{{
+    "key_events": ["本章发生的3-5个关键事件，按时间顺序排列"],
+    "character_changes": "角色状态变化描述（位置、情绪、关系变化等，50字以内）",
+    "plot_progress": "本章情节推进概要（100字以内，说明从哪里推进到了哪里）",
+    "foreshadowing": ["本章出现的伏笔或悬念"],
+    "ending_state": "章末状态（角色所处位置、正在做什么、悬念是什么，50字以内）",
+    "new_information": "本章揭示的新信息或设定（如果有）"
 }}"""
 
     @classmethod

@@ -26,6 +26,11 @@ from agents.review_loop import ReviewLoopHandler
 from agents.voting_manager import VotingManager
 from agents.agent_query_service import AgentQueryService
 
+# 章节连续性增强组件
+from agents.context_compressor import ContextCompressor, CompressedContext
+from agents.similarity_detector import SimilarityDetector
+from agents.chapter_summary_generator import ChapterSummaryGenerator
+
 
 class NovelCrewManager:
     """小说生成 Crew 管理器
@@ -86,6 +91,18 @@ class NovelCrewManager:
             client=qwen_client,
             cost_tracker=cost_tracker,
         )
+
+        # 章节连续性增强组件
+        self.context_compressor = ContextCompressor()
+        self.similarity_detector = SimilarityDetector()
+        self.summary_generator = ChapterSummaryGenerator(
+            client=qwen_client,
+            cost_tracker=cost_tracker,
+        )
+
+        # 章节数据缓存（供压缩器和相似度检测器使用）
+        self._chapter_summaries: dict[int, dict] = {}
+        self._chapter_contents: dict[int, str] = {}
 
     def _extract_json_from_response(self, response: str) -> dict | list:
         """从 LLM 响应中提取 JSON
@@ -525,6 +542,23 @@ class NovelCrewManager:
             if isinstance(char, dict) and char.get("name") in chapter_characters:
                 character_info += f"\n- {char.get('name')}：{char.get('personality', '')}，{char.get('background', '')[:50]}..."
 
+        # ── 构建前章关键事件列表（防止重复） ────────────────
+        previous_key_events = self._build_previous_key_events(chapter_number)
+
+        # ── 使用分层压缩构建前章结尾 ─────────────────────
+        compressed = self.context_compressor.compress(
+            chapter_number=chapter_number,
+            chapter_summaries=self._chapter_summaries,
+            chapter_contents=self._chapter_contents,
+            world_setting=world_setting,
+            characters=characters,
+            plot_outline=plot_outline,
+        )
+        # 前章结尾优先使用压缩器提取的 500 字
+        previous_ending = compressed.previous_ending or (
+            previous_chapters_summary[-500:] if previous_chapters_summary else "（本章为开篇）"
+        )
+
         # 选择带查询能力的 Writer prompt 还是普通的
         if self.enable_query:
             writer_system = self.pm.format(
@@ -537,9 +571,10 @@ class NovelCrewManager:
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
-                previous_ending=previous_chapters_summary[-200:] if previous_chapters_summary else "（本章为开篇）",
+                previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers="",
+                previous_key_events=previous_key_events,
             )
         else:
             writer_system = self.pm.format(self.pm.WRITER_SYSTEM, genre=genre)
@@ -549,8 +584,9 @@ class NovelCrewManager:
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
-                previous_ending=previous_chapters_summary[-200:] if previous_chapters_summary else "（本章为开篇）",
+                previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
+                previous_key_events=previous_key_events,
             )
 
         draft = await self._call_agent(
@@ -692,6 +728,68 @@ class NovelCrewManager:
 
         quality_score = continuity_report.get("quality_score", 0) if continuity_report else 0
 
+        # ── 5. 相似度检测 ─────────────────────────────────────
+        similarity_report = None
+        if self._chapter_contents:
+            # 取前 N 章内容进行比较
+            compare_chapters = {}
+            for ch in range(max(1, chapter_number - 3), chapter_number):
+                if ch in self._chapter_contents:
+                    compare_chapters[ch] = self._chapter_contents[ch]
+
+            if compare_chapters:
+                similarity_report = self.similarity_detector.detect(
+                    new_content=final_content,
+                    previous_chapters=compare_chapters,
+                    current_chapter=chapter_number,
+                )
+
+                if similarity_report.is_duplicate:
+                    logger.warning(
+                        f"⚠️  第{chapter_number}章与第{similarity_report.most_similar_chapter}章"
+                        f"内容相似度过高({similarity_report.overall_similarity:.1%})，"
+                        f"请求重写..."
+                    )
+                    # 在提示词中加入差异化要求，重新生成
+                    rewrite_task = f"""第{chapter_number}章的内容与第{similarity_report.most_similar_chapter}章过于相似。
+
+以下句子在两章中重复出现：
+{chr(10).join('- ' + s for s in similarity_report.duplicate_sentences[:3])}
+
+请重新撰写第{chapter_number}章，要求：
+1. 避免重复以上内容
+2. 确保情节有实质性推进
+3. 使用不同的开场方式和叙事角度
+
+章节计划：
+{json.dumps(chapter_plan, ensure_ascii=False, indent=2)}
+
+前一章结尾：
+{previous_ending}
+
+请直接输出完整的重写内容。"""
+
+                    rewritten = await self._call_agent(
+                        agent_name="作家(重写)",
+                        system_prompt=writer_system,
+                        task_prompt=rewrite_task,
+                        temperature=0.9,
+                        max_tokens=4096,
+                        expect_json=False,
+                    )
+                    if rewritten and len(rewritten) > len(final_content) * 0.3:
+                        final_content = rewritten
+                        logger.info(f"✅ 第{chapter_number}章重写完成")
+
+        # ── 6. 生成 LLM 摘要并缓存 ──────────────────────────
+        chapter_summary = await self.summary_generator.generate_summary(
+            chapter_number=chapter_number,
+            chapter_content=final_content,
+            chapter_plan=chapter_plan,
+        )
+        self._chapter_summaries[chapter_number] = chapter_summary
+        self._chapter_contents[chapter_number] = final_content
+
         logger.info("=" * 60)
         logger.info(f"🎉 第 {chapter_number} 章写作完成！")
         logger.info(f"   审查循环：{review_result.total_iterations} 轮, "
@@ -709,7 +807,24 @@ class NovelCrewManager:
             "continuity_report": continuity_report,
             "quality_score": quality_score,
             "review_loop_result": review_result.to_dict(),
+            "similarity_report": similarity_report.to_dict() if similarity_report else None,
+            "chapter_summary": chapter_summary,
         }
+
+    def _build_previous_key_events(self, chapter_number: int) -> str:
+        """构建前几章的关键事件列表（用于防止重复）"""
+        events = []
+        for ch in range(max(1, chapter_number - 3), chapter_number):
+            if ch not in self._chapter_summaries:
+                continue
+            summary = self._chapter_summaries[ch]
+            key_events = summary.get("key_events", [])
+            for event in key_events[:3]:
+                if isinstance(event, str):
+                    events.append(f"第{ch}章: {event}")
+                elif isinstance(event, dict):
+                    events.append(f"第{ch}章: {event.get('event', str(event))}")
+        return "\n".join(events) if events else "（无前章记录）"
 
     async def _handle_writer_queries(
         self,
