@@ -17,17 +17,38 @@ from core.logging_config import logger
 class AgentDispatcher:
     """Agent调度器，负责在不同Agent实现之间进行调度"""
     
-    def __init__(self, client: QwenClient, cost_tracker: CostTracker):
+    def __init__(
+        self,
+        client: QwenClient,
+        cost_tracker: CostTracker,
+        quality_threshold: float = 7.5,
+        max_review_iterations: int = 3,
+        max_fix_iterations: int = 2,
+        enable_voting: bool = True,
+        enable_query: bool = True,
+    ):
         """初始化Agent调度器
         
         Args:
             client: LLM客户端
             cost_tracker: 成本跟踪器
+            quality_threshold: 质量评分阈值
+            max_review_iterations: Writer-Editor 审查循环最大迭代次数
+            max_fix_iterations: 连续性修复循环最大迭代次数
+            enable_voting: 是否启用企划阶段投票共识
+            enable_query: 是否启用写作过程中的设定查询
         """
         self.client = client
         self.cost_tracker = cost_tracker
         self.agent_manager = get_agent_manager()
-        self.crew_manager = NovelCrewManager(client, cost_tracker)
+        self.crew_manager = NovelCrewManager(
+            client, cost_tracker,
+            quality_threshold=quality_threshold,
+            max_review_iterations=max_review_iterations,
+            max_fix_iterations=max_fix_iterations,
+            enable_voting=enable_voting,
+            enable_query=enable_query,
+        )
         self.use_scheduled_agents = False  # 默认使用CrewAI风格系统，确保完整的企划阶段
     
     async def initialize(self):

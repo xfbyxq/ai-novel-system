@@ -930,17 +930,26 @@ class NovelMemoryAdapter:
 
         # 初始化角色状态
         for char in novel_data.get('characters', []):
-            char_name = char.get('name', '')
+            # 兼容字符串和字典两种格式
+            if isinstance(char, str):
+                char_name = char
+                char_data = {}
+            elif isinstance(char, dict):
+                char_name = char.get('name', '')
+                char_data = char
+            else:
+                continue
+            
             if char_name:
                 self.storage.save_character_state(
                     novel_id=novel_id,
                     character_name=char_name,
                     state={
                         'last_appearance_chapter': 0,
-                        'current_location': char.get('initial_location', ''),
-                        'cultivation_level': char.get('cultivation_level', ''),
+                        'current_location': char_data.get('initial_location', ''),
+                        'cultivation_level': char_data.get('cultivation_level', ''),
                         'emotional_state': '平静',
-                        'relationships': char.get('relationships', {}),
+                        'relationships': char_data.get('relationships', {}),
                         'status': 'active',
                         'pending_events': []
                     }

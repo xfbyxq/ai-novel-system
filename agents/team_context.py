@@ -103,6 +103,55 @@ class TimelineEvent:
         }
 
 
+class AgentReview:
+    """Agent审查反馈记录"""
+
+    def __init__(
+        self,
+        reviewer: str,
+        target_agent: str,
+        task_desc: str,
+        score: float,
+        passed: bool,
+        suggestions: List[Dict[str, str]] = None,
+        chapter_number: int = 0,
+    ):
+        self.reviewer = reviewer
+        self.target_agent = target_agent
+        self.task_desc = task_desc
+        self.score = score
+        self.passed = passed
+        self.suggestions = suggestions or []
+        self.chapter_number = chapter_number
+        self.timestamp = datetime.now().isoformat()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "reviewer": self.reviewer,
+            "target_agent": self.target_agent,
+            "task_desc": self.task_desc,
+            "score": self.score,
+            "passed": self.passed,
+            "suggestions": self.suggestions,
+            "chapter_number": self.chapter_number,
+            "timestamp": self.timestamp,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentReview":
+        review = cls(
+            reviewer=data.get("reviewer", ""),
+            target_agent=data.get("target_agent", ""),
+            task_desc=data.get("task_desc", ""),
+            score=data.get("score", 0.0),
+            passed=data.get("passed", False),
+            suggestions=data.get("suggestions", []),
+            chapter_number=data.get("chapter_number", 0),
+        )
+        review.timestamp = data.get("timestamp", datetime.now().isoformat())
+        return review
+
+
 class NovelTeamContext:
     """
     小说生成团队共享上下文
@@ -154,6 +203,15 @@ class NovelTeamContext:
 
         # 伏笔追踪器引用（由外部注入）
         self.foreshadowing_tracker = None
+
+        # Agent审查反馈记录
+        self.agent_reviews: List[AgentReview] = []
+
+        # 迭代日志：记录 Writer-Editor 等循环的每轮信息
+        self.iteration_logs: List[Dict[str, Any]] = []
+
+        # 投票记录
+        self.voting_records: List[Dict[str, Any]] = []
 
         logger.info(f"NovelTeamContext initialized for novel: {novel_id}")
 
@@ -305,6 +363,28 @@ class NovelTeamContext:
             return {}
         return volumes[self.current_volume_number - 1]
 
+    def add_review(self, review: "AgentReview"):
+        """记录一次 Agent 审查反馈"""
+        self.agent_reviews.append(review)
+        logger.debug(
+            f"Review added: {review.reviewer} -> {review.target_agent}, "
+            f"score={review.score}, passed={review.passed}"
+        )
+
+    def get_reviews_for_chapter(self, chapter_number: int) -> List["AgentReview"]:
+        """获取某章的所有审查反馈"""
+        return [r for r in self.agent_reviews if r.chapter_number == chapter_number]
+
+    def add_iteration_log(self, log_entry: Dict[str, Any]):
+        """记录一次迭代信息（如 Writer-Editor 循环的某一轮）"""
+        log_entry.setdefault("timestamp", datetime.now().isoformat())
+        self.iteration_logs.append(log_entry)
+
+    def add_voting_record(self, record: Dict[str, Any]):
+        """记录一次投票结果"""
+        record.setdefault("timestamp", datetime.now().isoformat())
+        self.voting_records.append(record)
+
     def build_enhanced_context(self, chapter_number: int) -> str:
         """
         构建增强的章节上下文
@@ -366,7 +446,10 @@ class NovelTeamContext:
             "current_volume_number": self.current_volume_number,
             "rule": self.rule,
             "current_steps": self.current_steps,
-            "max_steps": self.max_steps
+            "max_steps": self.max_steps,
+            "agent_reviews": [r.to_dict() for r in self.agent_reviews],
+            "iteration_logs": self.iteration_logs,
+            "voting_records": self.voting_records,
         }
 
     @classmethod
@@ -397,5 +480,13 @@ class NovelTeamContext:
             )
             output.timestamp = output_data.get("timestamp", "")
             ctx.agent_outputs.append(output)
+
+        # 恢复审查反馈
+        for review_data in data.get("agent_reviews", []):
+            ctx.agent_reviews.append(AgentReview.from_dict(review_data))
+
+        # 恢复迭代日志和投票记录
+        ctx.iteration_logs = data.get("iteration_logs", [])
+        ctx.voting_records = data.get("voting_records", [])
 
         return ctx

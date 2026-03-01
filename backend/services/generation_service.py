@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -128,12 +129,25 @@ class GenerationService:
                     "other": Gender.other,
                 }
 
+                # 处理 age 字段，确保是整数类型
+                age_value = char_data.get("age")
+                if age_value is not None:
+                    if isinstance(age_value, str):
+                        # 尝试从字符串中提取数字
+                        numbers = re.findall(r'\d+', str(age_value))
+                        if numbers:
+                            age_value = int(numbers[0])  # 取第一个数字
+                        else:
+                            age_value = None  # 无法解析则设为 None
+                    elif not isinstance(age_value, int):
+                        age_value = None  # 非数字类型设为 None
+
                 character = Character(
                     novel_id=novel_id,
                     name=char_data.get("name", "未命名"),
                     role_type=role_type_map.get(role_type_str, RoleType.minor),
                     gender=gender_map.get(gender_str),
-                    age=char_data.get("age"),
+                    age=age_value,
                     appearance=char_data.get("appearance", ""),
                     personality=char_data.get("personality", ""),
                     background=char_data.get("background", ""),

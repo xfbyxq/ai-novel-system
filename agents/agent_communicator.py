@@ -1,11 +1,39 @@
 """Agent间通信机制"""
 import asyncio
 import json
+import time
+from enum import Enum
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4
 
 # Use the project-wide logger
 from core.logging_config import logger
+
+
+class MessageType(str, Enum):
+    """Agent间通信的消息类型"""
+    # 基础通信
+    TASK_ASSIGNMENT = "task_assignment"
+    TASK_COMPLETION = "task_completion"
+    TASK_CANCELLATION = "task_cancellation"
+    STATUS_REQUEST = "status_request"
+    STATUS_RESPONSE = "status_response"
+
+    # 请求-应答
+    REQUEST = "request"
+    RESPONSE = "response"
+
+    # 审查反馈
+    REVIEW_FEEDBACK = "review_feedback"
+    REVISION_REQUEST = "revision_request"
+
+    # 投票共识
+    VOTE_CALL = "vote_call"
+    VOTE_CAST = "vote_cast"
+    VOTE_RESULT = "vote_result"
+
+    # 质量检查
+    QUALITY_CHECK = "quality_check"
 
 
 class Message:
@@ -36,7 +64,7 @@ class Message:
         self.receiver = receiver
         self.message_type = message_type
         self.content = content
-        self.timestamp = timestamp or asyncio.get_event_loop().time()
+        self.timestamp = timestamp or time.time()
         self.priority = priority
         self.status = "pending"  # pending, delivered, processed
 
@@ -76,6 +104,8 @@ class AgentCommunicator:
         self.message_queues: Dict[str, asyncio.Queue] = {}  # Agent名称 -> 消息队列
         self.message_history: List[Message] = []
         self._lock = asyncio.Lock()
+        # 请求-响应配对：request_message_id -> Future
+        self.pending_requests: Dict[UUID, asyncio.Future] = {}
 
     async def register_agent(self, agent_name: str) -> None:
         """注册Agent
@@ -154,6 +184,62 @@ class AgentCommunicator:
                     content=content,
                 )
                 await self.send_message(message)
+
+    async def send_and_wait_reply(
+        self, message: Message, timeout: float = 60.0
+    ) -> Optional[Message]:
+        """发送请求消息并等待对方回复
+
+        通过 Future 实现请求-响应配对。发送方阻塞等待，直到接收方调用
+        send_reply() 回复对应的 message_id。
+
+        Args:
+            message: 请求消息（message_type 应为 REQUEST 等需要回复的类型）
+            timeout: 等待超时（秒）
+
+        Returns:
+            响应消息，或 None（如果超时）
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        self.pending_requests[message.message_id] = future
+
+        await self.send_message(message)
+
+        try:
+            response = await asyncio.wait_for(future, timeout=timeout)
+            return response
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⏰ 请求超时: {message.sender} -> {message.receiver} "
+                f"({message.message_type}), timeout={timeout}s"
+            )
+            return None
+        finally:
+            self.pending_requests.pop(message.message_id, None)
+
+    async def send_reply(
+        self, original_message_id: UUID, response_message: Message
+    ) -> None:
+        """回复一个请求消息
+
+        将响应消息投递到发送方队列，并唤醒 send_and_wait_reply 中的等待方。
+
+        Args:
+            original_message_id: 原始请求消息的 ID
+            response_message: 响应消息
+        """
+        # 记录到历史
+        await self.send_message(response_message)
+
+        # 唤醒等待方
+        future = self.pending_requests.get(original_message_id)
+        if future and not future.done():
+            future.set_result(response_message)
+            logger.debug(
+                f"↩️  回复已送达: {response_message.sender} -> {response_message.receiver} "
+                f"(reply to {original_message_id})"
+            )
 
     def get_message_history(self, agent_name: Optional[str] = None) -> List[Message]:
         """获取消息历史
