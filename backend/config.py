@@ -82,12 +82,12 @@ class Settings(BaseSettings):
     
     # --- 最大迭代次数 ---
     # 即使未达阈值，超过最大次数也会停止，防止无限循环
-    # 每次迭代会消耗 API 调用，企划阶段建议 3-5 次，写作阶段建议 2-3 次
-    MAX_WORLD_REVIEW_ITERATIONS: int = 5      # 世界观审查最大迭代
-    MAX_CHARACTER_REVIEW_ITERATIONS: int = 5  # 角色审查最大迭代
-    MAX_PLOT_REVIEW_ITERATIONS: int = 5       # 大纲审查最大迭代
-    MAX_CHAPTER_REVIEW_ITERATIONS: int = 3    # 章节审查最大迭代
-    MAX_FIX_ITERATIONS: int = 3               # 连续性修复最大迭代
+    # 每次迭代会消耗 API 调用，企划阶段建议 3-5 次，写作阶段建议 3-5 次
+    MAX_WORLD_REVIEW_ITERATIONS: int = 5      # 世界观审查最大迭代（从3增加到5）
+    MAX_CHARACTER_REVIEW_ITERATIONS: int = 5  # 角色审查最大迭代（从3增加到5）
+    MAX_PLOT_REVIEW_ITERATIONS: int = 5       # 大纲审查最大迭代（从3增加到5）
+    MAX_CHAPTER_REVIEW_ITERATIONS: int = 5    # 章节审查最大迭代（从3增加到5）
+    MAX_FIX_ITERATIONS: int = 3               # 连续性修复最大迭代（从2增加到3）
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
