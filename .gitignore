@@ -28,7 +28,7 @@ playwright/.auth/
 
 # IDE & Tools
 .trae/
-.qoder/
+# .qoder/
 .github/
 
 # 临时测试文件
