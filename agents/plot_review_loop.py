@@ -90,13 +90,22 @@ PLOT_REVIEWER_SYSTEM = """你是一位资深的网络小说情节架构评审专
    - 关键转折是否有预兆？
    - 是否有未来可回收的悬念？
 
+【重要】评分原则：
+- 你必须给出精确的评分，不要给出"安全"的中间分数
+- 如果大纲结构完整且有吸引力，应给 8.0 以上
+- 如果有明显问题未解决，应给 7.0 以下
+- 评分应该反映真实质量，而不是折中
+
 评分标准：
-- 8-10分：优秀，结构完整、节奏紧凑、冲突强烈
-- 6-8分：良好，但有改进空间
-- 4-6分：及格，存在明显问题
-- 4分以下：不合格，需要大幅修改"""
+- 9-10分：卓越，结构精妙、节奏完美、引人入胜
+- 8-9分：优秀，结构完整、节奏紧凑、冲突强烈
+- 7-8分：良好，基本完整但有改进空间
+- 6-7分：及格，存在明显问题需要修改
+- 6分以下：不合格，需要大幅重做"""
 
 PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
+
+{iteration_context}
 
 世界观设定：
 {world_setting}
@@ -109,13 +118,19 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
 
 请以JSON格式输出评估结果（不要输出其他内容）：
 {{
-    "overall_score": 综合评分(1-10浮点数),
+    "overall_score": 综合评分(1-10浮点数，请给出精确分数如7.3、8.1等，不要总是给7.0或7.5这样的整数),
     "dimension_scores": {{
         "structure": 结构完整性分数,
         "pacing": 节奏把控分数,
         "conflict": 冲突张力分数,
         "character_usage": 角色利用度分数,
         "foreshadowing": 伏笔设计分数
+    }},
+    "improvement_assessment": {{
+        "issues_resolved": ["已解决的问题"],
+        "issues_remaining": ["仍存在的问题"],
+        "new_issues": ["新发现的问题"],
+        "improvement_score": 改进程度分数(1-10，仅在非首轮审查时填写)
     }},
     "structure_analysis": {{
         "opening_hook": "开篇吸引力评价",
@@ -243,15 +258,22 @@ class PlotReviewHandler:
         current_plot = initial_plot_outline
         result = PlotReviewResult()
         last_report: Optional[PlotQualityReport] = None
+        previous_issues: List[str] = []
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"[PlotReview] 第 {iteration}/{self.max_iterations} 轮审查")
 
-            # ── Reviewer 审查评分 ──────────────────────────────
+            # 获取上一轮评分
+            previous_score = last_report.overall_score if last_report else 0
+
+            # ── Reviewer 审查评分（带迭代上下文）──────────────────
             review_data = await self._reviewer_evaluate(
                 plot_outline=current_plot,
                 world_setting=world_setting,
                 characters=characters,
+                iteration=iteration,
+                previous_score=previous_score,
+                previous_issues=previous_issues,
             )
 
             score = float(review_data.get("overall_score", 0))
@@ -346,6 +368,18 @@ class PlotReviewHandler:
 
             if revised_plot and isinstance(revised_plot, dict) and (revised_plot.get("volumes") or revised_plot.get("main_plot")):
                 current_plot = revised_plot
+                # 收集本轮问题，供下一轮审查参考
+                previous_issues = [
+                    f"{issue.get('area', '')}: {issue.get('issue', '')}"
+                    for issue in critical_issues
+                ]
+                # 添加缺失元素
+                previous_issues.extend([f"缺失: {m}" for m in missing])
+                # 添加各卷问题
+                for va in volume_assessments:
+                    vol_num = va.get("volume_num", "?")
+                    for w in va.get("weaknesses", []):
+                        previous_issues.append(f"第{vol_num}卷: {w}")
                 logger.info("[PlotReview] 架构师修订完成")
             else:
                 logger.warning("[PlotReview] 修订失败，保留原设计")
@@ -368,9 +402,39 @@ class PlotReviewHandler:
         plot_outline: Dict[str, Any],
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
+        iteration: int = 1,
+        previous_score: float = 0,
+        previous_issues: List[str] = None,
     ) -> Dict[str, Any]:
-        """调用 Reviewer 进行大纲评估"""
+        """调用 Reviewer 进行大纲评估
+        
+        Args:
+            plot_outline: 情节大纲
+            world_setting: 世界观设定
+            characters: 角色列表
+            iteration: 当前迭代轮次
+            previous_score: 上一轮评分
+            previous_issues: 上一轮发现的问题
+        """
+        # 构建迭代上下文
+        if iteration == 1:
+            iteration_context = "【首轮审查】这是情节大纲的首次评估。"
+        else:
+            issues_text = "\n".join(f"  - {issue}" for issue in (previous_issues or [])[:10])
+            iteration_context = f"""【第 {iteration} 轮审查】
+这是修订后的情节大纲，请评估修订效果。
+上一轮评分：{previous_score}/10
+上一轮发现的主要问题：
+{issues_text or "  （无）"}
+
+请重点评估：
+1. 上述问题是否已解决？
+2. 修订后是否引入了新问题？
+3. 大纲整体质量是否有实质性提升？
+如果问题已解决且没有新问题，应给予更高评分。"""
+
         task_prompt = PLOT_REVIEWER_TASK.format(
+            iteration_context=iteration_context,
             world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2)[:2000],
             characters=json.dumps(characters, ensure_ascii=False, indent=2)[:2000],
             plot_outline=json.dumps(plot_outline, ensure_ascii=False, indent=2),
@@ -380,7 +444,7 @@ class PlotReviewHandler:
             response = await self.client.chat(
                 prompt=task_prompt,
                 system=PLOT_REVIEWER_SYSTEM,
-                temperature=0.4,
+                temperature=0.5,  # 稍微提高温度，避免固定评分
                 max_tokens=4096,
             )
             usage = response["usage"]
