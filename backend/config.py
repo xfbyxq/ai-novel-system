@@ -47,6 +47,48 @@ class Settings(BaseSettings):
     CRAWLER_TIMEOUT: int = 30
     CRAWLER_USER_AGENT: str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+    # Agent Review Settings (审查循环配置)
+    # ============================================================
+    # 审查循环是保证生成质量的核心机制，通过 Designer-Reviewer 模式
+    # 对世界观、角色、大纲、章节进行多轮迭代优化，直到达到质量阈值。
+    # 
+    # 配置建议：
+    # - 追求高质量：阈值设为 7.5-8.0，迭代次数 2-3
+    # - 追求速度/省成本：阈值设为 6.0-6.5，迭代次数 1，或直接关闭审查
+    # - 调试模式：可关闭部分审查，加快测试速度
+    # ============================================================
+    
+    # --- 功能开关 ---
+    # 世界观审查：检查设定一致性、深度、独特性、可扩展性
+    ENABLE_WORLD_REVIEW: bool = True
+    # 角色审查：检查心理深度、独特性、成长弧线、关系复杂性
+    ENABLE_CHARACTER_REVIEW: bool = True
+    # 大纲审查：检查结构完整性、节奏把控、冲突张力、伏笔设计
+    ENABLE_PLOT_REVIEW: bool = True
+    # 章节审查：Writer-Editor 循环，检查语言流畅度、情节逻辑、角色一致性
+    ENABLE_CHAPTER_REVIEW: bool = True
+    # 投票共识：企划阶段关键决策由多 Agent 投票决定
+    ENABLE_VOTING: bool = True
+    # 设定查询：写作过程中 Writer 可查询世界观/角色/大纲设定
+    ENABLE_QUERY: bool = True
+    
+    # --- 质量阈值 (1-10分) ---
+    # 评分达到阈值即停止迭代，分数越高要求越严格
+    # 建议范围：6.0(宽松) - 8.0(严格)
+    WORLD_QUALITY_THRESHOLD: float = 8.0      # 世界观质量阈值
+    CHARACTER_QUALITY_THRESHOLD: float = 8.0  # 角色质量阈值
+    PLOT_QUALITY_THRESHOLD: float = 8.0       # 大纲质量阈值
+    CHAPTER_QUALITY_THRESHOLD: float = 8.0    # 章节质量阈值
+    
+    # --- 最大迭代次数 ---
+    # 即使未达阈值，超过最大次数也会停止，防止无限循环
+    # 每次迭代会消耗 API 调用，企划阶段建议 3-5 次，写作阶段建议 2-3 次
+    MAX_WORLD_REVIEW_ITERATIONS: int = 5      # 世界观审查最大迭代
+    MAX_CHARACTER_REVIEW_ITERATIONS: int = 5  # 角色审查最大迭代
+    MAX_PLOT_REVIEW_ITERATIONS: int = 5       # 大纲审查最大迭代
+    MAX_CHAPTER_REVIEW_ITERATIONS: int = 3    # 章节审查最大迭代
+    MAX_FIX_ITERATIONS: int = 3               # 连续性修复最大迭代
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

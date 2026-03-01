@@ -25,6 +25,9 @@ from agents.team_context import NovelTeamContext
 from agents.review_loop import ReviewLoopHandler
 from agents.voting_manager import VotingManager
 from agents.agent_query_service import AgentQueryService
+from agents.character_review_loop import CharacterReviewHandler
+from agents.world_review_loop import WorldReviewHandler
+from agents.plot_review_loop import PlotReviewHandler
 
 # 章节连续性增强组件
 from agents.context_compressor import ContextCompressor, CompressedContext
@@ -53,6 +56,15 @@ class NovelCrewManager:
         max_fix_iterations: int = 2,
         enable_voting: bool = True,
         enable_query: bool = True,
+        enable_character_review: bool = True,
+        enable_world_review: bool = True,
+        enable_plot_review: bool = True,
+        character_quality_threshold: float = 7.0,
+        world_quality_threshold: float = 7.0,
+        plot_quality_threshold: float = 7.0,
+        max_character_review_iterations: int = 2,
+        max_world_review_iterations: int = 2,
+        max_plot_review_iterations: int = 2,
     ):
         """初始化 Crew 管理器
         
@@ -64,6 +76,15 @@ class NovelCrewManager:
             max_fix_iterations: 连续性修复循环最大迭代次数
             enable_voting: 是否启用企划阶段投票共识
             enable_query: 是否启用写作过程中的设定查询
+            enable_character_review: 是否启用角色设计审查循环
+            enable_world_review: 是否启用世界观设计审查循环
+            enable_plot_review: 是否启用大纲设计审查循环
+            character_quality_threshold: 角色设计质量阈值
+            world_quality_threshold: 世界观设计质量阈值
+            plot_quality_threshold: 大纲设计质量阈值
+            max_character_review_iterations: 角色审查最大迭代次数
+            max_world_review_iterations: 世界观审查最大迭代次数
+            max_plot_review_iterations: 大纲审查最大迭代次数
         """
         self.client = qwen_client
         self.cost_tracker = cost_tracker
@@ -75,6 +96,9 @@ class NovelCrewManager:
         self.max_fix_iterations = max_fix_iterations
         self.enable_voting = enable_voting
         self.enable_query = enable_query
+        self.enable_character_review = enable_character_review
+        self.enable_world_review = enable_world_review
+        self.enable_plot_review = enable_plot_review
 
         # 初始化协作组件
         self.review_handler = ReviewLoopHandler(
@@ -90,6 +114,30 @@ class NovelCrewManager:
         self.query_service = AgentQueryService(
             client=qwen_client,
             cost_tracker=cost_tracker,
+        )
+        
+        # 角色审查处理器
+        self.character_review_handler = CharacterReviewHandler(
+            client=qwen_client,
+            cost_tracker=cost_tracker,
+            quality_threshold=character_quality_threshold,
+            max_iterations=max_character_review_iterations,
+        )
+        
+        # 世界观审查处理器
+        self.world_review_handler = WorldReviewHandler(
+            client=qwen_client,
+            cost_tracker=cost_tracker,
+            quality_threshold=world_quality_threshold,
+            max_iterations=max_world_review_iterations,
+        )
+        
+        # 大纲审查处理器
+        self.plot_review_handler = PlotReviewHandler(
+            client=qwen_client,
+            cost_tracker=cost_tracker,
+            quality_threshold=plot_quality_threshold,
+            max_iterations=max_plot_review_iterations,
         )
 
         # 章节连续性增强组件
@@ -316,6 +364,30 @@ class NovelCrewManager:
             expect_json=True,
         )
 
+        # 2.5 世界观审查循环：确保世界观设计的一致性和深度
+        world_review_result = None
+        if self.enable_world_review:
+            logger.info("🔍 启动世界观设计审查循环...")
+            # 确保 world_setting 是字典格式
+            world_dict = world_setting if isinstance(world_setting, dict) else {}
+            if isinstance(world_setting, list) and world_setting:
+                world_dict = world_setting[0]
+            
+            review_result = await self.world_review_handler.execute(
+                initial_world_setting=world_dict,
+                topic_analysis=topic_analysis if isinstance(topic_analysis, dict) else {},
+            )
+            
+            # 使用审查后的世界观
+            world_setting = review_result.final_world_setting
+            world_review_result = review_result.to_dict()
+            
+            logger.info(
+                f"🔍 世界观审查完成: iterations={review_result.total_iterations}, "
+                f"score={review_result.final_score:.1f}, "
+                f"converged={review_result.converged}"
+            )
+
         # 3. 角色设计
         character_length_instructions = ""
         if length_type == "long":
@@ -337,6 +409,29 @@ class NovelCrewManager:
             max_tokens=6000,
             expect_json=True,
         )
+
+        # 3.5 角色审查循环：确保角色设计的深度和质量
+        character_review_result = None
+        if self.enable_character_review:
+            logger.info("🔍 启动角色设计审查循环...")
+            # 确保 characters 是列表格式
+            characters_list = characters if isinstance(characters, list) else [characters]
+            
+            review_result = await self.character_review_handler.execute(
+                initial_characters=characters_list,
+                world_setting=world_setting if isinstance(world_setting, dict) else {},
+                topic_analysis=topic_analysis if isinstance(topic_analysis, dict) else {},
+            )
+            
+            # 使用审查后的角色
+            characters = review_result.final_characters
+            character_review_result = review_result.to_dict()
+            
+            logger.info(
+                f"🔍 角色审查完成: iterations={review_result.total_iterations}, "
+                f"score={review_result.final_score:.1f}, "
+                f"converged={review_result.converged}"
+            )
 
         # 4. 情节架构（使用带决策点标注的提示词）
         plot_length_instructions = ""
@@ -402,16 +497,54 @@ class NovelCrewManager:
                     # 记录到 TeamContext（如果后续有的话）
                 plot_outline["resolved_decisions"] = resolved_decisions
 
+        # 4.6 大纲审查循环：确保情节架构的完整性和吸引力
+        plot_review_result = None
+        if self.enable_plot_review:
+            logger.info("🔍 启动大纲设计审查循环...")
+            # 确保 plot_outline 是字典格式
+            plot_dict = plot_outline if isinstance(plot_outline, dict) else {}
+            if isinstance(plot_outline, list):
+                plot_dict = {"volumes": plot_outline, "structure_type": "multi_volume"}
+            
+            # 确保 characters 是列表格式
+            characters_list = characters if isinstance(characters, list) else [characters]
+            
+            review_result = await self.plot_review_handler.execute(
+                initial_plot_outline=plot_dict,
+                world_setting=world_setting if isinstance(world_setting, dict) else {},
+                characters=characters_list,
+            )
+            
+            # 使用审查后的大纲
+            plot_outline = review_result.final_plot_outline
+            plot_review_result = review_result.to_dict()
+            
+            logger.info(
+                f"🔍 大纲审查完成: iterations={review_result.total_iterations}, "
+                f"score={review_result.final_score:.1f}, "
+                f"converged={review_result.converged}"
+            )
+
         logger.info("=" * 60)
         logger.info("🎉 企划阶段完成！")
         logger.info("=" * 60)
 
-        return {
+        result = {
             "topic_analysis": topic_analysis,
             "world_setting": world_setting,
             "characters": characters,
             "plot_outline": plot_outline,
         }
+        
+        # 添加审查结果（如果启用）
+        if world_review_result:
+            result["world_review"] = world_review_result
+        if character_review_result:
+            result["character_review"] = character_review_result
+        if plot_review_result:
+            result["plot_review"] = plot_review_result
+        
+        return result
 
     # ============================================================
     # 写作阶段

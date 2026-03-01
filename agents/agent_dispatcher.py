@@ -21,22 +21,44 @@ class AgentDispatcher:
         self,
         client: QwenClient,
         cost_tracker: CostTracker,
+        # 章节审查配置
         quality_threshold: float = 7.5,
         max_review_iterations: int = 3,
         max_fix_iterations: int = 2,
+        # 功能开关
         enable_voting: bool = True,
         enable_query: bool = True,
+        enable_world_review: bool = True,
+        enable_character_review: bool = True,
+        enable_plot_review: bool = True,
+        # 各阶段质量阈值
+        world_quality_threshold: float = 7.0,
+        character_quality_threshold: float = 7.0,
+        plot_quality_threshold: float = 7.0,
+        # 各阶段最大迭代次数
+        max_world_review_iterations: int = 2,
+        max_character_review_iterations: int = 2,
+        max_plot_review_iterations: int = 2,
     ):
         """初始化Agent调度器
         
         Args:
             client: LLM客户端
             cost_tracker: 成本跟踪器
-            quality_threshold: 质量评分阈值
+            quality_threshold: 章节质量评分阈值
             max_review_iterations: Writer-Editor 审查循环最大迭代次数
             max_fix_iterations: 连续性修复循环最大迭代次数
             enable_voting: 是否启用企划阶段投票共识
             enable_query: 是否启用写作过程中的设定查询
+            enable_world_review: 是否启用世界观审查
+            enable_character_review: 是否启用角色审查
+            enable_plot_review: 是否启用大纲审查
+            world_quality_threshold: 世界观质量阈值
+            character_quality_threshold: 角色质量阈值
+            plot_quality_threshold: 大纲质量阈值
+            max_world_review_iterations: 世界观审查最大迭代次数
+            max_character_review_iterations: 角色审查最大迭代次数
+            max_plot_review_iterations: 大纲审查最大迭代次数
         """
         self.client = client
         self.cost_tracker = cost_tracker
@@ -48,6 +70,15 @@ class AgentDispatcher:
             max_fix_iterations=max_fix_iterations,
             enable_voting=enable_voting,
             enable_query=enable_query,
+            enable_world_review=enable_world_review,
+            enable_character_review=enable_character_review,
+            enable_plot_review=enable_plot_review,
+            world_quality_threshold=world_quality_threshold,
+            character_quality_threshold=character_quality_threshold,
+            plot_quality_threshold=plot_quality_threshold,
+            max_world_review_iterations=max_world_review_iterations,
+            max_character_review_iterations=max_character_review_iterations,
+            max_plot_review_iterations=max_plot_review_iterations,
         )
         self.use_scheduled_agents = False  # 默认使用CrewAI风格系统，确保完整的企划阶段
     

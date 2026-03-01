@@ -24,6 +24,7 @@ from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 from .memory_service import get_novel_memory_service
 from .agentmesh_memory_adapter import get_novel_memory_adapter, NovelMemoryAdapter
+from backend.config import settings
 
 # Use the project-wide logger
 from core.logging_config import logger
@@ -36,7 +37,31 @@ class GenerationService:
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
-        self.dispatcher = AgentDispatcher(self.client, self.cost_tracker)
+        
+        # 从配置文件读取审查循环配置
+        self.dispatcher = AgentDispatcher(
+            self.client,
+            self.cost_tracker,
+            # 章节审查配置
+            quality_threshold=settings.CHAPTER_QUALITY_THRESHOLD,
+            max_review_iterations=settings.MAX_CHAPTER_REVIEW_ITERATIONS,
+            max_fix_iterations=settings.MAX_FIX_ITERATIONS,
+            # 功能开关
+            enable_voting=settings.ENABLE_VOTING,
+            enable_query=settings.ENABLE_QUERY,
+            enable_world_review=settings.ENABLE_WORLD_REVIEW,
+            enable_character_review=settings.ENABLE_CHARACTER_REVIEW,
+            enable_plot_review=settings.ENABLE_PLOT_REVIEW,
+            # 各阶段质量阈值
+            world_quality_threshold=settings.WORLD_QUALITY_THRESHOLD,
+            character_quality_threshold=settings.CHARACTER_QUALITY_THRESHOLD,
+            plot_quality_threshold=settings.PLOT_QUALITY_THRESHOLD,
+            # 各阶段最大迭代次数
+            max_world_review_iterations=settings.MAX_WORLD_REVIEW_ITERATIONS,
+            max_character_review_iterations=settings.MAX_CHARACTER_REVIEW_ITERATIONS,
+            max_plot_review_iterations=settings.MAX_PLOT_REVIEW_ITERATIONS,
+        )
+        
         self.memory_service = get_novel_memory_service()
         # 新增：持久化记忆适配器（SQLite + FTS5）
         self.persistent_memory = get_novel_memory_adapter()
@@ -89,6 +114,13 @@ class GenerationService:
                 context=novel.synopsis or "",
                 length_type=novel.length_type.value if novel.length_type else "medium",
             )
+
+            # 删除旧的企划数据（如果存在），以便重新生成
+            from sqlalchemy import delete
+            await self.db.execute(delete(WorldSetting).where(WorldSetting.novel_id == novel_id))
+            await self.db.execute(delete(Character).where(Character.novel_id == novel_id))
+            await self.db.execute(delete(PlotOutline).where(PlotOutline.novel_id == novel_id))
+            await self.db.flush()
 
             # 保存世界观设定（LLM 可能返回非标准结构）
             world_data = planning_result.get("world_setting", {})
