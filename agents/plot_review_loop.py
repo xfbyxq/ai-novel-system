@@ -9,54 +9,19 @@
 """
 
 import json
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-
-@dataclass
-class PlotQualityReport:
-    """大纲质量评估报告"""
-
-    overall_score: float = 0.0
-    dimension_scores: Dict[str, float] = field(default_factory=dict)
-    passed: bool = False
-    issues: List[Dict[str, Any]] = field(default_factory=list)
-    structure_analysis: Dict[str, Any] = field(default_factory=dict)
-    summary: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "overall_score": self.overall_score,
-            "dimension_scores": self.dimension_scores,
-            "passed": self.passed,
-            "issues": self.issues,
-            "structure_analysis": self.structure_analysis,
-            "summary": self.summary,
-        }
-
-
-@dataclass
-class PlotReviewResult:
-    """大纲审查循环的最终结果"""
-
-    final_plot_outline: Dict[str, Any] = field(default_factory=dict)
-    final_score: float = 0.0
-    total_iterations: int = 0
-    converged: bool = False
-    iterations: List[Dict[str, Any]] = field(default_factory=list)
-    quality_report: Optional[PlotQualityReport] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "final_score": self.final_score,
-            "total_iterations": self.total_iterations,
-            "converged": self.converged,
-            "iterations": self.iterations,
-        }
+from agents.base import (
+    BaseReviewLoopHandler,
+    JsonExtractor,
+    PlotQualityReport,
+    PlotReviewResult,
+    ReviewLoopConfig,
+)
 
 
 # ── 大纲审查专用提示词 ──────────────────────────────────────────
@@ -226,7 +191,9 @@ PLOT_REVISION_TASK = """你之前设计的情节大纲经过专家评审，需�
 }}"""
 
 
-class PlotReviewHandler:
+class PlotReviewHandler(
+    BaseReviewLoopHandler[Dict[str, Any], PlotReviewResult, PlotQualityReport]
+):
     """情节大纲审查循环处理器
 
     流程：
@@ -243,10 +210,20 @@ class PlotReviewHandler:
         quality_threshold: float = 7.0,
         max_iterations: int = 2,
     ):
-        self.client = client
-        self.cost_tracker = cost_tracker
-        self.quality_threshold = quality_threshold
-        self.max_iterations = max_iterations
+        """初始化情节大纲审查处理器
+
+        Args:
+            client: LLM 客户端
+            cost_tracker: 成本追踪器
+            quality_threshold: 质量阈值
+            max_iterations: 最大迭代次数
+        """
+        super().__init__(
+            client=client,
+            cost_tracker=cost_tracker,
+            quality_threshold=quality_threshold,
+            max_iterations=max_iterations,
+        )
 
     async def execute(
         self,
@@ -254,290 +231,222 @@ class PlotReviewHandler:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> PlotReviewResult:
-        """执行情节大纲审查循环"""
-        current_plot = initial_plot_outline
-        result = PlotReviewResult()
-        last_report: Optional[PlotQualityReport] = None
-        previous_issues: List[str] = []
+        """执行情节大纲审查循环
 
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"[PlotReview] 第 {iteration}/{self.max_iterations} 轮审查")
+        Args:
+            initial_plot_outline: 初始情节大纲
+            world_setting: 世界观设定
+            characters: 角色列表
 
-            # 获取上一轮评分
-            previous_score = last_report.overall_score if last_report else 0
+        Returns:
+            PlotReviewResult
+        """
+        return await super().execute(
+            initial_content=initial_plot_outline,
+            world_setting=world_setting,
+            characters=characters,
+        )
 
-            # ── Reviewer 审查评分（带迭代上下文）──────────────────
-            review_data = await self._reviewer_evaluate(
-                plot_outline=current_plot,
-                world_setting=world_setting,
-                characters=characters,
-                iteration=iteration,
-                previous_score=previous_score,
-                previous_issues=previous_issues,
-            )
+    # ══════════════════════════════════════════════════════════════════════════
+    # 实现抽象方法
+    # ══════════════════════════════════════════════════════════════════════════
 
-            score = float(review_data.get("overall_score", 0))
-            critical_issues = review_data.get("critical_issues", [])
-            structure_analysis = review_data.get("structure_analysis", {})
+    def _get_loop_name(self) -> str:
+        return "PlotReview"
 
-            last_report = PlotQualityReport(
-                overall_score=score,
-                dimension_scores=review_data.get("dimension_scores", {}),
-                passed=score >= self.quality_threshold,
-                issues=critical_issues,
-                structure_analysis=structure_analysis,
-                summary=review_data.get("summary", ""),
-            )
+    def _create_result(self) -> PlotReviewResult:
+        return PlotReviewResult()
 
-            result.iterations.append({
-                "iteration": iteration,
-                "score": score,
-                "passed": last_report.passed,
-                "issue_count": len(critical_issues),
-                "dimension_scores": last_report.dimension_scores,
-            })
+    def _create_quality_report(self, review_data: Dict[str, Any]) -> PlotQualityReport:
+        return PlotQualityReport.from_llm_response(
+            review_data,
+            quality_threshold=self.quality_threshold,
+        )
 
-            logger.info(
-                f"[PlotReview] score={score:.1f}, "
-                f"passed={last_report.passed}, "
-                f"issues={len(critical_issues)}"
-            )
+    def _get_reviewer_system_prompt(self) -> str:
+        return PLOT_REVIEWER_SYSTEM
 
-            if last_report.passed:
-                logger.info("[PlotReview] 情节大纲质量达标")
-                break
+    def _get_builder_system_prompt(self) -> str:
+        from llm.prompt_manager import PromptManager
+        return PromptManager.PLOT_ARCHITECT_SYSTEM
 
-            if iteration >= self.max_iterations:
-                logger.warning(f"[PlotReview] 达到最大迭代次数，当前评分 {score:.1f}")
-                break
+    def _get_reviewer_agent_name(self) -> str:
+        return "大纲审查员"
 
-            # ── Architect 修订 ───────────────────────────────────
-            logger.info("[PlotReview] 质量未达标，请求架构师修订...")
+    def _get_builder_agent_name(self) -> str:
+        return "情节架构师(修订)"
 
-            feedback_lines = [f"整体评价：{last_report.summary}"]
-            for dim, dim_score in last_report.dimension_scores.items():
-                dim_names = {
-                    "structure": "结构完整性",
-                    "pacing": "节奏把控",
-                    "conflict": "冲突张力",
-                    "character_usage": "角色利用度",
-                    "foreshadowing": "伏笔设计",
-                }
-                feedback_lines.append(f"- {dim_names.get(dim, dim)}: {dim_score}/10")
+    def _get_dimension_names(self) -> Dict[str, str]:
+        return {
+            "structure": "结构完整性",
+            "pacing": "节奏把控",
+            "conflict": "冲突张力",
+            "character_usage": "角色利用度",
+            "foreshadowing": "伏笔设计",
+        }
 
-            issues_lines = []
-            for issue in critical_issues:
-                area = issue.get("area", "")
-                desc = issue.get("issue", "")
-                severity = issue.get("severity", "medium")
-                suggestion = issue.get("suggestion", "")
-                issues_lines.append(f"[{severity.upper()}] {area}: {desc}")
-                if suggestion:
-                    issues_lines.append(f"  建议: {suggestion}")
+    def _build_reviewer_task_prompt(
+        self,
+        content: Dict[str, Any],
+        iteration: int,
+        previous_score: float,
+        previous_issues: List[str],
+        **context,
+    ) -> str:
+        """构建 Reviewer 任务提示词"""
+        world_setting = context.get("world_setting", {})
+        characters = context.get("characters", [])
 
-            # 添加缺失元素
-            missing = review_data.get("missing_elements", [])
-            if missing:
-                issues_lines.append("\n缺失的重要元素：")
-                for m in missing:
-                    issues_lines.append(f"  - {m}")
+        iteration_context = self._build_iteration_context(
+            iteration, previous_score, previous_issues
+        )
 
-            # 添加各卷问题
-            volume_assessments = review_data.get("volume_assessments", [])
-            for va in volume_assessments:
-                weaknesses = va.get("weaknesses", [])
-                if weaknesses:
-                    issues_lines.append(f"\n第{va.get('volume_num', '?')}卷问题：")
-                    for w in weaknesses:
-                        issues_lines.append(f"  - {w}")
+        return PLOT_REVIEWER_TASK.format(
+            iteration_context=iteration_context,
+            world_setting=self.to_json(world_setting, max_length=2000),
+            characters=self.to_json(characters, max_length=2000),
+            plot_outline=self.to_json(content),
+        )
 
-            structure_text = json.dumps(structure_analysis, ensure_ascii=False, indent=2) if structure_analysis else "（无）"
-            unused_elements = review_data.get("unused_elements", {})
-            unused_text = json.dumps(unused_elements, ensure_ascii=False, indent=2) if unused_elements else "（无）"
+    def _build_revision_prompt(
+        self,
+        score: float,
+        feedback: str,
+        issues: str,
+        original_content: Dict[str, Any],
+        report: PlotQualityReport,
+        review_data: Dict[str, Any],
+        **context,
+    ) -> str:
+        """构建修订任务提示词"""
+        world_setting = context.get("world_setting", {})
+        characters = context.get("characters", [])
 
-            revised_plot = await self._architect_revise(
-                score=score,
-                feedback="\n".join(feedback_lines),
-                issues="\n".join(issues_lines) or "（无具体问题）",
-                structure_analysis=structure_text,
-                unused_elements=unused_text,
-                original_plot=current_plot,
-                world_setting=world_setting,
-                characters=characters,
-            )
+        structure_analysis = review_data.get("structure_analysis", {})
+        structure_text = (
+            self.to_json(structure_analysis)
+            if structure_analysis
+            else "（无）"
+        )
 
-            if revised_plot and isinstance(revised_plot, dict) and (revised_plot.get("volumes") or revised_plot.get("main_plot")):
-                current_plot = revised_plot
-                # 收集本轮问题，供下一轮审查参考
-                previous_issues = [
-                    f"{issue.get('area', '')}: {issue.get('issue', '')}"
-                    for issue in critical_issues
-                ]
-                # 添加缺失元素
-                previous_issues.extend([f"缺失: {m}" for m in missing])
-                # 添加各卷问题
-                for va in volume_assessments:
-                    vol_num = va.get("volume_num", "?")
-                    for w in va.get("weaknesses", []):
-                        previous_issues.append(f"第{vol_num}卷: {w}")
-                logger.info("[PlotReview] 架构师修订完成")
-            else:
-                logger.warning("[PlotReview] 修订失败，保留原设计")
-                break
+        unused_elements = review_data.get("unused_elements", {})
+        unused_text = (
+            self.to_json(unused_elements)
+            if unused_elements
+            else "（无）"
+        )
 
-        result.final_plot_outline = current_plot
+        return PLOT_REVISION_TASK.format(
+            score=f"{score:.1f}",
+            feedback=feedback,
+            issues=issues,
+            structure_analysis=structure_text,
+            unused_elements=unused_text,
+            original_plot=self.to_json(original_content),
+            world_setting=self.to_json(world_setting, max_length=1500),
+            characters=self.to_json(characters, max_length=1500),
+        )
+
+    def _validate_revision(
+        self, revised: Dict[str, Any], original: Dict[str, Any]
+    ) -> bool:
+        """验证修订结果是否有效"""
+        if not revised:
+            return False
+        if not isinstance(revised, dict):
+            return False
+        # 检查是否有关键字段
+        return bool(revised.get("volumes") or revised.get("main_plot"))
+
+    def _finalize_result(
+        self,
+        result: PlotReviewResult,
+        final_content: Dict[str, Any],
+        last_report: Optional[PlotQualityReport],
+    ) -> None:
+        """填充最终结果"""
+        result.final_plot_outline = final_content
+        result.final_output = final_content
         result.final_score = last_report.overall_score if last_report else 0
         result.total_iterations = len(result.iterations)
         result.converged = last_report.passed if last_report else False
         result.quality_report = last_report
 
-        logger.info(
-            f"[PlotReview] 完成: iterations={result.total_iterations}, "
-            f"score={result.final_score:.1f}, converged={result.converged}"
-        )
-        return result
+    def _get_empty_content(self) -> Dict[str, Any]:
+        """获取空内容"""
+        return {}
 
-    async def _reviewer_evaluate(
-        self,
-        plot_outline: Dict[str, Any],
-        world_setting: Dict[str, Any],
-        characters: List[Dict[str, Any]],
-        iteration: int = 1,
-        previous_score: float = 0,
-        previous_issues: List[str] = None,
-    ) -> Dict[str, Any]:
-        """调用 Reviewer 进行大纲评估
-        
-        Args:
-            plot_outline: 情节大纲
-            world_setting: 世界观设定
-            characters: 角色列表
-            iteration: 当前迭代轮次
-            previous_score: 上一轮评分
-            previous_issues: 上一轮发现的问题
-        """
-        # 构建迭代上下文
-        if iteration == 1:
-            iteration_context = "【首轮审查】这是情节大纲的首次评估。"
-        else:
-            issues_text = "\n".join(f"  - {issue}" for issue in (previous_issues or [])[:10])
-            iteration_context = f"""【第 {iteration} 轮审查】
-这是修订后的情节大纲，请评估修订效果。
-上一轮评分：{previous_score}/10
-上一轮发现的主要问题：
-{issues_text or "  （无）"}
+    def _parse_builder_response(self, response_text: str) -> Dict[str, Any]:
+        """解析 Builder 响应"""
+        result = JsonExtractor.extract_json(response_text, default={})
 
-请重点评估：
-1. 上述问题是否已解决？
-2. 修订后是否引入了新问题？
-3. 大纲整体质量是否有实质性提升？
-如果问题已解决且没有新问题，应给予更高评分。"""
+        # 如果返回的是数组（卷列表），包装为标准格式
+        if isinstance(result, list):
+            return {"volumes": result, "structure_type": "multi_volume"}
 
-        task_prompt = PLOT_REVIEWER_TASK.format(
-            iteration_context=iteration_context,
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2)[:2000],
-            characters=json.dumps(characters, ensure_ascii=False, indent=2)[:2000],
-            plot_outline=json.dumps(plot_outline, ensure_ascii=False, indent=2),
-        )
+        return result if isinstance(result, dict) else {}
 
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=PLOT_REVIEWER_SYSTEM,
-                temperature=0.5,  # 稍微提高温度，避免固定评分
-                max_tokens=4096,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="大纲审查员",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[PlotReview] Reviewer 评估失败: {e}")
-            return {"overall_score": self.quality_threshold, "critical_issues": []}
+    # ══════════════════════════════════════════════════════════════════════════
+    # 覆盖钩子方法以添加大纲评估细节
+    # ══════════════════════════════════════════════════════════════════════════
 
-    async def _architect_revise(
-        self,
-        score: float,
-        feedback: str,
-        issues: str,
-        structure_analysis: str,
-        unused_elements: str,
-        original_plot: Dict[str, Any],
-        world_setting: Dict[str, Any],
-        characters: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """调用 Architect 修订大纲"""
-        task_prompt = PLOT_REVISION_TASK.format(
-            score=f"{score:.1f}",
-            feedback=feedback,
-            issues=issues,
-            structure_analysis=structure_analysis,
-            unused_elements=unused_elements,
-            original_plot=json.dumps(original_plot, ensure_ascii=False, indent=2),
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2)[:1500],
-            characters=json.dumps(characters, ensure_ascii=False, indent=2)[:1500],
-        )
+    def _build_issues_text(
+        self, report: PlotQualityReport, review_data: Dict[str, Any]
+    ) -> str:
+        """构建问题列表文本，包含各卷问题"""
+        lines = []
 
-        from llm.prompt_manager import PromptManager
-        architect_system = PromptManager.PLOT_ARCHITECT_SYSTEM
+        # 添加严重问题
+        for issue in report.issues:
+            area = issue.get("area", "")
+            desc = issue.get("issue", "")
+            severity = issue.get("severity", "medium")
+            suggestion = issue.get("suggestion", "")
 
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=architect_system,
-                temperature=0.7,
-                max_tokens=6000,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="情节架构师(修订)",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[PlotReview] Architect 修订失败: {e}")
-            return {}
+            lines.append(f"[{severity.upper()}] {area}: {desc}")
+            if suggestion:
+                lines.append(f"  建议: {suggestion}")
 
-    @staticmethod
-    def _extract_json(text: str) -> Any:
-        """从 LLM 响应中提取 JSON"""
-        text = text.strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        # 添加缺失元素
+        missing = review_data.get("missing_elements", [])
+        if missing:
+            lines.append("\n缺失的重要元素：")
+            for m in missing:
+                lines.append(f"  - {m}")
 
-        import re
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            try:
-                return json.loads(match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
+        # 添加各卷问题
+        volume_assessments = review_data.get("volume_assessments", [])
+        for va in volume_assessments:
+            weaknesses = va.get("weaknesses", [])
+            if weaknesses:
+                lines.append(f"\n第{va.get('volume_num', '?')}卷问题：")
+                for w in weaknesses:
+                    lines.append(f"  - {w}")
 
-        # 尝试找 JSON 数组（大纲可能是卷列表）
-        start = text.find("[")
-        if start != -1:
-            end = text.rfind("]")
-            if end > start:
-                try:
-                    result = json.loads(text[start:end + 1])
-                    # 包装为标准格式
-                    return {"volumes": result, "structure_type": "multi_volume"}
-                except json.JSONDecodeError:
-                    pass
+        return "\n".join(lines) if lines else "（无具体问题）"
 
-        start = text.find("{")
-        if start != -1:
-            end = text.rfind("}")
-            if end > start:
-                try:
-                    return json.loads(text[start:end + 1])
-                except json.JSONDecodeError:
-                    pass
+    def _collect_issues_for_next_round(
+        self, report: PlotQualityReport, review_data: Dict[str, Any]
+    ) -> List[str]:
+        """收集问题用于下一轮审查"""
+        issues = []
 
-        raise ValueError(f"无法从响应中提取 JSON: {text[:200]}...")
+        # 添加严重问题
+        for issue in report.issues:
+            area = issue.get("area", "")
+            desc = issue.get("issue", "")
+            issues.append(f"{area}: {desc}" if area else desc)
+
+        # 添加缺失元素
+        missing = review_data.get("missing_elements", [])
+        for m in missing:
+            issues.append(f"缺失: {m}")
+
+        # 添加各卷问题
+        volume_assessments = review_data.get("volume_assessments", [])
+        for va in volume_assessments:
+            vol_num = va.get("volume_num", "?")
+            for w in va.get("weaknesses", []):
+                issues.append(f"第{vol_num}卷: {w}")
+
+        return issues

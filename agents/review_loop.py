@@ -1,36 +1,21 @@
 """审查反馈循环 - Writer 与 Editor 间的质量驱动迭代"""
 
 import json
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
+from agents.base import (
+    BaseReviewLoopHandler,
+    ChapterQualityReport,
+    JsonExtractor,
+    ReviewLoopConfig,
+    ReviewLoopResult,
+)
 from agents.iteration_controller import IterationController
-from agents.quality_evaluator import QualityEvaluator, QualityReport
 from agents.team_context import AgentReview, NovelTeamContext
-
-
-@dataclass
-class ReviewLoopResult:
-    """审查反馈循环的最终结果"""
-
-    final_content: str = ""
-    final_score: float = 0.0
-    total_iterations: int = 0
-    converged: bool = False
-    iterations: List[Dict[str, Any]] = field(default_factory=list)
-    quality_report: Optional[QualityReport] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "final_score": self.final_score,
-            "total_iterations": self.total_iterations,
-            "converged": self.converged,
-            "iterations": self.iterations,
-        }
 
 
 # ── 审查专用提示词 ──────────────────────────────────────────
@@ -88,7 +73,9 @@ WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title
 直接输出修订后的完整章节内容，不要输出JSON或其他格式标记。"""
 
 
-class ReviewLoopHandler:
+class ReviewLoopHandler(
+    BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]
+):
     """Writer-Editor 审查反馈循环处理器
 
     流程：
@@ -105,10 +92,20 @@ class ReviewLoopHandler:
         quality_threshold: float = 7.5,
         max_iterations: int = 3,
     ):
-        self.client = client
-        self.cost_tracker = cost_tracker
-        self.quality_threshold = quality_threshold
-        self.max_iterations = max_iterations
+        """初始化章节审查处理器
+
+        Args:
+            client: LLM 客户端
+            cost_tracker: 成本追踪器
+            quality_threshold: 质量阈值（默认 7.5，比其他审查略高）
+            max_iterations: 最大迭代次数
+        """
+        super().__init__(
+            client=client,
+            cost_tracker=cost_tracker,
+            quality_threshold=quality_threshold,
+            max_iterations=max_iterations,
+        )
 
     async def execute(
         self,
@@ -134,6 +131,267 @@ class ReviewLoopHandler:
         Returns:
             ReviewLoopResult
         """
+        # 保存上下文供内部方法使用
+        self._chapter_number = chapter_number
+        self._chapter_title = chapter_title
+        self._chapter_summary = chapter_summary
+        self._chapter_plan_json = chapter_plan_json
+        self._writer_system_prompt = writer_system_prompt
+        self._team_context = team_context
+
+        return await super().execute(
+            initial_content=initial_draft,
+            chapter_number=chapter_number,
+            chapter_title=chapter_title,
+            chapter_summary=chapter_summary,
+            chapter_plan_json=chapter_plan_json,
+            writer_system_prompt=writer_system_prompt,
+            team_context=team_context,
+        )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 实现抽象方法
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _get_loop_name(self) -> str:
+        return "ReviewLoop"
+
+    def _create_result(self) -> ReviewLoopResult:
+        return ReviewLoopResult()
+
+    def _create_quality_report(self, review_data: Dict[str, Any]) -> ChapterQualityReport:
+        return ChapterQualityReport.from_llm_response(
+            review_data,
+            quality_threshold=self.quality_threshold,
+        )
+
+    def _get_reviewer_system_prompt(self) -> str:
+        return EDITOR_REVIEW_SYSTEM
+
+    def _get_builder_system_prompt(self) -> str:
+        return self._writer_system_prompt
+
+    def _get_reviewer_agent_name(self) -> str:
+        return "编辑(审查)"
+
+    def _get_builder_agent_name(self) -> str:
+        return "作家(修订)"
+
+    def _get_dimension_names(self) -> Dict[str, str]:
+        return {
+            "fluency": "语言流畅度",
+            "plot_logic": "情节逻辑",
+            "character_consistency": "角色一致性",
+            "pacing": "节奏把控",
+        }
+
+    def _build_reviewer_task_prompt(
+        self,
+        content: str,
+        iteration: int,
+        previous_score: float,
+        previous_issues: List[str],
+        **context,
+    ) -> str:
+        """构建 Editor 审查任务提示词"""
+        chapter_number = context.get("chapter_number", 1)
+        chapter_title = context.get("chapter_title", "")
+        chapter_summary = context.get("chapter_summary", "")
+
+        return EDITOR_REVIEW_TASK.format(
+            draft_content=content,
+            chapter_number=chapter_number,
+            chapter_title=chapter_title,
+            chapter_summary=chapter_summary,
+        )
+
+    def _build_revision_prompt(
+        self,
+        score: float,
+        feedback: str,
+        issues: str,
+        original_content: str,
+        report: ChapterQualityReport,
+        review_data: Dict[str, Any],
+        **context,
+    ) -> str:
+        """构建 Writer 修订任务提示词"""
+        chapter_number = context.get("chapter_number", 1)
+        chapter_title = context.get("chapter_title", "")
+        chapter_plan_json = context.get("chapter_plan_json", "{}")
+
+        # 使用修订建议构建 suggestions 文本
+        suggestions = review_data.get("revision_suggestions", [])
+        suggestions_text = "\n".join(
+            f"- [{s.get('severity', 'medium')}] {s.get('issue', '')}: {s.get('suggestion', '')}"
+            for s in suggestions
+        ) or "（无具体建议）"
+
+        return WRITER_REVISION_TASK.format(
+            chapter_number=chapter_number,
+            chapter_title=chapter_title,
+            score=score,
+            suggestions=suggestions_text,
+            previous_content=original_content,
+            chapter_plan=chapter_plan_json,
+        )
+
+    def _validate_revision(self, revised: str, original: str) -> bool:
+        """验证修订结果是否有效"""
+        if not revised:
+            return False
+        # 修订后内容应该至少是原内容的 30%
+        return len(revised) > len(original) * 0.3
+
+    def _finalize_result(
+        self,
+        result: ReviewLoopResult,
+        final_content: str,
+        last_report: Optional[ChapterQualityReport],
+    ) -> None:
+        """填充最终结果"""
+        result.final_content = final_content
+        result.final_output = final_content
+        result.final_score = last_report.overall_score if last_report else 0
+        result.total_iterations = len(result.iterations)
+        result.converged = last_report.passed if last_report else False
+        result.quality_report = last_report
+
+    def _get_empty_content(self) -> str:
+        """获取空内容"""
+        return ""
+
+    def _parse_builder_response(self, response_text: str) -> str:
+        """解析 Writer 修订响应（纯文本，不需要 JSON 解析）"""
+        return response_text.strip()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 覆盖方法以支持 Editor 润色和 TeamContext 记录
+    # ══════════════════════════════════════════════════════════════════════════
+
+    async def _call_reviewer(
+        self,
+        content: str,
+        iteration: int,
+        previous_score: float,
+        previous_issues: List[str],
+        **context,
+    ) -> Dict[str, Any]:
+        """调用 Editor 进行审查评分+润色"""
+        task_prompt = self._build_reviewer_task_prompt(
+            content=content,
+            iteration=iteration,
+            previous_score=previous_score,
+            previous_issues=previous_issues,
+            **context,
+        )
+
+        try:
+            response = await self.client.chat(
+                prompt=task_prompt,
+                system=self._get_reviewer_system_prompt(),
+                temperature=self.config.reviewer_temperature,
+                max_tokens=6144,  # 章节审查需要更多 token 来输出润色内容
+            )
+
+            usage = response["usage"]
+            self.cost_tracker.record(
+                agent_name=self._get_reviewer_agent_name(),
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+            )
+
+            return JsonExtractor.extract_object(
+                response["content"],
+                default={"overall_score": self.quality_threshold, "revision_suggestions": []},
+            )
+
+        except Exception as e:
+            logger.error(f"[{self._get_loop_name()}] Editor 审查失败: {e}")
+            return {"overall_score": self.quality_threshold, "revision_suggestions": []}
+
+    def _record_iteration(
+        self,
+        result: ReviewLoopResult,
+        iteration: int,
+        score: float,
+        report: ChapterQualityReport,
+        review_data: Dict[str, Any],
+    ) -> None:
+        """记录迭代历史，并同步到 TeamContext"""
+        # 调用基类实现
+        result.add_iteration(
+            iteration=iteration,
+            score=score,
+            passed=report.passed,
+            issue_count=len(report.suggestions),
+            dimension_scores=report.dimension_scores,
+        )
+
+        # 记录到 TeamContext
+        team_context = getattr(self, "_team_context", None)
+        chapter_number = getattr(self, "_chapter_number", 0)
+
+        if team_context:
+            review = AgentReview(
+                reviewer="编辑",
+                target_agent="作家",
+                task_desc=f"第{chapter_number}章-第{iteration}轮审查",
+                score=score,
+                passed=report.passed,
+                suggestions=report.suggestions,
+                chapter_number=chapter_number,
+            )
+            team_context.add_review(review)
+            team_context.add_iteration_log({
+                "type": "review_loop",
+                "chapter": chapter_number,
+                "iteration": iteration,
+                "score": score,
+                "passed": report.passed,
+                "suggestion_count": len(report.suggestions),
+            })
+
+    def _build_issues_text(
+        self, report: ChapterQualityReport, review_data: Dict[str, Any]
+    ) -> str:
+        """构建问题列表文本"""
+        suggestions = review_data.get("revision_suggestions", [])
+        if not suggestions:
+            return "（无具体问题）"
+
+        lines = []
+        for s in suggestions:
+            severity = s.get("severity", "medium")
+            issue = s.get("issue", "")
+            suggestion = s.get("suggestion", "")
+            lines.append(f"[{severity.upper()}] {issue}")
+            if suggestion:
+                lines.append(f"  建议: {suggestion}")
+
+        return "\n".join(lines)
+
+    async def execute_with_editor_content(
+        self,
+        initial_draft: str,
+        chapter_number: int,
+        chapter_title: str,
+        chapter_summary: str,
+        chapter_plan_json: str,
+        writer_system_prompt: str,
+        team_context: Optional[NovelTeamContext] = None,
+    ) -> ReviewLoopResult:
+        """执行审查循环，支持使用 Editor 润色后的内容
+
+        这是原始 execute 方法的增强版本，会优先使用 Editor 返回的润色内容。
+        """
+        self._chapter_number = chapter_number
+        self._chapter_title = chapter_title
+        self._chapter_summary = chapter_summary
+        self._chapter_plan_json = chapter_plan_json
+        self._writer_system_prompt = writer_system_prompt
+        self._team_context = team_context
+
         controller = IterationController(
             quality_threshold=self.quality_threshold,
             max_iterations=self.max_iterations,
@@ -141,65 +399,52 @@ class ReviewLoopHandler:
 
         current_content = initial_draft
         result = ReviewLoopResult()
-        last_report: Optional[QualityReport] = None
+        last_report: Optional[ChapterQualityReport] = None
+
+        # 最佳记录追踪 & 停滞检测
+        best_score = 0.0
+        best_content = initial_draft
+        best_report: Optional[ChapterQualityReport] = None
+        stagnation_count = 0
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"[ReviewLoop] 第 {iteration}/{self.max_iterations} 轮审查")
 
-            # ── Editor 审查 + 评分 + 润色 ──────────────────────
-            review_data = await self._editor_review(
+            # Editor 审查 + 评分 + 润色
+            review_data = await self._call_reviewer(
                 content=current_content,
+                iteration=iteration,
+                previous_score=0,
+                previous_issues=[],
                 chapter_number=chapter_number,
                 chapter_title=chapter_title,
                 chapter_summary=chapter_summary,
             )
 
             score = float(review_data.get("overall_score", 0))
+            # 防止 overall_score 缺失时降为 0，使用维度平均分降级
+            if score == 0 and "dimension_scores" in review_data:
+                dim = review_data["dimension_scores"]
+                if dim and isinstance(dim, dict):
+                    try:
+                        score = sum(float(v) for v in dim.values()) / len(dim)
+                    except (ValueError, TypeError):
+                        pass
             suggestions = review_data.get("revision_suggestions", [])
             edited_content = review_data.get("edited_content", "")
 
-            # 如果 Editor 返回了润色后的内容，使用它
+            # 如果 Editor 返回了润色后的内容，优先使用
             if edited_content and len(edited_content) > len(current_content) * 0.5:
                 current_content = edited_content
 
-            # 构造 QualityReport
-            last_report = QualityReport(
-                overall_score=score,
-                dimension_scores=review_data.get("dimension_scores", {}),
-                passed=score >= self.quality_threshold,
-                suggestions=suggestions,
-                summary=review_data.get("summary", ""),
-            )
+            # 构造质量报告
+            last_report = self._create_quality_report(review_data)
+            # 使用报告中经过降级处理的分数，确保 score 与 last_report 一致
+            if score == 0 and last_report.overall_score > 0:
+                score = last_report.overall_score
 
-            # 记录到 TeamContext
-            if team_context:
-                review = AgentReview(
-                    reviewer="编辑",
-                    target_agent="作家",
-                    task_desc=f"第{chapter_number}章-第{iteration}轮审查",
-                    score=score,
-                    passed=last_report.passed,
-                    suggestions=suggestions,
-                    chapter_number=chapter_number,
-                )
-                team_context.add_review(review)
-                team_context.add_iteration_log({
-                    "type": "review_loop",
-                    "chapter": chapter_number,
-                    "iteration": iteration,
-                    "score": score,
-                    "passed": last_report.passed,
-                    "suggestion_count": len(suggestions),
-                })
-
-            # 记录到结果
-            result.iterations.append({
-                "iteration": iteration,
-                "score": score,
-                "passed": last_report.passed,
-                "suggestion_count": len(suggestions),
-                "dimension_scores": last_report.dimension_scores,
-            })
+            # 记录迭代
+            self._record_iteration(result, iteration, score, last_report, review_data)
 
             prev_score = result.iterations[-2]["score"] if len(result.iterations) > 1 else 0
             logger.info(
@@ -208,114 +453,57 @@ class ReviewLoopHandler:
                 + f", passed={last_report.passed}"
             )
 
-            # ── 判断是否继续迭代 ──────────────────────────────
+            # 更新最佳记录
+            if score > best_score:
+                best_score = score
+                best_content = current_content
+                best_report = last_report
+
+            # 判断是否继续迭代
             if not controller.should_continue(score, iteration):
                 break
 
-            # ── Writer 修订 ───────────────────────────────────
-            logger.info(f"[ReviewLoop] 质量未达标，请求 Writer 修订...")
-            suggestions_text = "\n".join(
-                f"- [{s.get('severity', 'medium')}] {s.get('issue', '')}: {s.get('suggestion', '')}"
-                for s in suggestions
-            )
+            # 评分停滞检测：连续 2 轮改善 < 0.3 则提前终止
+            if iteration > 1 and prev_score > 0:
+                improvement = score - prev_score
+                if improvement < 0.3:
+                    stagnation_count += 1
+                else:
+                    stagnation_count = 0
 
-            revision_prompt = WRITER_REVISION_TASK.format(
+                if stagnation_count >= 2:
+                    logger.warning(
+                        f"[ReviewLoop] 评分连续{stagnation_count}轮无明显改善"
+                        f"(score={score:.1f})，提前终止"
+                    )
+                    break
+
+            # Writer 修订
+            logger.info(f"[ReviewLoop] 质量未达标，请求 Writer 修订...")
+            feedback = self._build_feedback_text(last_report, review_data)
+            issues = self._build_issues_text(last_report, review_data)
+
+            revised = await self._call_builder(
+                score=score,
+                feedback=feedback,
+                issues=issues,
+                original_content=current_content,
+                report=last_report,
+                review_data=review_data,
                 chapter_number=chapter_number,
                 chapter_title=chapter_title,
-                score=score,
-                suggestions=suggestions_text or "（无具体建议）",
-                previous_content=current_content,
-                chapter_plan=chapter_plan_json,
+                chapter_plan_json=chapter_plan_json,
             )
 
-            try:
-                revision_response = await self.client.chat(
-                    prompt=revision_prompt,
-                    system=writer_system_prompt,
-                    temperature=0.75,
-                    max_tokens=4096,
-                )
-                usage = revision_response["usage"]
-                self.cost_tracker.record(
-                    agent_name="作家(修订)",
-                    prompt_tokens=usage["prompt_tokens"],
-                    completion_tokens=usage["completion_tokens"],
-                )
-                revised = revision_response["content"]
-                if revised and len(revised) > len(current_content) * 0.3:
-                    current_content = revised
-                    logger.info(f"[ReviewLoop] Writer 修订完成，{len(revised)} 字符")
-            except Exception as e:
-                logger.error(f"[ReviewLoop] Writer 修订失败: {e}")
+            if revised and len(revised) > len(current_content) * 0.3:
+                current_content = revised
+                logger.info(f"[ReviewLoop] Writer 修订完成，{len(revised)} 字符")
+            else:
+                logger.warning("[ReviewLoop] Writer 修订失败")
                 break
 
-        # 组装最终结果
-        result.final_content = current_content
-        result.final_score = last_report.overall_score if last_report else 0
-        result.total_iterations = len(result.iterations)
-        result.converged = last_report.passed if last_report else False
-        result.quality_report = last_report
-
-        logger.info(
-            f"[ReviewLoop] 完成: iterations={result.total_iterations}, "
-            f"score={result.final_score:.1f}, converged={result.converged}"
-        )
+        # 组装最终结果（使用最佳分数对应的内容）
+        final_content = best_content if best_score > 0 else current_content
+        final_report = best_report if best_report else last_report
+        self._finalize_result(result, final_content, final_report)
         return result
-
-    async def _editor_review(
-        self,
-        content: str,
-        chapter_number: int,
-        chapter_title: str,
-        chapter_summary: str,
-    ) -> Dict[str, Any]:
-        """调用 Editor 进行审查评分+润色"""
-        task_prompt = EDITOR_REVIEW_TASK.format(
-            draft_content=content,
-            chapter_number=chapter_number,
-            chapter_title=chapter_title,
-            chapter_summary=chapter_summary,
-        )
-
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=EDITOR_REVIEW_SYSTEM,
-                temperature=0.5,
-                max_tokens=6144,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="编辑(审查)",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[ReviewLoop] Editor 审查失败: {e}")
-            return {"overall_score": self.quality_threshold, "revision_suggestions": []}
-
-    @staticmethod
-    def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON"""
-        text = text.strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-        import re
-
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            try:
-                return json.loads(match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(text[start : end + 1])
-            except json.JSONDecodeError:
-                pass
-        raise ValueError(f"无法从 Editor 响应中提取 JSON: {text[:200]}...")

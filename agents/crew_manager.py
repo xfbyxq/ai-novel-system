@@ -243,7 +243,7 @@ class NovelCrewManager:
 
         Raises:
             RuntimeError: API 调用失败
-            ValueError: JSON 解析失败（当 expect_json=True 时）
+            ValueError: JSON 解析失败（当 expect_json=True 时，且重试后仍失败）
         """
         logger.info(f"🤖 [{agent_name}] 开始执行...")
         
@@ -268,9 +268,19 @@ class NovelCrewManager:
             
             # 如果需要 JSON，解析之
             if expect_json:
-                result = self._extract_json_from_response(content)
-                logger.info(f"✅ [{agent_name}] 执行成功，返回 JSON 数据")
-                return result
+                try:
+                    result = self._extract_json_from_response(content)
+                    logger.info(f"✅ [{agent_name}] 执行成功，返回 JSON 数据")
+                    return result
+                except ValueError:
+                    # JSON 提取失败，用修正提示词重试
+                    logger.warning(f"[{agent_name}] JSON提取失败，开始重试...")
+                    return await self._retry_json_extraction(
+                        agent_name=agent_name,
+                        system_prompt=system_prompt,
+                        failed_response=content,
+                        max_retries=2,
+                    )
             else:
                 logger.info(f"✅ [{agent_name}] 执行成功，返回文本内容（{len(content)} 字符）")
                 return content
@@ -278,6 +288,53 @@ class NovelCrewManager:
         except Exception as e:
             logger.error(f"❌ [{agent_name}] 执行失败: {e}")
             raise
+
+    async def _retry_json_extraction(
+        self,
+        agent_name: str,
+        system_prompt: str,
+        failed_response: str,
+        max_retries: int = 2,
+    ) -> dict | list:
+        """JSON 提取失败后，用修正提示词让 LLM 重新输出合法 JSON。"""
+        json_fix_prompt = (
+            "你上一次的输出无法解析为有效的JSON。请仅输出修正后的合法JSON，"
+            "不要添加任何解释文字或markdown标记。\n\n"
+            "原始输出（前1500字符）：\n{response}\n\n"
+            "请直接输出修正后的完整JSON："
+        )
+
+        last_response = failed_response
+        for attempt in range(1, max_retries + 1):
+            logger.warning(
+                f"[{agent_name}] JSON重试 {attempt}/{max_retries}，"
+                f"响应片段: {last_response[:100]}..."
+            )
+            fix_prompt = json_fix_prompt.format(response=last_response[:1500])
+            response = await self.client.chat(
+                prompt=fix_prompt,
+                system=system_prompt,
+                temperature=0.3,
+                max_tokens=4096,
+            )
+            usage = response["usage"]
+            self.cost_tracker.record(
+                agent_name=f"{agent_name}(JSON修正)",
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+            )
+            last_response = response["content"]
+            try:
+                result = self._extract_json_from_response(last_response)
+                logger.info(f"✅ [{agent_name}] JSON重试成功 (第{attempt}次)")
+                return result
+            except ValueError:
+                continue
+
+        raise ValueError(
+            f"[{agent_name}] JSON提取在{max_retries}次重试后仍失败: "
+            f"{last_response[:200]}..."
+        )
 
     # ============================================================
     # 企划阶段

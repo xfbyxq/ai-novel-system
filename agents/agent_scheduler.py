@@ -334,10 +334,18 @@ class AgentScheduler:
             executable_tasks = []
             for task in self.pending_tasks:
                 # 检查所有依赖是否已完成
-                all_deps_completed = all(
-                    self.tasks.get(dep if isinstance(dep, UUID) else UUID(dep)).status == TaskStatus.COMPLETED
-                    for dep in task.dependencies
-                )
+                all_deps_completed = True
+                for dep in task.dependencies:
+                    dep_id = dep if isinstance(dep, UUID) else UUID(dep)
+                    dep_task = self.tasks.get(dep_id)
+                    # 如果依赖任务不存在或未完成，则当前任务不可执行
+                    if dep_task is None:
+                        logger.warning(f"⚠️ 任务 {task.task_name} 的依赖 {dep_id} 不存在")
+                        all_deps_completed = False
+                        break
+                    if dep_task.status != TaskStatus.COMPLETED:
+                        all_deps_completed = False
+                        break
                 if all_deps_completed:
                     executable_tasks.append(task)
 

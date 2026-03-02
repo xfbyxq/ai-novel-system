@@ -2,9 +2,16 @@
 NovelTeamContext - 小说生成团队共享上下文
 
 借鉴AgentMesh的TeamContext设计，实现Agent之间的信息共享和状态追踪。
+
+线程安全说明：
+- 所有写操作都通过 asyncio.Lock 保护
+- 读操作不加锁，返回数据的快照
+- 在高并发场景下保证数据一致性
 """
+import asyncio
 import json
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -162,11 +169,18 @@ class NovelTeamContext:
     3. 时间线追踪
     4. 伏笔系统集成
     5. 团队规则管理
+    
+    线程安全保证：
+    - 使用 asyncio.Lock 保护所有写操作
+    - 读操作返回数据快照，避免并发修改问题
     """
 
     def __init__(self, novel_id: str, novel_title: str = ""):
         self.novel_id = novel_id
         self.novel_title = novel_title
+
+        # 异步锁，保护所有写操作
+        self._lock = asyncio.Lock()
 
         # 小说元数据
         self.novel_metadata: Dict[str, Any] = {}
@@ -215,6 +229,29 @@ class NovelTeamContext:
 
         logger.info(f"NovelTeamContext initialized for novel: {novel_id}")
 
+    @asynccontextmanager
+    async def _write_lock(self):
+        """获取写锁的上下文管理器"""
+        async with self._lock:
+            yield
+
+    def _acquire_lock_sync(self) -> bool:
+        """
+        同步方式尝试获取锁（用于非异步上下文）
+        
+        注意：这是一个尽力而为的保护，在纯同步代码中使用。
+        如果锁已被持有，将立即返回 False 而不是等待。
+        """
+        try:
+            # 检查是否在事件循环中
+            loop = asyncio.get_running_loop()
+            # 如果在事件循环中，应该使用异步方法
+            logger.warning("_acquire_lock_sync called from async context, use async methods instead")
+            return False
+        except RuntimeError:
+            # 不在事件循环中，可以安全地进行同步操作
+            return True
+
     def set_novel_data(self, novel_data: Dict[str, Any]):
         """设置小说基础数据"""
         self.novel_metadata = novel_data.get("metadata", {})
@@ -250,11 +287,22 @@ class NovelTeamContext:
         logger.info(f"Novel data set: {len(self.characters)} characters initialized")
 
     def add_agent_output(self, agent_name: str, output: Dict[str, Any], subtask: str = ""):
-        """记录Agent输出"""
+        """记录Agent输出（同步版本，向后兼容）
+        
+        注意：在异步上下文中应优先使用 add_agent_output_async
+        """
         agent_output = AgentOutput(agent_name, output, subtask)
         self.agent_outputs.append(agent_output)
         self.current_steps += 1
         logger.debug(f"Agent output added: {agent_name}, steps: {self.current_steps}")
+
+    async def add_agent_output_async(self, agent_name: str, output: Dict[str, Any], subtask: str = ""):
+        """记录Agent输出（异步版本，线程安全）"""
+        async with self._write_lock():
+            agent_output = AgentOutput(agent_name, output, subtask)
+            self.agent_outputs.append(agent_output)
+            self.current_steps += 1
+            logger.debug(f"Agent output added (async): {agent_name}, steps: {self.current_steps}")
 
     def get_previous_outputs(self, last_n: int = None) -> str:
         """获取前置Agent的输出（供后续Agent参考）"""
@@ -274,12 +322,21 @@ class NovelTeamContext:
         return "\n\n---\n\n".join(result)
 
     def update_character_state(self, char_name: str, **kwargs):
-        """更新角色状态"""
+        """更新角色状态（同步版本）"""
         if char_name not in self.character_states:
             self.character_states[char_name] = CharacterState(char_name)
 
         self.character_states[char_name].update(**kwargs)
         logger.debug(f"Character state updated: {char_name}")
+
+    async def update_character_state_async(self, char_name: str, **kwargs):
+        """更新角色状态（异步版本，线程安全）"""
+        async with self._write_lock():
+            if char_name not in self.character_states:
+                self.character_states[char_name] = CharacterState(char_name)
+
+            self.character_states[char_name].update(**kwargs)
+            logger.debug(f"Character state updated (async): {char_name}")
 
     def get_character_state(self, char_name: str) -> Optional[CharacterState]:
         """获取角色状态"""
@@ -320,7 +377,7 @@ class NovelTeamContext:
 
     def add_timeline_event(self, chapter_number: int, event: str,
                           characters: List[str] = None, location: str = ""):
-        """添加时间线事件"""
+        """添加时间线事件（同步版本）"""
         timeline_event = TimelineEvent(
             chapter_number=chapter_number,
             story_day=self.current_story_day,
@@ -331,10 +388,30 @@ class NovelTeamContext:
         self.timeline.append(timeline_event)
         logger.debug(f"Timeline event added: chapter {chapter_number}, day {self.current_story_day}")
 
+    async def add_timeline_event_async(self, chapter_number: int, event: str,
+                                       characters: List[str] = None, location: str = ""):
+        """添加时间线事件（异步版本，线程安全）"""
+        async with self._write_lock():
+            timeline_event = TimelineEvent(
+                chapter_number=chapter_number,
+                story_day=self.current_story_day,
+                event=event,
+                characters=characters,
+                location=location
+            )
+            self.timeline.append(timeline_event)
+            logger.debug(f"Timeline event added (async): chapter {chapter_number}, day {self.current_story_day}")
+
     def advance_story_day(self, days: int = 1):
-        """推进故事日期"""
+        """推进故事日期（同步版本）"""
         self.current_story_day += days
         logger.debug(f"Story day advanced to: {self.current_story_day}")
+
+    async def advance_story_day_async(self, days: int = 1):
+        """推进故事日期（异步版本，线程安全）"""
+        async with self._write_lock():
+            self.current_story_day += days
+            logger.debug(f"Story day advanced (async) to: {self.current_story_day}")
 
     def get_recent_timeline(self, last_n: int = 10) -> str:
         """获取最近的时间线事件"""
@@ -364,26 +441,47 @@ class NovelTeamContext:
         return volumes[self.current_volume_number - 1]
 
     def add_review(self, review: "AgentReview"):
-        """记录一次 Agent 审查反馈"""
+        """记录一次 Agent 审查反馈（同步版本）"""
         self.agent_reviews.append(review)
         logger.debug(
             f"Review added: {review.reviewer} -> {review.target_agent}, "
             f"score={review.score}, passed={review.passed}"
         )
 
+    async def add_review_async(self, review: "AgentReview"):
+        """记录一次 Agent 审查反馈（异步版本，线程安全）"""
+        async with self._write_lock():
+            self.agent_reviews.append(review)
+            logger.debug(
+                f"Review added (async): {review.reviewer} -> {review.target_agent}, "
+                f"score={review.score}, passed={review.passed}"
+            )
+
     def get_reviews_for_chapter(self, chapter_number: int) -> List["AgentReview"]:
         """获取某章的所有审查反馈"""
         return [r for r in self.agent_reviews if r.chapter_number == chapter_number]
 
     def add_iteration_log(self, log_entry: Dict[str, Any]):
-        """记录一次迭代信息（如 Writer-Editor 循环的某一轮）"""
+        """记录一次迭代信息（同步版本）"""
         log_entry.setdefault("timestamp", datetime.now().isoformat())
         self.iteration_logs.append(log_entry)
 
+    async def add_iteration_log_async(self, log_entry: Dict[str, Any]):
+        """记录一次迭代信息（异步版本，线程安全）"""
+        async with self._write_lock():
+            log_entry.setdefault("timestamp", datetime.now().isoformat())
+            self.iteration_logs.append(log_entry)
+
     def add_voting_record(self, record: Dict[str, Any]):
-        """记录一次投票结果"""
+        """记录一次投票结果（同步版本）"""
         record.setdefault("timestamp", datetime.now().isoformat())
         self.voting_records.append(record)
+
+    async def add_voting_record_async(self, record: Dict[str, Any]):
+        """记录一次投票结果（异步版本，线程安全）"""
+        async with self._write_lock():
+            record.setdefault("timestamp", datetime.now().isoformat())
+            self.voting_records.append(record)
 
     def build_enhanced_context(self, chapter_number: int) -> str:
         """

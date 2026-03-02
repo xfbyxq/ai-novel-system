@@ -8,55 +8,19 @@
 """
 
 import json
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-
-@dataclass
-class CharacterQualityReport:
-    """角色质量评估报告"""
-
-    overall_score: float = 0.0
-    dimension_scores: Dict[str, float] = field(default_factory=dict)
-    passed: bool = False
-    issues: List[Dict[str, Any]] = field(default_factory=list)
-    uniqueness_analysis: Dict[str, Any] = field(default_factory=dict)
-    summary: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "overall_score": self.overall_score,
-            "dimension_scores": self.dimension_scores,
-            "passed": self.passed,
-            "issues": self.issues,
-            "uniqueness_analysis": self.uniqueness_analysis,
-            "summary": self.summary,
-        }
-
-
-@dataclass
-class CharacterReviewResult:
-    """角色审查循环的最终结果"""
-
-    final_characters: List[Dict[str, Any]] = field(default_factory=list)
-    final_score: float = 0.0
-    total_iterations: int = 0
-    converged: bool = False
-    iterations: List[Dict[str, Any]] = field(default_factory=list)
-    quality_report: Optional[CharacterQualityReport] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "final_score": self.final_score,
-            "total_iterations": self.total_iterations,
-            "converged": self.converged,
-            "iterations": self.iterations,
-            "character_count": len(self.final_characters),
-        }
+from agents.base import (
+    BaseReviewLoopHandler,
+    CharacterQualityReport,
+    CharacterReviewResult,
+    JsonExtractor,
+    ReviewLoopConfig,
+)
 
 
 # ── 角色审查专用提示词 ──────────────────────────────────────────
@@ -199,7 +163,9 @@ CHARACTER_REVISION_TASK = """你之前设计的角色经过专家评审，需要
 ]"""
 
 
-class CharacterReviewHandler:
+class CharacterReviewHandler(
+    BaseReviewLoopHandler[List[Dict[str, Any]], CharacterReviewResult, CharacterQualityReport]
+):
     """角色设计审查循环处理器
 
     流程：
@@ -224,10 +190,12 @@ class CharacterReviewHandler:
             quality_threshold: 质量阈值（默认7.0，比章节略低）
             max_iterations: 最大迭代次数
         """
-        self.client = client
-        self.cost_tracker = cost_tracker
-        self.quality_threshold = quality_threshold
-        self.max_iterations = max_iterations
+        super().__init__(
+            client=client,
+            cost_tracker=cost_tracker,
+            quality_threshold=quality_threshold,
+            max_iterations=max_iterations,
+        )
 
     async def execute(
         self,
@@ -245,277 +213,177 @@ class CharacterReviewHandler:
         Returns:
             CharacterReviewResult
         """
-        current_characters = initial_characters
-        result = CharacterReviewResult()
-        last_report: Optional[CharacterQualityReport] = None
-        previous_issues: List[str] = []
+        return await super().execute(
+            initial_content=initial_characters,
+            world_setting=world_setting,
+            topic_analysis=topic_analysis,
+        )
 
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"[CharacterReview] 第 {iteration}/{self.max_iterations} 轮审查")
+    # ══════════════════════════════════════════════════════════════════════════
+    # 实现抽象方法
+    # ══════════════════════════════════════════════════════════════════════════
 
-            # 获取上一轮评分
-            previous_score = last_report.overall_score if last_report else 0
+    def _get_loop_name(self) -> str:
+        return "CharacterReview"
 
-            # ── Reviewer 审查评分（带迭代上下文）──────────────────
-            review_data = await self._reviewer_evaluate(
-                characters=current_characters,
-                world_setting=world_setting,
-                iteration=iteration,
-                previous_score=previous_score,
-                previous_issues=previous_issues,
-            )
+    def _create_result(self) -> CharacterReviewResult:
+        return CharacterReviewResult()
 
-            score = float(review_data.get("overall_score", 0))
-            character_assessments = review_data.get("character_assessments", [])
-            critical_issues = review_data.get("critical_issues", [])
-            uniqueness_analysis = review_data.get("uniqueness_analysis", {})
+    def _create_quality_report(self, review_data: Dict[str, Any]) -> CharacterQualityReport:
+        return CharacterQualityReport.from_llm_response(
+            review_data,
+            quality_threshold=self.quality_threshold,
+        )
 
-            # 构造质量报告
-            last_report = CharacterQualityReport(
-                overall_score=score,
-                dimension_scores=review_data.get("dimension_scores", {}),
-                passed=score >= self.quality_threshold,
-                issues=critical_issues,
-                uniqueness_analysis=uniqueness_analysis,
-                summary=review_data.get("summary", ""),
-            )
+    def _get_reviewer_system_prompt(self) -> str:
+        return CHARACTER_REVIEWER_SYSTEM
 
-            # 记录迭代
-            result.iterations.append({
-                "iteration": iteration,
-                "score": score,
-                "passed": last_report.passed,
-                "issue_count": len(critical_issues),
-                "dimension_scores": last_report.dimension_scores,
-            })
+    def _get_builder_system_prompt(self) -> str:
+        from llm.prompt_manager import PromptManager
+        return PromptManager.CHARACTER_DESIGNER_SYSTEM
 
-            logger.info(
-                f"[CharacterReview] score={score:.1f}, "
-                f"passed={last_report.passed}, "
-                f"issues={len(critical_issues)}"
-            )
+    def _get_reviewer_agent_name(self) -> str:
+        return "角色审查员"
 
-            # ── 判断是否继续迭代 ──────────────────────────────
-            if last_report.passed:
-                logger.info("[CharacterReview] 角色设计质量达标")
-                break
+    def _get_builder_agent_name(self) -> str:
+        return "角色设计师(修订)"
 
-            if iteration >= self.max_iterations:
-                logger.warning(
-                    f"[CharacterReview] 达到最大迭代次数 ({self.max_iterations})，"
-                    f"当前评分 {score:.1f}"
-                )
-                break
+    def _get_dimension_names(self) -> Dict[str, str]:
+        return {
+            "psychological_depth": "心理深度",
+            "uniqueness": "独特性",
+            "growth_potential": "成长潜力",
+            "relationship_complexity": "关系复杂性",
+            "world_fit": "世界观契合度",
+        }
 
-            # ── Designer 修订 ───────────────────────────────────
-            logger.info("[CharacterReview] 质量未达标，请求设计师修订...")
+    def _build_reviewer_task_prompt(
+        self,
+        content: List[Dict[str, Any]],
+        iteration: int,
+        previous_score: float,
+        previous_issues: List[str],
+        **context,
+    ) -> str:
+        """构建 Reviewer 任务提示词"""
+        world_setting = context.get("world_setting", {})
 
-            # 构建反馈文本
-            feedback_lines = [f"整体评价：{last_report.summary}"]
-            for dim, dim_score in last_report.dimension_scores.items():
-                dim_names = {
-                    "psychological_depth": "心理深度",
-                    "uniqueness": "独特性",
-                    "growth_potential": "成长潜力",
-                    "relationship_complexity": "关系复杂性",
-                    "world_fit": "世界观契合度",
-                }
-                feedback_lines.append(f"- {dim_names.get(dim, dim)}: {dim_score}/10")
+        iteration_context = self._build_iteration_context(
+            iteration, previous_score, previous_issues
+        )
 
-            # 构建角色问题文本
-            character_issues_lines = []
-            for assessment in character_assessments:
-                char_name = assessment.get("name", "未知")
-                weaknesses = assessment.get("weaknesses", [])
-                suggestions = assessment.get("improvement_suggestions", [])
-                if weaknesses or suggestions:
-                    character_issues_lines.append(f"\n【{char_name}】")
-                    for w in weaknesses:
-                        character_issues_lines.append(f"  - 问题：{w}")
-                    for s in suggestions:
-                        character_issues_lines.append(f"  - 建议：{s}")
+        return CHARACTER_REVIEWER_TASK.format(
+            iteration_context=iteration_context,
+            world_setting=self.to_json(world_setting),
+            characters=self.to_json(content),
+        )
 
-            # 添加严重问题
-            for issue in critical_issues:
-                char = issue.get("character", "")
-                desc = issue.get("issue", "")
-                severity = issue.get("severity", "medium")
-                character_issues_lines.append(f"\n[{severity.upper()}] {char}: {desc}")
+    def _build_revision_prompt(
+        self,
+        score: float,
+        feedback: str,
+        issues: str,
+        original_content: List[Dict[str, Any]],
+        report: CharacterQualityReport,
+        review_data: Dict[str, Any],
+        **context,
+    ) -> str:
+        """构建修订任务提示词"""
+        world_setting = context.get("world_setting", {})
 
-            revised_characters = await self._designer_revise(
-                score=score,
-                feedback="\n".join(feedback_lines),
-                character_issues="\n".join(character_issues_lines) or "（无具体问题）",
-                original_characters=current_characters,
-                world_setting=world_setting,
-            )
+        return CHARACTER_REVISION_TASK.format(
+            score=f"{score:.1f}",
+            feedback=feedback,
+            character_issues=issues,
+            original_characters=self.to_json(original_content),
+            world_setting=self.to_json(world_setting, max_length=2000),
+        )
 
-            if revised_characters and len(revised_characters) > 0:
-                current_characters = revised_characters
-                # 收集本轮问题，供下一轮审查参考
-                previous_issues = [
-                    f"{issue.get('character', '')}: {issue.get('issue', '')}"
-                    for issue in critical_issues
-                ]
-                # 添加角色评估中的问题
-                for assessment in character_assessments:
-                    char_name = assessment.get("name", "")
-                    for w in assessment.get("weaknesses", []):
-                        previous_issues.append(f"{char_name}: {w}")
-                logger.info(f"[CharacterReview] 设计师修订完成，{len(revised_characters)} 个角色")
-            else:
-                logger.warning("[CharacterReview] 修订失败，保留原设计")
-                break
+    def _validate_revision(
+        self, revised: List[Dict[str, Any]], original: List[Dict[str, Any]]
+    ) -> bool:
+        """验证修订结果是否有效"""
+        if not revised:
+            return False
+        if not isinstance(revised, list):
+            return False
+        return len(revised) > 0
 
-        # 组装最终结果
-        result.final_characters = current_characters
+    def _finalize_result(
+        self,
+        result: CharacterReviewResult,
+        final_content: List[Dict[str, Any]],
+        last_report: Optional[CharacterQualityReport],
+    ) -> None:
+        """填充最终结果"""
+        result.final_characters = final_content
+        result.final_output = final_content
         result.final_score = last_report.overall_score if last_report else 0
         result.total_iterations = len(result.iterations)
         result.converged = last_report.passed if last_report else False
         result.quality_report = last_report
 
-        logger.info(
-            f"[CharacterReview] 完成: iterations={result.total_iterations}, "
-            f"score={result.final_score:.1f}, converged={result.converged}"
-        )
-        return result
+    def _get_empty_content(self) -> List[Dict[str, Any]]:
+        """获取空内容"""
+        return []
 
-    async def _reviewer_evaluate(
-        self,
-        characters: List[Dict[str, Any]],
-        world_setting: Dict[str, Any],
-        iteration: int = 1,
-        previous_score: float = 0,
-        previous_issues: List[str] = None,
-    ) -> Dict[str, Any]:
-        """调用 Reviewer 进行角色评估
-        
-        Args:
-            characters: 角色列表
-            world_setting: 世界观设定
-            iteration: 当前迭代轮次
-            previous_score: 上一轮评分
-            previous_issues: 上一轮发现的问题
-        """
-        # 构建迭代上下文
-        if iteration == 1:
-            iteration_context = "【首轮审查】这是角色的首次评估。"
-        else:
-            issues_text = "\n".join(f"  - {issue}" for issue in (previous_issues or [])[:10])
-            iteration_context = f"""【第 {iteration} 轮审查】
-这是修订后的角色设计，请评估修订效果。
-上一轮评分：{previous_score}/10
-上一轮发现的主要问题：
-{issues_text or "  （无）"}
+    def _parse_builder_response(self, response_text: str) -> List[Dict[str, Any]]:
+        """解析 Builder 响应"""
+        result = JsonExtractor.extract_json(response_text, default=[])
+        # 确保返回列表
+        if isinstance(result, dict):
+            return [result]
+        return result if isinstance(result, list) else []
 
-请重点评估：
-1. 上述问题是否已解决？
-2. 修订后是否引入了新问题？
-3. 角色整体质量是否有实质性提升？
-如果问题已解决且没有新问题，应给予更高评分。"""
+    # ══════════════════════════════════════════════════════════════════════════
+    # 覆盖钩子方法以添加角色评估细节
+    # ══════════════════════════════════════════════════════════════════════════
 
-        task_prompt = CHARACTER_REVIEWER_TASK.format(
-            iteration_context=iteration_context,
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
-            characters=json.dumps(characters, ensure_ascii=False, indent=2),
-        )
+    def _build_issues_text(
+        self, report: CharacterQualityReport, review_data: Dict[str, Any]
+    ) -> str:
+        """构建问题列表文本，包含各角色具体问题"""
+        lines = []
 
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=CHARACTER_REVIEWER_SYSTEM,
-                temperature=0.5,  # 稍微提高温度，避免固定评分
-                max_tokens=4096,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="角色审查员",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[CharacterReview] Reviewer 评估失败: {e}")
-            return {"overall_score": self.quality_threshold, "critical_issues": []}
+        # 添加各角色评估
+        character_assessments = review_data.get("character_assessments", [])
+        for assessment in character_assessments:
+            char_name = assessment.get("name", "未知")
+            weaknesses = assessment.get("weaknesses", [])
+            suggestions = assessment.get("improvement_suggestions", [])
+            if weaknesses or suggestions:
+                lines.append(f"\n【{char_name}】")
+                for w in weaknesses:
+                    lines.append(f"  - 问题：{w}")
+                for s in suggestions:
+                    lines.append(f"  - 建议：{s}")
 
-    async def _designer_revise(
-        self,
-        score: float,
-        feedback: str,
-        character_issues: str,
-        original_characters: List[Dict[str, Any]],
-        world_setting: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
-        """调用 Designer 修订角色"""
-        task_prompt = CHARACTER_REVISION_TASK.format(
-            score=f"{score:.1f}",
-            feedback=feedback,
-            character_issues=character_issues,
-            original_characters=json.dumps(original_characters, ensure_ascii=False, indent=2),
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2)[:2000],
-        )
+        # 添加严重问题
+        for issue in report.issues:
+            char = issue.get("character", "")
+            desc = issue.get("issue", "")
+            severity = issue.get("severity", "medium")
+            lines.append(f"\n[{severity.upper()}] {char}: {desc}")
 
-        # 使用原有的角色设计师 system prompt
-        from llm.prompt_manager import PromptManager
-        designer_system = PromptManager.CHARACTER_DESIGNER_SYSTEM
+        return "\n".join(lines) if lines else "（无具体问题）"
 
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=designer_system,
-                temperature=0.8,
-                max_tokens=6000,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="角色设计师(修订)",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            result = self._extract_json(response["content"])
-            # 确保返回列表
-            if isinstance(result, dict):
-                return [result]
-            return result
-        except Exception as e:
-            logger.error(f"[CharacterReview] Designer 修订失败: {e}")
-            return []
+    def _collect_issues_for_next_round(
+        self, report: CharacterQualityReport, review_data: Dict[str, Any]
+    ) -> List[str]:
+        """收集问题用于下一轮审查"""
+        issues = []
 
-    @staticmethod
-    def _extract_json(text: str) -> Any:
-        """从 LLM 响应中提取 JSON"""
-        text = text.strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        # 添加严重问题
+        for issue in report.issues:
+            char = issue.get("character", "")
+            desc = issue.get("issue", "")
+            issues.append(f"{char}: {desc}" if char else desc)
 
-        import re
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            try:
-                return json.loads(match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
+        # 添加角色评估中的问题
+        character_assessments = review_data.get("character_assessments", [])
+        for assessment in character_assessments:
+            char_name = assessment.get("name", "")
+            for w in assessment.get("weaknesses", []):
+                issues.append(f"{char_name}: {w}")
 
-        # 尝试找 JSON 数组
-        start = text.find("[")
-        if start != -1:
-            end = text.rfind("]")
-            if end > start:
-                try:
-                    return json.loads(text[start:end + 1])
-                except json.JSONDecodeError:
-                    pass
-
-        # 尝试找 JSON 对象
-        start = text.find("{")
-        if start != -1:
-            end = text.rfind("}")
-            if end > start:
-                try:
-                    return json.loads(text[start:end + 1])
-                except json.JSONDecodeError:
-                    pass
-
-        raise ValueError(f"无法从响应中提取 JSON: {text[:200]}...")
+        return issues

@@ -9,54 +9,19 @@
 """
 
 import json
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-
-@dataclass
-class WorldQualityReport:
-    """世界观质量评估报告"""
-
-    overall_score: float = 0.0
-    dimension_scores: Dict[str, float] = field(default_factory=dict)
-    passed: bool = False
-    issues: List[Dict[str, Any]] = field(default_factory=list)
-    consistency_analysis: Dict[str, Any] = field(default_factory=dict)
-    summary: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "overall_score": self.overall_score,
-            "dimension_scores": self.dimension_scores,
-            "passed": self.passed,
-            "issues": self.issues,
-            "consistency_analysis": self.consistency_analysis,
-            "summary": self.summary,
-        }
-
-
-@dataclass
-class WorldReviewResult:
-    """世界观审查循环的最终结果"""
-
-    final_world_setting: Dict[str, Any] = field(default_factory=dict)
-    final_score: float = 0.0
-    total_iterations: int = 0
-    converged: bool = False
-    iterations: List[Dict[str, Any]] = field(default_factory=list)
-    quality_report: Optional[WorldQualityReport] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "final_score": self.final_score,
-            "total_iterations": self.total_iterations,
-            "converged": self.converged,
-            "iterations": self.iterations,
-        }
+from agents.base import (
+    BaseReviewLoopHandler,
+    JsonExtractor,
+    ReviewLoopConfig,
+    WorldQualityReport,
+    WorldReviewResult,
+)
 
 
 # ── 世界观审查专用提示词 ──────────────────────────────────────────
@@ -203,7 +168,9 @@ WORLD_REVISION_TASK = """你之前设计的世界观经过专家评审，需要�
 }}"""
 
 
-class WorldReviewHandler:
+class WorldReviewHandler(
+    BaseReviewLoopHandler[Dict[str, Any], WorldReviewResult, WorldQualityReport]
+):
     """世界观设计审查循环处理器
 
     流程：
@@ -220,262 +187,184 @@ class WorldReviewHandler:
         quality_threshold: float = 7.0,
         max_iterations: int = 2,
     ):
-        self.client = client
-        self.cost_tracker = cost_tracker
-        self.quality_threshold = quality_threshold
-        self.max_iterations = max_iterations
+        """初始化世界观审查处理器
+
+        Args:
+            client: LLM 客户端
+            cost_tracker: 成本追踪器
+            quality_threshold: 质量阈值（默认7.0）
+            max_iterations: 最大迭代次数
+        """
+        super().__init__(
+            client=client,
+            cost_tracker=cost_tracker,
+            quality_threshold=quality_threshold,
+            max_iterations=max_iterations,
+        )
 
     async def execute(
         self,
         initial_world_setting: Dict[str, Any],
         topic_analysis: Dict[str, Any],
     ) -> WorldReviewResult:
-        """执行世界观设计审查循环"""
-        current_world = initial_world_setting
-        result = WorldReviewResult()
-        last_report: Optional[WorldQualityReport] = None
-        previous_issues: List[str] = []
+        """执行世界观设计审查循环
 
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"[WorldReview] 第 {iteration}/{self.max_iterations} 轮审查")
+        Args:
+            initial_world_setting: 初始世界观设定
+            topic_analysis: 主题分析结果
 
-            # 获取上一轮评分
-            previous_score = last_report.overall_score if last_report else 0
+        Returns:
+            WorldReviewResult
+        """
+        # 调用基类的模板方法，传递上下文参数
+        return await super().execute(
+            initial_content=initial_world_setting,
+            topic_analysis=topic_analysis,
+        )
 
-            # ── Reviewer 审查评分（带迭代上下文）──────────────────
-            review_data = await self._reviewer_evaluate(
-                world_setting=current_world,
-                topic_analysis=topic_analysis,
-                iteration=iteration,
-                previous_score=previous_score,
-                previous_issues=previous_issues,
-            )
+    # ══════════════════════════════════════════════════════════════════════════
+    # 实现抽象方法
+    # ══════════════════════════════════════════════════════════════════════════
 
-            score = float(review_data.get("overall_score", 0))
-            critical_issues = review_data.get("critical_issues", [])
-            consistency_analysis = review_data.get("consistency_analysis", {})
+    def _get_loop_name(self) -> str:
+        return "WorldReview"
 
-            last_report = WorldQualityReport(
-                overall_score=score,
-                dimension_scores=review_data.get("dimension_scores", {}),
-                passed=score >= self.quality_threshold,
-                issues=critical_issues,
-                consistency_analysis=consistency_analysis,
-                summary=review_data.get("summary", ""),
-            )
+    def _create_result(self) -> WorldReviewResult:
+        return WorldReviewResult()
 
-            result.iterations.append({
-                "iteration": iteration,
-                "score": score,
-                "passed": last_report.passed,
-                "issue_count": len(critical_issues),
-                "dimension_scores": last_report.dimension_scores,
-            })
+    def _create_quality_report(self, review_data: Dict[str, Any]) -> WorldQualityReport:
+        return WorldQualityReport.from_llm_response(
+            review_data,
+            quality_threshold=self.quality_threshold,
+        )
 
-            logger.info(
-                f"[WorldReview] score={score:.1f}, "
-                f"passed={last_report.passed}, "
-                f"issues={len(critical_issues)}"
-            )
+    def _get_reviewer_system_prompt(self) -> str:
+        return WORLD_REVIEWER_SYSTEM
 
-            if last_report.passed:
-                logger.info("[WorldReview] 世界观设计质量达标")
-                break
+    def _get_builder_system_prompt(self) -> str:
+        from llm.prompt_manager import PromptManager
+        return PromptManager.WORLD_BUILDER_SYSTEM
 
-            if iteration >= self.max_iterations:
-                logger.warning(f"[WorldReview] 达到最大迭代次数，当前评分 {score:.1f}")
-                break
+    def _get_reviewer_agent_name(self) -> str:
+        return "世界观审查员"
 
-            # ── Builder 修订 ───────────────────────────────────
-            logger.info("[WorldReview] 质量未达标，请求架构师修订...")
+    def _get_builder_agent_name(self) -> str:
+        return "世界观架构师(修订)"
 
-            feedback_lines = [f"整体评价：{last_report.summary}"]
-            for dim, dim_score in last_report.dimension_scores.items():
-                dim_names = {
-                    "consistency": "内在一致性",
-                    "depth_breadth": "深度与广度",
-                    "uniqueness": "独特性",
-                    "expandability": "可扩展性",
-                    "power_system": "力量体系完整性",
-                }
-                feedback_lines.append(f"- {dim_names.get(dim, dim)}: {dim_score}/10")
+    def _get_dimension_names(self) -> Dict[str, str]:
+        return {
+            "consistency": "内在一致性",
+            "depth_breadth": "深度与广度",
+            "uniqueness": "独特性",
+            "expandability": "可扩展性",
+            "power_system": "力量体系完整性",
+        }
 
-            issues_lines = []
-            for issue in critical_issues:
-                area = issue.get("area", "")
-                desc = issue.get("issue", "")
-                severity = issue.get("severity", "medium")
-                suggestion = issue.get("suggestion", "")
-                issues_lines.append(f"[{severity.upper()}] {area}: {desc}")
-                if suggestion:
-                    issues_lines.append(f"  建议: {suggestion}")
+    def _build_reviewer_task_prompt(
+        self,
+        content: Dict[str, Any],
+        iteration: int,
+        previous_score: float,
+        previous_issues: List[str],
+        **context,
+    ) -> str:
+        """构建 Reviewer 任务提示词"""
+        topic_analysis = context.get("topic_analysis", {})
 
-            # 添加缺失元素
-            missing = review_data.get("missing_elements", [])
-            if missing:
-                issues_lines.append("\n缺失的重要元素：")
-                for m in missing:
-                    issues_lines.append(f"  - {m}")
+        iteration_context = self._build_iteration_context(
+            iteration, previous_score, previous_issues
+        )
 
-            consistency_text = json.dumps(consistency_analysis, ensure_ascii=False, indent=2) if consistency_analysis else "（无）"
+        return WORLD_REVIEWER_TASK.format(
+            iteration_context=iteration_context,
+            topic_analysis=self.to_json(topic_analysis),
+            world_setting=self.to_json(content),
+        )
 
-            revised_world = await self._builder_revise(
-                score=score,
-                feedback="\n".join(feedback_lines),
-                issues="\n".join(issues_lines) or "（无具体问题）",
-                consistency_analysis=consistency_text,
-                original_world=current_world,
-                topic_analysis=topic_analysis,
-            )
+    def _build_revision_prompt(
+        self,
+        score: float,
+        feedback: str,
+        issues: str,
+        original_content: Dict[str, Any],
+        report: WorldQualityReport,
+        review_data: Dict[str, Any],
+        **context,
+    ) -> str:
+        """构建修订任务提示词"""
+        topic_analysis = context.get("topic_analysis", {})
+        consistency_analysis = review_data.get("consistency_analysis", {})
 
-            if revised_world and isinstance(revised_world, dict) and revised_world.get("world_name"):
-                current_world = revised_world
-                # 收集本轮问题，供下一轮审查参考
-                previous_issues = [
-                    f"{issue.get('area', '')}: {issue.get('issue', '')}"
-                    for issue in critical_issues
-                ]
-                # 添加缺失元素到问题列表
-                previous_issues.extend([f"缺失: {m}" for m in missing])
-                logger.info("[WorldReview] 架构师修订完成")
-            else:
-                logger.warning("[WorldReview] 修订失败，保留原设计")
-                break
+        consistency_text = (
+            self.to_json(consistency_analysis)
+            if consistency_analysis
+            else "（无）"
+        )
 
-        result.final_world_setting = current_world
+        return WORLD_REVISION_TASK.format(
+            score=f"{score:.1f}",
+            feedback=feedback,
+            issues=issues,
+            consistency_analysis=consistency_text,
+            original_world=self.to_json(original_content),
+            topic_analysis=self.to_json(topic_analysis, max_length=1500),
+        )
+
+    def _validate_revision(
+        self, revised: Dict[str, Any], original: Dict[str, Any]
+    ) -> bool:
+        """验证修订结果是否有效"""
+        if not revised:
+            return False
+        if not isinstance(revised, dict):
+            return False
+        # 检查是否有关键字段
+        return bool(revised.get("world_name"))
+
+    def _finalize_result(
+        self,
+        result: WorldReviewResult,
+        final_content: Dict[str, Any],
+        last_report: Optional[WorldQualityReport],
+    ) -> None:
+        """填充最终结果"""
+        result.final_world_setting = final_content
+        result.final_output = final_content
         result.final_score = last_report.overall_score if last_report else 0
         result.total_iterations = len(result.iterations)
         result.converged = last_report.passed if last_report else False
         result.quality_report = last_report
 
-        logger.info(
-            f"[WorldReview] 完成: iterations={result.total_iterations}, "
-            f"score={result.final_score:.1f}, converged={result.converged}"
-        )
-        return result
+    def _get_empty_content(self) -> Dict[str, Any]:
+        """获取空内容"""
+        return {}
 
-    async def _reviewer_evaluate(
-        self,
-        world_setting: Dict[str, Any],
-        topic_analysis: Dict[str, Any],
-        iteration: int = 1,
-        previous_score: float = 0,
-        previous_issues: List[str] = None,
-    ) -> Dict[str, Any]:
-        """调用 Reviewer 进行世界观评估
-        
-        Args:
-            world_setting: 世界观设定
-            topic_analysis: 主题分析
-            iteration: 当前迭代轮次
-            previous_score: 上一轮评分
-            previous_issues: 上一轮发现的问题
-        """
-        # 构建迭代上下文
-        if iteration == 1:
-            iteration_context = "【首轮审查】这是世界观的首次评估。"
-        else:
-            issues_text = "\n".join(f"  - {issue}" for issue in (previous_issues or []))
-            iteration_context = f"""【第 {iteration} 轮审查】
-这是修订后的世界观，请评估修订效果。
-上一轮评分：{previous_score}/10
-上一轮发现的主要问题：
-{issues_text or "  （无）"}
+    # ══════════════════════════════════════════════════════════════════════════
+    # 覆盖钩子方法以添加一致性分析
+    # ══════════════════════════════════════════════════════════════════════════
 
-请重点评估：
-1. 上述问题是否已解决？
-2. 修订后是否引入了新问题？
-3. 整体质量是否有实质性提升？
-如果问题已解决且没有新问题，应给予更高评分。"""
+    def _build_issues_text(
+        self, report: WorldQualityReport, review_data: Dict[str, Any]
+    ) -> str:
+        """构建问题列表文本，包含一致性分析"""
+        lines = []
 
-        task_prompt = WORLD_REVIEWER_TASK.format(
-            iteration_context=iteration_context,
-            topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
-        )
+        # 添加严重问题
+        for issue in report.issues:
+            area = issue.get("area", "")
+            desc = issue.get("issue", "")
+            severity = issue.get("severity", "medium")
+            suggestion = issue.get("suggestion", "")
 
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=WORLD_REVIEWER_SYSTEM,
-                temperature=0.5,  # 稍微提高温度，避免固定评分
-                max_tokens=4096,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="世界观审查员",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[WorldReview] Reviewer 评估失败: {e}")
-            return {"overall_score": self.quality_threshold, "critical_issues": []}
+            lines.append(f"[{severity.upper()}] {area}: {desc}")
+            if suggestion:
+                lines.append(f"  建议: {suggestion}")
 
-    async def _builder_revise(
-        self,
-        score: float,
-        feedback: str,
-        issues: str,
-        consistency_analysis: str,
-        original_world: Dict[str, Any],
-        topic_analysis: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """调用 Builder 修订世界观"""
-        task_prompt = WORLD_REVISION_TASK.format(
-            score=f"{score:.1f}",
-            feedback=feedback,
-            issues=issues,
-            consistency_analysis=consistency_analysis,
-            original_world=json.dumps(original_world, ensure_ascii=False, indent=2),
-            topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2)[:1500],
-        )
+        # 添加缺失元素
+        missing = review_data.get("missing_elements", [])
+        if missing:
+            lines.append("\n缺失的重要元素：")
+            for m in missing:
+                lines.append(f"  - {m}")
 
-        from llm.prompt_manager import PromptManager
-        builder_system = PromptManager.WORLD_BUILDER_SYSTEM
-
-        try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=builder_system,
-                temperature=0.7,
-                max_tokens=6000,
-            )
-            usage = response["usage"]
-            self.cost_tracker.record(
-                agent_name="世界观架构师(修订)",
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
-            )
-            return self._extract_json(response["content"])
-        except Exception as e:
-            logger.error(f"[WorldReview] Builder 修订失败: {e}")
-            return {}
-
-    @staticmethod
-    def _extract_json(text: str) -> Any:
-        """从 LLM 响应中提取 JSON"""
-        text = text.strip()
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        import re
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            try:
-                return json.loads(match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
-
-        start = text.find("{")
-        if start != -1:
-            end = text.rfind("}")
-            if end > start:
-                try:
-                    return json.loads(text[start:end + 1])
-                except json.JSONDecodeError:
-                    pass
-
-        raise ValueError(f"无法从响应中提取 JSON: {text[:200]}...")
+        return "\n".join(lines) if lines else "（无具体问题）"

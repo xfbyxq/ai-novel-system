@@ -174,16 +174,22 @@ class GenerationService:
                     elif not isinstance(age_value, int):
                         age_value = None  # 非数字类型设为 None
 
+                # 处理 Text 字段：LLM 可能返回 dict/list，需要序列化为字符串
+                def _to_str(val) -> str:
+                    if isinstance(val, (dict, list)):
+                        return json.dumps(val, ensure_ascii=False)
+                    return str(val) if val else ""
+
                 character = Character(
                     novel_id=novel_id,
                     name=char_data.get("name", "未命名"),
                     role_type=role_type_map.get(role_type_str, RoleType.minor),
                     gender=gender_map.get(gender_str),
                     age=age_value,
-                    appearance=char_data.get("appearance", ""),
-                    personality=char_data.get("personality", ""),
-                    background=char_data.get("background", ""),
-                    goals=char_data.get("goals", ""),
+                    appearance=_to_str(char_data.get("appearance", "")),
+                    personality=_to_str(char_data.get("personality", "")),
+                    background=_to_str(char_data.get("background", "")),
+                    goals=_to_str(char_data.get("goals", "")),
                     abilities=char_data.get("abilities", {}),
                     relationships=char_data.get("relationships", {}),
                     growth_arc=char_data.get("growth_arc", {}),
@@ -258,10 +264,14 @@ class GenerationService:
 
         except Exception as e:
             logger.error(f"企划阶段失败: {e}")
-            if task:
-                task.status = TaskStatus.failed
-                task.error_message = str(e)
-                await self.db.commit()
+            try:
+                await self.db.rollback()
+                if task:
+                    task.status = TaskStatus.failed
+                    task.error_message = str(e)[:500]
+                    await self.db.commit()
+            except Exception as rollback_err:
+                logger.error(f"企划失败后回滚/记录异常: {rollback_err}")
             raise
 
     async def run_chapter_writing(
@@ -367,6 +377,18 @@ class GenerationService:
                 "characters": characters_list,
                 "plot_outline": plot_outline_dict,
             }
+
+            # 确保内存缓存中有小说记忆（供 update_chapter_summary 等方法使用）
+            if not self.memory_service.get_novel_memory(str(novel_id)):
+                self.memory_service.set_novel_memory(str(novel_id), {
+                    "id": str(novel_id),
+                    "title": novel.title,
+                    "genre": novel.genre,
+                    "world_setting": world_setting_dict,
+                    "characters": characters_list,
+                    "plot_outline": plot_outline_dict,
+                    "synopsis": novel.synopsis or "",
+                })
 
             # 获取或创建 TeamContext
             team_context = self._get_or_create_team_context(

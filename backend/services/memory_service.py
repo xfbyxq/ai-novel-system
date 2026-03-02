@@ -274,6 +274,31 @@ class NovelMemoryService:
     
     # ==================== 章节摘要管理方法 ====================
     
+    def _ensure_novel_memory(self, novel_id: str) -> Dict[str, Any]:
+        """确保小说在缓存中存在，不存在则创建最小化条目
+        
+        Args:
+            novel_id: 小说ID
+            
+        Returns:
+            小说的缓存数据
+        """
+        memory = self.get_novel_memory(novel_id)
+        if memory is None:
+            memory = {
+                'base': {'id': novel_id},
+                'details': {},
+                'chapters': [],
+                'chapter_summaries': {},
+                'character_states': {},
+                'analysis': {},
+                'metadata': {'version': 1},
+            }
+            cache_key = f"novel:{novel_id}"
+            self.cache.set(cache_key, memory)
+            logger.info(f"Lazy-initialized novel memory for {novel_id}")
+        return memory
+
     def update_chapter_summary(self, novel_id: str, chapter_number: int, summary: Dict[str, Any]) -> None:
         """更新单个章节的结构化摘要
         
@@ -283,16 +308,13 @@ class NovelMemoryService:
             summary: 章节摘要，包含 key_events, character_changes, plot_progress, foreshadowing, ending_state
         """
         cache_key = f"novel:{novel_id}"
-        memory = self.get_novel_memory(novel_id)
-        if memory:
-            if 'chapter_summaries' not in memory:
-                memory['chapter_summaries'] = {}
-            memory['chapter_summaries'][str(chapter_number)] = summary
-            # 直接更新缓存，不触发版本号递增
-            self.cache.set(cache_key, memory)
-            logger.info(f"Updated chapter {chapter_number} summary for novel {novel_id}")
-        else:
-            logger.warning(f"Cannot update chapter summary: novel {novel_id} not in memory")
+        memory = self._ensure_novel_memory(novel_id)
+        if 'chapter_summaries' not in memory:
+            memory['chapter_summaries'] = {}
+        memory['chapter_summaries'][str(chapter_number)] = summary
+        # 直接更新缓存，不触发版本号递增
+        self.cache.set(cache_key, memory)
+        logger.info(f"Updated chapter {chapter_number} summary for novel {novel_id}")
     
     def get_chapter_summaries(self, novel_id: str, max_chapters: int = 20) -> Dict[str, Dict]:
         """获取章节摘要
@@ -342,20 +364,17 @@ class NovelMemoryService:
                    emotional_state, relationships, status, pending_events 等
         """
         cache_key = f"novel:{novel_id}"
-        memory = self.get_novel_memory(novel_id)
-        if memory:
-            if 'character_states' not in memory:
-                memory['character_states'] = {}
-            # 合并状态而非完全覆盖
-            if character_name in memory['character_states']:
-                memory['character_states'][character_name].update(state)
-            else:
-                memory['character_states'][character_name] = state
-            # 直接更新缓存
-            self.cache.set(cache_key, memory)
-            logger.info(f"Updated character '{character_name}' state for novel {novel_id}")
+        memory = self._ensure_novel_memory(novel_id)
+        if 'character_states' not in memory:
+            memory['character_states'] = {}
+        # 合并状态而非完全覆盖
+        if character_name in memory['character_states']:
+            memory['character_states'][character_name].update(state)
         else:
-            logger.warning(f"Cannot update character state: novel {novel_id} not in memory")
+            memory['character_states'][character_name] = state
+        # 直接更新缓存
+        self.cache.set(cache_key, memory)
+        logger.info(f"Updated character '{character_name}' state for novel {novel_id}")
     
     def get_character_states(self, novel_id: str) -> Dict[str, Dict]:
         """获取所有角色状态
