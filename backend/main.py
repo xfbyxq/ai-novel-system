@@ -10,14 +10,81 @@ from backend.config import settings
 
 # Setup logging
 from core.logging_config import setup_logging
+
 setup_logging()
+
+# OpenAPI tags metadata
+tags_metadata = [
+    {
+        "name": "novels",
+        "description": "小说管理：创建、查询、更新、删除小说",
+    },
+    {
+        "name": "characters",
+        "description": "角色管理：创建、查询、更新、删除角色，获取角色关系图",
+    },
+    {
+        "name": "chapters",
+        "description": "章节管理：查询、更新、删除章节，支持批量操作",
+    },
+    {
+        "name": "outlines",
+        "description": "大纲管理：世界观设定、剧情大纲的查询和更新",
+    },
+    {
+        "name": "generation",
+        "description": "AI内容生成：创建生成任务（企划、写作、批量写作），查询任务状态",
+    },
+    {
+        "name": "ai-chat",
+        "description": "AI对话：创建会话、发送消息、解析意图、提取和应用修订建议",
+    },
+    {
+        "name": "publishing",
+        "description": "发布系统：平台账号管理、发布任务管理、发布预览",
+    },
+    {
+        "name": "监控",
+        "description": "系统监控：系统状态、性能指标、错误分析、Agent状态",
+    },
+    {
+        "name": "root",
+        "description": "根端点：API基本信息",
+    },
+    {
+        "name": "health",
+        "description": "健康检查：服务健康状态",
+    },
+]
 
 app = FastAPI(
     title="小说生成系统 API",
     version="1.1.0",
-    description="AI-powered novel generation system API",
+    description="""
+## AI驱动的小说生成系统
+
+本系统提供完整的AI小说创作能力，包括：
+
+### 核心功能
+- **小说管理**：创建、编辑、删除小说项目
+- **角色管理**：创建角色档案，管理角色关系
+- **世界观设定**：定义力量体系、地理、势力等
+- **剧情大纲**：规划主线、支线、转折点
+- **AI内容生成**：自动生成世界观、角色、章节内容
+- **多平台发布**：支持起点、晋江等平台的自动发布
+
+### 技术特点
+- 基于CrewAI的多Agent协作架构
+- 支持流式响应的AI对话
+- 质量审查和自动优化
+- 完整的任务状态追踪
+
+### 使用方式
+1. 创建小说项目 → 2. 执行企划任务 → 3. 执行写作任务 → 4. 发布到平台
+""",
     debug=settings.APP_DEBUG,
-    redirect_slashes=False,  # 禁用尾部斜杠重定向，避免307导致浏览器访问Docker内部地址
+    redirect_slashes=False,
+    openapi_tags=tags_metadata,
 )
 
 # Configure CORS middleware

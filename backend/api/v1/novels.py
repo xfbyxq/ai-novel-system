@@ -6,16 +6,16 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.dependencies import get_db
 from backend.schemas.novel import (
     NovelCreate,
-    NovelUpdate,
-    NovelResponse,
     NovelListResponse,
+    NovelResponse,
+    NovelUpdate,
 )
 from core.models.novel import Novel
 
@@ -30,31 +30,35 @@ async def list_novels(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说列表(分页).
-    
-    - **page**: 页码,从1开始
-    - **page_size**: 每页数量,最大100
-    - **status**: 可选的状态筛选 (planning/writing/completed/published)
+    获取小说列表（分页）。
+
+    返回所有小说的分页列表，按创建时间倒序排列。
+
+    **状态筛选 (status)**:
+    - `planning`: 企划中
+    - `writing`: 写作中
+    - `completed`: 已完成
+    - `published`: 已发布
     """
     offset = (page - 1) * page_size
-    
+
     # Build query
     query = select(Novel)
     if status:
         query = query.where(Novel.status == status)
-    
+
     # Get total count
     count_query = select(func.count()).select_from(Novel)
     if status:
         count_query = count_query.where(Novel.status == status)
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    
+
     # Get paginated novels
     query = query.offset(offset).limit(page_size).order_by(Novel.created_at.desc())
     result = await db.execute(query)
     novels = result.scalars().all()
-    
+
     return NovelListResponse(
         items=novels,
         total=total,
@@ -69,7 +73,10 @@ async def create_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建新小说.
+    创建新小说。
+
+    创建一个新的小说项目，初始状态为 `planning`（企划中）。
+    创建后可执行企划任务生成世界观、角色、大纲等内容。
     """
     novel = Novel(**novel_in.model_dump())
     db.add(novel)
@@ -84,7 +91,9 @@ async def get_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说详情(包含世界观、角色数、章节数等).
+    获取小说详情。
+
+    返回小说的完整信息，包括关联的世界观设定、角色列表、章节列表等。
     """
     query = (
         select(Novel)
@@ -97,10 +106,10 @@ async def get_novel(
     )
     result = await db.execute(query)
     novel = result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     return novel
 
 
@@ -111,20 +120,22 @@ async def update_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说信息.
+    更新小说信息。
+
+    仅更新请求体中提供的字段，未提供的字段保持不变。
     """
     query = select(Novel).where(Novel.id == novel_id)
     result = await db.execute(query)
     novel = result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     # Update only provided fields
     update_data = novel_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(novel, field, value)
-    
+
     await db.commit()
     await db.refresh(novel)
     return novel
@@ -136,14 +147,21 @@ async def delete_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除小说(级联删除相关数据).
+    删除小说。
+
+    **警告**：此操作会级联删除小说的所有关联数据，包括：
+    - 世界观设定
+    - 所有角色
+    - 所有章节
+    - 剧情大纲
+    - 生成任务记录
     """
     query = select(Novel).where(Novel.id == novel_id)
     result = await db.execute(query)
     novel = result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     await db.delete(novel)
     await db.commit()

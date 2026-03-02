@@ -1047,7 +1047,7 @@ class NovelMemoryAdapter:
                 char_data = char
             else:
                 continue
-            
+
             if char_name:
                 self.storage.save_character_state(
                     novel_id=novel_id,

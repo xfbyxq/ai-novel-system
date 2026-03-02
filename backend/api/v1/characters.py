@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.dependencies import get_db
 from backend.schemas.character import (
     CharacterCreate,
-    CharacterUpdate,
-    CharacterResponse,
     CharacterRelationshipResponse,
+    CharacterResponse,
+    CharacterUpdate,
 )
 from core.models.character import Character
 from core.models.novel import Novel
@@ -27,21 +27,23 @@ async def list_characters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定小说的所有角色.
+    获取指定小说的所有角色。
+
+    返回角色列表，按创建时间正序排列（先创建的角色在前）。
     """
     # Verify novel exists
     novel_query = select(Novel).where(Novel.id == novel_id)
     novel_result = await db.execute(novel_query)
     novel = novel_result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     # Get characters
     query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
     result = await db.execute(query)
     characters = result.scalars().all()
-    
+
     return characters
 
 
@@ -52,16 +54,18 @@ async def create_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    为指定小说创建新角色.
+    为指定小说创建新角色。
+
+    创建角色后可在 relationships 字段中指定与其他角色的关系。
     """
     # Verify novel exists
     novel_query = select(Novel).where(Novel.id == novel_id)
     novel_result = await db.execute(novel_query)
     novel = novel_result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     # Create character
     character = Character(**character_in.model_dump(), novel_id=novel_id)
     db.add(character)
@@ -76,28 +80,30 @@ async def get_character_relationships(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色关系图数据(节点和边).
-    
-    返回格式:
-    - nodes: 角色列表 [{id, name, role_type, ...}]
-    - edges: 关系列表 [{source, target, relationship_type}]
+    获取角色关系图数据（图论格式）。
+
+    返回用于前端可视化的关系图数据结构：
+    - **nodes**: 角色节点列表，每个节点包含 id、name、role_type 等信息
+    - **edges**: 关系边列表，表示从 source 角色到 target 角色的有向关系
+
+    关系数据来源于各角色的 relationships 字段。
     """
     # Verify novel exists
     novel_query = select(Novel).where(Novel.id == novel_id)
     novel_result = await db.execute(novel_query)
     novel = novel_result.scalar_one_or_none()
-    
+
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-    
+
     # Get all characters
     query = select(Character).where(Character.novel_id == novel_id)
     result = await db.execute(query)
     characters = result.scalars().all()
-    
+
     # Create name to ID mapping
     name_to_id = {char.name: str(char.id) for char in characters}
-    
+
     # Build nodes
     nodes = [
         {
@@ -109,7 +115,7 @@ async def get_character_relationships(
         }
         for char in characters
     ]
-    
+
     # Build edges from relationships
     edges = []
     for char in characters:
@@ -123,7 +129,7 @@ async def get_character_relationships(
                         "target": target_id,
                         "label": relationship_type,
                     })
-    
+
     return CharacterRelationshipResponse(nodes=nodes, edges=edges)
 
 
@@ -134,7 +140,9 @@ async def get_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色详情.
+    获取角色详情。
+
+    返回指定角色的完整信息。
     """
     query = select(Character).where(
         Character.id == character_id,
@@ -142,10 +150,10 @@ async def get_character(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     return character
 
 
@@ -157,7 +165,9 @@ async def update_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新角色信息.
+    更新角色信息。
+
+    仅更新请求体中提供的字段，未提供的字段保持不变。
     """
     query = select(Character).where(
         Character.id == character_id,
@@ -165,15 +175,15 @@ async def update_character(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     # Update only provided fields
     update_data = character_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(character, field, value)
-    
+
     await db.commit()
     await db.refresh(character)
     return character
@@ -186,7 +196,9 @@ async def delete_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除角色.
+    删除角色。
+
+    删除后，其他角色的 relationships 中对此角色的引用不会自动更新。
     """
     query = select(Character).where(
         Character.id == character_id,
@@ -194,9 +206,9 @@ async def delete_character(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     await db.delete(character)
     await db.commit()

@@ -3,43 +3,43 @@
 import hashlib
 import json
 import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class MemoryCache:
     """内存缓存实现"""
-    
+
     def __init__(self, max_size: int = 100, expiration_minutes: int = 30):
         self.max_size = max_size
         self.expiration_minutes = expiration_minutes
         self.cache: Dict[str, Dict[str, Any]] = {}
-    
+
     def get(self, key: str) -> Optional[Any]:
         """获取缓存数据"""
         if key not in self.cache:
             return None
-        
+
         item = self.cache[key]
         # 检查是否过期
         if datetime.now() > item['expires_at']:
             del self.cache[key]
             return None
-        
+
         # 更新访问时间和访问次数
         item['last_accessed'] = datetime.now()
         item['access_count'] += 1
-        
+
         return item['data']
-    
+
     def set(self, key: str, data: Any) -> None:
         """设置缓存数据"""
         # 如果缓存已满，删除最不常用的项目
         if len(self.cache) >= self.max_size:
             self._evict_least_used()
-        
+
         self.cache[key] = {
             'data': data,
             'created_at': datetime.now(),
@@ -47,25 +47,25 @@ class MemoryCache:
             'expires_at': datetime.now() + timedelta(minutes=self.expiration_minutes),
             'access_count': 1
         }
-    
+
     def delete(self, key: str) -> None:
         """删除缓存数据"""
         if key in self.cache:
             del self.cache[key]
-    
+
     def _evict_least_used(self) -> None:
         """删除最不常用的缓存项"""
         if not self.cache:
             return
-        
+
         # 按访问次数和最后访问时间排序
         least_used = sorted(
             self.cache.items(),
             key=lambda x: (x[1]['access_count'], x[1]['last_accessed'])
         )[0]
-        
+
         del self.cache[least_used[0]]
-    
+
     def clear(self) -> None:
         """清空缓存"""
         self.cache.clear()
@@ -73,11 +73,11 @@ class MemoryCache:
 
 class NovelMemoryService:
     """小说记忆服务"""
-    
+
     def __init__(self):
         self.cache = MemoryCache()
         self.version_map: Dict[str, int] = {}  # 小说ID -> 版本号
-    
+
     def _compute_content_hash(self, data: Any) -> str:
         """计算内容哈希用于变化检测"""
         if data is None:
@@ -88,7 +88,7 @@ class NovelMemoryService:
         except (TypeError, ValueError):
             # 如果数据无法序列化，返回空字符串
             return ""
-    
+
     def _detect_changes(self, novel_data: Dict, current_memory: Dict) -> bool:
         """深度变化检测 - 检测所有关键字段的变化"""
         # 基础字段比较
@@ -96,22 +96,22 @@ class NovelMemoryService:
         for field in basic_fields:
             if novel_data.get(field) != current_memory['base'].get(field):
                 return True
-        
+
         # 复杂字段哈希比较
         current_details = current_memory.get('details') or {}
-        
+
         # 世界观变化检测
         new_world_hash = self._compute_content_hash(novel_data.get('world_setting'))
         old_world_hash = self._compute_content_hash(current_details.get('world_setting'))
         if new_world_hash != old_world_hash:
             return True
-        
+
         # 情节大纲变化检测
         new_outline_hash = self._compute_content_hash(novel_data.get('plot_outline'))
         old_outline_hash = self._compute_content_hash(current_details.get('plot_outline'))
         if new_outline_hash != old_outline_hash:
             return True
-        
+
         # 角色变化检测（数量和内容）
         new_chars = novel_data.get('characters') or []
         old_chars = current_details.get('characters') or []
@@ -121,68 +121,68 @@ class NovelMemoryService:
         old_chars_hash = self._compute_content_hash(old_chars)
         if new_chars_hash != old_chars_hash:
             return True
-        
+
         # 章节变化检测
         new_chapters = novel_data.get('chapters') or []
         old_chapters = current_memory.get('chapters') or []
         if len(new_chapters) != len(old_chapters):
             return True
-        
+
         return False
-    
+
     def get_novel_memory(self, novel_id: str) -> Optional[Dict[str, Any]]:
         """获取小说记忆"""
         cache_key = f"novel:{novel_id}"
         return self.cache.get(cache_key)
-    
+
     def set_novel_memory(self, novel_id: str, novel_data: Dict[str, Any]) -> bool:
         """设置小说记忆，返回是否有内容变化"""
         cache_key = f"novel:{novel_id}"
-        
+
         # 获取当前记忆
         current_memory = self.get_novel_memory(novel_id)
         has_changes = False
-        
+
         # 检查内容是否有变化（使用深度变化检测）
         if current_memory:
             has_changes = self._detect_changes(novel_data, current_memory)
         else:
             # 新的记忆，视为有变化
             has_changes = True
-        
+
         # 只有在有变化时才更新
         if has_changes:
             # 更新版本号
             current_version = self.version_map.get(novel_id, 0)
             new_version = current_version + 1
             self.version_map[novel_id] = new_version
-            
+
             # 添加版本信息和时间戳
             novel_data['version'] = new_version
             novel_data['last_updated'] = datetime.now().isoformat()
             novel_data['last_change_detected'] = datetime.now().isoformat()
-            
+
             # 分层存储数据
             memory_data = self._structure_novel_data(novel_data)
-            
+
             self.cache.set(cache_key, memory_data)
             logger.info(f"Set novel memory for {novel_id}, version: {new_version}, changes detected: {has_changes}")
-        
+
         return has_changes
-    
+
     def update_novel_memory(self, novel_id: str, updated_data: Dict[str, Any]) -> bool:
         """更新小说记忆（增量更新），返回是否有内容变化"""
         current_memory = self.get_novel_memory(novel_id)
-        
+
         if current_memory:
             # 合并数据
             updated_memory = self._merge_memory(current_memory, updated_data)
         else:
             updated_memory = updated_data
-        
+
         # 调用set_novel_memory检测变化
         return self.set_novel_memory(novel_id, updated_memory)
-    
+
     def invalidate_novel_memory(self, novel_id: str) -> None:
         """使小说记忆失效"""
         cache_key = f"novel:{novel_id}"
@@ -190,11 +190,11 @@ class NovelMemoryService:
         if novel_id in self.version_map:
             del self.version_map[novel_id]
         logger.info(f"Invalidated novel memory for {novel_id}")
-    
+
     def get_novel_version(self, novel_id: str) -> int:
         """获取小说版本号"""
         return self.version_map.get(novel_id, 0)
-    
+
     def _structure_novel_data(self, novel_data: Dict[str, Any]) -> Dict[str, Any]:
         """结构化小说数据"""
         return {
@@ -237,43 +237,43 @@ class NovelMemoryService:
                 'chapter_range': novel_data.get('chapter_range', {'start': 1, 'end': 10}),
             }
         }
-    
+
     def _merge_memory(self, current: Dict[str, Any], updated: Dict[str, Any]) -> Dict[str, Any]:
         """合并内存数据"""
         # 合并基本信息
         if 'base' in updated:
             current['base'].update(updated['base'])
-        
+
         # 合并详细信息
         if 'details' in updated:
             for key, value in updated['details'].items():
                 if value is not None:
                     current['details'][key] = value
-        
+
         # 合并章节
         if 'chapters' in updated:
             current['chapters'] = updated['chapters']
-        
+
         # 合并章节摘要
         if 'chapter_summaries' in updated:
             if 'chapter_summaries' not in current:
                 current['chapter_summaries'] = {}
             current['chapter_summaries'].update(updated['chapter_summaries'])
-        
+
         # 合并角色状态
         if 'character_states' in updated:
             if 'character_states' not in current:
                 current['character_states'] = {}
             current['character_states'].update(updated['character_states'])
-        
+
         # 合并分析结果
         if 'analysis' in updated:
             current['analysis'].update(updated['analysis'])
-        
+
         return current
-    
+
     # ==================== 章节摘要管理方法 ====================
-    
+
     def _ensure_novel_memory(self, novel_id: str) -> Dict[str, Any]:
         """确保小说在缓存中存在，不存在则创建最小化条目
         
@@ -315,7 +315,7 @@ class NovelMemoryService:
         # 直接更新缓存，不触发版本号递增
         self.cache.set(cache_key, memory)
         logger.info(f"Updated chapter {chapter_number} summary for novel {novel_id}")
-    
+
     def get_chapter_summaries(self, novel_id: str, max_chapters: int = 20) -> Dict[str, Dict]:
         """获取章节摘要
         
@@ -338,7 +338,7 @@ class NovelMemoryService:
             except (ValueError, TypeError):
                 return summaries
         return {}
-    
+
     def get_chapter_summary(self, novel_id: str, chapter_number: int) -> Optional[Dict[str, Any]]:
         """获取单个章节的摘要
         
@@ -351,9 +351,9 @@ class NovelMemoryService:
         """
         summaries = self.get_chapter_summaries(novel_id)
         return summaries.get(str(chapter_number))
-    
+
     # ==================== 角色状态管理方法 ====================
-    
+
     def update_character_state(self, novel_id: str, character_name: str, state: Dict[str, Any]) -> None:
         """更新角色状态
         
@@ -375,7 +375,7 @@ class NovelMemoryService:
         # 直接更新缓存
         self.cache.set(cache_key, memory)
         logger.info(f"Updated character '{character_name}' state for novel {novel_id}")
-    
+
     def get_character_states(self, novel_id: str) -> Dict[str, Dict]:
         """获取所有角色状态
         
@@ -389,7 +389,7 @@ class NovelMemoryService:
         if memory:
             return memory.get('character_states', {})
         return {}
-    
+
     def get_character_state(self, novel_id: str, character_name: str) -> Optional[Dict[str, Any]]:
         """获取单个角色的状态
         

@@ -1,8 +1,8 @@
 """收益分析API"""
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
-from uuid import UUID
 
 from backend.services.revenue_analysis_service import RevenueAnalysisService
 from core.database import get_db

@@ -1,40 +1,39 @@
 """Pydantic schemas for the novel system"""
 
 # Novel schemas
-from .novel import (
-    NovelCreate,
-    NovelUpdate,
-    NovelResponse,
-    NovelListResponse,
-)
-
 # Character schemas
 from .character import (
     CharacterCreate,
-    CharacterUpdate,
-    CharacterResponse,
-    CharacterNode,
     CharacterEdge,
+    CharacterNode,
     CharacterRelationshipResponse,
-)
-
-# Outline schemas
-from .outline import (
-    WorldSettingResponse,
-    WorldSettingUpdate,
-    PlotOutlineResponse,
-    PlotOutlineUpdate,
-    ChapterCreate,
-    ChapterUpdate,
-    ChapterResponse,
-    ChapterListResponse,
+    CharacterResponse,
+    CharacterUpdate,
 )
 
 # Generation schemas
 from .generation import (
     GenerationTaskCreate,
-    GenerationTaskResponse,
     GenerationTaskListResponse,
+    GenerationTaskResponse,
+)
+from .novel import (
+    NovelCreate,
+    NovelListResponse,
+    NovelResponse,
+    NovelUpdate,
+)
+
+# Outline schemas
+from .outline import (
+    ChapterCreate,
+    ChapterListResponse,
+    ChapterResponse,
+    ChapterUpdate,
+    PlotOutlineResponse,
+    PlotOutlineUpdate,
+    WorldSettingResponse,
+    WorldSettingUpdate,
 )
 
 __all__ = [

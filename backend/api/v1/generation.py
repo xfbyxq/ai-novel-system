@@ -3,18 +3,25 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
-from sqlalchemy import select, func
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+)
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db
+from backend.schemas.common import TaskCancelResponse
 from backend.schemas.generation import (
     GenerationTaskCreate,
-    GenerationTaskResponse,
     GenerationTaskListResponse,
+    GenerationTaskResponse,
 )
 from backend.services.generation_service import GenerationService
-from core.models.generation_task import GenerationTask, TaskStatus, TaskType
+from core.models.generation_task import GenerationTask, TaskStatus
 from core.models.novel import Novel
 
 router = APIRouter(prefix="/generation", tags=["generation"])
@@ -149,12 +156,17 @@ async def get_generation_task(
     return task
 
 
-@router.post("/tasks/{task_id}/cancel")
+@router.post("/tasks/{task_id}/cancel", response_model=TaskCancelResponse)
 async def cancel_generation_task(
     task_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """取消生成任务。"""
+    """
+    取消生成任务。
+
+    只能取消处于 pending（等待中）或 running（执行中）状态的任务。
+    已完成、已失败或已取消的任务无法再次取消。
+    """
     result = await db.execute(
         select(GenerationTask).where(GenerationTask.id == task_id)
     )

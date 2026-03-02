@@ -12,7 +12,7 @@ from core.database import get_db as _get_db
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Get database session dependency.
-    
+
     Re-exports get_db from core.database for use in FastAPI dependencies.
     """
     async for session in _get_db():

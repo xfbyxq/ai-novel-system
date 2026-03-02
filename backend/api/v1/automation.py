@@ -1,8 +1,9 @@
 """自动化API"""
-from fastapi import APIRouter, Depends, Body, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
+
+from fastapi import APIRouter, Body, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.automation_service import AutomationService
 from core.database import get_db

@@ -12,23 +12,23 @@ from backend.services.encryption_service import EncryptionService
 from core.models.chapter import Chapter
 from core.models.chapter_publish import ChapterPublish, PublishStatus
 from core.models.novel import Novel
-from core.models.platform_account import PlatformAccount, AccountStatus
-from core.models.publish_task import PublishTask, PublishType, PublishTaskStatus
+from core.models.platform_account import AccountStatus, PlatformAccount
+from core.models.publish_task import PublishTask, PublishTaskStatus, PublishType
 
 logger = logging.getLogger(__name__)
 
 
 class PublishingService:
     """发布服务"""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.encryption = EncryptionService()
-    
+
     # ============================================================
     # 平台账号管理
     # ============================================================
-    
+
     async def create_account(
         self,
         platform: str,
@@ -45,9 +45,9 @@ class PublishingService:
         }
         if extra_credentials:
             credentials.update(extra_credentials)
-        
+
         encrypted = self.encryption.encrypt_dict(credentials)
-        
+
         account = PlatformAccount(
             platform=platform,
             account_name=account_name,
@@ -58,10 +58,10 @@ class PublishingService:
         self.db.add(account)
         await self.db.commit()
         await self.db.refresh(account)
-        
+
         logger.info(f"创建平台账号: {account_name} ({platform})")
         return account
-    
+
     async def update_account(
         self,
         account_id: UUID,
@@ -77,29 +77,29 @@ class PublishingService:
         account = result.scalar_one_or_none()
         if not account:
             return None
-        
+
         if account_name:
             account.account_name = account_name
-        
+
         if password or extra_credentials:
             # 解密现有凭证
             current_credentials = self.encryption.decrypt_dict(account.encrypted_credentials)
-            
+
             if password:
                 current_credentials["password"] = password
             if extra_credentials:
                 current_credentials.update(extra_credentials)
-            
+
             # 重新加密
             account.encrypted_credentials = self.encryption.encrypt_dict(current_credentials)
-        
+
         if status:
             account.status = AccountStatus(status)
-        
+
         await self.db.commit()
         await self.db.refresh(account)
         return account
-    
+
     async def get_account_credentials(self, account_id: UUID) -> Optional[dict]:
         """获取解密后的账号凭证"""
         result = await self.db.execute(
@@ -108,39 +108,39 @@ class PublishingService:
         account = result.scalar_one_or_none()
         if not account:
             return None
-        
+
         return self.encryption.decrypt_dict(account.encrypted_credentials)
-    
+
     async def verify_account(self, account_id: UUID) -> bool:
         """验证账号是否可用"""
         credentials = await self.get_account_credentials(account_id)
         if not credentials:
             return False
-        
+
         result = await self.db.execute(
             select(PlatformAccount).where(PlatformAccount.id == account_id)
         )
         account = result.scalar_one_or_none()
         if not account:
             return False
-        
+
         try:
             # 模拟验证成功
             account.status = AccountStatus.active
             account.last_login_at = datetime.now()
             await self.db.commit()
             return True
-            
+
         except Exception as e:
             logger.error(f"验证账号失败: {e}")
             account.status = AccountStatus.invalid
             await self.db.commit()
             return False
-    
+
     # ============================================================
     # 发布任务管理
     # ============================================================
-    
+
     async def run_publish_task(self, task_id: UUID) -> None:
         """执行发布任务（后台运行）"""
         # 获取任务
@@ -151,19 +151,19 @@ class PublishingService:
         if not task:
             logger.error(f"发布任务 {task_id} 未找到")
             return
-        
+
         # 更新状态为运行中
         task.status = PublishTaskStatus.running
         task.started_at = datetime.now()
         task.progress = {"status": "started"}
         await self.db.commit()
-        
+
         try:
             # 获取账号凭证
             credentials = await self.get_account_credentials(task.account_id)
             if not credentials:
                 raise ValueError("账号凭证获取失败")
-            
+
             # 获取账号信息
             account_result = await self.db.execute(
                 select(PlatformAccount).where(PlatformAccount.id == task.account_id)
@@ -171,10 +171,10 @@ class PublishingService:
             account = account_result.scalar_one_or_none()
             if not account:
                 raise ValueError("账号不存在")
-            
+
             # 模拟发布过程
             await asyncio.sleep(2)  # 模拟处理时间
-            
+
             # 根据发布类型设置结果
             if task.publish_type == PublishType.create_book:
                 task.platform_book_id = "mock_book_id"
@@ -194,21 +194,21 @@ class PublishingService:
                     "success_count": 1,
                     "fail_count": 0,
                 }
-            
+
             # 更新状态为完成
             task.status = PublishTaskStatus.completed
             task.completed_at = datetime.now()
             await self.db.commit()
-            
+
         except Exception as e:
             logger.error(f"发布任务 {task_id} 失败: {e}")
             task.status = PublishTaskStatus.failed
             task.error_message = str(e)
             task.completed_at = datetime.now()
             await self.db.commit()
-    
 
-    
+
+
     async def get_publish_preview(
         self,
         novel_id: UUID,
@@ -223,7 +223,7 @@ class PublishingService:
         novel = novel_result.scalar_one_or_none()
         if not novel:
             return {"error": "小说不存在"}
-        
+
         # 获取章节
         query = select(Chapter).where(
             Chapter.novel_id == novel_id,
@@ -232,10 +232,10 @@ class PublishingService:
         if to_chapter:
             query = query.where(Chapter.chapter_number <= to_chapter)
         query = query.order_by(Chapter.chapter_number)
-        
+
         result = await self.db.execute(query)
         chapters = result.scalars().all()
-        
+
         # 获取已发布记录
         published_chapters = {}
         pub_result = await self.db.execute(
@@ -246,7 +246,7 @@ class PublishingService:
         )
         for pub in pub_result.scalars().all():
             published_chapters[pub.chapter_id] = pub
-        
+
         # 构建预览
         chapter_previews = []
         unpublished_count = 0
@@ -254,7 +254,7 @@ class PublishingService:
             is_published = chapter.id in published_chapters
             if not is_published:
                 unpublished_count += 1
-            
+
             pub_record = published_chapters.get(chapter.id)
             chapter_previews.append({
                 "chapter_number": chapter.chapter_number,
@@ -264,7 +264,7 @@ class PublishingService:
                 "is_published": is_published,
                 "published_at": pub_record.published_at.isoformat() if pub_record else None,
             })
-        
+
         return {
             "novel_id": str(novel_id),
             "novel_title": novel.title,

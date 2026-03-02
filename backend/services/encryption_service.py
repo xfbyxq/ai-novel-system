@@ -17,11 +17,11 @@ class EncryptionService:
             # 如果没有配置密钥，生成一个新的（仅用于开发）
             key = Fernet.generate_key().decode()
             print(f"警告: 未配置 ENCRYPTION_KEY，使用临时密钥。请在 .env 中设置: ENCRYPTION_KEY={key}")
-        
+
         # 确保密钥是 bytes 类型
         if isinstance(key, str):
             key = key.encode()
-        
+
         self._fernet = Fernet(key)
 
     def encrypt(self, data: str) -> str:

@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -14,12 +15,12 @@ class Settings(BaseSettings):
     DB_HOST: str = "localhost"
     DB_PORT: int = 5434  # 从 .env 文件中看到实际使用的端口
     DB_NAME: str = "novel_system"
-    
+
     @property
     def DATABASE_URL(self) -> str:
         """动态构建数据库连接URL"""
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-    
+
     @property
     def DATABASE_URL_SYNC(self) -> str:
         """动态构建同步数据库连接URL"""
@@ -51,13 +52,13 @@ class Settings(BaseSettings):
     # ============================================================
     # 审查循环是保证生成质量的核心机制，通过 Designer-Reviewer 模式
     # 对世界观、角色、大纲、章节进行多轮迭代优化，直到达到质量阈值。
-    # 
+    #
     # 配置建议：
     # - 追求高质量：阈值设为 7.5-8.0，迭代次数 2-3
     # - 追求速度/省成本：阈值设为 6.0-6.5，迭代次数 1，或直接关闭审查
     # - 调试模式：可关闭部分审查，加快测试速度
     # ============================================================
-    
+
     # --- 功能开关 ---
     # 世界观审查：检查设定一致性、深度、独特性、可扩展性
     ENABLE_WORLD_REVIEW: bool = True
@@ -71,7 +72,7 @@ class Settings(BaseSettings):
     ENABLE_VOTING: bool = True
     # 设定查询：写作过程中 Writer 可查询世界观/角色/大纲设定
     ENABLE_QUERY: bool = True
-    
+
     # --- 质量阈值 (1-10分) ---
     # 评分达到阈值即停止迭代，分数越高要求越严格
     # 建议范围：6.0(宽松) - 8.0(严格)
@@ -79,7 +80,7 @@ class Settings(BaseSettings):
     CHARACTER_QUALITY_THRESHOLD: float = 8.0  # 角色质量阈值
     PLOT_QUALITY_THRESHOLD: float = 8.0       # 大纲质量阈值
     CHAPTER_QUALITY_THRESHOLD: float = 8.0    # 章节质量阈值
-    
+
     # --- 最大迭代次数 ---
     # 即使未达阈值，超过最大次数也会停止，防止无限循环
     # 每次迭代会消耗 API 调用，企划阶段建议 3-5 次，写作阶段建议 3-5 次
