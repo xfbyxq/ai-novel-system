@@ -33,6 +33,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+      args:
+        - PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+        - PIP_TRUSTED_HOST=mirrors.aliyun.com
     container_name: novel_backend
     environment:
       - DB_HOST=postgres
@@ -69,6 +72,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        - NPM_REGISTRY=https://registry.npmmirror.com
     container_name: novel_frontend
     environment:
       - API_PROXY_TARGET=http://backend:8000
