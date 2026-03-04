@@ -123,7 +123,11 @@ async def update_novel(
     更新小说信息。
 
     仅更新请求体中提供的字段，未提供的字段保持不变。
+    当状态改为"企划中"(planning)时，会自动重置所有统计信息（字数、章节数、Token成本等）。
     """
+    from core.models.novel import NovelStatus
+    from decimal import Decimal
+
     query = select(Novel).where(Novel.id == novel_id)
     result = await db.execute(query)
     novel = result.scalar_one_or_none()
@@ -133,8 +137,25 @@ async def update_novel(
 
     # Update only provided fields
     update_data = novel_in.model_dump(exclude_unset=True)
+
+    # 检查是否将状态改为 planning（企划中）
+    is_reset_to_planning = (
+        update_data.get("status") == NovelStatus.planning.value
+        and novel.status != NovelStatus.planning
+    )
+
     for field, value in update_data.items():
         setattr(novel, field, value)
+
+    # 如果重置为企划中状态，清空所有统计信息
+    if is_reset_to_planning:
+        novel.word_count = 0
+        novel.chapter_count = 0
+        novel.token_cost = Decimal("0")
+        novel.estimated_revenue = Decimal("0")
+        novel.actual_revenue = Decimal("0")
+        # 可选：同时删除所有章节数据
+        # 注意：这里通过 cascade="all, delete-orphan" 关联会自动删除
 
     await db.commit()
     await db.refresh(novel)
