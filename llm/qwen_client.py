@@ -31,9 +31,11 @@ class QwenClient:
         
         if self.use_openai_mode:
             # 使用 OpenAI 兼容模式（异步）
+            import httpx
             self.openai_client = AsyncOpenAI(
                 api_key=self.api_key,
-                base_url=self.base_url
+                base_url=self.base_url,
+                timeout=httpx.Timeout(60.0, connect=10.0),  # 60秒读取超时，10秒连接超时
             )
             logger.info(f"使用 OpenAI 兼容模式: {self.base_url}")
         else:
