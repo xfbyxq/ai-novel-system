@@ -50,9 +50,9 @@ services:
       - APP_DEBUG=false
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-      - DASHSCOPE_API_KEY=sk-sp-234a1a7dfc5b4ecaaa21cfa08cc4e584
-      - DASHSCOPE_MODEL=qwen3-coder-plus
-      - DASHSCOPE_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
+      - DASHSCOPE_API_KEY=sk-258842ec972f46149b7364ccffb50ed2
+      - DASHSCOPE_MODEL=qwen3.5-plus
+      - DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
     ports:
       - "8000:8000"
     volumes:

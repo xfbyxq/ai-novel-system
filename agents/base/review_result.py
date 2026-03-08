@@ -136,6 +136,9 @@ class ReviewLoopResult(BaseReviewResult[str, ChapterQualityReport]):
     # 章节内容使用 final_content 别名（向后兼容）
     final_content: str = ""
     
+    # Editor 效果统计
+    editor_stats: Dict[str, Any] = field(default_factory=dict)
+    
     def __post_init__(self):
         """初始化后处理"""
         if self.final_content and not self.final_output:
@@ -147,6 +150,9 @@ class ReviewLoopResult(BaseReviewResult[str, ChapterQualityReport]):
         data = super().to_dict()
         # 添加内容长度信息
         data["content_length"] = len(self.final_content) if self.final_content else 0
+        # 添加 Editor 统计信息
+        if self.editor_stats:
+            data["editor_stats"] = self.editor_stats
         return data
 
 

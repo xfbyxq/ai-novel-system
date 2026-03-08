@@ -168,6 +168,61 @@ class ReviewLoopHandler(
             quality_threshold=self.quality_threshold,
         )
 
+    async def _validate_edited_content(
+        self,
+        original_content: str,
+        edited_content: str,
+        review_data: Dict[str, Any],
+    ) -> float:
+        """验证 Editor 润色后的内容质量
+
+        Args:
+            original_content: 原始内容
+            edited_content: Editor 润色后的内容
+            review_data: Editor 审查数据（包含评分和建议）
+
+        Returns:
+            润色后内容的质量评分
+        """
+        # 使用 QualityEvaluator 对润色内容进行独立评估
+        from agents.quality_evaluator import QualityEvaluator
+
+        evaluator = QualityEvaluator(
+            client=self.client,
+            cost_tracker=self.cost_tracker,
+            default_threshold=self.quality_threshold,
+        )
+
+        # 提取章节计划
+        chapter_plan = ""
+        try:
+            plan_data = json.loads(self._chapter_plan_json)
+            chapter_plan = plan_data.get("content", str(plan_data))
+        except (json.JSONDecodeError, AttributeError):
+            chapter_plan = self._chapter_plan_json or ""
+
+        # 评估润色内容
+        edited_score = await evaluator.evaluate(
+            content=edited_content,
+            chapter_plan=chapter_plan,
+            threshold=self.quality_threshold,
+        )
+
+        # 计算改进幅度
+        original_score = float(review_data.get("overall_score", 0))
+        improvement = edited_score.overall_score - original_score
+
+        # 记录指标
+        self.metrics["editor_improvement"] = improvement
+        self.metrics["editor_edit_applied"] = 1 if improvement > 0.5 else 0
+
+        logger.info(
+            f"[ReviewLoop] Editor 润色验证：original={original_score:.2f}, "
+            f"edited={edited_score.overall_score:.2f}, improvement={improvement:.2f}"
+        )
+
+        return edited_score.overall_score
+
     def _get_reviewer_system_prompt(self) -> str:
         return EDITOR_REVIEW_SYSTEM
 
@@ -260,6 +315,36 @@ class ReviewLoopHandler(
         result.total_iterations = len(result.iterations)
         result.converged = last_report.passed if last_report else False
         result.quality_report = last_report
+        
+        # 添加 Editor 效果统计
+        editor_stats = self._get_editor_stats(result.iterations)
+        result.editor_stats = editor_stats
+
+    def _get_editor_stats(self, iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """获取 Editor 效果统计信息
+        
+        Args:
+            iterations: 迭代历史记录
+            
+        Returns:
+            Editor 统计信息字典
+        """
+        total_edits = sum(1 for it in iterations if it.get("editor_edit_applied"))
+        rejected_edits = sum(1 for it in iterations if it.get("editor_edit_rejected"))
+        
+        improvements = [
+            it.get("editor_improvement_delta", 0) 
+            for it in iterations 
+            if it.get("editor_edit_applied")
+        ]
+        avg_improvement = sum(improvements) / len(improvements) if improvements else 0.0
+        
+        return {
+            "total_edits": total_edits,
+            "rejected_edits": rejected_edits,
+            "avg_improvement": round(avg_improvement, 2),
+            "acceptance_rate": round(total_edits / (total_edits + rejected_edits), 2) if (total_edits + rejected_edits) > 0 else 0.0
+        }
 
     def _get_empty_content(self) -> str:
         """获取空内容"""
@@ -391,10 +476,21 @@ class ReviewLoopHandler(
         chapter_plan_json: str,
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
+        chapter_type: Optional[str] = None,
     ) -> ReviewLoopResult:
         """执行审查循环，支持使用 Editor 润色后的内容
 
         这是原始 execute 方法的增强版本，会优先使用 Editor 返回的润色内容。
+        
+        Args:
+            initial_draft: 初始草稿
+            chapter_number: 章节号
+            chapter_title: 章节标题
+            chapter_summary: 章节摘要
+            chapter_plan_json: 章节计划 JSON
+            writer_system_prompt: Writer 系统提示词
+            team_context: 团队上下文
+            chapter_type: 章节类型（可选，支持动态迭代策略）
         """
         self._chapter_number = chapter_number
         self._chapter_title = chapter_title
@@ -403,9 +499,27 @@ class ReviewLoopHandler(
         self._writer_system_prompt = writer_system_prompt
         self._team_context = team_context
 
+        # 根据章节类型创建迭代控制器（支持动态策略）
+        from agents.iteration_controller import ChapterType, IterationController
+        
+        # 解析章节类型
+        if chapter_type:
+            try:
+                chapter_type_enum = ChapterType(chapter_type.lower())
+            except ValueError:
+                logger.warning(f"未知的章节类型：{chapter_type}，使用默认类型 NORMAL")
+                chapter_type_enum = ChapterType.NORMAL
+        else:
+            chapter_type_enum = ChapterType.NORMAL
+        
         controller = IterationController(
-            quality_threshold=self.quality_threshold,
-            max_iterations=self.max_iterations,
+            chapter_type=chapter_type_enum,
+            cost_limit=None,  # 暂不使用成本限制
+        )
+        
+        logger.info(
+            f"[ReviewLoop] 使用动态迭代策略：type={chapter_type_enum.value}, "
+            f"max_iterations={controller.max_iterations}, threshold={controller.quality_threshold}"
         )
 
         current_content = initial_draft
@@ -454,9 +568,32 @@ class ReviewLoopHandler(
             suggestions = review_data.get("revision_suggestions", [])
             edited_content = review_data.get("edited_content", "")
 
-            # 如果 Editor 返回了润色后的内容，优先使用
-            if edited_content and len(edited_content) > len(current_content) * 0.5:
-                current_content = edited_content
+            # 如果 Editor 返回了润色后的内容，进行质量验证
+            if edited_content:
+                # 验证润色内容质量
+                edited_score = await self._validate_edited_content(
+                    original_content=current_content,
+                    edited_content=edited_content,
+                    review_data=review_data,
+                )
+
+                # 只有润色后质量更高才使用（允许 0.5 分的误差）
+                if edited_score > score + 0.5:
+                    current_content = edited_content
+                    self.metrics["editor_edit_applied"] = 1
+                    self.metrics["editor_improvement_delta"] = edited_score - score
+                    logger.info(
+                        f"[ReviewLoop] 应用 Editor 润色：quality improved from {score:.2f} to {edited_score:.2f}"
+                    )
+                else:
+                    # 保留原始内容
+                    self.metrics["editor_edit_rejected"] = 1
+                    self.metrics["editor_reason"] = (
+                        f"质量未提升：{edited_score:.2f} vs {score:.2f}"
+                    )
+                    logger.info(
+                        f"[ReviewLoop] 拒绝 Editor 润色：edited={edited_score:.2f} <= original={score:.2f}"
+                    )
 
             # 构造质量报告
             last_report = self._create_quality_report(review_data)

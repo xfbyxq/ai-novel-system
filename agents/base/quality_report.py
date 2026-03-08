@@ -289,15 +289,44 @@ class PlotQualityReport(BaseQualityReport):
 class ChapterQualityReport(BaseQualityReport):
     """章节质量评估报告
     
-    在基类基础上添加修订建议。
+    在基类基础上添加修订建议和加权总分计算。
+    权重设计：爽感设计 30%，其他维度共 70%
     """
     
     # 修订建议列表
     suggestions: List[Dict[str, Any]] = field(default_factory=list)
     
+    # 维度权重配置
+    _weights: Dict[str, float] = field(default_factory=lambda: {
+        "fluency": 0.15,
+        "plot_logic": 0.20,
+        "character_consistency": 0.20,
+        "pacing": 0.15,
+        "satisfaction_design": 0.30  # 爽感设计权重最高
+    })
+    
+    @property
+    def weighted_score(self) -> float:
+        """计算加权总分
+        
+        Returns:
+            加权后的总分（0-10）
+        """
+        if not self.dimension_scores:
+            return 0.0
+        
+        weighted_sum = 0.0
+        for dim, score in self.dimension_scores.items():
+            weight = self._weights.get(dim, 0.0)
+            weighted_sum += score * weight
+        
+        return weighted_sum
+    
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
         data["suggestions"] = self.suggestions
+        data["weighted_score"] = self.weighted_score
+        data["weights"] = self._weights
         return data
     
     @classmethod

@@ -27,17 +27,26 @@ class QwenClient:
         self.base_url = base_url or settings.DASHSCOPE_BASE_URL
         
         # 判断是否使用 OpenAI 兼容模式
-        self.use_openai_mode = bool(self.base_url and 'coding.dashscope' in self.base_url)
+        self.use_openai_mode = bool(
+            self.base_url and 
+            ('coding.dashscope' in self.base_url or 'dashscope.aliyuncs.com' in self.base_url)
+        )
         
         if self.use_openai_mode:
             # 使用 OpenAI 兼容模式（异步）
             import httpx
+            # 增加超时时间：LLM 响应较慢，特别是复杂任务可能需要 2-5 分钟
             self.openai_client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
-                timeout=httpx.Timeout(60.0, connect=10.0),  # 60秒读取超时，10秒连接超时
+                timeout=httpx.Timeout(
+                    timeout=300.0,  # 总超时 300 秒（5 分钟）
+                    connect=10.0,   # 连接超时 10 秒
+                    read=300.0,     # 读取超时 300 秒（5 分钟）
+                    write=300.0     # 写入超时 300 秒（5 分钟）
+                ),
             )
-            logger.info(f"使用 OpenAI 兼容模式: {self.base_url}")
+            logger.info(f"使用 OpenAI 兼容模式：{self.base_url}，超时配置：300s")
         else:
             # 使用标准 DashScope SDK
             dashscope.api_key = self.api_key
