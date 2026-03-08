@@ -32,6 +32,7 @@ class Chapter(Base):
     foreshadowing = Column(JSONB, default=list)
     quality_score = Column(Float, nullable=True)
     continuity_issues = Column(JSONB, default=list)
+    detailed_outline = Column(JSONB, default=dict)  # 细化后的详细章节大纲
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)

@@ -55,6 +55,12 @@ PLOT_REVIEWER_SYSTEM = """你是一位资深的网络小说情节架构评审专
    - 关键转折是否有预兆？
    - 是否有未来可回收的悬念？
 
+6. **爽感节奏设计** (satisfaction_rhythm)：
+   - 黄金三章：第一卷前三章是否有明确的强钩子 → 金手指首亮 → 首个小高潮？
+   - 欲扬先抑分布：每卷是否有完整的"抑→扬"循环？压制期是否控制在3章以内？
+   - 升级节奏：主角的实力/地位提升是否有明确的可感知里程碑？
+   - 卡章设计：每卷结尾是否有强悬念驱动读者继续？
+
 【重要】评分原则：
 - 你必须给出精确的评分，不要给出"安全"的中间分数
 - 如果大纲结构完整且有吸引力，应给 8.0 以上
@@ -89,7 +95,8 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
         "pacing": 节奏把控分数,
         "conflict": 冲突张力分数,
         "character_usage": 角色利用度分数,
-        "foreshadowing": 伏笔设计分数
+        "foreshadowing": 伏笔设计分数,
+        "satisfaction_rhythm": 爽感节奏设计分数
     }},
     "improvement_assessment": {{
         "issues_resolved": ["已解决的问题"],
@@ -101,7 +108,10 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
         "opening_hook": "开篇吸引力评价",
         "climax_strength": "高潮张力评价",
         "ending_satisfaction": "结局满意度评价",
-        "volume_balance": "各卷平衡性评价"
+        "volume_balance": "各卷平衡性评价",
+        "golden_three_chapters": "前三章黄金钩子评价",
+        "suppress_release_distribution": "欲扬先抑分布评价",
+        "upgrade_pacing": "升级节奏评价"
     }},
     "volume_assessments": [
         {{
@@ -283,6 +293,7 @@ class PlotReviewHandler(
             "conflict": "冲突张力",
             "character_usage": "角色利用度",
             "foreshadowing": "伏笔设计",
+            "satisfaction_rhythm": "爽感节奏设计",
         }
 
     def _build_reviewer_task_prompt(

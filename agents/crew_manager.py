@@ -59,6 +59,7 @@ class NovelCrewManager:
         enable_character_review: bool = True,
         enable_world_review: bool = True,
         enable_plot_review: bool = True,
+        enable_outline_refinement: bool = True,
         character_quality_threshold: float = 7.0,
         world_quality_threshold: float = 7.0,
         plot_quality_threshold: float = 7.0,
@@ -79,6 +80,7 @@ class NovelCrewManager:
             enable_character_review: 是否启用角色设计审查循环
             enable_world_review: 是否启用世界观设计审查循环
             enable_plot_review: 是否启用大纲设计审查循环
+            enable_outline_refinement: 是否启用章节大纲细化步骤
             character_quality_threshold: 角色设计质量阈值
             world_quality_threshold: 世界观设计质量阈值
             plot_quality_threshold: 大纲设计质量阈值
@@ -99,6 +101,7 @@ class NovelCrewManager:
         self.enable_character_review = enable_character_review
         self.enable_world_review = enable_world_review
         self.enable_plot_review = enable_plot_review
+        self.enable_outline_refinement = enable_outline_refinement
 
         # 初始化协作组件
         self.review_handler = ReviewLoopHandler(
@@ -151,6 +154,7 @@ class NovelCrewManager:
         # 章节数据缓存（供压缩器和相似度检测器使用）
         self._chapter_summaries: dict[int, dict] = {}
         self._chapter_contents: dict[int, str] = {}
+        self._chapter_detailed_outlines: dict[int, dict] = {}
 
     def _extract_json_from_response(self, response: str) -> dict | list:
         """从 LLM 响应中提取 JSON
@@ -621,6 +625,7 @@ class NovelCrewManager:
 
         流程：
         1. 章节策划师：制定章节计划
+        1.5 大纲细化师：将章节计划展开为逐场景详细大纲（可选，由 enable_outline_refinement 控制）
         2. 作家撰写初稿（如果启用查询，解析并回答 [QUERY] 标记后重写）
         3. Writer-Editor 审查反馈循环（质量阈值驱动迭代）
         4. 连续性审查（如有问题则修复-重检循环）
@@ -637,6 +642,7 @@ class NovelCrewManager:
         Returns:
             包含以下键的字典：
             - chapter_plan: 章节计划
+            - detailed_outline: 细化大纲（如未启用则为空 dict）
             - draft: 初稿
             - edited_content: 编辑后内容
             - final_content: 最终内容
@@ -717,6 +723,55 @@ class NovelCrewManager:
         if team_context:
             team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
 
+        # ── 1.5 章节大纲细化（可选步骤） ─────────────────────
+        detailed_outline = {}
+        detailed_outline_text = "（未启用大纲细化）"
+
+        if self.enable_outline_refinement:
+            logger.info(f"📋 大纲细化：开始细化第 {chapter_number} 章大纲...")
+
+            # 构建全局大纲上下文
+            plot_outline_context = self._build_plot_outline_context(
+                plot_outline, volume_number, chapter_number
+            )
+
+            # 获取上一章的详细大纲（用于衔接）
+            prev_detailed = self._chapter_detailed_outlines.get(chapter_number - 1)
+            if prev_detailed:
+                prev_outline_text = json.dumps(prev_detailed, ensure_ascii=False, indent=2)
+            else:
+                prev_outline_text = "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
+
+            refiner_task = self.pm.format(
+                self.pm.OUTLINE_REFINER_TASK,
+                chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
+                plot_outline_context=plot_outline_context,
+                previous_chapter_detailed_outline=prev_outline_text,
+                character_states=character_states or "（初始状态）",
+                chapter_number=chapter_number,
+            )
+
+            detailed_outline = await self._call_agent(
+                agent_name="大纲细化师",
+                system_prompt=self.pm.OUTLINE_REFINER_SYSTEM,
+                task_prompt=refiner_task,
+                temperature=0.6,
+                expect_json=True,
+            )
+
+            # 缓存细化大纲
+            self._chapter_detailed_outlines[chapter_number] = detailed_outline
+            detailed_outline_text = json.dumps(detailed_outline, ensure_ascii=False, indent=2)
+
+            logger.info(f"📋 大纲细化：第 {chapter_number} 章细化完成，"
+                        f"包含 {len(detailed_outline.get('detailed_scenes', []))} 个场景")
+
+            # 记录到 TeamContext
+            if team_context:
+                team_context.add_agent_output(
+                    "大纲细化师", detailed_outline, f"第{chapter_number}章大纲细化"
+                )
+
         # ── 2. 撰写初稿（支持设定查询） ────────────────────
         # 构建世界观简要
         world_brief = f"""
@@ -759,6 +814,7 @@ class NovelCrewManager:
                 self.pm.WRITER_WITH_QUERY_TASK,
                 chapter_number=chapter_number,
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
+                detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
                 previous_ending=previous_ending,
@@ -772,6 +828,7 @@ class NovelCrewManager:
                 self.pm.WRITER_TASK,
                 chapter_number=chapter_number,
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
+                detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
                 previous_ending=previous_ending,
@@ -801,6 +858,8 @@ class NovelCrewManager:
                 world_brief=world_brief,
                 character_info=character_info,
                 previous_chapters_summary=previous_chapters_summary,
+                detailed_outline_text=detailed_outline_text,
+                previous_key_events=previous_key_events,
             )
 
         # 记录到 TeamContext
@@ -991,6 +1050,7 @@ class NovelCrewManager:
 
         return {
             "chapter_plan": chapter_plan,
+            "detailed_outline": detailed_outline,
             "draft": draft,
             "edited_content": edited_content,
             "final_content": final_content,
@@ -1000,6 +1060,105 @@ class NovelCrewManager:
             "similarity_report": similarity_report.to_dict() if similarity_report else None,
             "chapter_summary": chapter_summary,
         }
+
+    def _build_plot_outline_context(
+        self, plot_outline: dict | list, volume_number: int, chapter_number: int
+    ) -> str:
+        """从全局大纲中提取与当前章节相关的上下文信息
+
+        提取内容包括：
+        - 主线剧情核心冲突
+        - 当前卷的关键转折点
+        - 张力循环（欲扬先抑）位置
+        - 升级里程碑
+        - 黄金三章设计（前3章适用）
+
+        Args:
+            plot_outline: 全局情节大纲
+            volume_number: 当前卷号
+            chapter_number: 当前章节号
+
+        Returns:
+            格式化的大纲上下文字符串
+        """
+        if not plot_outline:
+            return "（无全局大纲信息）"
+
+        parts = []
+
+        # 处理 dict 格式
+        if isinstance(plot_outline, dict):
+            # 主线剧情
+            main_plot = plot_outline.get("main_plot", {})
+            if main_plot:
+                parts.append(f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}")
+                parts.append(f"  主题：{main_plot.get('theme', '未知')}")
+
+            # 黄金三章（前3章适用）
+            if chapter_number <= 3:
+                golden = plot_outline.get("golden_three_chapters", {})
+                if golden:
+                    parts.append("【黄金三章设计】")
+                    for key, val in golden.items():
+                        parts.append(f"  {key}: {val}")
+
+            # 关键转折点
+            turning_points = plot_outline.get("key_turning_points", [])
+            if turning_points:
+                parts.append("【全局关键转折点】")
+                for tp in turning_points[:5]:
+                    if isinstance(tp, str):
+                        parts.append(f"  - {tp}")
+                    elif isinstance(tp, dict):
+                        parts.append(f"  - {tp.get('event', tp.get('description', str(tp)))}")
+
+            # 当前卷信息
+            volumes = plot_outline.get("volumes", [])
+            for vol in volumes:
+                if vol.get("volume_num") == volume_number:
+                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
+                    parts.append(f"  概要：{vol.get('summary', '')}")
+
+                    # 张力循环
+                    tension_cycles = vol.get("tension_cycles", [])
+                    if tension_cycles:
+                        parts.append("  张力循环：")
+                        for tc in tension_cycles:
+                            if isinstance(tc, dict):
+                                suppress = tc.get('suppress_event', tc.get('suppress', ''))
+                                release = tc.get('release_event', tc.get('release', ''))
+                                parts.append(f"    - 压制: {suppress} → 释放: {release}")
+                            elif isinstance(tc, str):
+                                parts.append(f"    - {tc}")
+
+                    # 升级里程碑
+                    milestone = vol.get("upgrade_milestone", "")
+                    if milestone:
+                        parts.append(f"  升级里程碑：{milestone}")
+                    else:
+                        milestones = vol.get(
+                            "upgrade_milestones", vol.get("power_milestones", [])
+                        )
+                        if milestones:
+                            parts.append("  升级里程碑：")
+                            for ms in milestones:
+                                if isinstance(ms, str):
+                                    parts.append(f"    - {ms}")
+                                elif isinstance(ms, dict):
+                                    parts.append(
+                                        f"    - {ms.get('event', str(ms))}"
+                                    )
+                    break
+
+        elif isinstance(plot_outline, list):
+            # 直接是卷列表格式
+            for vol in plot_outline:
+                if vol.get("volume_num") == volume_number:
+                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
+                    parts.append(f"  概要：{vol.get('summary', '')}")
+                    break
+
+        return "\n".join(parts) if parts else "（无全局大纲信息）"
 
     def _build_previous_key_events(self, chapter_number: int) -> str:
         """构建前几章的关键事件列表（用于防止重复）"""
@@ -1028,6 +1187,8 @@ class NovelCrewManager:
         world_brief: str,
         character_info: str,
         previous_chapters_summary: str,
+        detailed_outline_text: str = "（未启用大纲细化）",
+        previous_key_events: str = "（无前章记录）",
         max_query_rounds: int = 2,
     ) -> str:
         """处理 Writer 输出中的 [QUERY] 标记
@@ -1074,11 +1235,13 @@ class NovelCrewManager:
                 self.pm.WRITER_WITH_QUERY_TASK,
                 chapter_number=chapter_number,
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
+                detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
                 previous_ending=previous_chapters_summary[-200:] if previous_chapters_summary else "（本章为开篇）",
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers=query_answers_text,
+                previous_key_events=previous_key_events,
             )
 
             draft = await self._call_agent(

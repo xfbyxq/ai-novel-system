@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     ENABLE_VOTING: bool = True
     # 设定查询：写作过程中 Writer 可查询世界观/角色/大纲设定
     ENABLE_QUERY: bool = True
+    # 章节大纲细化：在 ChapterPlanner 之后、Writer 之前，将章节计划展开为详细大纲
+    ENABLE_OUTLINE_REFINEMENT: bool = True
 
     # --- 质量阈值 (1-10分) ---
     # 评分达到阈值即停止迭代，分数越高要求越严格

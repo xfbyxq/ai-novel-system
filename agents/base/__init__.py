@@ -6,6 +6,9 @@
 - BaseReviewResult: 审查结果基类及子类
 - BaseReviewLoopHandler: 审查循环处理器基类
 - ReviewLoopConfig: 审查循环配置
+- QualityLevel: 质量级别枚举
+- IssueRecord / IssueTracker: 跨轮次问题追踪
+- ReviewProgressSummary: 审查进度摘要
 """
 
 from agents.base.json_extractor import JsonExtractor, extract_json
@@ -23,7 +26,14 @@ from agents.base.review_result import (
     ReviewLoopResult,
     WorldReviewResult,
 )
-from agents.base.review_loop_base import BaseReviewLoopHandler, ReviewLoopConfig
+from agents.base.review_loop_base import (
+    BaseReviewLoopHandler,
+    ReviewLoopConfig,
+    QualityLevel,
+    IssueRecord,
+    IssueTracker,
+    ReviewProgressSummary,
+)
 
 __all__ = [
     # JSON 工具
@@ -44,4 +54,9 @@ __all__ = [
     # 循环处理器
     "BaseReviewLoopHandler",
     "ReviewLoopConfig",
+    # 增强组件
+    "QualityLevel",
+    "IssueRecord",
+    "IssueTracker",
+    "ReviewProgressSummary",
 ]

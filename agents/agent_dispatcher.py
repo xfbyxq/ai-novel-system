@@ -31,6 +31,8 @@ class AgentDispatcher:
         enable_world_review: bool = True,
         enable_character_review: bool = True,
         enable_plot_review: bool = True,
+        # 大纲细化开关
+        enable_outline_refinement: bool = True,
         # 各阶段质量阈值
         world_quality_threshold: float = 7.0,
         character_quality_threshold: float = 7.0,
@@ -53,6 +55,7 @@ class AgentDispatcher:
             enable_world_review: 是否启用世界观审查
             enable_character_review: 是否启用角色审查
             enable_plot_review: 是否启用大纲审查
+            enable_outline_refinement: 是否启用章节大纲细化步骤
             world_quality_threshold: 世界观质量阈值
             character_quality_threshold: 角色质量阈值
             plot_quality_threshold: 大纲质量阈值
@@ -73,6 +76,7 @@ class AgentDispatcher:
             enable_world_review=enable_world_review,
             enable_character_review=enable_character_review,
             enable_plot_review=enable_plot_review,
+            enable_outline_refinement=enable_outline_refinement,
             world_quality_threshold=world_quality_threshold,
             character_quality_threshold=character_quality_threshold,
             plot_quality_threshold=plot_quality_threshold,

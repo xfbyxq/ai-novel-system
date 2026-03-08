@@ -52,6 +52,8 @@ class GenerationService:
             enable_world_review=settings.ENABLE_WORLD_REVIEW,
             enable_character_review=settings.ENABLE_CHARACTER_REVIEW,
             enable_plot_review=settings.ENABLE_PLOT_REVIEW,
+            # 大纲细化开关
+            enable_outline_refinement=settings.ENABLE_OUTLINE_REFINEMENT,
             # 各阶段质量阈值
             world_quality_threshold=settings.WORLD_QUALITY_THRESHOLD,
             character_quality_threshold=settings.CHARACTER_QUALITY_THRESHOLD,
@@ -400,6 +402,17 @@ class GenerationService:
             # 初始化Agent调度器
             await self.dispatcher.initialize()
 
+            # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
+            if chapter_number > 1:
+                prev_chapter = next(
+                    (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
+                    None
+                )
+                if prev_chapter and prev_chapter.detailed_outline:
+                    self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
+                        prev_chapter.detailed_outline
+                    )
+
             # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
             writing_result = await self.dispatcher.run_chapter_writing(
@@ -431,6 +444,7 @@ class GenerationService:
                 foreshadowing=chapter_plan.get("foreshadowing", []),
                 quality_score=writing_result.get("quality_score", 0),
                 continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+                detailed_outline=writing_result.get("detailed_outline", {}),
             )
             self.db.add(chapter)
 
@@ -814,6 +828,17 @@ class GenerationService:
         # 初始化Agent调度器
         await self.dispatcher.initialize()
 
+        # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
+        if chapter_number > 1:
+            prev_chapter = next(
+                (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
+                None
+            )
+            if prev_chapter and prev_chapter.detailed_outline:
+                self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
+                    prev_chapter.detailed_outline
+                )
+
         # 执行写作阶段
         self.cost_tracker.reset()
         writing_result = await self.dispatcher.run_chapter_writing(
@@ -844,6 +869,7 @@ class GenerationService:
             foreshadowing=chapter_plan.get("foreshadowing", []),
             quality_score=writing_result.get("quality_score", 0),
             continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+            detailed_outline=writing_result.get("detailed_outline", {}),
         )
         self.db.add(chapter)
 

@@ -14,6 +14,7 @@ from agents.base import (
     ReviewLoopConfig,
     ReviewLoopResult,
 )
+from agents.base.review_loop_base import IssueTracker, QualityLevel, ReviewProgressSummary
 from agents.iteration_controller import IterationController
 from agents.team_context import AgentReview, NovelTeamContext
 
@@ -30,7 +31,8 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - fluency：语言流畅度
 - plot_logic：情节逻辑
 - character_consistency：角色一致性
-- pacing：节奏把控"""
+- pacing：节奏把控
+- satisfaction_design：爽感设计——章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底（旁观者反应、对手震惊）？章末是否有有效卡章？压制期章节是否在章末给出反转信号？"""
 
 EDITOR_REVIEW_TASK = """请审查并润色以下章节内容。
 
@@ -49,7 +51,8 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容。
         "fluency": 分数,
         "plot_logic": 分数,
         "character_consistency": 分数,
-        "pacing": 分数
+        "pacing": 分数,
+        "satisfaction_design": 分数
     }},
     "revision_suggestions": [
         {{"issue": "问题描述", "suggestion": "修改建议", "severity": "high/medium/low"}}
@@ -183,6 +186,7 @@ class ReviewLoopHandler(
             "plot_logic": "情节逻辑",
             "character_consistency": "角色一致性",
             "pacing": "节奏把控",
+            "satisfaction_design": "爽感设计",
         }
 
     def _build_reviewer_task_prompt(
@@ -287,9 +291,14 @@ class ReviewLoopHandler(
         )
 
         try:
+            # 非首轮审查时追加追踪指引到 system prompt
+            system_prompt = self._get_reviewer_system_prompt()
+            if iteration > 1:
+                system_prompt += self._get_enhanced_reviewer_system_suffix()
+            
             response = await self.client.chat(
                 prompt=task_prompt,
-                system=self._get_reviewer_system_prompt(),
+                system=system_prompt,
                 temperature=self.config.reviewer_temperature,
                 max_tokens=6144,  # 章节审查需要更多 token 来输出润色内容
             )
@@ -317,6 +326,7 @@ class ReviewLoopHandler(
         score: float,
         report: ChapterQualityReport,
         review_data: Dict[str, Any],
+        **kwargs,
     ) -> None:
         """记录迭代历史，并同步到 TeamContext"""
         # 调用基类实现
@@ -326,6 +336,7 @@ class ReviewLoopHandler(
             passed=report.passed,
             issue_count=len(report.suggestions),
             dimension_scores=report.dimension_scores,
+            **kwargs,
         )
 
         # 记录到 TeamContext
@@ -406,6 +417,16 @@ class ReviewLoopHandler(
         best_content = initial_draft
         best_report: Optional[ChapterQualityReport] = None
         stagnation_count = 0
+        
+        # 初始化增强组件（与基类 execute() 保持同步）
+        self._issue_tracker = (
+            IssueTracker(match_threshold=self.config.issue_match_threshold)
+            if self.config.enable_issue_tracking else None
+        )
+        self._progress_summary = (
+            ReviewProgressSummary() if self.config.enable_progress_summary else None
+        )
+        self._quality_level = QualityLevel.MEDIUM
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"[ReviewLoop] 第 {iteration}/{self.max_iterations} 轮审查")
@@ -443,8 +464,21 @@ class ReviewLoopHandler(
             if score == 0 and last_report.overall_score > 0:
                 score = last_report.overall_score
 
+            # 更新问题跟踪和进度摘要（与基类 execute() 保持同步）
+            self._quality_level = self._determine_quality_level(score)
+            if self._issue_tracker:
+                self._issue_tracker.update_round(iteration, last_report, review_data)
+            if self._progress_summary:
+                self._progress_summary.update(iteration, score, self._issue_tracker)
+
             # 记录迭代
-            self._record_iteration(result, iteration, score, last_report, review_data)
+            self._record_iteration(
+                result, iteration, score, last_report, review_data,
+                quality_level=self._quality_level.value,
+                issues_resolved=len(self._issue_tracker.get_resolved_this_round()) if self._issue_tracker else 0,
+                issues_new=len(self._issue_tracker.get_new_this_round()) if self._issue_tracker else 0,
+                issues_recurring=len(self._issue_tracker.get_recurring_issues()) if self._issue_tracker else 0,
+            )
 
             prev_score = result.iterations[-2]["score"] if len(result.iterations) > 1 else 0
             logger.info(
