@@ -17,6 +17,7 @@ from backend.schemas.character import (
 )
 from core.models.character import Character
 from core.models.novel import Novel
+from core.models.character_name_version import CharacterNameVersionService
 
 router = APIRouter(prefix="/novels/{novel_id}/characters", tags=["characters"])
 
@@ -212,3 +213,195 @@ async def delete_character(
 
     await db.delete(character)
     await db.commit()
+
+
+@router.get("/{character_id}/name-versions", response_model=list)
+async def get_character_name_versions(
+    novel_id: UUID,
+    character_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取角色名字版本历史。
+    
+    返回角色名字的变更历史记录，包括每次变更的时间、操作人和原因。
+    """
+    query = select(Character).where(
+        Character.id == character_id,
+        Character.novel_id == novel_id,
+    )
+    result = await db.execute(query)
+    character = result.scalar_one_or_none()
+    
+    if not character:
+        raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
+    
+    version_service = CharacterNameVersionService(db)
+    versions = await version_service.get_version_history(character_id)
+    
+    return [
+        {
+            "id": str(version.id),
+            "old_name": version.old_name,
+            "new_name": version.new_name,
+            "changed_at": version.changed_at.isoformat(),
+            "changed_by": version.changed_by,
+            "reason": version.reason,
+        }
+        for version in versions
+    ]
+
+
+@router.post("/{character_id}/name-versions", response_model=dict, status_code=201)
+async def create_character_name_version(
+    novel_id: UUID,
+    character_id: UUID,
+    version_data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    创建角色名字版本记录。
+    
+    记录角色名字的变更，包括旧名字、新名字、变更人和原因。
+    """
+    query = select(Character).where(
+        Character.id == character_id,
+        Character.novel_id == novel_id,
+    )
+    result = await db.execute(query)
+    character = result.scalar_one_or_none()
+    
+    if not character:
+        raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
+    
+    old_name = version_data.get("old_name", character.name)
+    new_name = version_data.get("new_name")
+    changed_by = version_data.get("changed_by", "system")
+    reason = version_data.get("reason")
+    
+    if not new_name:
+        raise HTTPException(status_code=400, detail="new_name 是必填字段")
+    
+    version_service = CharacterNameVersionService(db)
+    version = await version_service.create_version_record(
+        character_id=character_id,
+        old_name=old_name,
+        new_name=new_name,
+        changed_by=changed_by,
+        reason=reason,
+    )
+    
+    return {
+        "id": str(version.id),
+        "old_name": version.old_name,
+        "new_name": version.new_name,
+        "changed_at": version.changed_at.isoformat(),
+        "changed_by": version.changed_by,
+        "reason": version.reason,
+    }
+
+
+@router.get("/{character_id}/name-versions/compare")
+async def compare_character_name_versions(
+    novel_id: UUID,
+    character_id: UUID,
+    version_id_1: UUID,
+    version_id_2: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    对比两个名字版本的差异。
+    
+    返回两个版本之间的差异信息。
+    """
+    query = select(Character).where(
+        Character.id == character_id,
+        Character.novel_id == novel_id,
+    )
+    result = await db.execute(query)
+    character = result.scalar_one_or_none()
+    
+    if not character:
+        raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
+    
+    version_service = CharacterNameVersionService(db)
+    comparison = await version_service.compare_versions(version_id_1, version_id_2)
+    
+    return comparison
+
+
+@router.post("/{character_id}/name-versions/revert")
+async def revert_character_name_version(
+    novel_id: UUID,
+    character_id: UUID,
+    version_data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    回溯到指定的名字版本。
+    
+    将角色名字恢复到历史版本，并创建新的版本记录。
+    """
+    query = select(Character).where(
+        Character.id == character_id,
+        Character.novel_id == novel_id,
+    )
+    result = await db.execute(query)
+    character = result.scalar_one_or_none()
+    
+    if not character:
+        raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
+    
+    target_version_id = version_data.get("target_version_id")
+    reverted_by = version_data.get("reverted_by", "system")
+    
+    if not target_version_id:
+        raise HTTPException(status_code=400, detail="target_version_id 是必填字段")
+    
+    version_service = CharacterNameVersionService(db)
+    reverted_version = await version_service.revert_to_version(
+        character_id=character_id,
+        target_version_id=UUID(target_version_id),
+        reverted_by=reverted_by,
+    )
+    
+    if not reverted_version:
+        raise HTTPException(status_code=404, detail=f"目标版本 {target_version_id} 未找到")
+    
+    return {
+        "id": str(reverted_version.id),
+        "old_name": reverted_version.old_name,
+        "new_name": reverted_version.new_name,
+        "changed_at": reverted_version.changed_at.isoformat(),
+        "changed_by": reverted_version.changed_by,
+        "reason": reverted_version.reason,
+        "message": f"成功回溯到版本 {target_version_id}",
+    }
+
+
+@router.get("/{character_id}/name-versions/validate")
+async def validate_character_name_change(
+    novel_id: UUID,
+    character_id: UUID,
+    new_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    验证角色名字变更是否合理。
+    
+    检查新名字是否与历史版本冲突，并提供警告信息。
+    """
+    query = select(Character).where(
+        Character.id == character_id,
+        Character.novel_id == novel_id,
+    )
+    result = await db.execute(query)
+    character = result.scalar_one_or_none()
+    
+    if not character:
+        raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
+    
+    version_service = CharacterNameVersionService(db)
+    validation = await version_service.validate_name_change(character_id, new_name)
+    
+    return validation

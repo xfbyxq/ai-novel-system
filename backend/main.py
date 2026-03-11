@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.v1 import api_router
 from backend.config import settings
+from backend.routes import agent_activities
 
 # Setup logging
 from core.logging_config import setup_logging
@@ -98,6 +99,9 @@ app.add_middleware(
 
 # Include API v1 router
 app.include_router(api_router)
+
+# Include Agent Activities router
+app.include_router(agent_activities.router, prefix="/api/v1")
 
 
 @app.get("/", tags=["root"])

@@ -13,17 +13,23 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Poetry
+# 安装 Poetry（使用国内镜像）
 RUN pip install poetry==1.8.2 -i ${PIP_INDEX_URL} --trusted-host ${PIP_TRUSTED_HOST}
+
+# 配置 Poetry 使用国内源
+RUN poetry config virtualenvs.create false \
+    && poetry config repositories.pypi https://mirrors.aliyun.com/pypi/simple/
 
 # 复制依赖文件
 COPY pyproject.toml poetry.lock ./
 
-# 配置 Poetry 并安装依赖
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --only main
+# 安装依赖（带重试）
+RUN poetry install --no-interaction --no-ansi --only main \
+    || (echo "第一次安装失败，重试..." && sleep 5 && poetry install --no-interaction --no-ansi --only main) \
+    || (echo "第二次安装失败，再次重试..." && sleep 10 && poetry install --no-interaction --no-ansi --only main)
 
 # 复制应用代码
 COPY . .

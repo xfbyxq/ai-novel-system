@@ -213,23 +213,68 @@ class VotingManager:
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
         text = text.strip()
+        
+        # 1. 尝试直接解析
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
+        
         import re
-
+        
+        # 2. 尝试提取代码块中的 JSON
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
         if match:
             try:
                 return json.loads(match.group(1).strip())
             except json.JSONDecodeError:
                 pass
+        
+        # 3. 提取大括号内的内容
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
+            json_text = text[start : end + 1]
+            
+            # 4. 修复中文引号问题：将中文引号替换为英文引号
+            json_text = json_text.replace('"', '"').replace('"', '"')
+            
+            # 5. 尝试解析修复后的 JSON
             try:
-                return json.loads(text[start : end + 1])
+                return json.loads(json_text)
             except json.JSONDecodeError:
                 pass
+            
+            # 6. 尝试更激进的修复：处理不规范的键名引号
+            try:
+                # 匹配 "key": 或 ': 或 key: 模式
+                fixed_text = re.sub(r'["\']?(\w+)["\']?\s*:', r'"\1":', json_text)
+                return json.loads(fixed_text)
+            except json.JSONDecodeError:
+                pass
+            
+            # 7. 尝试逐字段提取（最激进的方法）
+            try:
+                result = {}
+                # 提取 chosen_option
+                match = re.search(r'"chosen_option"\s*:\s*"([^"]+)"', json_text)
+                if match:
+                    result["chosen_option"] = match.group(1)
+                
+                # 提取 reasoning - 处理值中包含引号的情况
+                match = re.search(r'"reasoning"\s*:\s*"(.+?)"(?:\s*,|\s*\})', json_text, re.DOTALL)
+                if match:
+                    result["reasoning"] = match.group(1).strip()
+                
+                # 提取 confidence
+                match = re.search(r'"confidence"\s*:\s*([\d.]+)', json_text)
+                if match:
+                    result["confidence"] = float(match.group(1))
+                
+                if result:
+                    return result
+            except Exception:
+                pass
+        
+        # 8. 所有尝试都失败，抛出错误
         raise ValueError(f"无法提取投票 JSON: {text[:200]}...")

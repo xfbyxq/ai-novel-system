@@ -28,6 +28,7 @@ from llm.qwen_client import QwenClient
 
 from .agentmesh_memory_adapter import get_novel_memory_adapter
 from .memory_service import get_novel_memory_service
+from .agent_activity_recorder import AgentActivityRecorder, get_agent_activity_recorder
 
 
 class GenerationService:
@@ -37,6 +38,9 @@ class GenerationService:
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
+        
+        # 初始化 Agent 活动记录器
+        self.activity_recorder = get_agent_activity_recorder(db)
 
         # 从配置文件读取审查循环配置
         self.dispatcher = AgentDispatcher(
@@ -209,11 +213,16 @@ class GenerationService:
                     "sub_plots": [],
                     "key_turning_points": [],
                 }
+            
+            # 保存主线剧情详细字段（如果存在）
+            main_plot_detailed = plot_data.get("main_plot_detailed", {})
+            
             plot_outline = PlotOutline(
                 novel_id=novel_id,
                 structure_type=plot_data.get("structure_type", "three_act"),
                 volumes=plot_data.get("volumes", []),
                 main_plot=plot_data.get("main_plot", {}),
+                main_plot_detailed=main_plot_detailed,  # 新增：保存详细主线剧情
                 sub_plots=plot_data.get("sub_plots", []),
                 key_turning_points=plot_data.get("key_turning_points", []),
                 climax_chapter=plot_data.get("climax_chapter"),
@@ -262,6 +271,15 @@ class GenerationService:
             await self.db.commit()
 
             logger.info(f"企划阶段完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
+            
+            # 记录企划阶段的 Agent 活动摘要
+            await self._record_planning_activities(
+                novel_id=novel_id,
+                task_id=task_id,
+                planning_result=planning_result,
+                cost_summary=cost_summary
+            )
+            
             return planning_result
 
         except Exception as e:
@@ -430,12 +448,25 @@ class GenerationService:
             final_content = writing_result.get("final_content", "")
             word_count = len(final_content)
             chapter_plan = writing_result.get("chapter_plan", {})
+            
+            # 构建章节标题：确保包含章节号
+            raw_title = chapter_plan.get("title", "")
+            if raw_title:
+                # 如果标题已包含章节号，直接使用
+                if f"第{chapter_number}章" in raw_title:
+                    title = raw_title
+                else:
+                    # 否则添加章节号前缀
+                    title = f"第{chapter_number}章：{raw_title}"
+            else:
+                # 没有标题，使用默认值
+                title = f"第{chapter_number}章"
 
             chapter = Chapter(
                 novel_id=novel_id,
                 chapter_number=chapter_number,
                 volume_number=volume_number,
-                title=chapter_plan.get("title", f"第{chapter_number}章"),
+                title=title,
                 content=final_content,
                 word_count=word_count,
                 status=ChapterStatus.draft,
@@ -500,7 +531,7 @@ class GenerationService:
                 task.completed_at = datetime.now(timezone.utc)
                 task.output_data = {
                     "chapter_number": chapter_number,
-                    "title": chapter_plan.get("title", ""),
+                    "title": title,  # 使用已构建好的完整标题
                     "word_count": word_count,
                     "quality_score": writing_result.get("quality_score", 0),
                 }
@@ -1177,4 +1208,80 @@ class GenerationService:
 
         # 2. 回退到原有的内存缓存实现
         return self._build_previous_context(novel_id, novel, chapter_number)
+    
+    async def _record_planning_activities(
+        self,
+        novel_id: UUID,
+        task_id: UUID,
+        planning_result: dict,
+        cost_summary: dict
+    ):
+        """记录企划阶段的 Agent 活动摘要
+        
+        Args:
+            novel_id: 小说 ID
+            task_id: 任务 ID
+            planning_result: 企划结果
+            cost_summary: 成本摘要
+        """
+        try:
+            # 记录主题分析活动
+            if "topic_analysis" in planning_result:
+                await self.activity_recorder.record_planning_activity(
+                    novel_id=novel_id,
+                    task_id=task_id,
+                    agent_name="主题分析师",
+                    agent_role="市场趋势分析和选题推荐",
+                    activity_subtype="topic_analysis",
+                    input_data={"genre": planning_result.get("genre")},
+                    output_data=planning_result.get("topic_analysis", {}),
+                    total_tokens=cost_summary.get("total_tokens", 0),
+                    cost=cost_summary.get("total_cost", 0),
+                )
+            
+            # 记录世界观构建活动
+            if "world_setting" in planning_result:
+                await self.activity_recorder.record_planning_activity(
+                    novel_id=novel_id,
+                    task_id=task_id,
+                    agent_name="世界观架构师",
+                    agent_role="世界观体系构建",
+                    activity_subtype="world_building",
+                    input_data={"topic_analysis": planning_result.get("topic_analysis")},
+                    output_data=planning_result.get("world_setting", {}),
+                )
+            
+            # 记录角色设计活动
+            if "characters" in planning_result:
+                await self.activity_recorder.record_planning_activity(
+                    novel_id=novel_id,
+                    task_id=task_id,
+                    agent_name="角色设计师",
+                    agent_role="主要角色设计",
+                    activity_subtype="character_design",
+                    input_data={"world_setting": planning_result.get("world_setting")},
+                    output_data={"characters_count": len(planning_result.get("characters", []))},
+                )
+            
+            # 记录情节架构活动
+            if "plot_outline" in planning_result:
+                await self.activity_recorder.record_planning_activity(
+                    novel_id=novel_id,
+                    task_id=task_id,
+                    agent_name="情节架构师",
+                    agent_role="整体情节架构规划",
+                    activity_subtype="plot_architecture",
+                    input_data={
+                        "world_setting": planning_result.get("world_setting"),
+                        "characters": planning_result.get("characters")
+                    },
+                    output_data={
+                        "structure_type": planning_result.get("plot_outline", {}).get("structure_type"),
+                        "volumes_count": len(planning_result.get("plot_outline", {}).get("volumes", []))
+                    },
+                )
+            
+            logger.info(f"✅ 企划阶段 Agent 活动记录完成")
+        except Exception as e:
+            logger.error(f"记录企划阶段 Agent 活动失败：{e}")
 

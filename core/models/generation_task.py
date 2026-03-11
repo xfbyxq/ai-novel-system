@@ -44,3 +44,4 @@ class GenerationTask(Base):
 
     novel = relationship("Novel", back_populates="generation_tasks")
     token_usages = relationship("TokenUsage", back_populates="task", cascade="all, delete-orphan")
+    # agent_activities = relationship("AgentActivity", back_populates="task", cascade="all, delete-orphan")

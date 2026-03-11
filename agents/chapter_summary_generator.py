@@ -52,7 +52,7 @@ class ChapterSummaryGenerator:
                 prompt=task_prompt,
                 system=self.pm.CHAPTER_SUMMARY_SYSTEM,
                 temperature=0.3,
-                max_tokens=1024,
+                max_tokens=2048,  # 增加 max_tokens 避免 JSON 被截断
             )
 
             usage = response["usage"]
@@ -63,7 +63,15 @@ class ChapterSummaryGenerator:
                 cost_category="base",
             )
 
+            # 提取 JSON（已增强容错性）
             summary = self._extract_json(response["content"])
+            
+            # 检查是否返回了空摘要（解析失败的标志）
+            if not summary.get("key_events") and not summary.get("plot_progress"):
+                logger.warning(
+                    f"[SummaryGenerator] JSON 解析返回空摘要，使用回退方案..."
+                )
+                return self._fallback_summary(chapter_content, chapter_plan)
 
             # 确保必要字段
             summary.setdefault("key_events", [])
@@ -135,13 +143,30 @@ class ChapterSummaryGenerator:
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON"""
+        """从 LLM 响应中提取 JSON
+        
+        使用多层策略：
+        1. 直接解析完整文本
+        2. 提取 markdown 代码块中的 JSON
+        3. 提取花括号内的 JSON 片段
+        4. 尝试修复不完整的 JSON（添加缺失的闭合括号）
+        5. 返回空字典作为最后手段
+        
+        Args:
+            text: LLM 响应的原始文本
+            
+        Returns:
+            解析后的字典，如全部失败则返回空字典
+        """
         text = text.strip()
+        
+        # 策略 1: 直接解析完整文本
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
-
+        
+        # 策略 2: 提取 markdown 代码块中的 JSON
         import re
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
         if match:
@@ -149,13 +174,48 @@ class ChapterSummaryGenerator:
                 return json.loads(match.group(1).strip())
             except json.JSONDecodeError:
                 pass
-
+        
+        # 策略 3: 提取花括号内的 JSON 片段
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
+            json_str = text[start:end + 1]
             try:
-                return json.loads(text[start: end + 1])
+                return json.loads(json_str)
             except json.JSONDecodeError:
-                pass
-
-        raise ValueError(f"无法提取摘要 JSON: {text[:200]}...")
+                # 策略 4: 尝试修复不完整的 JSON
+                # 计算缺失的闭合括号数量
+                open_braces = json_str.count("{")
+                close_braces = json_str.count("}")
+                missing_braces = open_braces - close_braces
+                
+                if missing_braces > 0:
+                    try:
+                        # 添加缺失的闭合括号
+                        fixed_json = json_str + "}" * missing_braces
+                        return json.loads(fixed_json)
+                    except json.JSONDecodeError:
+                        # 尝试更激进的修复：移除最后一个不完整的项目
+                        try:
+                            # 找到最后一个逗号并截断
+                            last_comma = json_str.rfind(",")
+                            if last_comma > start + 1:
+                                truncated = json_str[:last_comma] + "}"
+                                return json.loads(truncated)
+                        except json.JSONDecodeError:
+                            pass
+                
+                # 策略 5: 记录警告并返回空字典
+                logger.warning(
+                    f"JSON 解析失败，返回空摘要。文本片段：{text[:100]}..."
+                )
+        
+        # 全部失败，返回空字典
+        return {
+            "key_events": [],
+            "character_changes": "",
+            "plot_progress": text[:200] if text else "",
+            "foreshadowing": [],
+            "ending_state": "",
+            "new_information": "",
+        }

@@ -57,9 +57,19 @@ PLOT_REVIEWER_SYSTEM = """你是一位资深的网络小说情节架构评审专
 
 6. **爽感节奏设计** (satisfaction_rhythm)：
    - 黄金三章：第一卷前三章是否有明确的强钩子 → 金手指首亮 → 首个小高潮？
-   - 欲扬先抑分布：每卷是否有完整的"抑→扬"循环？压制期是否控制在3章以内？
+   - 欲扬先抑分布：每卷是否有完整的"抑→扬"循环？压制期是否控制在 3 章以内？
    - 升级节奏：主角的实力/地位提升是否有明确的可感知里程碑？
    - 卡章设计：每卷结尾是否有强悬念驱动读者继续？
+
+7. **主线剧情深度** (main_plot_depth)：
+   - 核心冲突是否有多个层次（表面→深层→哲学）？
+   - 主角动机是否纯粹强烈，有明确心理根源？
+   - 反派/阻碍力量是否有合理动机和强大实力？
+   - 冲突升级路径是否清晰（个人→组织→世界）？
+   - 情感弧光是否有起伏变化？
+   - 主题表达是否贯穿始终？
+   - 关键揭示点是否精心布置？
+   - 主角成长轨迹是否清晰有代价？
 
 【重要】评分原则：
 - 你必须给出精确的评分，不要给出"安全"的中间分数
@@ -68,11 +78,11 @@ PLOT_REVIEWER_SYSTEM = """你是一位资深的网络小说情节架构评审专
 - 评分应该反映真实质量，而不是折中
 
 评分标准：
-- 9-10分：卓越，结构精妙、节奏完美、引人入胜
-- 8-9分：优秀，结构完整、节奏紧凑、冲突强烈
-- 7-8分：良好，基本完整但有改进空间
-- 6-7分：及格，存在明显问题需要修改
-- 6分以下：不合格，需要大幅重做"""
+- 9-10 分：卓越，结构精妙、节奏完美、引人入胜
+- 8-9 分：优秀，结构完整、节奏紧凑、冲突强烈
+- 7-8 分：良好，基本完整但有改进空间
+- 6-7 分：及格，存在明显问题需要修改
+- 6 分以下：不合格，需要大幅重做"""
 
 PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
 
@@ -87,22 +97,23 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
 情节大纲：
 {plot_outline}
 
-请以JSON格式输出评估结果（不要输出其他内容）：
+请以 JSON 格式输出评估结果（不要输出其他内容）：
 {{
-    "overall_score": 综合评分(1-10浮点数，请给出精确分数如7.3、8.1等，不要总是给7.0或7.5这样的整数),
+    "overall_score": 综合评分 (1-10 浮点数，请给出精确分数如 7.3、8.1 等，不要总是给 7.0 或 7.5 这样的整数),
     "dimension_scores": {{
-        "structure": 结构完整性分数,
-        "pacing": 节奏把控分数,
-        "conflict": 冲突张力分数,
-        "character_usage": 角色利用度分数,
-        "foreshadowing": 伏笔设计分数,
-        "satisfaction_rhythm": 爽感节奏设计分数
+        "structure": 结构完整性分数，
+        "pacing": 节奏把控分数，
+        "conflict": 冲突张力分数，
+        "character_usage": 角色利用度分数，
+        "foreshadowing": 伏笔设计分数，
+        "satisfaction_rhythm": 爽感节奏设计分数，
+        "main_plot_depth": 主线剧情深度分数
     }},
     "improvement_assessment": {{
         "issues_resolved": ["已解决的问题"],
         "issues_remaining": ["仍存在的问题"],
         "new_issues": ["新发现的问题"],
-        "improvement_score": 改进程度分数(1-10，仅在非首轮审查时填写)
+        "improvement_score": 改进程度分数 (1-10，仅在非首轮审查时填写)
     }},
     "structure_analysis": {{
         "opening_hook": "开篇吸引力评价",
@@ -113,9 +124,20 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
         "suppress_release_distribution": "欲扬先抑分布评价",
         "upgrade_pacing": "升级节奏评价"
     }},
+    "main_plot_depth_analysis": {{
+        "conflict_layers": "核心冲突层次评价（表面/深层/哲学三层是否完整）",
+        "protagonist_motivation": "主角动机评价（是否纯粹强烈、有心理根源）",
+        "antagonist_strength": "反派/阻碍力量评价（动机合理性、实力威胁）",
+        "escalation_path": "冲突升级路径评价（个人→组织→世界是否清晰）",
+        "emotional_arc": "情感弧光评价（是否有起伏变化）",
+        "theme_expression": "主题表达评价（是否贯穿始终）",
+        "key_revelations": "关键揭示点评价（布置是否精心、影响是否重大）",
+        "character_growth": "主角成长轨迹评价（是否清晰、有代价有收获）",
+        "depth_issues": ["主线深度方面的问题"]
+    }},
     "volume_assessments": [
         {{
-            "volume_num": 卷号,
+            "volume_num": 卷号，
             "strengths": ["优点"],
             "weaknesses": ["问题"],
             "pacing_issue": "节奏问题（如有）"
@@ -130,7 +152,7 @@ PLOT_REVIEWER_TASK = """请对以下情节大纲进行全面质量评估。
         {{"area": "问题领域", "issue": "具体问题", "severity": "high/medium/low", "suggestion": "改进建议"}}
     ],
     "missing_elements": ["缺失的重要情节元素"],
-    "summary": "整体评价（50字以内）"
+    "summary": "整体评价（50 字以内）"
 }}"""
 
 PLOT_REVISION_TASK = """你之前设计的情节大纲经过专家评审，需要优化。

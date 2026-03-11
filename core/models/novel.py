@@ -39,7 +39,7 @@ class Novel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(200), nullable=False)
-    author = Column(String(100), default="AI创作")
+    author = Column(String(100), default="AI 创作")
     genre = Column(String(50), nullable=False)
     tags = Column(ARRAY(String), default=list)
     status = Column(Enum(NovelStatus), default=NovelStatus.planning)
@@ -52,6 +52,18 @@ class Novel(Base):
     estimated_revenue = Column(Numeric(10, 2), default=0)
     actual_revenue = Column(Numeric(10, 2), default=0)
     token_cost = Column(Numeric(10, 4), default=0)
+    
+    # 章节配置 - 支持灵活的章节结构
+    chapter_config = Column(
+        JSONB,
+        default=lambda: {
+            "total_chapters": 6,
+            "min_chapters": 3,
+            "max_chapters": 12,
+            "flexible": True
+        }
+    )
+    
     metadata_ = Column("metadata", JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -162,6 +162,12 @@ class NovelCrewManager:
         LLM 可能会在 JSON 前后添加 markdown 代码块标记或其他文本,
         这个方法使用多种策略找到 JSON 内容并解析。
         
+        增强功能：
+        - 支持中文引号自动转换为英文引号
+        - 支持不规范的键名（无引号）
+        - 支持截断的 JSON
+        - 逐字段提取作为最后保障
+        
         Args:
             response: LLM 的原始响应文本
             
@@ -171,13 +177,13 @@ class NovelCrewManager:
         Raises:
             ValueError: 如果无法找到或解析 JSON
         """
-        # 先尝试直接解析
+        # 策略 1: 先尝试直接解析
         try:
             return json.loads(response.strip())
         except json.JSONDecodeError:
             pass
 
-        # 尝试提取 markdown 代码块中的内容（先找```json...```的边界，再解析内部内容）
+        # 策略 2: 尝试提取 markdown 代码块中的内容
         code_block_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```"
         for match in re.finditer(code_block_pattern, response):
             block_content = match.group(1).strip()
@@ -187,7 +193,7 @@ class NovelCrewManager:
                 except json.JSONDecodeError:
                     continue
 
-        # 使用括号匹配法找到完整的 JSON 对象或数组
+        # 策略 3: 使用括号匹配法找到完整的 JSON 对象或数组
         for start_char, end_char in [('{', '}'), ('[', ']')]:
             start_idx = response.find(start_char)
             if start_idx == -1:
@@ -221,7 +227,76 @@ class NovelCrewManager:
                         except json.JSONDecodeError:
                             break  # 这个起始位置不行，试下一个策略
 
+        # 策略 4: 修复中文引号后重试
+        fixed_response = response.replace('"', '"').replace('"', '"')
+        try:
+            return json.loads(fixed_response.strip())
+        except json.JSONDecodeError:
+            pass
+        
+        # 策略 5: 提取大括号内的内容并修复
+        start_idx = response.find('{')
+        end_idx = response.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_text = response[start_idx:end_idx + 1]
+            
+            # 修复中文引号
+            json_text = json_text.replace('"', '"').replace('"', '"')
+            
+            # 尝试解析
+            try:
+                return json.loads(json_text)
+            except json.JSONDecodeError:
+                pass
+            
+            # 修复不规范的键名
+            fixed_json = re.sub(r'["\']?(\w+)["\']?\s*:', r'"\1":', json_text)
+            try:
+                return json.loads(fixed_json)
+            except json.JSONDecodeError:
+                pass
+
+        # 策略 6: 逐字段提取（针对特定结构）
+        extracted = self._extract_fields_manually(response)
+        if extracted:
+            return extracted
+
+        # 所有策略都失败
         raise ValueError(f"无法从响应中提取有效的 JSON: {response[:200]}...")
+    
+    def _extract_fields_manually(self, response: str) -> Optional[Dict[str, Any]]:
+        """
+        手动提取常见字段作为最后保障
+        
+        适用于连续性审查员等特定 Agent 的输出
+        """
+        result = {}
+        
+        # 提取 has_issues
+        has_issues_match = re.search(r'"has_issues"\s*:\s*(true|false)', response, re.IGNORECASE)
+        if has_issues_match:
+            result["has_issues"] = has_issues_match.group(1).lower() == "true"
+        
+        # 提取 quality_score
+        score_match = re.search(r'"quality_score"\s*:\s*([\d.]+)', response)
+        if score_match:
+            result["quality_score"] = float(score_match.group(1))
+        
+        # 提取 overall_assessment
+        assessment_match = re.search(r'"overall_assessment"\s*:\s*"([^"]+)"', response)
+        if assessment_match:
+            result["overall_assessment"] = assessment_match.group(1)
+        
+        # 如果有至少一个字段，返回部分结果
+        if result:
+            # 尝试提取 issues 数组
+            issues_match = re.search(r'"issues"\s*:\s*\[', response)
+            if issues_match:
+                result["issues"] = []  # 简化处理，返回空数组
+            
+            return result
+        
+        return None
 
     async def _call_agent(
         self,
@@ -500,7 +575,15 @@ class NovelCrewManager:
             plot_length_instructions = "\n\n重要要求：为长篇小说设计宏大的多卷情节架构，包括主线剧情、多条副线、多个高潮点和足够的伏笔，确保故事有长期发展的潜力。"
         elif length_type == "short":
             plot_length_instructions = "\n\n重要要求：为短文设计紧凑的单卷情节结构，有明确的开始、发展、高潮和结局，确保故事在有限篇幅内完整呈现。"
-
+        
+        # 构建章节配置
+        chapter_config = {
+            "total_chapters": 6,  # 默认 6 章
+            "min_chapters": 3,
+            "max_chapters": 12,
+            "flexible": True
+        }
+        
         # 启用投票时使用带决策点标注的模板
         plot_template = (
             self.pm.PLOT_ARCHITECT_WITH_DECISIONS_TASK
@@ -512,6 +595,10 @@ class NovelCrewManager:
             plot_template,
             world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
             characters=json.dumps(characters, ensure_ascii=False, indent=2),
+            chapter_config=json.dumps(chapter_config, ensure_ascii=False, indent=2),
+            total_chapters=chapter_config["total_chapters"],
+            min_chapters=chapter_config["min_chapters"],
+            max_chapters=chapter_config["max_chapters"],
         ) + plot_length_instructions
         
         plot_outline = await self._call_agent(
