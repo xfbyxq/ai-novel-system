@@ -2233,5 +2233,112 @@ AI修订建议内容：
                     for chap in chapters
                 ]
             except Exception as e:
-                logger.error(f"获取章节列表失败: {e}")
+                logger.error(f"获取章节列表失败：{e}")
                 return []
+
+    # ==================== 小说对话流程集成方法 ====================
+
+    async def start_novel_dialogue_flow(self, session_id: str, scene: str = "create") -> str:
+        """启动小说对话流程（创建/查询/修改）
+        
+        Args:
+            session_id: 会话 ID
+            scene: 场景类型 (create/query/revise)
+        
+        Returns:
+            欢迎消息
+        """
+        from backend.services.novel_creation_flow_manager import NovelCreationFlowManager
+        from backend.schemas.novel_creation_flow import NovelDialogueScene
+        
+        # 映射场景字符串到枚举
+        scene_mapping = {
+            "create": NovelDialogueScene.CREATE,
+            "query": NovelDialogueScene.QUERY,
+            "revise": NovelDialogueScene.REVISE,
+            "novel_creation": NovelDialogueScene.CREATE,
+            "novel_query": NovelDialogueScene.QUERY,
+            "novel_revision": NovelDialogueScene.REVISE
+        }
+        
+        flow_scene = scene_mapping.get(scene, NovelDialogueScene.CREATE)
+        
+        # 初始化流程
+        flow_manager = NovelCreationFlowManager(self.db, self.client)
+        await flow_manager.initialize_flow(session_id, flow_scene)
+        
+        # 根据场景返回不同的欢迎消息
+        if flow_scene == NovelDialogueScene.CREATE:
+            return """您好！我是您的小说创作助手📚
+
+我将通过对话帮您完成小说的创建，包括：
+✅ 确认小说类型
+✅ 构建世界观设定
+✅ 提炼核心简介
+✅ 自动生成创建请求
+
+让我们开始吧！请告诉我：您想创作什么类型的小说呢？
+
+比如：玄幻、科幻、言情、都市、历史、悬疑等"""
+        
+        elif flow_scene == NovelDialogueScene.QUERY:
+            return """您好！我是您的小说查询助手📖
+
+我可以帮您查询已有小说的各种信息：
+- 📚 基本信息（标题、类型、字数等）
+- 🌍 世界观设定（时代、地理、势力、规则等）
+- 👥 角色信息（外貌、性格、背景、能力等）
+- 📖 剧情大纲（主线、支线、转折点等）
+- 📄 章节列表和内容
+
+请告诉我您想查询哪部小说？您可以提供小说 ID、名称或关键词。"""
+        
+        elif flow_scene == NovelDialogueScene.REVISE:
+            return """您好！我是您的小说修订助手✏️
+
+我可以帮您通过对话修改小说内容：
+- 🌍 修改世界观设定
+- 👥 修改角色信息
+- 📖 修改剧情大纲
+- 📝 修改小说基本信息
+
+请告诉我您想修改哪部小说？"""
+        
+        else:
+            return "您好！我是您的小说创作助手，请问有什么可以帮助您的？"
+
+    async def process_novel_dialogue_message(self, session_id: str, user_message: str) -> str:
+        """处理小说对话流程中的消息
+        
+        Args:
+            session_id: 会话 ID
+            user_message: 用户消息
+        
+        Returns:
+            AI 回复消息
+        """
+        from backend.services.novel_creation_flow_manager import NovelCreationFlowManager
+        
+        flow_manager = NovelCreationFlowManager(self.db, self.client)
+        response = await flow_manager.process_message(session_id, user_message)
+        
+        # 保存对话历史到 AI 会话
+        session = self.get_session(session_id)
+        if session:
+            session.add_user_message(user_message)
+            session.add_assistant_message(response.message)
+            
+            # 更新会话上下文
+            session.context["flow_state"] = {
+                "current_step": response.next_step.value,
+                "scene": response.context.scene.value,
+                "selected_novel_id": response.context.selected_novel_id,
+                "genre": response.context.genre,
+                "revision_target": response.context.revision_target
+            }
+            
+            # 异步保存会话
+            import asyncio
+            asyncio.create_task(self.save_session(session))
+        
+        return response.message
