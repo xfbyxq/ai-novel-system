@@ -2,7 +2,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Enum, String, Text
+from sqlalchemy import Column, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -27,7 +27,7 @@ class PlatformAccount(Base):
     account_name = Column(String(100), nullable=False)  # 备注名
     username = Column(String(100), nullable=False)
     encrypted_credentials = Column(Text, nullable=True)  # Fernet 加密的 JSON（含密码、cookies、tokens）
-    status = Column(Enum(AccountStatus), default=AccountStatus.inactive)
+    status = Column(String(50), default="inactive")
     last_verified_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

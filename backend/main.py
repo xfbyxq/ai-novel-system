@@ -4,6 +4,7 @@ FastAPI application entry point for the Novel Generation System.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from backend.api.v1 import api_router
 from backend.config import settings
@@ -117,8 +118,31 @@ async def root():
 
 @app.get("/health", tags=["health"])
 async def health_check():
-    """Health check endpoint."""
-    return {
+    """Health check endpoint with database and Redis dependency checks."""
+    health = {
         "status": "healthy",
         "service": "novel-generation-system",
+        "dependencies": {}
     }
+    
+    # 检查数据库
+    try:
+        from core.database import engine
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        health["dependencies"]["postgres"] = "healthy"
+    except Exception as e:
+        health["status"] = "unhealthy"
+        health["dependencies"]["postgres"] = f"error: {str(e)}"
+    
+    # 检查Redis
+    try:
+        import redis
+        r = redis.from_url(settings.REDIS_URL)
+        r.ping()
+        health["dependencies"]["redis"] = "healthy"
+    except Exception as e:
+        health["status"] = "unhealthy"
+        health["dependencies"]["redis"] = f"error: {str(e)}"
+    
+    return health

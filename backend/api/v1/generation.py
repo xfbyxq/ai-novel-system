@@ -174,9 +174,12 @@ async def cancel_generation_task(
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
 
-    if task.status in (TaskStatus.completed, TaskStatus.failed, TaskStatus.cancelled):
-        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task.status.value}")
+    # 获取状态字符串值
+    status_value = task.status.value if hasattr(task.status, 'value') else task.status
+    
+    if status_value in (TaskStatus.completed.value, TaskStatus.failed.value, TaskStatus.cancelled.value):
+        raise HTTPException(status_code=400, detail=f"任务已处于终态: {status_value}")
 
-    task.status = TaskStatus.cancelled
+    task.status = TaskStatus.cancelled.value if hasattr(TaskStatus.cancelled, 'value') else TaskStatus.cancelled
     await db.commit()
     return {"message": "任务已取消", "task_id": str(task_id)}

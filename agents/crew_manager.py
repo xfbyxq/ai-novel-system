@@ -9,7 +9,7 @@
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager

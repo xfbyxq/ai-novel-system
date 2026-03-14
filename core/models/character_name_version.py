@@ -25,12 +25,6 @@ class CharacterNameVersion(Base):
     character = relationship("Character", back_populates="name_versions")
 
 
-class Character(Base):
-    __tablename__ = "characters"
-
-    name_versions = relationship("CharacterNameVersion", back_populates="character", cascade="all, delete-orphan")
-
-
 class CharacterNameVersionService:
     """角色名字版本管理服务"""
 

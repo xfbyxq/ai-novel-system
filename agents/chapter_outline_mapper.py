@@ -243,6 +243,91 @@ class ChapterOutlineMapper:
             f"{len(self.tension_cycles[volume_number])} tension cycles"
         )
     
+    def decompose_outline_to_chapters(
+        self,
+        volume_number: int,
+        foreshadowings: Optional[List[Dict[str, Any]]] = None,
+        character_states: Optional[Dict[str, Any]] = None
+    ) -> List[ChapterOutlineTask]:
+        """
+        将卷大纲分解为章节级任务列表
+        
+        支持自动章节拆分和主线细化
+        
+        Args:
+            volume_number: 卷号
+            foreshadowings: 伏笔列表（用于分配伏笔任务）
+            character_states: 角色状态（用于分配角色发展任务）
+        
+        Returns:
+            章节任务列表
+        """
+        logger.info(f"Decomposing volume {volume_number} outline to chapters")
+        
+        volume_outline = self.volume_outlines.get(volume_number)
+        if not volume_outline:
+            logger.warning(f"Volume {volume_number} outline not found")
+            return []
+        
+        # 获取章节配置
+        chapter_config = volume_outline.get("chapter_config", {})
+        total_chapters = chapter_config.get("total_chapters", 0)
+        
+        if total_chapters == 0:
+            # 从张力循环推断章节数
+            cycles = self.tension_cycles.get(volume_number, [])
+            if cycles:
+                total_chapters = max(c.end_chapter for c in cycles)
+            else:
+                logger.warning(f"Cannot determine total chapters for volume {volume_number}")
+                return []
+        
+        chapter_tasks = []
+        
+        # 为每章生成任务
+        for ch_num in range(1, total_chapters + 1):
+            task = self.map_outline_to_chapter(
+                volume_number=volume_number,
+                chapter_number=ch_num,
+                foreshadowings=foreshadowings
+            )
+            
+            # 添加角色发展任务
+            if character_states:
+                self._add_character_development_tasks(task, ch_num, character_states)
+            
+            chapter_tasks.append(task)
+        
+        logger.info(
+            f"Volume {volume_number} decomposed into {len(chapter_tasks)} chapter tasks"
+        )
+        
+        return chapter_tasks
+    
+    def _add_character_development_tasks(
+        self,
+        task: ChapterOutlineTask,
+        chapter_number: int,
+        character_states: Dict[str, Any]
+    ):
+        """添加角色发展任务"""
+        for char_name, state in character_states.items():
+            # 检查角色是否在当前章节有发展需求
+            pending_events = state.get("pending_events", [])
+            current_location = state.get("current_location", "")
+            emotional_state = state.get("emotional_state", "")
+            
+            # 如果有待处理事件，添加到章节任务
+            if pending_events:
+                for event in pending_events[:2]:
+                    task.character_development[char_name] = f"处理：{event}"
+            
+            # 根据情感状态添加发展任务
+            if emotional_state and chapter_number % 5 == 0:
+                task.character_development[char_name] = (
+                    f"情感发展：{emotional_state}"
+                )
+    
     def _parse_tension_cycles(
         self,
         volume_outline: Dict[str, Any],
@@ -412,6 +497,7 @@ class ChapterOutlineMapper:
         # 4. 根据循环位置分配事件
         if current_cycle:
             position = current_cycle.position(chapter_number)
+            cycle_progress = current_cycle.progress(chapter_number)
             
             if position == "suppress":
                 task.mandatory_events = current_cycle.suppression_events[:2]
@@ -424,6 +510,11 @@ class ChapterOutlineMapper:
                 task.mandatory_events = current_cycle.suppression_events[-1:]
                 task.optional_events = current_cycle.release_events[:1]
                 task.emotional_tone = "过渡、铺垫"
+            
+            # 新增：添加张力循环进度信息
+            task.mandatory_events.append(
+                f"张力循环 #{current_cycle.cycle_number} 进度：{cycle_progress:.0%}"
+            )
         
         # 5. 添加卷的关键事件
         key_events = volume_outline.get("key_events", [])
@@ -433,6 +524,9 @@ class ChapterOutlineMapper:
                 if event_chapter == chapter_number:
                     task.mandatory_events.append(event_data.get("event", ""))
                     task.is_milestone = True
+                    # 新增：添加事件影响说明
+                    if "impact" in event_data:
+                        task.optional_events.append(f"影响：{event_data['impact']}")
             elif isinstance(event_data, str):
                 # 字符串格式，无法确定章节，跳过
                 pass
@@ -455,15 +549,69 @@ class ChapterOutlineMapper:
         # 9. 生成任务描述
         task.task_description = self._generate_task_description(task, volume_outline)
         
+        # 10. 新增：添加主线细化信息
+        main_plot_thread = self._extract_main_plot_thread(volume_outline, chapter_number)
+        if main_plot_thread:
+            task.optional_events.append(f"主线推进：{main_plot_thread}")
+        
         # 缓存任务
         self.chapter_tasks[chapter_number] = task
         
         logger.info(
             f"Chapter {chapter_number} task created: "
-            f"{len(task.mandatory_events)} mandatory events"
+            f"{len(task.mandatory_events)} mandatory events, "
+            f"{len(task.optional_events)} optional events"
         )
         
         return task
+    
+    def _extract_main_plot_thread(
+        self,
+        volume_outline: Dict[str, Any],
+        chapter_number: int
+    ) -> str:
+        """
+        提取主线剧情线索
+        
+        从卷大纲中提取当前章节应推进的主线剧情
+        
+        Args:
+            volume_outline: 卷大纲
+            chapter_number: 章节号
+        
+        Returns:
+            主线剧情线索描述
+        """
+        # 检查是否有主线剧情定义
+        main_plot = volume_outline.get("main_plot", {})
+        if not main_plot:
+            return ""
+        
+        # 根据章节位置判断主线阶段
+        chapter_config = volume_outline.get("chapter_config", {})
+        total_chapters = chapter_config.get("total_chapters", 0)
+        
+        if total_chapters == 0:
+            cycles = self.tension_cycles.get(
+                volume_outline.get("number", 1), []
+            )
+            if cycles:
+                total_chapters = max(c.end_chapter for c in cycles)
+        
+        if total_chapters == 0:
+            return ""
+        
+        progress = chapter_number / total_chapters
+        
+        # 根据进度返回不同的主线阶段
+        if progress < 0.2:
+            return main_plot.get("setup", "故事开端")
+        elif progress < 0.5:
+            return main_plot.get("conflict", "冲突发展")
+        elif progress < 0.8:
+            return main_plot.get("climax", "高潮铺垫")
+        else:
+            return main_plot.get("resolution", "结局收尾")
     
     def _find_current_cycle(
         self,
@@ -485,27 +633,229 @@ class ChapterOutlineMapper:
         chapter_number: int,
         foreshadowings: List[Dict[str, Any]]
     ):
-        """添加伏笔任务"""
-        for foreshadow in foreshadowings:
-            if foreshadow.get("status") != "pending":
-                continue
-            
+        """
+        添加伏笔任务
+        
+        增强功能：
+        1. 智能伏笔分配：根据张力循环位置分配伏笔
+        2. 伏笔优先级：高优先级伏笔优先分配
+        3. 伏笔回收提醒：提前 1-2 章提醒即将回收的伏笔
+        """
+        # 1. 获取当前张力循环位置
+        current_cycle = None
+        for cycle in self.tension_cycles.get(task.volume_number, []):
+            if cycle.start_chapter <= chapter_number <= cycle.end_chapter:
+                current_cycle = cycle
+                break
+        
+        cycle_position = current_cycle.position(chapter_number) if current_cycle else None
+        
+        # 2. 分类伏笔
+        pending_foreshadowings = [
+            fb for fb in foreshadowings 
+            if fb.get("status") == "pending"
+        ]
+        
+        # 按优先级排序
+        pending_foreshadowings.sort(
+            key=lambda x: x.get("importance", 5),
+            reverse=True
+        )
+        
+        for foreshadow in pending_foreshadowings:
             planted_chapter = foreshadow.get("planted_chapter", 0)
             expected_resolve = foreshadow.get("expected_resolve_chapter", 0)
+            importance = foreshadow.get("importance", 5)
+            content = foreshadow.get("content", "")
             
             # 检查是否需要回收
             if expected_resolve == chapter_number:
                 task.foreshadowing_to_payoff.append(
-                    f"[第{planted_chapter}章] {foreshadow.get('content', '')}"
+                    f"[第{planted_chapter}章] {content}"
                 )
             # 检查是否超期
-            elif chapter_number - planted_chapter >= 5 and foreshadow.get("importance", 0) >= 7:
+            elif chapter_number - planted_chapter >= 5 and importance >= 7:
                 task.foreshadowing_to_payoff.append(
-                    f"[超期] {foreshadow.get('content', '')}"
+                    f"[超期] {content}"
+                )
+            # 提前提醒：距离回收还有 1-2 章
+            elif expected_resolve > 0 and 0 < expected_resolve - chapter_number <= 2:
+                task.foreshadowing_to_plant.append(
+                    f"[即将回收] {content} (第{expected_resolve}章回收)"
                 )
             
-            # 检查是否需要埋设（基于大纲的未来事件）
-            # 这里简化处理，实际应该分析大纲预测需要埋设的伏笔
+            # 3. 根据张力循环位置智能分配伏笔埋设
+            # 压制期适合埋设伏笔，释放期适合回收伏笔
+            if cycle_position == "suppress" and planted_chapter == 0:
+                # 压制期是埋设伏笔的好时机
+                if importance >= 6:  # 中高优先级伏笔
+                    task.foreshadowing_to_plant.append(
+                        f"[建议埋设] {content} (重要性：{importance})"
+                    )
+    
+    def analyze_tension_cycle_distribution(
+        self,
+        volume_number: int
+    ) -> Dict[str, Any]:
+        """
+        分析张力循环分布
+        
+        提供张力循环的详细分析，包括：
+        - 各循环的章节分布
+        - 压制期与释放期比例
+        - 事件密度分析
+        
+        Args:
+            volume_number: 卷号
+        
+        Returns:
+            张力循环分析报告
+        """
+        cycles = self.tension_cycles.get(volume_number, [])
+        
+        if not cycles:
+            return {
+                "error": "未找到张力循环",
+                "volume_number": volume_number,
+            }
+        
+        total_chapters = max(c.end_chapter for c in cycles)
+        
+        analysis = {
+            "volume_number": volume_number,
+            "total_chapters": total_chapters,
+            "total_cycles": len(cycles),
+            "cycles": [],
+            "overall_rhythm": "",
+        }
+        
+        total_suppress = 0
+        total_release = 0
+        
+        for cycle in cycles:
+            suppress_count = len(cycle.suppress_chapters)
+            release_count = 1  # 释放期通常 1 章
+            
+            total_suppress += suppress_count
+            total_release += release_count
+            
+            cycle_analysis = {
+                "cycle_number": cycle.cycle_number,
+                "chapter_range": [cycle.start_chapter, cycle.end_chapter],
+                "suppress_chapters": suppress_count,
+                "release_chapter": cycle.release_chapter,
+                "suppress_events_count": len(cycle.suppression_events),
+                "release_events_count": len(cycle.release_events),
+                "rhythm": f"{suppress_count}:1",
+            }
+            
+            analysis["cycles"].append(cycle_analysis)
+        
+        # 计算整体节奏
+        if total_suppress > 0:
+            ratio = total_suppress / total_release
+            if ratio < 3:
+                analysis["overall_rhythm"] = "快节奏（频繁释放）"
+            elif ratio < 6:
+                analysis["overall_rhythm"] = "中等节奏（平衡）"
+            else:
+                analysis["overall_rhythm"] = "慢节奏（长期压抑）"
+        
+        analysis["suppress_release_ratio"] = f"{total_suppress}:{total_release}"
+        
+        return analysis
+    
+    def distribute_foreshadowings_across_chapters(
+        self,
+        volume_number: int,
+        foreshadowings: List[Dict[str, Any]],
+        total_chapters: int
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        在章节间智能分配伏笔
+        
+        根据张力循环和伏笔重要性，自动分配伏笔到最佳章节
+        
+        Args:
+            volume_number: 卷号
+            foreshadowings: 伏笔列表
+            total_chapters: 总章节数
+        
+        Returns:
+            章节到伏笔列表的映射 {chapter_number: [foreshadowings]}
+        """
+        distribution = {i: [] for i in range(1, total_chapters + 1)}
+        
+        # 1. 分类伏笔
+        high_priority = [
+            fb for fb in foreshadowings 
+            if fb.get("importance", 5) >= 7 and fb.get("status") == "pending"
+        ]
+        medium_priority = [
+            fb for fb in foreshadowings 
+            if 4 <= fb.get("importance", 5) < 7 and fb.get("status") == "pending"
+        ]
+        low_priority = [
+            fb for fb in foreshadowings 
+            if fb.get("importance", 5) < 4 and fb.get("status") == "pending"
+        ]
+        
+        # 2. 获取张力循环
+        cycles = self.tension_cycles.get(volume_number, [])
+        
+        if not cycles:
+            # 没有张力循环，均匀分配
+            for i, fb in enumerate(foreshadowings):
+                ch_num = (i % total_chapters) + 1
+                distribution[ch_num].append(fb)
+            return distribution
+        
+        # 3. 根据张力循环分配伏笔
+        # 高优先级伏笔：分配到前 30% 的压制期
+        # 中优先级伏笔：分配到中间 50%
+        # 低优先级伏笔：分配到后 20%
+        
+        for cycle in cycles:
+            suppress_chapters = cycle.suppress_chapters
+            if not suppress_chapters:
+                continue
+            
+            # 计算压制期的分段
+            early_suppress = suppress_chapters[:len(suppress_chapters)//3]
+            mid_suppress = suppress_chapters[len(suppress_chapters)//3:2*len(suppress_chapters)//3]
+            late_suppress = suppress_chapters[2*len(suppress_chapters)//3:]
+            
+            # 分配高优先级伏笔到早期压制期
+            for fb in high_priority[:len(early_suppress)]:
+                if early_suppress:
+                    ch_num = early_suppress[len(distribution) % len(early_suppress)]
+                    distribution[ch_num].append({
+                        **fb,
+                        "distribution_reason": "高优先级伏笔，早期压制期埋设"
+                    })
+            
+            # 分配中优先级伏笔到中期压制期
+            for fb in medium_priority[:len(mid_suppress)]:
+                if mid_suppress:
+                    ch_num = mid_suppress[len(distribution) % len(mid_suppress)]
+                    distribution[ch_num].append({
+                        **fb,
+                        "distribution_reason": "中优先级伏笔，中期压制期埋设"
+                    })
+            
+            # 分配低优先级伏笔到后期压制期
+            for fb in low_priority[:len(late_suppress)]:
+                if late_suppress:
+                    ch_num = late_suppress[len(distribution) % len(late_suppress)]
+                    distribution[ch_num].append({
+                        **fb,
+                        "distribution_reason": "低优先级伏笔，后期压制期埋设"
+                    })
+        
+        # 4. 移除空章节
+        distribution = {k: v for k, v in distribution.items() if v}
+        
+        return distribution
     
     def _generate_task_description(
         self,
@@ -700,3 +1050,59 @@ def map_chapter_outline_task(
         chapter_number=chapter_number,
         foreshadowings=kwargs.get("foreshadowings")
     )
+
+
+def decompose_volume_outline(
+    novel_id: str,
+    volume_outline: Dict[str, Any],
+    volume_number: int,
+    total_chapters: int,
+    chapter_config: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> List[ChapterOutlineTask]:
+    """
+    便捷函数：将卷大纲分解为章节任务
+    
+    Args:
+        novel_id: 小说 ID
+        volume_outline: 卷大纲
+        volume_number: 卷号
+        total_chapters: 卷总章节数
+        chapter_config: 章节配置（可选）
+        **kwargs: 其他参数（如 foreshadowings, character_states）
+    
+    Returns:
+        ChapterOutlineTask 列表
+    """
+    mapper = ChapterOutlineMapper(novel_id)
+    mapper.load_volume_outline(volume_number, volume_outline, total_chapters, chapter_config)
+    return mapper.decompose_outline_to_chapters(
+        volume_number=volume_number,
+        foreshadowings=kwargs.get("foreshadowings"),
+        character_states=kwargs.get("character_states")
+    )
+
+
+def analyze_volume_tension(
+    novel_id: str,
+    volume_outline: Dict[str, Any],
+    volume_number: int,
+    total_chapters: int,
+    chapter_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    便捷函数：分析卷张力循环分布
+    
+    Args:
+        novel_id: 小说 ID
+        volume_outline: 卷大纲
+        volume_number: 卷号
+        total_chapters: 卷总章节数
+        chapter_config: 章节配置（可选）
+    
+    Returns:
+        张力循环分析报告
+    """
+    mapper = ChapterOutlineMapper(novel_id)
+    mapper.load_volume_outline(volume_number, volume_outline, total_chapters, chapter_config)
+    return mapper.analyze_tension_cycle_distribution(volume_number=volume_number)

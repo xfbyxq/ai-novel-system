@@ -11,6 +11,8 @@ import OverviewTab from './OverviewTab';
 import WorldSettingTab from './WorldSettingTab';
 import CharactersTab from './CharactersTab';
 import PlotOutlineTab from './PlotOutlineTab';
+import OutlineRefinementTab from './OutlineRefinementTab';
+import ChapterDecompositionTab from './ChapterDecompositionTab';
 import ChaptersTab from './ChaptersTab';
 import GenerationHistoryTab from './GenerationHistoryTab';
 
@@ -56,7 +58,7 @@ export default function NovelDetail() {
             icon={<RobotOutlined />}
             onClick={() => setAiChatOpen(true)}
           >
-            AI助手
+            AI 助手
           </Button>
         }
       >
@@ -71,7 +73,7 @@ export default function NovelDetail() {
           <Descriptions.Item label="作者">{novel.author}</Descriptions.Item>
           <Descriptions.Item label="总字数">{formatWordCount(novel.word_count)}</Descriptions.Item>
           <Descriptions.Item label="章节数">{novel.chapter_count}</Descriptions.Item>
-          <Descriptions.Item label="Token成本">{formatCost(novel.token_cost)}</Descriptions.Item>
+          <Descriptions.Item label="Token 成本">{formatCost(novel.token_cost)}</Descriptions.Item>
           <Descriptions.Item label="创建时间">{formatDate(novel.created_at)}</Descriptions.Item>
         </Descriptions>
         {novel.tags && novel.tags.length > 0 && (
@@ -93,6 +95,8 @@ export default function NovelDetail() {
           { key: 'world', label: '世界观', children: <WorldSettingTab novelId={id} /> },
           { key: 'characters', label: '角色', children: <CharactersTab novelId={id} /> },
           { key: 'outline', label: '大纲', children: <PlotOutlineTab novelId={id} /> },
+          { key: 'outline-refine', label: '大纲梳理', children: <OutlineRefinementTab novelId={id} onOutlineUpdate={loadNovel} /> },
+          { key: 'chapter-split', label: '章节拆分', children: <ChapterDecompositionTab novelId={id} /> },
           { key: 'chapters', label: '章节', children: <ChaptersTab novelId={id} /> },
           { key: 'generation', label: '生成历史', children: <GenerationHistoryTab novelId={id} onNovelRefresh={loadNovel} /> },
         ]}

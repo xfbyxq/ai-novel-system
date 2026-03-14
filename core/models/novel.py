@@ -4,7 +4,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Integer,
@@ -41,9 +40,9 @@ class Novel(Base):
     title = Column(String(200), nullable=False)
     author = Column(String(100), default="AI 创作")
     genre = Column(String(50), nullable=False)
-    tags = Column(ARRAY(String), default=list)
-    status = Column(Enum(NovelStatus), default=NovelStatus.planning)
-    length_type = Column(Enum(NovelLengthType), default=NovelLengthType.medium)  # 默认为中篇小说
+    tags = Column(JSONB, default=list)  # 标签列表
+    status = Column(String(50), default="planning")
+    length_type = Column(String(50), default="medium")  # 默认为中篇小说
     word_count = Column(Integer, default=0)
     chapter_count = Column(Integer, default=0)
     cover_url = Column(String(500), nullable=True)

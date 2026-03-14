@@ -2,7 +2,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Text
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -33,9 +33,9 @@ class PublishTask(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     novel_id = Column(UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
     platform_account_id = Column(UUID(as_uuid=True), ForeignKey("platform_accounts.id", ondelete="CASCADE"), nullable=False)
-    publish_type = Column(Enum(PublishType), nullable=False)
+    publish_type = Column(String(50), nullable=False)
     target_chapters = Column(ARRAY(Integer), default=list)  # 目标章节号列表
-    status = Column(Enum(PublishTaskStatus), default=PublishTaskStatus.pending)
+    status = Column(String(50), default="pending")
     progress = Column(JSONB, default=dict)
     result_summary = Column(JSONB, default=dict)
     error_message = Column(Text, nullable=True)

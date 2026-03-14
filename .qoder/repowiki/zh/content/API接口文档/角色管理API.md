@@ -16,6 +16,13 @@
 - [frontend/src/utils/constants.ts](file://frontend/src/utils/constants.ts)
 </cite>
 
+## 更新摘要
+**变更内容**
+- 新增专门的关系图谱数据模型（CharacterNode、CharacterEdge、CharacterRelationshipResponse）
+- 改进的关系图可视化能力，提供更规范的图论数据结构
+- 增强的前端节点边渲染，支持更好的视觉效果和交互体验
+- 优化的关系数据处理流程，提升性能和可维护性
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -29,13 +36,15 @@
 10. [附录](#附录)
 
 ## 简介
-本文件面向“角色管理API”的使用与维护，覆盖角色的完整CRUD操作及关系图谱功能，包括：
+本文件面向"角色管理API"的使用与维护，覆盖角色的完整CRUD操作及关系图谱功能，包括：
 - GET /novels/{novel_id}/characters：获取指定小说的角色列表
 - POST /novels/{novel_id}/characters：创建新角色
 - GET /novels/{novel_id}/characters/{character_id}：获取角色详情
 - PATCH /novels/{novel_id}/characters/{character_id}：更新角色信息
 - DELETE /novels/{novel_id}/characters/{character_id}：删除角色
 - GET /novels/{novel_id}/characters/relationships：获取角色关系图（节点与边）
+
+**更新** 新增专门的关系图谱数据模型，提供更规范的图论数据结构，支持更好的可视化渲染和交互体验。
 
 同时，文档详细说明角色属性字段、关系建模方式、前端集成点、错误处理策略，并提供典型应用场景与最佳实践。
 
@@ -52,13 +61,14 @@ D["SQLAlchemy 异步引擎<br/>core/database.py"]
 E["角色模型<br/>core/models/character.py"]
 F["小说模型<br/>core/models/novel.py"]
 G["角色Schema<br/>backend/schemas/character.py"]
+H["关系图谱模型<br/>CharacterNode/CharacterEdge"]
 end
 subgraph "前端"
-H["角色API封装<br/>frontend/src/api/characters.ts"]
-I["角色卡片与表单<br/>frontend/src/pages/NovelDetail/CharactersTab.tsx"]
-J["关系图谱组件<br/>frontend/src/pages/NovelDetail/RelationshipGraph.tsx"]
-K["类型定义<br/>frontend/src/api/types.ts"]
-L["常量映射<br/>frontend/src/utils/constants.ts"]
+I["角色API封装<br/>frontend/src/api/characters.ts"]
+J["角色卡片与表单<br/>frontend/src/pages/NovelDetail/CharactersTab.tsx"]
+K["关系图谱组件<br/>frontend/src/pages/NovelDetail/RelationshipGraph.tsx"]
+L["类型定义<br/>frontend/src/api/types.ts"]
+M["常量映射<br/>frontend/src/utils/constants.ts"]
 end
 A --> B
 B --> C
@@ -66,14 +76,16 @@ C --> D
 B --> E
 B --> F
 B --> G
-H --> A
-I --> H
-J --> H
-K --> G
-L --> I
+B --> H
+I --> A
+J --> I
+K --> I
+L --> G
+L --> H
+M --> J
 ```
 
-图表来源
+**图表来源**
 - [backend/main.py](file://backend/main.py#L15-L32)
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L21-L21)
 - [backend/dependencies.py](file://backend/dependencies.py#L12-L19)
@@ -87,9 +99,9 @@ L --> I
 - [frontend/src/api/types.ts](file://frontend/src/api/types.ts#L46-L94)
 - [frontend/src/utils/constants.ts](file://frontend/src/utils/constants.ts#L22-L33)
 
-章节来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L1-L203)
-- [backend/schemas/character.py](file://backend/schemas/character.py#L1-L76)
+**章节来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L1-L215)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L1-L123)
 - [core/models/character.py](file://core/models/character.py#L1-L54)
 - [core/models/novel.py](file://core/models/novel.py#L1-L66)
 - [frontend/src/api/characters.ts](file://frontend/src/api/characters.ts#L1-L44)
@@ -104,13 +116,16 @@ L --> I
 ## 核心组件
 - 角色CRUD路由：提供角色列表、创建、详情、更新、删除的REST接口，均绑定在 /novels/{novel_id}/characters 路径下。
 - 关系图谱接口：返回角色节点与关系边，供前端可视化展示。
+- **新增** 专门的关系图谱数据模型：CharacterNode、CharacterEdge、CharacterRelationshipResponse，提供规范的图论数据结构。
 - 数据模型与枚举：角色类型、性别、状态等枚举统一定义于模型层。
 - Pydantic Schema：严格定义请求与响应的数据结构，确保前后端契约一致。
 - 前端集成：提供角色列表、详情、编辑、删除、关系图谱的UI与交互。
 
-章节来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L203)
-- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L76)
+**更新** 新增专门的关系图谱数据模型，提供更规范的图论数据结构，支持更好的可视化渲染和交互体验。
+
+**章节来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L215)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L123)
 - [core/models/character.py](file://core/models/character.py#L12-L53)
 - [frontend/src/api/characters.ts](file://frontend/src/api/characters.ts#L4-L43)
 - [frontend/src/pages/NovelDetail/CharactersTab.tsx](file://frontend/src/pages/NovelDetail/CharactersTab.tsx#L19-L234)
@@ -135,8 +150,8 @@ MODEL-->>API : "模型实例"
 API-->>FE : "HTTP 响应(JSON)"
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L203)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L215)
 - [backend/dependencies.py](file://backend/dependencies.py#L12-L19)
 - [core/database.py](file://core/database.py#L25-L34)
 - [core/models/character.py](file://core/models/character.py#L31-L53)
@@ -162,28 +177,36 @@ API-->>FE : "HTTP 响应(JSON)"
   - 角色不存在时返回404。
   - 其他数据库异常由中间件捕获并返回标准错误。
 
-章节来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L203)
+**章节来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L215)
 
 ### 角色关系图谱接口
 - 路径与方法
   - GET /novels/{novel_id}/characters/relationships
 
-- 返回结构
+- **更新** 返回结构
   - nodes：角色节点数组，包含 id、name、role_type 等
   - edges：关系边数组，包含 source、target、label
+
+- **新增** 专门的关系图谱数据模型
+  - CharacterNode：角色节点模型，包含角色ID、名称、类型
+  - CharacterEdge：关系边模型，包含源角色ID、目标角色ID、关系标签
+  - CharacterRelationshipResponse：关系图谱响应模型，包含节点和边列表
 
 - 关系建模
   - 后端从每个角色的 relationships 字段读取目标角色名到关系类型的映射。
   - 使用角色名到UUID的映射构建边，仅当目标角色存在时才输出该边。
+  - **改进** 使用专门的CharacterRelationshipResponse模型确保数据结构的一致性和完整性。
   - 前端接收nodes与edges后，使用Dagre布局算法进行自动布局。
 
 - 前端集成
   - 前端组件基于 @xyflow/react 渲染关系图，支持缩放、平移、迷你地图等交互。
-  - 节点样式根据角色类型映射颜色，边标注关系标签。
+  - **改进** 节点样式根据角色类型映射颜色，边标注关系标签，支持更好的视觉效果。
+  - 使用改进的节点边数据结构，提供更清晰的可视化展示。
 
-章节来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L73-L127)
+**章节来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L77-L133)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L105-L123)
 - [frontend/src/pages/NovelDetail/RelationshipGraph.tsx](file://frontend/src/pages/NovelDetail/RelationshipGraph.tsx#L37-L107)
 - [frontend/src/utils/constants.ts](file://frontend/src/utils/constants.ts#L22-L27)
 
@@ -210,10 +233,16 @@ API-->>FE : "HTTP 响应(JSON)"
   - 性别：male/female/other
   - 角色状态：alive/dead/unknown
 
-章节来源
+- **新增** 关系图谱数据模型
+  - CharacterNode：规范的节点模型，包含id、name、role_type字段
+  - CharacterEdge：规范的边模型，包含source、target、label字段
+  - CharacterRelationshipResponse：规范的关系图谱响应模型
+
+**章节来源**
 - [core/models/character.py](file://core/models/character.py#L12-L53)
 - [core/models/novel.py](file://core/models/novel.py#L37-L65)
 - [backend/schemas/character.py](file://backend/schemas/character.py#L36-L55)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L105-L123)
 
 ### 前端集成与用户界面
 - 角色列表与详情
@@ -221,14 +250,17 @@ API-->>FE : "HTTP 响应(JSON)"
   - 支持角色类型与性别的下拉选择，基础字段输入框。
   - 编辑模式下提交PATCH请求更新角色信息。
 
-- 关系图谱
+- **更新** 关系图谱
   - RelationshipGraph 组件加载关系数据并渲染图谱。
+  - **改进** 使用改进的节点边数据结构，支持更好的视觉效果和交互体验。
   - 使用Dagre进行自动布局，边标注关系标签，节点按角色类型着色。
+  - **新增** 支持节点边的样式定制，包括边框颜色、圆角、字体大小等。
 
 - 类型定义
   - 前端类型与后端Schema一一对应，确保TS类型安全。
+  - **新增** CharacterNode、CharacterEdge、CharacterRelationships类型定义。
 
-章节来源
+**章节来源**
 - [frontend/src/pages/NovelDetail/CharactersTab.tsx](file://frontend/src/pages/NovelDetail/CharactersTab.tsx#L19-L234)
 - [frontend/src/pages/NovelDetail/RelationshipGraph.tsx](file://frontend/src/pages/NovelDetail/RelationshipGraph.tsx#L37-L107)
 - [frontend/src/api/types.ts](file://frontend/src/api/types.ts#L46-L94)
@@ -251,7 +283,7 @@ DB-->>Router : "角色列表"
 Router-->>Client : "200 OK + JSON数组"
 ```
 
-图表来源
+**图表来源**
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L45)
 - [core/models/novel.py](file://core/models/novel.py#L37-L65)
 - [core/models/character.py](file://core/models/character.py#L31-L53)
@@ -272,8 +304,8 @@ DB-->>Router : "刷新后的角色"
 Router-->>Client : "201 Created + JSON"
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L48-L70)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L50-L74)
 - [core/models/novel.py](file://core/models/novel.py#L37-L65)
 - [core/models/character.py](file://core/models/character.py#L31-L53)
 
@@ -294,8 +326,8 @@ Router-->>Client : "404 Not Found"
 end
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L130-L149)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L136-L157)
 
 #### 更新角色
 ```mermaid
@@ -317,8 +349,8 @@ Router-->>Client : "404 Not Found"
 end
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L152-L179)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L160-L189)
 
 #### 删除角色
 ```mermaid
@@ -338,8 +370,8 @@ Router-->>Client : "404 Not Found"
 end
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L182-L202)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L192-L215)
 
 ### 关系图谱流程图
 ```mermaid
@@ -357,8 +389,8 @@ NextChar --> |循环结束| Return["返回 nodes 和 edges"]
 Return --> End(["结束"])
 ```
 
-图表来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L73-L127)
+**图表来源**
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L77-L133)
 
 ## 依赖分析
 - 路由与依赖
@@ -371,7 +403,8 @@ Return --> End(["结束"])
 
 - 前后端契约
   - 前端类型定义与后端Pydantic Schema保持一致，避免类型不匹配问题。
-  - 关系图谱的节点与边结构与后端返回一致，便于前端直接消费。
+  - **新增** 关系图谱的节点与边结构与后端返回一致，便于前端直接消费。
+  - **新增** 专门的关系图谱数据模型确保前后端数据结构的一致性。
 
 ```mermaid
 graph LR
@@ -384,9 +417,9 @@ FE["前端组件<br/>CharactersTab/RelationshipGraph"] --> API["角色API封装<
 API --> R
 ```
 
-图表来源
+**图表来源**
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L11-L19)
-- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L76)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L123)
 - [core/models/character.py](file://core/models/character.py#L31-L53)
 - [core/models/novel.py](file://core/models/novel.py#L37-L65)
 - [backend/dependencies.py](file://backend/dependencies.py#L12-L19)
@@ -395,9 +428,9 @@ API --> R
 - [frontend/src/pages/NovelDetail/CharactersTab.tsx](file://frontend/src/pages/NovelDetail/CharactersTab.tsx#L1-L298)
 - [frontend/src/pages/NovelDetail/RelationshipGraph.tsx](file://frontend/src/pages/NovelDetail/RelationshipGraph.tsx#L1-L108)
 
-章节来源
+**章节来源**
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L11-L19)
-- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L76)
+- [backend/schemas/character.py](file://backend/schemas/character.py#L8-L123)
 - [core/models/character.py](file://core/models/character.py#L31-L53)
 - [core/models/novel.py](file://core/models/novel.py#L37-L65)
 - [backend/dependencies.py](file://backend/dependencies.py#L12-L19)
@@ -416,8 +449,7 @@ API --> R
 
 - 前端渲染
   - 关系图谱使用Dagre布局，节点与边较多时建议启用虚拟滚动或分批渲染。
-
-[本节为通用指导，无需列出具体文件来源]
+  - **新增** 改进的节点边数据结构支持更好的渲染性能。
 
 ## 故障排除指南
 - 常见错误与处理
@@ -428,17 +460,16 @@ API --> R
 - 前端调试
   - 使用浏览器开发者工具查看网络请求与响应，确认接口路径与参数。
   - 在角色详情抽屉中核对字段显示是否符合预期。
+  - **新增** 检查关系图谱数据结构是否符合CharacterRelationshipResponse模型。
 
-章节来源
+**章节来源**
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L37-L38)
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L146-L147)
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L198-L199)
 - [backend/main.py](file://backend/main.py#L22-L29)
 
 ## 结论
-角色管理API提供了完善的角色CRUD与关系图谱功能，结合前后端类型安全与清晰的路由设计，能够满足小说创作中角色信息管理与关系可视化的典型需求。后续可在关系图谱分页、批量操作、字段过滤等方面进一步增强。
-
-[本节为总结性内容，无需列出具体文件来源]
+角色管理API提供了完善的角色CRUD与关系图谱功能，结合前后端类型安全与清晰的路由设计，能够满足小说创作中角色信息管理与关系可视化的典型需求。**更新** 新增专门的关系图谱数据模型，提供更规范的图论数据结构，支持更好的可视化渲染和交互体验。后续可在关系图谱分页、批量操作、字段过滤等方面进一步增强。
 
 ## 附录
 
@@ -476,15 +507,12 @@ API --> R
   - 成功响应：204 No Content
   - 失败响应：404 Not Found（角色不存在）
 
-- 获取角色关系图
+- **新增** 获取角色关系图
   - 方法：GET
   - 路径：/novels/{novel_id}/characters/relationships
   - 成功响应：200 OK，返回 { nodes: [], edges: [] }
   - 失败响应：404 Not Found（小说不存在）
-
-章节来源
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L203)
-- [frontend/src/api/characters.ts](file://frontend/src/api/characters.ts#L4-L43)
+  - **更新** 返回结构：使用CharacterRelationshipResponse模型，包含规范的节点和边数据结构
 
 ### 字段说明与枚举
 
@@ -507,14 +535,14 @@ API --> R
   - 性别：male/female/other
   - 角色状态：alive/dead/unknown
 
-章节来源
-- [core/models/character.py](file://core/models/character.py#L12-L53)
-- [backend/schemas/character.py](file://backend/schemas/character.py#L36-L55)
+- **新增** 关系图谱数据模型字段
+  - CharacterNode：id（UUID）、name（字符串）、role_type（枚举）
+  - CharacterEdge：source（UUID）、target（UUID）、label（字符串）
+  - CharacterRelationshipResponse：nodes（CharacterNode数组）、edges（CharacterEdge数组）
 
 ### 实际应用场景
 - 小说创作：快速录入角色基础信息与关系，自动生成关系图谱辅助构思。
 - 世界构建：通过relationships字段表达复杂的人际网络，支撑剧情发展。
 - 批量导入：可扩展批量创建接口，配合CSV/JSON模板导入角色数据。
 - 权限控制：在路由层增加鉴权中间件，确保角色操作仅限作者或团队成员。
-
-[本节为概念性内容，无需列出具体文件来源]
+- **新增** 关系分析：利用改进的关系图谱数据结构，支持更复杂的关系分析和可视化需求。

@@ -168,7 +168,7 @@ class NovelQueryService:
                 "volume_number": c.volume_number,
                 "title": c.title,
                 "word_count": c.word_count,
-                "status": c.status.value if c.status else "draft"
+                "status": c.status if c.status else "draft"
             }
             for c in chapters
         ]

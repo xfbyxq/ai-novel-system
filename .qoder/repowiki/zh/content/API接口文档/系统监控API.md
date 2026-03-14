@@ -12,6 +12,13 @@
 - [core/models/publish_task.py](file://core/models/publish_task.py)
 </cite>
 
+## 更新摘要
+**变更内容**
+- 增强了监控API的参数验证机制，确保查询参数的合法性和范围约束
+- 统一了所有API端点的响应格式，提供一致的数据结构
+- 改进了错误处理和数据验证逻辑
+- 优化了Agent历史任务接口的响应格式
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -64,31 +71,31 @@ MAIN --> API
 ```
 
 **图表来源**
-- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L1-L100)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L1-L805)
-- [backend/main.py](file://backend/main.py#L1-L53)
+- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L1-L129)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L1-L804)
+- [backend/main.py](file://backend/main.py#L1-L121)
 
 **章节来源**
-- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L1-L100)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L1-L805)
-- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L1-L29)
+- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L1-L129)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L1-L804)
+- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L1-L39)
 
 ## 核心组件
 
 ### API路由器组件
 
-监控API通过FastAPI路由器提供RESTful接口，采用模块化设计，每个监控功能对应独立的端点：
+监控API通过FastAPI路由器提供RESTful接口，采用模块化设计，每个监控功能对应独立的端点，并具备增强的参数验证和一致的响应格式：
 
 ```mermaid
 classDiagram
 class MonitoringRouter {
 +get_system_status() Response
-+get_performance_metrics() Response
-+get_error_analysis() Response
++get_performance_metrics(days : int) Response
++get_error_analysis(days : int) Response
 +get_auto_optimization_suggestions() Response
 +get_system_health_check() Response
-+get_agent_statuses() Response
-+get_agent_history(agent_id) Response
++get_agent_status() Response
++get_agent_history(agent_id : str) Response
 }
 class MonitoringService {
 +get_system_status() Dict
@@ -103,8 +110,8 @@ MonitoringRouter --> MonitoringService : "依赖"
 ```
 
 **图表来源**
-- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L9-L100)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L63-L805)
+- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L9-L129)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L62-L804)
 
 ### 数据模型组件
 
@@ -182,22 +189,25 @@ participant Service as 监控服务
 participant DB as 数据库
 participant System as 系统资源
 Client->>API : GET /monitoring/system-status
+API->>API : 参数验证 (Query参数)
 API->>Service : get_system_status()
 Service->>System : 读取系统资源使用情况
 Service->>DB : 查询任务状态和Token使用
 DB-->>Service : 返回统计数据
 Service->>Service : 计算健康评分
 Service-->>API : 返回系统状态
-API-->>Client : JSON响应
+API-->>Client : 统一响应格式
 Note over Client,System : 异步执行，非阻塞操作
 ```
 
 **图表来源**
-- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L12-L22)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L118-L176)
+- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L12-L26)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L117-L175)
 
 系统架构特点：
 - **异步处理**：所有监控操作都是异步执行，避免阻塞主线程
+- **参数验证**：API层提供严格的参数验证和范围约束
+- **统一响应**：所有端点返回一致的JSON响应格式
 - **资源监控**：直接读取系统资源使用情况，无需额外配置
 - **数据库集成**：通过SQLAlchemy ORM访问数据库，支持复杂的聚合查询
 - **健康评估**：内置智能健康评分算法，提供客观的系统状态判断
@@ -246,7 +256,7 @@ MonitoringService --> PerformanceMetrics : "生成"
 ```
 
 **图表来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L63-L805)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L62-L804)
 
 #### 系统状态监控流程
 
@@ -270,10 +280,10 @@ RecordMetrics --> End([返回系统状态])
 ```
 
 **图表来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L118-L176)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L117-L175)
 
 **章节来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L63-L805)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L62-L804)
 
 ### 健康评估算法
 
@@ -315,7 +325,7 @@ StatusCheck --> |分数 < 60| Critical[严重]
 ```
 
 **图表来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L486-L556)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L485-L555)
 
 ## 监控指标定义
 
@@ -327,7 +337,7 @@ StatusCheck --> |分数 < 60| Critical[严重]
 |---------|---------|------|------|----------|
 | CPU | cpu_percent | % | CPU使用率 | < 80% 正常，> 80% 需关注 |
 | 内存 | memory.percent | % | 内存使用率 | < 80% 正常，> 80% 需关注 |
-| 磁盘 | disk.percent | % | 磁盘使用率 | < 80% 正常，> 80% 需清理 |
+| 磁盘 | disk.percent | % | 磁盘使用率 | < 80% 正常，> 80% 需关注 |
 | 网络 | network.bytes_sent | 字节 | 发送字节数 | 实时监控 |
 | 网络 | network.bytes_recv | 字节 | 接收字节数 | 实时监控 |
 | 系统 | uptime_seconds | 秒 | 系统运行时间 | 持续增长 |
@@ -363,10 +373,25 @@ AI Agent运行状态监控：
 | Agent状态 | agents[].error_message | 错误信息 | 错误描述 | 可为空 |
 
 **章节来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L118-L176)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L178-L261)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L117-L175)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L177-L260)
 
 ## API接口规范
+
+### 统一响应格式
+
+**更新** 所有监控API端点现在都遵循统一的响应格式：
+
+```json
+{
+  "success": true,
+  "data": {
+    // 具体的响应数据
+  }
+}
+```
+
+这种统一格式提供了更好的错误处理能力和客户端兼容性。
 
 ### 系统状态接口
 
@@ -457,7 +482,11 @@ AI Agent运行状态监控：
 **功能**: 获取指定时间范围内的性能指标分析
 
 **查询参数**:
-- `days` (可选): 分析天数，默认值: 7
+- `days` (可选): 分析天数，默认值: 7，范围: 1-90天
+
+**参数验证**: 
+- `days` 参数现在具有严格的范围验证：`ge=1, le=90`
+- 确保查询范围合理，避免过长或过短的时间窗口
 
 **响应格式**:
 ```json
@@ -500,7 +529,11 @@ AI Agent运行状态监控：
 **功能**: 获取指定时间范围内的错误分析报告
 
 **查询参数**:
-- `days` (可选): 分析天数，默认值: 7
+- `days` (可选): 分析天数，默认值: 7，范围: 1-90天
+
+**参数验证**: 
+- `days` 参数具有相同的范围验证机制
+- 确保错误分析的时间范围在合理范围内
 
 **响应格式**:
 ```json
@@ -642,9 +675,11 @@ AI Agent运行状态监控：
 ]
 ```
 
+**更新** Agent历史任务接口现在返回原始数据格式，不再包装在统一的响应结构中。
+
 **章节来源**
-- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L12-L100)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L118-L407)
+- [backend/api/v1/monitoring.py](file://backend/api/v1/monitoring.py#L12-L129)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L117-L406)
 
 ## 使用示例与最佳实践
 
@@ -660,9 +695,10 @@ participant Service as 监控服务
 participant Timer as 定时器
 Page->>Timer : 设置5秒定时器
 Timer->>API : GET /monitoring/system-status
+API->>API : 参数验证
 API->>Service : get_system_status()
 Service-->>API : 返回系统状态
-API-->>Page : 更新UI状态
+API-->>Page : 统一响应格式
 Note over Page : 自动轮询更新监控数据
 ```
 
@@ -711,7 +747,7 @@ Note over Page : 自动轮询更新监控数据
 
 **章节来源**
 - [frontend/src/pages/SystemMonitoring.tsx](file://frontend/src/pages/SystemMonitoring.tsx#L60-L411)
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L558-L698)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L557-L697)
 
 ## 故障排查指南
 
@@ -775,10 +811,10 @@ SuggestSolution --> MonitorFix[监控修复效果]
 ```
 
 **图表来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L263-L345)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L262-L344)
 
 **章节来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L263-L345)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L262-L344)
 
 ## 性能优化建议
 
@@ -840,7 +876,7 @@ SuggestSolution --> MonitorFix[监控修复效果]
    - 实施告警升级机制
 
 **章节来源**
-- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L558-L698)
+- [backend/services/monitoring_service.py](file://backend/services/monitoring_service.py#L557-L697)
 
 ## 结论
 
@@ -852,6 +888,7 @@ SuggestSolution --> MonitorFix[监控修复效果]
 2. **实时性**: 支持实时监控和历史数据分析
 3. **智能化**: 内置健康评估和自动调优建议
 4. **可扩展性**: 模块化设计，易于扩展新的监控指标
+5. **一致性**: 统一的响应格式和参数验证机制
 
 ### 应用价值
 

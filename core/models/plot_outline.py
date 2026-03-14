@@ -28,7 +28,8 @@ class PlotOutline(Base):
     #     "emotional_arc": "情感弧光变化曲线",
     #     "theme_expression": "主题表达方式",
     #     "key_revelations": "关键揭示点列表",
-    #     "character_growth": "主角成长轨迹描述"
+    #     "character_growth": "主角成长轨迹描述",
+    #     "ending_description": "结局详细描述（包括最终冲突解决、角色归宿等）"
     # }
     
     sub_plots = Column(JSONB, default=list)

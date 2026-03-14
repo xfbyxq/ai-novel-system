@@ -118,7 +118,7 @@ class GenerationService:
                 genre=novel.genre,
                 tags=novel.tags or [],
                 context=novel.synopsis or "",
-                length_type=novel.length_type.value if novel.length_type else "medium",
+                length_type=novel.length_type if novel.length_type else "medium",
             )
 
             # 删除旧的企划数据（如果存在），以便重新生成

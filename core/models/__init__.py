@@ -1,6 +1,7 @@
 from core.models.novel import Novel, NovelStatus
 from core.models.world_setting import WorldSetting
 from core.models.character import Character, RoleType, Gender, CharacterStatus
+from core.models.character_name_version import CharacterNameVersion
 from core.models.plot_outline import PlotOutline
 from core.models.chapter import Chapter, ChapterStatus
 from core.models.generation_task import GenerationTask, TaskType, TaskStatus
@@ -18,6 +19,7 @@ __all__ = [
     "RoleType",
     "Gender",
     "CharacterStatus",
+    "CharacterNameVersion",
     "PlotOutline",
     "Chapter",
     "ChapterStatus",

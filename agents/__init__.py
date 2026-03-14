@@ -23,6 +23,8 @@ from agents.continuity_integration import (
     ContinuityAssuranceIntegration,
     generate_chapter_with_continuity,
 )
+from agents.outline_refiner import OutlineRefiner
+from agents.outline_validator import OutlineValidator
 
 __all__ = [
     "NovelCrewManager",
@@ -38,4 +40,6 @@ __all__ = [
     "validate_chapter_transition",
     "ContinuityAssuranceIntegration",
     "generate_chapter_with_continuity",
+    "OutlineRefiner",
+    "OutlineValidator",
 ]

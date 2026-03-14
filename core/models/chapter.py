@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -25,7 +25,7 @@ class Chapter(Base):
     title = Column(String(200), nullable=True)
     content = Column(Text, nullable=True)
     word_count = Column(Integer, default=0)
-    status = Column(Enum(ChapterStatus), default=ChapterStatus.draft)
+    status = Column(String(50), default="draft")
     outline = Column(JSONB, default=dict)  # 章节大纲
     characters_appeared = Column(ARRAY(UUID(as_uuid=True)), default=list)
     plot_points = Column(JSONB, default=list)
@@ -33,6 +33,9 @@ class Chapter(Base):
     quality_score = Column(Float, nullable=True)
     continuity_issues = Column(JSONB, default=list)
     detailed_outline = Column(JSONB, default=dict)  # 细化后的详细章节大纲
+    outline_task = Column(JSONB, default=dict)  # 本章的大纲任务
+    outline_validation = Column(JSONB, default=dict)  # 大纲验证结果
+    outline_version = Column(String(50), nullable=True)  # 使用的大纲版本号
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)

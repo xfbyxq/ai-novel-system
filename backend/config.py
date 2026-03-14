@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
@@ -12,9 +13,21 @@ class Settings(BaseSettings):
     # Database
     DB_USER: str = "novel_user"
     DB_PASSWORD: str = "novel_pass"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5434  # 从 .env 文件中看到实际使用的端口
     DB_NAME: str = "novel_system"
+
+    @property
+    def DB_HOST(self) -> str:
+        """自动检测是否在Docker环境中"""
+        if os.environ.get('DOCKER_ENV') == 'true':
+            return 'postgres'  # Docker服务名
+        return 'localhost'     # 本地开发
+
+    @property
+    def DB_PORT(self) -> int:
+        """自动检测是否在Docker环境中"""
+        if os.environ.get('DOCKER_ENV') == 'true':
+            return 5432        # Docker内部端口
+        return 5434            # 本地开发映射端口
 
     @property
     def DATABASE_URL(self) -> str:
@@ -27,11 +40,26 @@ class Settings(BaseSettings):
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    @property
+    def REDIS_URL(self) -> str:
+        """自动检测Redis URL"""
+        if os.environ.get('DOCKER_ENV') == 'true':
+            return "redis://redis:6379/0"
+        return "redis://localhost:6379/0"
 
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    @property
+    def CELERY_BROKER_URL(self) -> str:
+        """自动检测Celery Broker URL"""
+        if os.environ.get('DOCKER_ENV') == 'true':
+            return "redis://redis:6379/1"
+        return "redis://localhost:6379/1"
+
+    @property
+    def CELERY_RESULT_BACKEND(self) -> str:
+        """自动检测Celery Result Backend URL"""
+        if os.environ.get('DOCKER_ENV') == 'true':
+            return "redis://redis:6379/2"
+        return "redis://localhost:6379/2"
 
     # Application
     APP_ENV: str = "development"

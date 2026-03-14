@@ -316,13 +316,18 @@ async def cancel_publish_task(
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
 
+    # 获取状态值（支持String列和Enum）
+    task_status_value = task.status.value if hasattr(task.status, 'value') else task.status
+    
     terminal_statuses = (
-        PublishTaskStatus.completed, PublishTaskStatus.failed, PublishTaskStatus.cancelled
+        PublishTaskStatus.completed.value if hasattr(PublishTaskStatus.completed, 'value') else PublishTaskStatus.completed,
+        PublishTaskStatus.failed.value if hasattr(PublishTaskStatus.failed, 'value') else PublishTaskStatus.failed,
+        PublishTaskStatus.cancelled.value if hasattr(PublishTaskStatus.cancelled, 'value') else PublishTaskStatus.cancelled
     )
-    if task.status in terminal_statuses:
-        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task.status.value}")
+    if task_status_value in terminal_statuses:
+        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task_status_value}")
 
-    task.status = PublishTaskStatus.cancelled
+    task.status = PublishTaskStatus.cancelled.value if hasattr(PublishTaskStatus.cancelled, 'value') else PublishTaskStatus.cancelled
     await db.commit()
     return {"message": "任务已取消", "task_id": str(task_id)}
 

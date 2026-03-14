@@ -2,7 +2,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -26,9 +26,9 @@ class ChapterPublish(Base):
     publish_task_id = Column(UUID(as_uuid=True), ForeignKey("publish_tasks.id", ondelete="CASCADE"), nullable=False)
     chapter_id = Column(UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
     chapter_number = Column(Integer, nullable=False)
-    platform_chapter_id = Column(String(100), nullable=True)  # 平台返回的章节ID
+    platform_chapter_id = Column(String(100), nullable=True)  # 平台返回的章节 ID
     platform_url = Column(String(500), nullable=True)
-    status = Column(Enum(PublishStatus), default=PublishStatus.pending)
+    status = Column(String(50), default="pending")
     error_message = Column(Text, nullable=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
