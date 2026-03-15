@@ -1,15 +1,23 @@
-# Memory Service
+# 内存服务
 
 <cite>
 **本文档引用的文件**
 - [memory_service.py](file://backend/services/memory_service.py)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py)
+- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
 - [ai_chat.py](file://backend/api/v1/ai_chat.py)
 - [ai_chat_session.py](file://core/models/ai_chat_session.py)
 - [novel.py](file://core/models/novel.py)
 - [qwen_client.py](file://llm/qwen_client.py)
 - [ai_chat.py](file://backend/schemas/ai_chat.py)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 移除了关于持久化记忆系统的详细说明，因为原文档已被删除
+- 更新了架构概览，反映当前的内存缓存架构
+- 移除了持久化存储相关的章节和图表
+- 保持了内存缓存功能的完整描述
 
 ## 目录
 1. [简介](#简介)
@@ -24,13 +32,15 @@
 
 ## 简介
 
-Memory Service 是小说创作系统中的核心记忆管理模块，负责高效存储和管理小说相关信息。该服务提供了智能的内存缓存机制、深度变化检测、版本控制以及专门针对小说创作场景的数据结构化管理。
+内存服务是小说创作系统中的核心记忆管理模块，负责高效存储和管理小说相关信息。该服务提供了智能的内存缓存机制、深度变化检测、版本控制以及专门针对小说创作场景的数据结构化管理。
 
 该服务主要服务于AI聊天功能，通过智能缓存机制显著提升小说信息的访问速度，同时提供完整的版本控制和增量更新能力，确保小说创作过程中的数据一致性。
 
+**更新** 移除了持久化记忆系统的详细说明，系统目前仅保留基本的内存缓存功能。
+
 ## 项目结构
 
-Memory Service 在整个项目架构中扮演着关键角色，位于服务层的核心位置：
+内存服务在当前架构中采用纯内存缓存设计，位于服务层的核心位置：
 
 ```mermaid
 graph TB
@@ -43,8 +53,7 @@ SCHEMAS[数据模型]
 end
 subgraph "服务层"
 AI_CHAT_SERVICE[AI聊天服务]
-MEMORY_SERVICE[记忆服务]
-LLM_CLIENT[LLM客户端]
+MEMORY_SERVICE[内存缓存服务]
 end
 subgraph "数据层"
 DB[(数据库)]
@@ -53,50 +62,49 @@ end
 FE --> API
 API --> AI_CHAT_SERVICE
 AI_CHAT_SERVICE --> MEMORY_SERVICE
-AI_CHAT_SERVICE --> LLM_CLIENT
+AI_CHAT_SERVICE --> DB
 MEMORY_SERVICE --> DB
-AI_CHAT_SERVICE --> MODELS
 DB --> MODELS
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L1-L396)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L200)
+- [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
+- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L1-L396)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L200)
+- [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
+- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 
 ## 核心组件
 
-Memory Service 包含两个核心组件：
+内存服务包含两个核心组件：
 
-### 1. MemoryCache 缓存系统
+### 1. MemoryCache 内存缓存系统
 - **内存缓存实现**：提供LRU（最近最少使用）淘汰策略
-- **过期管理**：支持可配置的过期时间
-- **容量控制**：限制最大缓存条目数量
+- **过期管理**：支持可配置的过期时间（默认30分钟）
+- **容量控制**：限制最大缓存条目数量（默认100个）
 - **访问统计**：跟踪访问频率和时间
 
-### 2. NovelMemoryService 小说记忆服务
+### 2. NovelMemoryService 小说内存服务
 - **深度变化检测**：检测小说各个组成部分的变化
 - **版本控制系统**：维护小说内容的版本历史
 - **结构化数据存储**：按层次结构组织小说数据
 - **增量更新支持**：仅在内容发生变化时更新缓存
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L12-L72)
-- [memory_service.py](file://backend/services/memory_service.py#L74-L274)
+- [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
+- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
 
 ## 架构概览
 
-Memory Service 采用分层架构设计，与AI聊天服务紧密集成：
+内存服务采用纯内存缓存架构设计，与AI聊天服务紧密集成：
 
 ```mermaid
 sequenceDiagram
 participant Client as 客户端
 participant API as API层
 participant ChatService as AI聊天服务
-participant MemoryService as 记忆服务
+participant MemoryService as 内存缓存服务
 participant Cache as 内存缓存
 participant DB as 数据库
 Client->>API : 请求小说信息
@@ -109,6 +117,7 @@ MemoryService-->>ChatService : 返回小说信息
 else 缓存未命中
 MemoryService->>DB : 查询数据库
 DB-->>MemoryService : 返回数据库数据
+MemoryService->>MemoryService : set_novel_memory()
 MemoryService->>Cache : 存储到缓存
 MemoryService-->>ChatService : 返回小说信息
 end
@@ -117,8 +126,8 @@ API-->>Client : 返回结果
 ```
 
 **图表来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L207-L368)
-- [memory_service.py](file://backend/services/memory_service.py#L133-L171)
+- [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
+- [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
 
 ## 详细组件分析
 
@@ -155,22 +164,22 @@ MemoryCache <|-- NovelMemoryService : "组合关系"
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L12-L72)
-- [memory_service.py](file://backend/services/memory_service.py#L74-L274)
+- [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
+- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
 
 #### 核心功能特性
 
 1. **智能缓存淘汰**：基于访问频率和时间的LRU算法
-2. **过期时间管理**：自动清理过期数据
-3. **容量限制**：防止内存无限增长
+2. **过期时间管理**：自动清理过期数据（默认30分钟）
+3. **容量限制**：防止内存无限增长（默认100个条目）
 4. **原子操作**：保证缓存操作的线程安全
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L12-L72)
+- [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
 
 ### NovelMemoryService 类分析
 
-NovelMemoryService 是记忆服务的核心实现：
+NovelMemoryService 是内存服务的核心实现：
 
 #### 数据结构设计
 
@@ -178,7 +187,7 @@ NovelMemoryService 是记忆服务的核心实现：
 
 ```mermaid
 graph TD
-subgraph "小说记忆结构"
+subgraph "小说内存结构"
 BASE[基础信息<br/>- id<br/>- title<br/>- author<br/>- genre<br/>- status<br/>- word_count<br/>- chapter_count]
 DETAILS[详细信息<br/>- world_setting<br/>- characters<br/>- plot_outline]
 CHAPTERS[章节数据<br/>- chapters<br/>- chapter_summaries]
@@ -194,7 +203,7 @@ BASE --> METADATA
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L198-L239)
+- [memory_service.py:198-239](file://backend/services/memory_service.py#L198-L239)
 
 #### 深度变化检测算法
 
@@ -202,7 +211,7 @@ BASE --> METADATA
 
 ```mermaid
 flowchart TD
-START[开始检测] --> GET_CURRENT[获取当前记忆]
+START[开始检测] --> GET_CURRENT[获取当前内存]
 GET_CURRENT --> COMPUTE_HASH[计算内容哈希]
 COMPUTE_HASH --> CHECK_BASIC{检查基础字段}
 CHECK_BASIC --> |发现变化| DETECTED[检测到变化]
@@ -226,10 +235,10 @@ NO_CHANGE --> END
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L92-L131)
+- [memory_service.py:92-131](file://backend/services/memory_service.py#L92-L131)
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L74-L274)
+- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
 
 ### 章节摘要管理
 
@@ -246,7 +255,7 @@ NO_CHANGE --> END
 | ending_state | Dict[str, Any] | 章节结尾状态 |
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L277-L332)
+- [memory_service.py:277-332](file://backend/services/memory_service.py#L277-L332)
 
 ### 角色状态管理
 
@@ -265,49 +274,46 @@ NO_CHANGE --> END
 | pending_events | List[Dict] | 待处理事件 |
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L335-L385)
+- [memory_service.py:335-385](file://backend/services/memory_service.py#L335-L385)
 
 ## 依赖关系分析
 
-Memory Service 与其他组件的依赖关系如下：
+内存服务与其他组件的依赖关系如下：
 
 ```mermaid
 graph TB
 subgraph "外部依赖"
 SQLALCHEMY[SQLAlchemy ORM]
-DASHSCOPE[DashScope API]
 UUID[UUID库]
 end
 subgraph "内部依赖"
 AI_CHAT_SERVICE[AI聊天服务]
-LLM_CLIENT[LLM客户端]
 DATABASE_MODELS[数据库模型]
 end
 subgraph "核心服务"
-MEMORY_SERVICE[记忆服务]
+MEMORY_SERVICE[内存缓存服务]
 MEMORY_CACHE[内存缓存]
 end
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 MEMORY_SERVICE --> MEMORY_CACHE
 MEMORY_SERVICE --> DATABASE_MODELS
-LLM_CLIENT --> DASHSCOPE
-AI_CHAT_SERVICE --> LLM_CLIENT
+AI_CHAT_SERVICE --> DATABASE_MODELS
 MEMORY_SERVICE --> UUID
 MEMORY_SERVICE --> SQLALCHEMY
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L1-L10)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L15)
+- [memory_service.py:1-10](file://backend/services/memory_service.py#L1-L10)
+- [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
 
 ### 与AI聊天服务的集成
 
-Memory Service 与AI聊天服务的集成关系：
+内存服务与AI聊天服务的集成关系：
 
 ```mermaid
 sequenceDiagram
 participant ChatService as AI聊天服务
-participant MemoryService as 记忆服务
+participant MemoryService as 内存缓存服务
 participant Cache as 内存缓存
 participant DB as 数据库
 ChatService->>MemoryService : get_novel_info(novel_id)
@@ -325,12 +331,12 @@ end
 ```
 
 **图表来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L207-L368)
-- [memory_service.py](file://backend/services/memory_service.py#L133-L171)
+- [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
+- [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L192-L200)
-- [memory_service.py](file://backend/services/memory_service.py#L388-L396)
+- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
+- [memory_service.py:407-416](file://backend/services/memory_service.py#L407-L416)
 
 ## 性能考虑
 
@@ -339,7 +345,7 @@ end
 1. **LRU淘汰策略**：通过访问频率和时间排序实现智能淘汰
 2. **哈希计算优化**：使用MD5哈希快速检测内容变化
 3. **增量更新机制**：仅在内容变化时更新缓存
-4. **内存使用控制**：限制最大缓存条目数量
+4. **内存使用控制**：限制最大缓存条目数量（默认100个）
 
 ### 数据结构优化
 
@@ -354,7 +360,7 @@ end
 
 #### 缓存失效问题
 - **症状**：频繁从数据库重新加载数据
-- **原因**：缓存过期时间设置过短
+- **原因**：缓存过期时间设置过短（默认30分钟）
 - **解决方案**：调整 `expiration_minutes` 参数
 
 #### 内存泄漏问题
@@ -368,17 +374,19 @@ end
 - **解决方案**：使用原子操作更新版本号
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L56-L67)
-- [memory_service.py](file://backend/services/memory_service.py#L155-L158)
+- [memory_service.py:56-67](file://backend/services/memory_service.py#L56-L67)
+- [memory_service.py:155-158](file://backend/services/memory_service.py#L155-L158)
 
 ## 结论
 
-Memory Service 作为小说创作系统的核心组件，提供了高效、可靠的内存缓存和数据管理能力。其设计特点包括：
+内存服务作为小说创作系统的核心组件，提供了高效、可靠的内存缓存和数据管理能力。其设计特点包括：
 
 1. **智能缓存管理**：通过LRU算法和过期机制确保内存使用效率
 2. **深度变化检测**：精确识别小说内容的细微变化
 3. **版本控制系统**：完整追踪内容演进历史
 4. **结构化数据存储**：针对小说创作场景优化的数据组织方式
 5. **高性能架构**：与AI聊天服务无缝集成，提供流畅的用户体验
+
+**更新** 系统当前采用纯内存缓存架构，移除了持久化存储功能，但仍保持了完整的内存缓存和版本控制能力。这种简化设计确保了系统的稳定性和性能，同时降低了部署复杂度。
 
 该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，是系统能够高效运行的关键保障。

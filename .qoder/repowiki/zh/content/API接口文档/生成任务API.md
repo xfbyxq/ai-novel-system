@@ -30,6 +30,8 @@
 ## 简介
 生成任务API是小说生成系统的核心接口，负责管理AI内容生成任务的完整生命周期。该API支持三种主要任务类型：企划阶段（世界观、角色、大纲）、单章写作和批量写作，为用户提供从创意构思到内容产出的全流程自动化服务。
 
+**重要更新**：系统现已实现企划任务并发控制机制，在API层、服务层和Worker层都实现了防止重复规划任务的验证逻辑，增强了任务创建时的冲突检测和错误处理能力。
+
 ## 项目结构
 生成任务API位于后端的API路由层，采用分层架构设计，确保业务逻辑与接口层的清晰分离。
 
@@ -68,23 +70,24 @@ DATABASE --> MODEL_NOVEL
 ```
 
 **图表来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L20-L20)
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L27-L35)
-- [workers/generation_worker.py](file://workers/generation_worker.py#L12-L19)
+- [backend/api/v1/generation.py:20-20](file://backend/api/v1/generation.py#L20-L20)
+- [backend/services/generation_service.py:27-35](file://backend/services/generation_service.py#L27-L35)
+- [workers/generation_worker.py:12-19](file://workers/generation_worker.py#L12-L19)
 
 **章节来源**
-- [backend/main.py](file://backend/main.py#L8-L33)
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L1-L20)
+- [backend/main.py:8-33](file://backend/main.py#L8-L33)
+- [backend/api/v1/generation.py:1-20](file://backend/api/v1/generation.py#L1-L20)
 
 ## 核心组件
 生成任务API由多个核心组件构成，每个组件都有明确的职责和功能边界。
 
 ### 任务类型枚举
-系统定义了三种主要的任务类型，每种类型对应不同的生成流程：
+系统定义了四种主要的任务类型，每种类型对应不同的生成流程：
 
 - **planning（企划阶段）**：执行世界观、角色、情节大纲的生成
 - **writing（单章写作）**：生成单个章节的内容
 - **batch_writing（批量写作）**：批量生成多个章节
+- **editing（编辑任务）**：对现有内容进行编辑和优化
 
 ### 任务状态管理
 任务状态采用五状态机设计，确保任务生命周期的完整追踪：
@@ -105,8 +108,8 @@ DATABASE --> MODEL_NOVEL
 - **统计信息**：Token使用量、费用计算
 
 **章节来源**
-- [core/models/generation_task.py](file://core/models/generation_task.py#L12-L25)
-- [backend/schemas/generation.py](file://backend/schemas/generation.py#L8-L36)
+- [core/models/generation_task.py:12-25](file://core/models/generation_task.py#L12-L25)
+- [backend/schemas/generation.py:8-36](file://backend/schemas/generation.py#L8-L36)
 
 ## 架构概览
 生成任务API采用异步架构设计，结合后台任务队列实现高并发处理能力。
@@ -136,17 +139,20 @@ API-->>Client : 任务状态和结果
 ```
 
 **图表来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L103)
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L36-L204)
-- [workers/generation_worker.py](file://workers/generation_worker.py#L21-L62)
+- [backend/api/v1/generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
+- [backend/services/generation_service.py:36-204](file://backend/services/generation_service.py#L36-L204)
+- [workers/generation_worker.py:21-62](file://workers/generation_worker.py#L21-L62)
 
 ## 详细组件分析
 
 ### API端点设计
-生成任务API提供了四个核心端点，覆盖任务生命周期的各个阶段：
+生成任务API提供了四个核心端点，覆盖任务生命周期的各个阶段。
 
 #### POST /generation/tasks - 创建生成任务
 该端点负责创建新的生成任务，支持三种任务类型的差异化处理。
+
+**企划任务并发控制**：
+系统在API层实现了严格的企划任务并发控制机制，防止同一小说同时存在多个企划任务。
 
 **请求参数规范**：
 - `novel_id`：目标小说的唯一标识符
@@ -156,6 +162,11 @@ API-->>Client : 任务状态和结果
 - `from_chapter`：批量写作起始章节号
 - `to_chapter`：批量写作结束章节号
 - `volume_number`：卷号标识，默认为1
+
+**并发控制验证**：
+- 检查同一小说是否已有处于pending或running状态的企划任务
+- 如发现重复任务，立即返回400错误并提示具体任务ID
+- 确保每个小说在同一时间只能有一个活跃的企划任务
 
 **批量写作参数验证**：
 - 必须同时提供起始和结束章节号
@@ -198,7 +209,7 @@ API-->>Client : 任务状态和结果
 - 立即更新数据库状态并返回确认信息
 
 **章节来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L171)
+- [backend/api/v1/generation.py:23-171](file://backend/api/v1/generation.py#L23-L171)
 
 ### 服务层实现
 服务层负责协调AI代理系统和数据库操作，确保任务的正确执行和数据持久化。
@@ -211,7 +222,8 @@ flowchart TD
 Start([开始企划阶段]) --> LoadNovel["加载小说信息"]
 LoadNovel --> InitTask["初始化任务记录"]
 InitTask --> ResetCost["重置成本统计"]
-ResetCost --> RunPlanning["执行AI企划"]
+ResetCost --> CheckConcurrency["检查并发控制"]
+CheckConcurrency --> RunPlanning["执行AI企划"]
 RunPlanning --> SaveWorld["保存世界观设定"]
 SaveWorld --> SaveCharacters["保存角色信息"]
 SaveCharacters --> SavePlot["保存情节大纲"]
@@ -222,7 +234,13 @@ UpdateTask --> Complete([完成企划阶段])
 ```
 
 **图表来源**
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L36-L196)
+- [backend/services/generation_service.py:36-196](file://backend/services/generation_service.py#L36-L196)
+
+**并发控制增强**：
+服务层实现了双重并发控制验证：
+- 排除当前任务本身，避免自检导致的误判
+- 在任务执行期间再次检查是否有其他任务开始
+- 如发现并发冲突，立即抛出异常并终止执行
 
 **执行特点**：
 - 自动检测和处理LLM返回的非标准数据结构
@@ -257,7 +275,34 @@ UpdateTask --> Complete([完成企划阶段])
 - 提供部分成功的处理方案
 
 **章节来源**
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L206-L563)
+- [backend/services/generation_service.py:206-563](file://backend/services/generation_service.py#L206-L563)
+
+### Worker层并发控制
+Worker层实现了最终的并发控制保障，确保即使在分布式环境下也不会出现重复执行。
+
+#### 任务执行流程
+```mermaid
+flowchart TD
+WorkerStart([Worker接收任务]) --> CheckExisting["检查现有任务"]
+CheckExisting --> HasExisting{是否有运行中任务?}
+HasExisting --> |是| ReturnError["返回错误并终止"]
+HasExisting --> |否| ExecuteTask["执行任务"]
+ExecuteTask --> UpdateStatus["更新任务状态"]
+UpdateStatus --> Complete([任务完成])
+ReturnError --> Complete
+```
+
+**图表来源**
+- [workers/generation_worker.py:21-51](file://workers/generation_worker.py#L21-L51)
+
+**Worker并发控制**：
+- 在任务执行前再次检查数据库中的并发状态
+- 使用相同的查询条件确保一致性
+- 如发现冲突，立即返回错误信息
+- 防止分布式环境下的竞态条件
+
+**章节来源**
+- [workers/generation_worker.py:21-51](file://workers/generation_worker.py#L21-L51)
 
 ### 前端集成
 前端提供了完整的API集成和状态管理功能。
@@ -285,9 +330,9 @@ UpdateTask --> Complete([完成企划阶段])
 - 响应式布局适配
 
 **章节来源**
-- [frontend/src/api/generation.ts](file://frontend/src/api/generation.ts#L1-L35)
-- [frontend/src/stores/useGenerationStore.ts](file://frontend/src/stores/useGenerationStore.ts#L1-L41)
-- [frontend/src/utils/constants.ts](file://frontend/src/utils/constants.ts#L14-L20)
+- [frontend/src/api/generation.ts:1-35](file://frontend/src/api/generation.ts#L1-L35)
+- [frontend/src/stores/useGenerationStore.ts:1-41](file://frontend/src/stores/useGenerationStore.ts#L1-L41)
+- [frontend/src/utils/constants.ts:14-20](file://frontend/src/utils/constants.ts#L14-L20)
 
 ## 依赖关系分析
 
@@ -323,9 +368,9 @@ FE --> ANTD
 ```
 
 **图表来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L6-L18)
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L12-L24)
-- [workers/generation_worker.py](file://workers/generation_worker.py#L7-L9)
+- [backend/api/v1/generation.py:6-18](file://backend/api/v1/generation.py#L6-L18)
+- [backend/services/generation_service.py:12-24](file://backend/services/generation_service.py#L12-L24)
+- [workers/generation_worker.py:7-9](file://workers/generation_worker.py#L7-L9)
 
 ### 关键依赖关系
 - **API层依赖**：FastAPI提供路由和中间件支持
@@ -334,8 +379,8 @@ FE --> ANTD
 - **前端依赖**：Ant Design提供UI组件，Zustand管理应用状态
 
 **章节来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L1-L18)
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L1-L24)
+- [backend/api/v1/generation.py:1-18](file://backend/api/v1/generation.py#L1-L18)
+- [backend/services/generation_service.py:1-24](file://backend/services/generation_service.py#L1-L24)
 
 ## 性能考虑
 生成任务API在设计时充分考虑了性能优化和扩展性需求。
@@ -343,7 +388,7 @@ FE --> ANTD
 ### 异步处理架构
 - **非阻塞I/O**：使用异步数据库连接避免阻塞
 - **后台任务**：通过Celery实现任务的异步执行
-- **并发控制**：AI代理系统的并发处理能力
+- **并发控制**：在多层实现防止重复执行
 
 ### 缓存和优化策略
 - **数据库查询优化**：使用selectinload减少N+1查询问题
@@ -362,6 +407,7 @@ FE --> ANTD
 #### 任务创建错误
 **小说不存在**：当指定的novel_id不存在时，API会返回404错误
 **参数验证失败**：批量写作缺少必要参数或参数值无效时返回400错误
+**企划任务并发冲突**：同一小说已有运行中的企划任务时返回400错误，包含具体任务ID
 
 #### 任务执行错误
 **AI服务异常**：LLM客户端实现指数退避重试机制
@@ -372,6 +418,24 @@ FE --> ANTD
 **状态不支持**：对已完成或已取消的任务尝试取消会返回400错误
 **并发冲突**：使用数据库事务确保状态一致性
 
+### 并发控制机制
+系统在三层实现了并发控制，确保任务执行的一致性和可靠性：
+
+**API层并发控制**：
+- 创建任务时检查数据库中的并发状态
+- 防止重复创建相同类型的任务
+- 提供详细的错误信息
+
+**服务层并发控制**：
+- 任务执行前再次验证并发状态
+- 排除当前任务本身进行检查
+- 防止服务层内部的并发冲突
+
+**Worker层并发控制**：
+- 分布式环境下的最终一致性保障
+- 防止多个worker实例同时执行相同任务
+- 提供统一的错误处理机制
+
 ### 监控和日志
 系统提供了全面的监控和日志记录功能：
 
@@ -381,16 +445,19 @@ FE --> ANTD
 - **性能指标**：任务执行时间和成功率统计
 
 **章节来源**
-- [agents/agent_scheduler.py](file://agents/agent_scheduler.py#L420-L441)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L140-L161)
+- [agents/agent_scheduler.py:420-441](file://agents/agent_scheduler.py#L420-L441)
+- [llm/qwen_client.py:140-161](file://llm/qwen_client.py#L140-L161)
 
 ## 结论
 生成任务API为小说生成系统提供了完整、可靠的任务管理解决方案。通过清晰的架构设计、完善的错误处理机制和优秀的用户体验，该API能够满足从个人创作者到专业出版机构的各种需求。
 
+**重要更新**：新增的企划任务并发控制机制显著提升了系统的稳定性和可靠性，确保每个小说在同一时间只能有一个活跃的企划任务，避免了资源竞争和数据不一致的问题。
+
 系统的主要优势包括：
 - **完整的生命周期管理**：从任务创建到结果获取的全流程支持
 - **灵活的任务类型**：支持不同阶段和规模的生成需求
-- **强大的扩展性**：基于异步架构和分布式任务处理
+- **强大的并发控制**：多层并发保障机制确保任务执行的一致性
+- **优秀的扩展性**：基于异步架构和分布式任务处理
 - **优秀的用户体验**：直观的前端界面和实时状态反馈
 
 ## 附录
@@ -464,6 +531,7 @@ try {
 - **目标**：生成小说的基础框架
 - **输出**：世界观设定、角色档案、情节大纲
 - **适用场景**：新小说创作的初始阶段
+- **并发控制**：同一小说只能有一个活跃的企划任务
 - **典型参数**：小说题材、风格偏好、长度要求
 
 #### 单章写作（writing）
@@ -495,6 +563,12 @@ try {
 
 ### 错误处理机制
 
+#### 并发控制错误
+系统实现了多层并发控制，防止重复规划任务的创建和执行：
+- **API层**：创建任务时检查数据库状态
+- **服务层**：任务执行前再次验证
+- **Worker层**：分布式环境下的最终保障
+
 #### 自动重试策略
 系统实现了智能的错误重试机制：
 - **指数退避**：每次重试间隔呈指数增长
@@ -508,6 +582,7 @@ try {
 - **告警机制**：异常情况的自动通知
 
 **章节来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L42-L52)
-- [backend/services/generation_service.py](file://backend/services/generation_service.py#L198-L204)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L140-L161)
+- [backend/api/v1/generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
+- [backend/services/generation_service.py:87-100](file://backend/services/generation_service.py#L87-L100)
+- [workers/generation_worker.py:29-42](file://workers/generation_worker.py#L29-L42)
+- [llm/qwen_client.py:140-161](file://llm/qwen_client.py#L140-L161)
