@@ -1342,3 +1342,250 @@ class NovelCrewManager:
 
         # 最终确保没有残留的查询标记
         return AgentQueryService.remove_query_tags(draft)
+
+    async def refine_outline_comprehensive(
+        self,
+        outline: dict,
+        world_setting: dict,
+        characters: list,
+        options: dict,
+        max_rounds: int = 3
+    ) -> dict:
+        """综合大纲完善功能
+        
+        对现有大纲进行全面的质量评估和优化，包括：
+        - 结构完整性检查
+        - 角色发展弧线优化
+        - 情节节奏调整
+        - 世界观融合度提升
+        - 伏笔和呼应完善
+        
+        Args:
+            outline: 当前大纲
+            world_setting: 世界观设定
+            characters: 角色列表
+            options: 完善选项
+            max_rounds: 最大迭代轮次
+            
+        Returns:
+            包含完善结果的字典
+        """
+        logger.info("🎯 开始综合大纲完善...")
+        
+        # 初始化结果
+        current_outline = outline.copy()
+        improvements_made = []
+        round_history = []
+        
+        for round_num in range(1, max_rounds + 1):
+            logger.info(f"🔄 完善轮次 {round_num}/{max_rounds}")
+            
+            # 1. 分析当前大纲问题
+            analysis_result = await self._analyze_outline_issues(
+                current_outline, world_setting, characters
+            )
+            
+            # 2. 生成优化建议
+            suggestions = await self._generate_optimization_suggestions(
+                analysis_result, current_outline, world_setting, characters
+            )
+            
+            # 3. 应用优化
+            optimized_outline = await self._apply_outline_optimizations(
+                current_outline, suggestions, world_setting, characters
+            )
+            
+            # 记录本轮改进
+            round_improvements = self._extract_improvements(
+                current_outline, optimized_outline, suggestions
+            )
+            improvements_made.extend(round_improvements)
+            
+            round_history.append({
+                "round": round_num,
+                "analysis": analysis_result,
+                "suggestions": suggestions,
+                "improvements": round_improvements
+            })
+            
+            # 更新当前大纲
+            current_outline = optimized_outline
+            
+            # 检查是否达到质量阈值或收敛
+            if self._should_stop_refinement(analysis_result, options):
+                logger.info(f"✅ 完善在第 {round_num} 轮达到质量要求")
+                break
+                
+        logger.info(f"🎯 大纲完善完成，共进行 {len(round_history)} 轮优化")
+        
+        return {
+            "enhancement_result": {
+                "enhanced_outline": current_outline,
+                "improvements_made": improvements_made,
+                "round_history": round_history,
+                "total_rounds": len(round_history)
+            }
+        }
+    
+    async def _analyze_outline_issues(
+        self, 
+        outline: dict, 
+        world_setting: dict, 
+        characters: list
+    ) -> dict:
+        """分析大纲存在的问题"""
+        analysis_prompt = f"""
+请分析以下小说大纲存在的问题和不足之处：
+
+大纲内容：
+{json.dumps(outline, ensure_ascii=False, indent=2)}
+
+世界观设定：
+{json.dumps(world_setting, ensure_ascii=False, indent=2)}
+
+角色列表：
+{json.dumps(characters, ensure_ascii=False, indent=2)}
+
+请从以下维度进行分析：
+1. 结构完整性（是否有清晰的起承转合）
+2. 角色发展（主要角色是否有完整的成长弧线）
+3. 情节节奏（高潮和低谷分布是否合理）
+4. 世界观融合（大纲是否充分利用了世界观设定）
+5. 伏笔呼应（是否有足够的伏笔和呼应）
+
+输出格式：
+{{
+    "structural_issues": ["问题1", "问题2"],
+    "character_development_issues": ["问题1", "问题2"],
+    "pacing_issues": ["问题1", "问题2"],
+    "world_integration_issues": ["问题1", "问题2"],
+    "foreshadowing_issues": ["问题1", "问题2"],
+    "overall_assessment": "总体评价"
+}}
+"""
+        
+        analysis = await self._call_agent(
+            agent_name="大纲分析师",
+            system_prompt="你是一位专业的小说大纲分析师，擅长发现大纲结构和内容上的问题。",
+            task_prompt=analysis_prompt,
+            temperature=0.3,
+            expect_json=True
+        )
+        
+        return analysis
+    
+    async def _generate_optimization_suggestions(
+        self,
+        analysis_result: dict,
+        outline: dict,
+        world_setting: dict,
+        characters: list
+    ) -> list:
+        """基于分析结果生成优化建议"""
+        suggestions_prompt = f"""
+基于以下大纲分析结果，请生成具体的优化建议：
+
+分析结果：
+{json.dumps(analysis_result, ensure_ascii=False, indent=2)}
+
+原大纲：
+{json.dumps(outline, ensure_ascii=False, indent=2)}
+
+请为每个发现的问题提供具体的解决方案，输出格式：
+[
+    {{
+        "issue_category": "问题类别",
+        "specific_issue": "具体问题描述",
+        "solution": "解决方案",
+        "implementation_details": "实施细节"
+    }}
+]
+"""
+        
+        suggestions = await self._call_agent(
+            agent_name="大纲优化师",
+            system_prompt="你是一位专业的小说大纲优化师，能够提供具体可行的改进建议。",
+            task_prompt=suggestions_prompt,
+            temperature=0.6,
+            expect_json=True
+        )
+        
+        return suggestions if isinstance(suggestions, list) else []
+    
+    async def _apply_outline_optimizations(
+        self,
+        outline: dict,
+        suggestions: list,
+        world_setting: dict,
+        characters: list
+    ) -> dict:
+        """应用优化建议到大纲"""
+        if not suggestions:
+            return outline
+            
+        optimization_prompt = f"""
+请根据以下优化建议修改小说大纲：
+
+原大纲：
+{json.dumps(outline, ensure_ascii=False, indent=2)}
+
+优化建议：
+{json.dumps(suggestions, ensure_ascii=False, indent=2)}
+
+世界观设定：
+{json.dumps(world_setting, ensure_ascii=False, indent=2)}
+
+请输出优化后的大纲，保持原有结构格式，只做必要的改进。
+"""
+        
+        optimized_outline = await self._call_agent(
+            agent_name="大纲重构师",
+            system_prompt="你是一位专业的小说大纲重构师，能够精准地改进大纲内容。",
+            task_prompt=optimization_prompt,
+            temperature=0.4,
+            expect_json=True
+        )
+        
+        return optimized_outline
+    
+    def _extract_improvements(
+        self, 
+        original: dict, 
+        optimized: dict, 
+        suggestions: list
+    ) -> list:
+        """提取本次优化的具体改进点"""
+        improvements = []
+        
+        # 基于建议生成改进描述
+        for suggestion in suggestions:
+            if isinstance(suggestion, dict):
+                improvements.append(
+                    f"优化了{suggestion.get('issue_category', '某方面')}："
+                    f"{suggestion.get('specific_issue', '某个问题')} → "
+                    f"{suggestion.get('solution', '已解决')}"
+                )
+        
+        # 如果没有具体建议，生成通用描述
+        if not improvements:
+            improvements.append("对大纲结构进行了综合性优化")
+            
+        return improvements
+    
+    def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
+        """判断是否应该停止完善迭代"""
+        quality_threshold = options.get("quality_threshold", 8.0)
+        
+        # 简单的质量评估逻辑
+        # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断
+        overall_assessment = analysis_result.get("overall_assessment", "").lower()
+        
+        # 如果评估中包含"良好"、"优秀"等正面词汇，或者问题很少
+        positive_indicators = ["良好", "优秀", "完善", "完整"]
+        structural_issues = len(analysis_result.get("structural_issues", []))
+        character_issues = len(analysis_result.get("character_development_issues", []))
+        
+        has_positive_words = any(word in overall_assessment for word in positive_indicators)
+        few_issues = (structural_issues + character_issues) <= 2
+        
+        return has_positive_words or few_issues

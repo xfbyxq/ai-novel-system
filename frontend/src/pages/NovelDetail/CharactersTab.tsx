@@ -172,7 +172,7 @@ export default function CharactersTab({ novelId }: Props) {
         title={editMode ? '编辑角色' : (selected?.name || '角色详情')}
         open={!!selected}
         onClose={handleDrawerClose}
-        width={480}
+        size={480}
         extra={
           !editMode ? (
             <Space>

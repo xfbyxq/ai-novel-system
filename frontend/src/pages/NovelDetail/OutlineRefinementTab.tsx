@@ -18,9 +18,13 @@ import {
   SaveOutlined,
   CheckCircleOutlined,
   EditOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { PlotOutline } from '@/api/types';
-import { getPlotOutline, updatePlotOutline } from '@/api/outlines';
+import { getPlotOutline, updatePlotOutline, enhanceOutlinePreview } from '@/api/outlines';
+import { createGenerationTask } from '@/api/generation';
+import { useGenerationStore } from '@/stores/useGenerationStore';
+import { useNavigate } from 'react-router-dom';
 
 interface MainPlot {
   core_conflict?: string;
@@ -56,6 +60,18 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [completeness, setCompleteness] = useState(0);
+  
+  // 新增：大纲完善任务状态管理
+  const { 
+    currentEnhancementTask, 
+    setCurrentEnhancementTask, 
+    clearCurrentEnhancementTask,
+    hasRunningEnhancementTask 
+  } = useGenerationStore();
+  const navigate = useNavigate();
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+
+
 
   const fetchOutline = useCallback(async () => {
     setLoading(true);
@@ -191,6 +207,69 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
     calculateCompleteness(values as MainPlot);
   }, [form]);
 
+  // 智能完善相关处理函数
+  const handleSmartEnhance = useCallback(async () => {
+    // 防重复点击检查
+    if (hasRunningEnhancementTask() || isCreatingTask) {
+      message.info('已有完善任务正在执行中，请稍后再试');
+      return;
+    }
+
+    setIsCreatingTask(true);
+    
+    try {
+      // 收集当前大纲数据
+      const values = form.getFieldsValue();
+      const mainPlot: MainPlot = {};
+      
+      PLOT_FIELDS.forEach((field) => {
+        if (values[field.name]) {
+          mainPlot[field.name] = values[field.name];
+        }
+      });
+
+      // 创建离线任务
+      const taskPayload = {
+        novel_id: novelId,
+        task_type: 'outline_refinement',
+        input_data: {
+          outline_data: {
+            structure_type: outline?.structure_type || 'three_act',
+            main_plot: mainPlot,
+            sub_plots: outline?.sub_plots || [],
+            key_turning_points: outline?.key_turning_points || [],
+          },
+          options: {
+            max_iterations: 3,
+            quality_threshold: 8.0,
+            preserve_user_edits: true
+          }
+        }
+      };
+
+      const task = await createGenerationTask(taskPayload);
+
+      // 更新全局状态
+      setCurrentEnhancementTask({
+        taskId: task.id,
+        status: task.status,
+        createdAt: new Date(task.created_at)
+      });
+
+      // 显示成功提示
+      message.success('智能完善任务已创建，可在生成历史中查看进度');
+      
+      // 跳转到生成历史Tab
+      navigate(`/novels/${novelId}?tab=generation-history`);
+
+    } catch (error) {
+      console.error('创建完善任务失败:', error);
+      message.error('创建任务失败，请稍后重试');
+    } finally {
+      setIsCreatingTask(false);
+    }
+  }, [novelId, form, outline, hasRunningEnhancementTask, isCreatingTask, setCurrentEnhancementTask, navigate]);
+
   const getProgressColor = (percent: number) => {
     if (percent < 30) return '#ff4d4f';
     if (percent < 60) return '#faad14';
@@ -211,7 +290,7 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
       <Card style={{ marginBottom: 16 }}>
         <Row align="middle" gutter={16}>
           <Col flex="auto">
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <Typography.Title level={5} style={{ margin: 0 }}>
                 大纲完整度
               </Typography.Title>
@@ -230,6 +309,15 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
                 loading={saving}
               >
                 保存草稿
+              </Button>
+              <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                onClick={handleSmartEnhance}
+                disabled={hasRunningEnhancementTask() || isCreatingTask}
+                loading={isCreatingTask}
+              >
+                {isCreatingTask ? '创建中...' : '智能完善'}
               </Button>
               <Button
                 type="primary"

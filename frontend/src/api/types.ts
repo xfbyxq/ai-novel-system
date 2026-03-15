@@ -148,7 +148,7 @@ export interface PlotOutline {
 export interface GenerationTask {
   id: string;
   novel_id: string;
-  task_type: 'planning' | 'writing' | 'editing' | 'batch_writing';
+  task_type: 'planning' | 'writing' | 'editing' | 'batch_writing' | 'outline_refinement';
   phase: string | null;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   input_data: Record<string, unknown> | null;
@@ -163,7 +163,7 @@ export interface GenerationTask {
 
 export interface GenerationTaskCreate {
   novel_id: string;
-  task_type: 'planning' | 'writing' | 'batch_writing';
+  task_type: 'planning' | 'writing' | 'batch_writing' | 'outline_refinement';
   phase?: string;
   input_data?: Record<string, unknown>;
   // 批量写作专用字段
@@ -348,4 +348,32 @@ export interface PublishPreview {
   total_chapters: number;
   unpublished_count: number;
   chapters: ChapterPreviewItem[];
+}
+
+// 智能完善相关接口
+export interface EnhancementPreviewResponse {
+  original_outline: PlotOutline;
+  enhanced_outline: PlotOutline;
+  quality_comparison: {
+    original_score: number;
+    enhanced_score: number;
+    improvement: number;
+    dimension_improvements: Record<string, number>;
+  };
+  improvements_made: string[];
+  processing_time: number;
+  cost_estimate: number;
+}
+
+export interface OutlineQualityReport {
+  overall_score: number;
+  dimension_scores: Record<string, number>;
+  strengths: string[];
+  weaknesses: string[];
+  improvement_suggestions: Array<{
+    type: string;
+    priority: string;
+    description: string;
+    details: string[];
+  }>;
 }

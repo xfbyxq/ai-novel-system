@@ -309,6 +309,212 @@ class GenerationService:
                 logger.error(f"企划失败后回滚/记录异常: {rollback_err}")
             raise
 
+    async def run_outline_refinement(self, novel_id: UUID, task_id: UUID) -> dict:
+        """执行大纲完善任务并保存结果到数据库。"""
+        from agents.crew_manager import NovelCrewManager
+        from core.models.plot_outline import PlotOutline
+        from core.models.world_setting import WorldSetting
+        from core.models.character import Character
+        from sqlalchemy import select
+        
+        # 加载小说和相关数据
+        result = await self.db.execute(
+            select(Novel).where(Novel.id == novel_id)
+        )
+        novel = result.scalar_one_or_none()
+        if not novel:
+            raise ValueError(f"小说 {novel_id} 不存在")
+
+        # 并发控制：检查是否已有大纲完善任务在运行
+        existing_result = await self.db.execute(
+            select(GenerationTask)
+            .where(
+                GenerationTask.novel_id == novel_id,
+                GenerationTask.task_type == "outline_refinement",
+                GenerationTask.id != task_id,  # 排除当前任务本身
+                GenerationTask.status.in_(["pending", "running"])
+            )
+            .order_by(GenerationTask.created_at.desc())
+        )
+        existing_tasks = existing_result.scalars().all()
+        if existing_tasks:
+            existing_task = existing_tasks[0]  # 取最新的一条
+            raise ValueError(f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})")
+
+        # 更新任务状态
+        task_result = await self.db.execute(
+            select(GenerationTask).where(GenerationTask.id == task_id)
+        )
+        task = task_result.scalar_one_or_none()
+        if not task:
+            raise ValueError(f"任务 {task_id} 不存在")
+
+        task.status = TaskStatus.running
+        task.started_at = datetime.now(timezone.utc)
+        await self.db.commit()
+
+        try:
+            # 获取当前大纲数据
+            outline_result = await self.db.execute(
+                select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+            )
+            outline = outline_result.scalar_one_or_none()
+            if not outline:
+                raise ValueError(f"小说 {novel_id} 没有大纲数据")
+
+            # 获取世界观设定
+            world_result = await self.db.execute(
+                select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+            )
+            world_setting = world_result.scalar_one_or_none()
+            
+            # 获取角色列表
+            characters_result = await self.db.execute(
+                select(Character).where(Character.novel_id == novel_id)
+            )
+            characters = characters_result.scalars().all()
+
+            # 准备输入数据 - 确保是字典格式
+            outline_data = {
+                "structure_type": outline.structure_type,
+                "volumes": outline.volumes or [],
+                "main_plot": outline.main_plot or {},
+                "main_plot_detailed": outline.main_plot_detailed or {},
+                "sub_plots": outline.sub_plots or [],
+                "key_turning_points": outline.key_turning_points or [],
+                "climax_chapter": outline.climax_chapter
+            }
+            
+            # 确保outline_data是字典类型
+            if not isinstance(outline_data, dict):
+                logger.error(f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}")
+                raise ValueError(f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}")
+
+            world_data = {
+                "world_name": world_setting.world_name if world_setting else "",
+                "world_type": world_setting.world_type if world_setting else "",
+                "power_system": world_setting.power_system if world_setting else {},
+                "geography": world_setting.geography if world_setting else {},
+                "factions": world_setting.factions if world_setting else [],
+                "rules": world_setting.rules if world_setting else [],
+                "timeline": world_setting.timeline if world_setting else [],
+                "special_elements": world_setting.special_elements if world_setting else []
+            } if world_setting else {}
+
+            characters_data = [
+                {
+                    "name": char.name,
+                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type),
+                    "gender": char.gender.value if char.gender and hasattr(char.gender, 'value') else (str(char.gender) if char.gender else None),
+                    "age": char.age,
+                    "appearance": char.appearance,
+                    "personality": char.personality,
+                    "background": char.background,
+                    "goals": char.goals,
+                    "abilities": char.abilities or {},
+                    "relationships": char.relationships or {},
+                    "growth_arc": char.growth_arc or {}
+                }
+                for char in characters
+            ]
+
+            # 获取完善选项
+            options = task.input_data.get("options", {
+                "max_iterations": 3,
+                "quality_threshold": 8.0,
+                "preserve_user_edits": True
+            })
+
+            # 初始化Agent调度器
+            await self.dispatcher.initialize()
+
+            # 执行大纲完善
+            self.cost_tracker.reset()
+            
+            # 使用crew_manager执行完善
+            crew_manager = NovelCrewManager(self.client, self.cost_tracker)
+            enhancement_result = await crew_manager.refine_outline_comprehensive(
+                outline=outline_data,
+                world_setting=world_data,
+                characters=characters_data,
+                options=options,
+                max_rounds=options.get("max_iterations", 3)
+            )
+            
+            # 调试：检查返回数据格式
+            logger.info(f"enhancement_result类型: {type(enhancement_result)}")
+            logger.info(f"enhancement_result内容: {enhancement_result}")
+            
+            if "enhancement_result" in enhancement_result:
+                enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
+                logger.info(f"enhanced_outline类型: {type(enhanced_outline)}")
+                logger.info(f"enhanced_outline内容: {enhanced_outline}")
+
+            # 保存完善结果到任务输出
+            task_output = {
+                "original_outline": outline_data,
+                "enhanced_outline": enhancement_result["enhancement_result"]["enhanced_outline"],
+                "improvements_made": enhancement_result["enhancement_result"]["improvements_made"],
+                "round_history": enhancement_result["enhancement_result"]["round_history"],
+                "total_rounds": enhancement_result["enhancement_result"]["total_rounds"],
+                "quality_comparison": {}  # 可以在这里添加质量对比逻辑
+            }
+
+            # 保存 token 使用记录
+            cost_summary = self.cost_tracker.get_summary()
+            for record in self.cost_tracker.records:
+                token_usage = TokenUsage(
+                    novel_id=novel_id,
+                    task_id=task_id,
+                    agent_name=record["agent_name"],
+                    prompt_tokens=record["prompt_tokens"],
+                    completion_tokens=record["completion_tokens"],
+                    total_tokens=record["total_tokens"],
+                    cost=record["cost"],
+                )
+                self.db.add(token_usage)
+
+            # 更新任务状态
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(timezone.utc)
+            task.output_data = task_output
+            task.token_usage = cost_summary["total_tokens"]
+            task.cost = cost_summary["total_cost"]
+
+            # 自动应用增强结果到大纲表
+            enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
+            if enhanced_outline and isinstance(enhanced_outline, dict):
+                # 更新PlotOutline表中的数据
+                outline.main_plot = enhanced_outline.get("main_plot", outline.main_plot)
+                outline.main_plot_detailed = enhanced_outline.get("main_plot_detailed", outline.main_plot_detailed)
+                outline.sub_plots = enhanced_outline.get("sub_plots", outline.sub_plots)
+                outline.key_turning_points = enhanced_outline.get("key_turning_points", outline.key_turning_points)
+                outline.volumes = enhanced_outline.get("volumes", outline.volumes)
+                outline.structure_type = enhanced_outline.get("structure_type", outline.structure_type)
+                logger.info("已自动应用大纲增强结果到数据库")
+
+            # 更新小说 token 成本
+            from decimal import Decimal
+            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+
+            await self.db.commit()
+
+            logger.info(f"大纲完善任务完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
+            
+            return task_output
+
+        except Exception as e:
+            logger.error(f"大纲完善任务失败: {e}")
+            try:
+                await self.db.rollback()
+                task.status = TaskStatus.failed
+                task.error_message = str(e)[:500]
+                task.completed_at = datetime.now(timezone.utc)
+                await self.db.commit()
+            except Exception as rollback_err:
+                logger.error(f"大纲完善失败后回滚/记录异常: {rollback_err}")
+            raise
+
     async def run_chapter_writing(
         self,
         novel_id: UUID,

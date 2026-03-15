@@ -15,6 +15,7 @@ import {
   Divider,
   Spin,
   Empty,
+  Input,
 } from 'antd';
 import {
   DragOutlined,
@@ -24,6 +25,7 @@ import {
   DeleteOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
+import { Select } from 'antd';
 import type { PlotOutline } from '@/api/types';
 import { getPlotOutline, updatePlotOutline } from '@/api/outlines';
 
@@ -59,6 +61,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [outline, setOutline] = useState<PlotOutline | null>(null);
+
   const [decomposition, setDecomposition] = useState<ChapterDecomposition | null>(null);
   const [draggedVolumeIndex, setDraggedVolumeIndex] = useState<number | null>(null);
 
@@ -66,7 +69,6 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
     setLoading(true);
     try {
       const data = await getPlotOutline(novelId);
-      setOutline(data);
       
       const volumes = (data.volumes || []) as unknown[];
       
@@ -78,7 +80,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
         };
 
         let chapterCounter = 1;
-        volumes.forEach((vol: Record<string, unknown>, index: number) => {
+        volumes.forEach((vol: any, index: number) => {
           const chapterCount = DEFAULT_CHAPTERS_PER_VOLUME;
           const volume: Volume = {
             volume_num: (vol.volume_num as number) || index + 1,
@@ -86,7 +88,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
             summary: (vol.summary as string) || '',
             chapter_start: chapterCounter,
             chapter_end: chapterCounter + chapterCount - 1,
-            main_events: (vol.key_events as string[]) || [],
+            main_events: (vol.main_events as string[]) || [],
             side_plots: [],
             tension_cycle: 'rising',
             foreshadowing: [],
@@ -273,6 +275,8 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
   const handleSaveConfiguration = useCallback(async () => {
     if (!decomposition) return;
 
+    console.log('🎯 开始保存配置:', { novelId, decomposition });
+    
     setSaving(true);
     try {
       const volumesData = decomposition.volumes.map((vol) => ({
@@ -286,14 +290,23 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
         foreshadowing: vol.foreshadowing,
       }));
 
+      console.log('📤 发送的数据:', { 
+        novelId, 
+        volumes: volumesData 
+      });
+
       await updatePlotOutline(novelId, {
         volumes: volumesData as unknown[],
       });
 
+      // 保存成功后重新获取最新数据
+      await fetchOutline();
+
+      console.log('✅ 配置保存成功');
       message.success('配置已保存');
       onDecompositionConfirm?.(decomposition);
     } catch (error) {
-      console.error('Save configuration error:', error);
+      console.error('❌ 保存配置错误:', error);
       message.error('保存失败');
     } finally {
       setSaving(false);
@@ -373,7 +386,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
       <Card style={{ marginBottom: 16 }}>
         <Row align="middle" justify="space-between">
           <Col>
-            <Space direction="horizontal" size="large">
+            <Space orientation="horizontal" size="large">
               <div>
                 <Typography.Text type="secondary">总卷数</Typography.Text>
                 <Typography.Title level={4} style={{ margin: 0 }}>
@@ -425,65 +438,63 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
       <Collapse
         defaultActiveKey={decomposition.volumes.map((_, i) => `vol-${i}`)}
         accordion={false}
-      >
-        {decomposition.volumes.map((volume, index) => (
-          <Collapse.Panel
-            key={volume.key}
-            header={
-              <Row align="middle" gutter={16} style={{ width: '100%' }}>
-                <Col>
-                  <DragOutlined
-                    style={{ cursor: 'grab', color: '#999' }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      handleDragStart(index);
-                    }}
-                    draggable
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => {
-                      e.stopPropagation();
-                      handleDrop(index);
-                    }}
-                  />
-                </Col>
-                <Col flex="auto">
-                  <Space>
-                    <Tag color="blue">{volume.title}</Tag>
-                    <Tag>
-                      第{volume.chapter_start}-{volume.chapter_end}章
+        items={decomposition.volumes.map((volume, index) => ({
+          key: volume.key,
+          label: (
+            <Row align="middle" gutter={16} style={{ width: '100%' }}>
+              <Col>
+                <DragOutlined
+                  style={{ cursor: 'grab', color: '#999' }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleDragStart(index);
+                  }}
+                  draggable
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => {
+                    e.stopPropagation();
+                    handleDrop(index);
+                  }}
+                />
+              </Col>
+              <Col flex="auto">
+                <Space>
+                  <Tag color="blue">{volume.title}</Tag>
+                  <Tag>
+                    第{volume.chapter_start}-{volume.chapter_end}章
+                  </Tag>
+                  <Tag color="green">
+                    {volume.chapter_end - volume.chapter_start + 1}章
+                  </Tag>
+                  {volume.tension_cycle && (
+                    <Tag color={
+                      volume.tension_cycle === 'rising' ? 'green' :
+                      volume.tension_cycle === 'climax' ? 'red' : 'orange'
+                    }>
+                      {volume.tension_cycle === 'rising' ? '上升' :
+                       volume.tension_cycle === 'climax' ? '高潮' : '下降'}
                     </Tag>
-                    <Tag color="green">
-                      {volume.chapter_end - volume.chapter_start + 1}章
-                    </Tag>
-                    {volume.tension_cycle && (
-                      <Tag color={
-                        volume.tension_cycle === 'rising' ? 'green' :
-                        volume.tension_cycle === 'climax' ? 'red' : 'orange'
-                      }>
-                        {volume.tension_cycle === 'rising' ? '上升' :
-                         volume.tension_cycle === 'climax' ? '高潮' : '下降'}
-                      </Tag>
-                    )}
-                  </Space>
-                </Col>
-                <Col>
-                  <Button
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteVolume(index);
-                    }}
-                    disabled={decomposition.volumes.length <= 1}
-                  />
-                </Col>
-              </Row>
-            }
-          >
+                  )}
+                </Space>
+              </Col>
+              <Col>
+                <Button
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteVolume(index);
+                  }}
+                  disabled={decomposition.volumes.length <= 1}
+                />
+              </Col>
+            </Row>
+          ),
+          children: (
             <Row gutter={[16, 16]}>
               <Col span={24}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>卷标题</Typography.Text>
                   <Input
                     value={volume.title}
@@ -494,7 +505,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={24}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>卷概要</Typography.Text>
                   <Input.TextArea
                     value={volume.summary}
@@ -508,7 +519,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={8}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>章节数量</Typography.Text>
                   <InputNumber
                     min={MIN_CHAPTERS_PER_VOLUME}
@@ -527,7 +538,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={8}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>张力循环</Typography.Text>
                   <SelectTensionCycle
                     value={volume.tension_cycle}
@@ -537,7 +548,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={8}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>主线事件</Typography.Text>
                   <Input
                     value={volume.main_events?.join(', ') || ''}
@@ -552,7 +563,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={12}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>支线情节</Typography.Text>
                   <Input.TextArea
                     value={volume.side_plots?.join('\n') || ''}
@@ -568,7 +579,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
               </Col>
 
               <Col span={12}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Text strong>伏笔分配</Typography.Text>
                   <Input.TextArea
                     value={volume.foreshadowing?.join('\n') || ''}
@@ -583,14 +594,14 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
                 </Space>
               </Col>
             </Row>
-          </Collapse.Panel>
-        ))}
-      </Collapse>
+          )
+        }))}
+      />
 
       <Divider />
 
       <Card size="small" type="inner">
-        <Space direction="horizontal" size="middle">
+        <Space orientation="horizontal" size="middle">
           <SettingOutlined />
           <Typography.Text strong>操作提示</Typography.Text>
         </Space>
@@ -604,10 +615,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
   );
 }
 
-interface TensionCycleProps {
-  value?: string;
-  onChange?: (value: string) => void;
-}
+
 
 function SelectTensionCycle({ value, onChange }: TensionCycleProps) {
   const options = [

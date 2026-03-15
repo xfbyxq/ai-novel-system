@@ -268,3 +268,72 @@ class OutlineVersionInfo(BaseModel):
     created_by: Optional[str] = Field(default=None, description="创建者")
     created_at: datetime = Field(..., description="创建时间")
     is_current: bool = Field(default=False, description="是否为当前版本")
+
+
+class EnhancementOptions(BaseModel):
+    """智能完善选项模型"""
+    max_iterations: Optional[int] = Field(
+        default=3,
+        description="最大迭代次数",
+        ge=1,
+        le=10
+    )
+    quality_threshold: Optional[float] = Field(
+        default=8.0,
+        description="质量阈值（0-10）",
+        ge=0.0,
+        le=10.0
+    )
+    preserve_user_edits: Optional[bool] = Field(
+        default=True,
+        description="是否保留用户手动编辑的内容"
+    )
+    update_database: Optional[bool] = Field(
+        default=False,
+        description="是否直接更新数据库（false时只返回预览）"
+    )
+
+
+class OutlineQualityReport(BaseModel):
+    """大纲质量评估报告模型"""
+    overall_score: float = Field(
+        ...,
+        description="总体质量评分（0-10）",
+        ge=0.0,
+        le=10.0
+    )
+    dimension_scores: dict = Field(
+        ...,
+        description="各维度评分，格式: {'完整性': 8.5, '逻辑性': 7.2, ...}"
+    )
+    strengths: list = Field(
+        default_factory=list,
+        description="优势点列表"
+    )
+    weaknesses: list = Field(
+        default_factory=list,
+        description="薄弱点列表"
+    )
+    improvement_suggestions: list = Field(
+        default_factory=list,
+        description="改进建议列表"
+    )
+    evaluated_at: datetime = Field(..., description="评估时间")
+
+
+class EnhancementPreviewResponse(BaseModel):
+    """智能完善预览响应模型"""
+    original_outline: PlotOutlineResponse = Field(..., description="原始大纲")
+    enhanced_outline: PlotOutlineResponse = Field(..., description="增强后的大纲")
+    quality_comparison: dict = Field(
+        ...,
+        description="质量对比数据，格式: {original_score, enhanced_score, improvement, dimension_improvements}"
+    )
+    improvements_made: list = Field(
+        default_factory=list,
+        description="实施的改进措施列表"
+    )
+    processing_time: float = Field(..., description="处理耗时（秒）")
+    cost_estimate: float = Field(..., description="预估成本（元）")
+
+    model_config = ConfigDict(from_attributes=True)

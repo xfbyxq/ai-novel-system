@@ -116,11 +116,11 @@ export default function ChapterOutlineTaskModal({
           </Card>
         )}
 
-        <Divider orientation="left" orientationMargin="0">强制性事件</Divider>
+        <Divider orientation="left">强制性事件</Divider>
 
         {task.mandatory_events && task.mandatory_events.length > 0 ? (
           <Card type="inner" size="small">
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               {task.mandatory_events.map((event, index) => (
                 <Space key={index} align="start">
                   <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
@@ -139,7 +139,7 @@ export default function ChapterOutlineTaskModal({
 
         {task.optional_events && task.optional_events.length > 0 ? (
           <Card type="inner" size="small">
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               {task.optional_events.map((event, index) => (
                 <Space key={index} align="start">
                   <MinusCircleOutlined style={{ color: '#1890ff', marginTop: 4 }} />
@@ -154,11 +154,11 @@ export default function ChapterOutlineTaskModal({
           <Typography.Text type="secondary">无可选事件</Typography.Text>
         )}
 
-        <Divider orientation="left" orientationMargin="0">伏笔任务</Divider>
+        <Divider orientation="left">伏笔任务</Divider>
 
         {task.foreshadowing_tasks && task.foreshadowing_tasks.length > 0 ? (
           <Card type="inner" size="small">
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               {task.foreshadowing_tasks.map((task, index) => (
                 <Space key={index} align="start">
                   <ClockCircleOutlined style={{ color: '#faad14', marginTop: 4 }} />

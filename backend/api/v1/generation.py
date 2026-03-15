@@ -33,11 +33,12 @@ async def create_generation_task(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """创建生成任务（企划、单章写作或批量写作）。
+    """创建生成任务（企划、单章写作、批量写作或大纲完善）。
 
     - task_type=planning: 执行企划阶段（世界观、角色、大纲）
     - task_type=writing: 执行单章写作（需在 input_data 中指定 chapter_number）
     - task_type=batch_writing: 执行批量写作（需指定 from_chapter 和 to_chapter）
+    - task_type=outline_refinement: 执行大纲完善（优化现有大纲结构和内容）
     """
     # 检查小说是否存在
     novel_result = await db.execute(select(Novel).where(Novel.id == task_in.novel_id))
@@ -117,6 +118,8 @@ async def create_generation_task(
                         task_in.to_chapter,
                         task_in.volume_number or 1,
                     )
+                elif task_in.task_type == "outline_refinement":
+                    await service.run_outline_refinement(task_in.novel_id, task.id)
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)

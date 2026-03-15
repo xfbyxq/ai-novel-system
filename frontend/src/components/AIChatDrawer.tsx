@@ -508,7 +508,7 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     <>
       <Drawer
         title={
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Space>
               <RobotOutlined />
               <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{title}</span>
@@ -897,11 +897,11 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
             onChange={(e) => setSelectedTargetId(e.target.value)}
             style={{ width: '100%' }}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {characters.map((char) => (
                 <Radio key={char.id} value={char.id} style={{ width: '100%' }}>
                   <Card size="small" style={{ width: '100%', marginLeft: 8 }}>
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space orientation="vertical" style={{ width: '100%' }}>
                       <Space>
                         <Typography.Text strong>{char.name}</Typography.Text>
                         {char.role_type && <Tag>{char.role_type}</Tag>}
@@ -964,7 +964,7 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
             onChange={(e) => setSelectedTargetId(e.target.value)}
             style={{ width: '100%' }}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {chapters.map((chapter) => (
                 <Radio key={chapter.id} value={String(chapter.chapter_number)} style={{ width: '100%' }}>
                   <Card size="small" style={{ width: '100%', marginLeft: 8 }}>

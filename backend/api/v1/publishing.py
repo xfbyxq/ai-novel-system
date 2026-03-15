@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db
 from backend.schemas.common import DeleteResponse, TaskCancelResponse, VerifyAccountResponse
+from core.utils.enum_utils import safe_enum_value
 from backend.schemas.publishing import (
     ChapterPreviewItem,
     ChapterPublishListResponse,

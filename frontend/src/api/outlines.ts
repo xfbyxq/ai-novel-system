@@ -108,3 +108,16 @@ export async function getOutlineVersions(novelId: string): Promise<
   const { data } = await apiClient.get(`/novels/${novelId}/outline/versions`);
   return data;
 }
+
+export async function enhanceOutlinePreview(
+  novelId: string,
+  options: {
+    max_iterations?: number;
+    quality_threshold?: number;
+    preserve_user_edits?: boolean;
+    update_database?: boolean;
+  }
+): Promise<any> {
+  const { data } = await apiClient.post(`/novels/${novelId}/outline/enhance-preview`, options);
+  return data;
+}

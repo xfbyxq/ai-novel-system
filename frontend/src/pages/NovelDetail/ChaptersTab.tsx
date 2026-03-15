@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Tag, Button, Modal, message, Space, Typography, Tooltip } from 'antd';
-import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { Chapter } from '@/api/types';
 import { getChapters, deleteChapter, batchDeleteChapters } from '@/api/chapters';
 import { getChapterOutlineTask } from '@/api/outlines';

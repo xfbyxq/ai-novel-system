@@ -14,6 +14,7 @@ class TaskType(str, enum.Enum):
     writing = "writing"
     editing = "editing"
     batch_writing = "batch_writing"
+    outline_refinement = "outline_refinement"
 
 
 class TaskStatus(str, enum.Enum):

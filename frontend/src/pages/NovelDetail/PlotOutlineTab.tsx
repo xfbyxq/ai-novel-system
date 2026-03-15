@@ -187,7 +187,7 @@ export default function PlotOutlineTab({ novelId }: Props) {
                     </Space>
                   }
                   description={
-                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                       <Typography.Text type="secondary">
                         创建时间：{formatDate(item.created_at)}
                       </Typography.Text>

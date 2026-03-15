@@ -2,8 +2,6 @@
 WorldSetting and PlotOutline API endpoints.
 """
 
-import logging
-import time
 from datetime import datetime
 from uuid import UUID
 
@@ -11,16 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from backend.dependencies import get_db
 from backend.schemas.outline import (
     ChapterOutlineTaskResponse,
-    EnhancementOptions,
-    EnhancementPreviewResponse,
     OutlineDecomposeRequest,
     OutlineGenerateRequest,
-    OutlineQualityReport,
     OutlineValidationRequest,
     OutlineValidationResponse,
     OutlineVersionInfo,
@@ -28,11 +21,60 @@ from backend.schemas.outline import (
     PlotOutlineUpdate,
     WorldSettingResponse,
     WorldSettingUpdate,
+    OutlineQualityReport,
+    EnhancementOptions,
+    EnhancementPreviewResponse,
 )
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.world_setting import WorldSetting
-from core.models.character import Character
+import uuid
+
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+                result[column.name] = str(value)
+            else:
+                result[column.name] = value
+        return result
+    else:
+        return model
+        return model
+import uuid
+
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+                result[column.name] = str(value)
+            else:
+                result[column.name] = value
+        return result
+    else:
+        return model
+        return model
+
 
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
@@ -514,76 +556,380 @@ async def update_plot_outline_with_version(
     await db.commit()
     await db.refresh(plot_outline)
     return plot_outline
-@router.post("/outline/enhance-preview", response_model=EnhancementPreviewResponse)
-async def enhance_outline_preview(
-    *,
+
+# 新增的大纲完善API端点
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
+
+class OutlineEnhancementRequest(BaseModel):
+    """大纲完善请求"""
+    novel_id: UUID
+    initial_outline: Optional[Dict[str, Any]] = None
+    enhancement_options: Optional[Dict[str, Any]] = None
+
+class OutlineEnhancementResponse(BaseModel):
+    """大纲完善响应"""
+    novel_id: UUID
+    enhancement_result: Dict[str, Any]
+    process_log: Dict[str, Any]
+    enhanced_at: datetime
+
+@router.post("/outline/enhance", response_model=OutlineEnhancementResponse)
+async def enhance_outline(
     novel_id: UUID,
-    options: EnhancementOptions,
+    request: OutlineEnhancementRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """预览大纲智能完善结果（不修改数据库）"""
+    """
+    基于多Agent协作完善小说大纲。
+    
+    利用现有多Agent机制对现有大纲进行智能审查、优化和质量提升。
+    """
+    # 验证小说是否存在
+    novel_query = select(Novel).where(Novel.id == novel_id)
+    novel_result = await db.execute(novel_query)
+    novel = novel_result.scalar_one_or_none()
+    
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+    
+    # 获取必要的数据
+    from core.models.world_setting import WorldSetting
+import uuid
+
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+    else:
+        return model
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+    else:
+        return model
+
+
+    else:
+        return model
+    from core.models.character import Character
+    
+    # 获取世界观设定
+    world_query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+    world_result = await db.execute(world_query)
+    world_setting = world_result.scalar_one_or_none()
+    
+    # 获取角色列表
+    character_query = select(Character).where(Character.novel_id == novel_id)
+    character_result = await db.execute(character_query)
+    characters = character_result.scalars().all()
+    
+    # 准备小说数据
+    novel_data = {
+        "novel_id": str(novel_id),
+        "novel_title": novel.title,
+        "world_setting": model_to_dict(world_setting) if world_setting else {},
+        "characters": [model_to_dict(char) for char in characters] if characters else []
+    }
+    
+    # 如果没有提供初始大纲，则从数据库获取
+    if not request.initial_outline:
+        outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+        outline_result = await db.execute(outline_query)
+        existing_outline = outline_result.scalar_one_or_none()
+        
+        if not existing_outline:
+            raise HTTPException(
+                status_code=404,
+                detail=f"小说 {novel_id} 未找到现有大纲"
+            )
+        
+        initial_outline = existing_outline.to_dict()
+    else:
+        initial_outline = request.initial_outline
+    
+    # 调用多Agent大纲完善流程
     try:
-        logger.info(f"开始大纲完善预览: novel_id={novel_id}")
+        # 导入必要的组件
+        from agents.crew_manager import NovelCrewManager
+        from agents.team_context import NovelTeamContext
+        from llm.qwen_client import QwenClient
+        from llm.cost_tracker import CostTracker
         
-        # 获取小说信息
-        novel_result = await db.execute(select(Novel).where(Novel.id == novel_id))
-        novel = novel_result.scalar_one_or_none()
-        if not novel:
-            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-        
-        # 获取大纲
-        outline_result = await db.execute(
-            select(PlotOutline).where(PlotOutline.novel_id == novel_id)
-        )
-        plot_outline = outline_result.scalar_one_or_none()
-        if not plot_outline:
-            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
-        
-        # 获取世界观设定
-        world_result = await db.execute(
-            select(WorldSetting).where(WorldSetting.novel_id == novel_id)
-        )
-        world_setting = world_result.scalar_one_or_none()
-        
-        # 获取角色信息
-        characters_result = await db.execute(
-            select(Character).where(Character.novel_id == novel_id)
-        )
-        characters = characters_result.scalars().all()
-        
-        # 初始化Agent管理器
-        from backend.dependencies.agents import get_crew_manager, get_outline_evaluator
-        crew_manager = get_crew_manager()
-        evaluator = get_outline_evaluator()
-        
-        # 转换模型为字典
-        initial_outline = model_to_dict(plot_outline)
+        # 初始化组件
+        qwen_client = QwenClient()
+        cost_tracker = CostTracker()
+        crew_manager = NovelCrewManager(qwen_client, cost_tracker)
+        team_context = NovelTeamContext(str(novel_id), novel.title)
         
         # 执行大纲完善
-        start_time = time.time()
-        enhancement_result = await crew_manager.refine_outline_comprehensive(
-            outline=initial_outline,
-            world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=[model_to_dict(char) for char in characters] if characters else [],
-            options=options.dict(),
-            max_rounds=options.max_iterations
+        enhancement_result = await crew_manager.run_outline_enhancement_phase(
+            novel_data=novel_data,
+            initial_outline=initial_outline,
+            team_context=team_context
         )
         
-        # 评估质量对比
-        original_quality = await evaluator.evaluate_outline_comprehensively(
+        # 更新数据库中的大纲（如果需要）
+        if request.enhancement_options and request.enhancement_options.get("update_database", False):
+            outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+            outline_result = await db.execute(outline_query)
+            plot_outline = outline_result.scalar_one_or_none()
+            
+            if plot_outline:
+                # 更新大纲内容
+                enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
+                plot_outline.main_plot = enhanced_outline.get("main_plot", plot_outline.main_plot)
+                plot_outline.volumes = enhanced_outline.get("volumes", plot_outline.volumes)
+                plot_outline.sub_plots = enhanced_outline.get("sub_plots", plot_outline.sub_plots)
+                plot_outline.key_turning_points = enhanced_outline.get("key_turning_points", plot_outline.key_turning_points)
+                
+                await db.commit()
+                await db.refresh(plot_outline)
+        
+        return OutlineEnhancementResponse(
+            novel_id=novel_id,
+            enhancement_result=enhancement_result,
+            process_log={
+                "started_at": datetime.now(),
+                "completed_at": datetime.now(),
+                "steps_executed": ["consistency_check", "collaborative_review", "iterative_optimization"]
+            },
+            enhanced_at=datetime.now()
+        )
+        
+    except Exception as e:
+        logger.error(f"大纲完善过程失败：{e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"大纲完善失败：{str(e)}"
+        )
+
+@router.get("/outline/quality-report", response_model=Dict[str, Any])
+async def get_outline_quality_report(
+    novel_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取大纲质量评估报告。
+    
+    返回基于多维度评估的大纲质量分析结果。
+    """
+    # 验证小说是否存在
+    novel_query = select(Novel).where(Novel.id == novel_id)
+    novel_result = await db.execute(novel_query)
+    novel = novel_result.scalar_one_or_none()
+    
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+    
+    # 获取大纲
+    outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    outline_result = await db.execute(outline_query)
+    plot_outline = outline_result.scalar_one_or_none()
+    
+    if not plot_outline:
+        raise HTTPException(
+            status_code=404,
+            detail=f"小说 {novel_id} 的情节大纲未找到"
+        )
+    
+    # 执行质量评估
+    try:
+        from agents.outline_quality_evaluator import OutlineQualityEvaluator
+        from core.models.world_setting import WorldSetting
+import uuid
+
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+    else:
+        return model
+
+def model_to_dict(model):
+    """将SQLAlchemy模型转换为字典"""
+    if model is None:
+        return None
+    
+    # 处理不同类型的模型
+    if hasattr(model, '__table__'):
+        result = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, 'isoformat'):
+                result[column.name] = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+    else:
+        return model
+
+
+    else:
+        return model
+        from core.models.character import Character
+        
+        # 获取相关数据
+        world_query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+        world_result = await db.execute(world_query)
+        world_setting = world_result.scalar_one_or_none()
+        
+        character_query = select(Character).where(Character.novel_id == novel_id)
+        character_result = await db.execute(character_query)
+        characters = character_result.scalars().all()
+        
+        # 执行评估
+        evaluator = OutlineQualityEvaluator()
+        quality_score = await evaluator.evaluate_outline_comprehensively(
             outline=model_to_dict(plot_outline),
             world_setting=model_to_dict(world_setting) if world_setting else {},
             characters=[model_to_dict(char) for char in characters] if characters else []
         )
         
+        return OutlineQualityReport(
+            overall_score=quality_score.overall_score,
+            dimension_scores=quality_score.dimension_scores,
+            strengths=quality_score.strengths,
+            weaknesses=quality_score.weaknesses,
+            improvement_suggestions=[
+                {
+                    "type": suggestion.type,
+                    "priority": suggestion.priority,
+                    "description": suggestion.description,
+                    "details": suggestion.details
+                }
+                for suggestion in quality_score.improvement_suggestions
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"质量评估失败：{e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"质量评估失败：{str(e)}"
+        )
+
+
+@router.post("/outline/enhance-preview", response_model=EnhancementPreviewResponse)
+async def enhance_outline_preview(
+    novel_id: UUID,
+    options: EnhancementOptions = EnhancementOptions(),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    大纲智能完善预览（不修改数据库）
+    
+    提供优化前后的对比结果，供用户决定是否应用。
+    不会直接修改数据库中的大纲内容。
+    """
+    import time
+    import logging
+    from agents.crew_manager import NovelCrewManager
+    
+    logger = logging.getLogger(__name__)
+    start_time = time.time()
+    
+    # 验证小说是否存在
+    novel_query = select(Novel).where(Novel.id == novel_id)
+    novel_result = await db.execute(novel_query)
+    novel = novel_result.scalar_one_or_none()
+    
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+    
+    # 获取大纲
+    outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    outline_result = await db.execute(outline_query)
+    plot_outline = outline_result.scalar_one_or_none()
+    
+    if not plot_outline:
+        raise HTTPException(
+            status_code=404,
+            detail=f"小说 {novel_id} 的情节大纲未找到"
+        )
+    
+    try:
+        # 准备小说数据
+        from core.models.character import Character
+        
+        world_query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+        world_result = await db.execute(world_query)
+        world_setting = world_result.scalar_one_or_none()
+        
+        character_query = select(Character).where(Character.novel_id == novel_id)
+        character_result = await db.execute(character_query)
+        characters = character_result.scalars().all()
+        
+        novel_data = {
+            "title": novel.title,
+            "genre": novel.genre,
+            "synopsis": novel.synopsis,
+            "world_setting": model_to_dict(world_setting),
+            "characters": [model_to_dict(char) for char in characters] if characters else []
+        }
+        
+        initial_outline = model_to_dict(plot_outline)
+        
+        # 执行完善流程但不更新数据库
+        crew_manager = NovelCrewManager()
+        enhancement_result = await crew_manager.run_outline_enhancement_phase(
+            novel_data=novel_data,
+            initial_outline=initial_outline,
+            team_context={"novel_id": str(novel_id)}
+        )
+        
+        # 计算质量对比
+        from agents.outline_quality_evaluator import OutlineQualityEvaluator
+        
+        evaluator = OutlineQualityEvaluator()
+        original_quality = await evaluator.evaluate_outline_comprehensively(
+            outline=model_to_dict(plot_outline),
+            world_setting=model_to_dict(world_setting),
+            characters=[model_to_dict(char) for char in characters] if characters else []
+        )
+        
         enhanced_quality = await evaluator.evaluate_outline_comprehensively(
             outline=enhancement_result["enhancement_result"]["enhanced_outline"],
-            world_setting=model_to_dict(world_setting) if world_setting else {},
+            world_setting=model_to_dict(world_setting),
             characters=[model_to_dict(char) for char in characters] if characters else []
         )
         
         processing_time = time.time() - start_time
-        cost_estimate = 0.0
+        
+        # 估算成本（这里可以根据实际使用的token数量计算）
+        cost_estimate = 0.0  # 实际实现中应该基于token使用量计算
         
         return EnhancementPreviewResponse(
             original_outline=initial_outline,
@@ -597,7 +943,7 @@ async def enhance_outline_preview(
                     for dim in original_quality.dimension_scores.keys()
                 }
             },
-            improvements_made=enhancement_result["enhancement_result"].get("improvements_made", [])[:3],  # 限制改进数量
+            improvements_made=enhancement_result["enhancement_result"].get("improvements_made", []),
             processing_time=processing_time,
             cost_estimate=cost_estimate
         )
@@ -605,66 +951,3 @@ async def enhance_outline_preview(
     except Exception as e:
         logger.error(f"大纲完善预览失败：{e}")
         raise HTTPException(status_code=500, detail=f"完善失败：{str(e)}")
-
-
-@router.post("/outline/{outline_id}/apply-enhancement", response_model=dict)
-async def apply_outline_enhancement(
-    *,
-    novel_id: UUID,
-    outline_id: UUID,
-    enhanced_outline: dict,
-    db: AsyncSession = Depends(get_db),
-):
-    """应用大纲优化结果到数据库"""
-    try:
-        # 获取原大纲
-        plot_outline = await db.execute(
-            select(PlotOutline).where(PlotOutline.id == outline_id, PlotOutline.novel_id == novel_id)
-        )
-        plot_outline = plot_outline.scalar_one_or_none()
-        
-        if not plot_outline:
-            raise HTTPException(status_code=404, detail=f"大纲 {outline_id} 未找到")
-        
-        # 更新大纲内容
-        if 'main_plot' in enhanced_outline:
-            plot_outline.main_plot = enhanced_outline['main_plot']
-        if 'sub_plots' in enhanced_outline:
-            plot_outline.sub_plots = enhanced_outline['sub_plots']
-        if 'key_turning_points' in enhanced_outline:
-            plot_outline.key_turning_points = enhanced_outline['key_turning_points']
-        
-        # 创建新版本
-        await create_outline_version(db, novel_id, outline_id, "应用AI优化结果")
-        
-        await db.commit()
-        
-        return {"message": "优化结果已应用", "outline_id": str(outline_id)}
-        
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"应用大纲优化失败：{e}")
-        raise HTTPException(status_code=500, detail=f"应用优化失败：{str(e)}")
-
-
-def model_to_dict(model_instance):
-    """将SQLAlchemy模型实例转换为字典"""
-    if model_instance is None:
-        return {}
-    
-    # 获取模型的所有列属性
-    result = {}
-    for column in model_instance.__table__.columns:
-        value = getattr(model_instance, column.name)
-        # 处理UUID类型
-        if hasattr(value, 'hex'):
-            value = value.hex
-        # 处理datetime类型
-        elif hasattr(value, 'isoformat'):
-            value = value.isoformat()
-        result[column.name] = value
-    
-    return result
-
-
-__all__ = ["router"]

@@ -35,6 +35,8 @@ playwright/.auth/
 check_*.py
 test_*.py
 create_test_*.py
+test_*.html
+final_check.py
 # 明确排除特定日志文件
 novel_system.log*
 
