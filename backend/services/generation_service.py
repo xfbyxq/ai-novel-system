@@ -84,6 +84,21 @@ class GenerationService:
         if not novel:
             raise ValueError(f"小说 {novel_id} 不存在")
 
+        # 并发控制：检查是否已有企划任务在运行
+        existing_result = await self.db.execute(
+            select(GenerationTask)
+            .where(
+                GenerationTask.novel_id == novel_id,
+                GenerationTask.task_type == "planning",
+                GenerationTask.id != task_id,  # 排除当前任务本身
+                GenerationTask.status.in_(["pending", "running"])
+            )
+            .order_by(GenerationTask.created_at.desc())
+        )
+        existing_task = existing_result.scalar_one_or_none()
+        if existing_task:
+            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
+
         # 更新任务状态
         task_result = await self.db.execute(
             select(GenerationTask).where(GenerationTask.id == task_id)
@@ -118,7 +133,7 @@ class GenerationService:
                 genre=novel.genre,
                 tags=novel.tags or [],
                 context=novel.synopsis or "",
-                length_type=novel.length_type if novel.length_type else "medium",
+                length_type=novel.length_type if novel.length_type and novel.length_type != "medium" else "medium",
             )
 
             # 删除旧的企划数据（如果存在），以便重新生成

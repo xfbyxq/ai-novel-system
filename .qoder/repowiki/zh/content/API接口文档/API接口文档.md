@@ -10,7 +10,6 @@
 - [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py)
 - [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py)
 - [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py)
-- [backend/schemas/common.py](file://backend/schemas/common.py)
 - [backend/schemas/novel.py](file://backend/schemas/novel.py)
 - [backend/schemas/character.py](file://backend/schemas/character.py)
 - [backend/schemas/outline.py](file://backend/schemas/outline.py)
@@ -22,14 +21,6 @@
 - [core/models/chapter.py](file://core/models/chapter.py)
 - [core/models/generation_task.py](file://core/models/generation_task.py)
 </cite>
-
-## 更新摘要
-**所做更改**
-- 新增通用响应模型模块，统一API响应格式
-- 更新发布管理API的删除和验证响应格式
-- 更新生成任务API的任务取消响应格式
-- 更新AI聊天API的消息响应格式
-- 标准化所有API模块的错误处理和响应格式
 
 ## 目录
 1. [简介](#简介)
@@ -46,8 +37,6 @@
 ## 简介
 本项目是一个基于FastAPI构建的小说生成系统，提供从创意生成、角色塑造、章节管理到发布的完整工作流。系统采用异步数据库访问、后台任务处理和流式WebSocket通信，支持多种AI驱动的功能。
 
-**更新** 新增通用响应模型模块，实现API响应格式的标准化和统一化。
-
 ## 项目结构
 系统采用模块化设计，主要分为以下层次：
 
@@ -62,7 +51,6 @@ Outlines[大纲API]
 Generation[生成API]
 Publishing[发布API]
 AIChat[AI聊天API]
-Common[通用响应模型]
 end
 subgraph "服务层"
 Services[业务服务]
@@ -85,7 +73,6 @@ V1 --> Outlines
 V1 --> Generation
 V1 --> Publishing
 V1 --> AIChat
-V1 --> Common
 Novels --> Services
 Characters --> Services
 Chapters --> Services
@@ -100,11 +87,12 @@ WS --> AIChat
 ```
 
 **图表来源**
-- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L21-L39)
-- [backend/schemas/common.py](file://backend/schemas/common.py#L1-L28)
+- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L11-L26)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L22-L22)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L21-L21)
 
 **章节来源**
-- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L1-L39)
+- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L1-L29)
 
 ## 核心组件
 系统包含以下核心API模块：
@@ -114,30 +102,13 @@ WS --> AIChat
 - **当前版本**: v1.0
 - **版本策略**: 向后兼容，新增功能通过新端点实现
 
-### 通用响应模型
-**新增** 系统现在提供统一的响应模型，确保所有API响应格式的一致性：
-
-#### 通用消息响应
-- `MessageResponse`: 标准化的操作结果消息
-- 字段: `message` (字符串，操作结果消息)
-
-#### 任务相关响应
-- `TaskCancelResponse`: 任务取消响应
-- 字段: `message` (字符串，取消结果消息), `task_id` (字符串，被取消的任务ID)
-
-#### 账号相关响应
-- `VerifyAccountResponse`: 账号验证响应
-- 字段: `success` (布尔值，验证是否成功), `message` (字符串，验证结果消息)
-- `DeleteResponse`: 删除操作响应
-- 字段: `message` (字符串，删除结果消息), `account_id` (可选字符串，被删除的账号ID)
-
 ### 认证与授权
 - **认证方式**: 基于数据库的用户会话管理
 - **授权机制**: 基于角色的权限控制
 - **安全措施**: SQL注入防护、参数验证、错误处理
 
 **章节来源**
-- [backend/schemas/common.py](file://backend/schemas/common.py#L7-L27)
+- [backend/api/v1/__init__.py](file://backend/api/v1/__init__.py#L11-L11)
 
 ## 架构概览
 系统采用分层架构，确保关注点分离和可扩展性：
@@ -146,17 +117,14 @@ WS --> AIChat
 sequenceDiagram
 participant Client as 客户端
 participant API as API路由器
-participant Common as 通用响应模型
 participant Service as 业务服务
 participant DB as 数据库
 participant Worker as 后台工作者
 Client->>API : HTTP请求
-API->>Common : 标准化响应格式
-Common->>Service : 业务逻辑调用
+API->>Service : 业务逻辑调用
 Service->>DB : 数据持久化
 DB-->>Service : 查询结果
-Service-->>Common : 处理结果
-Common-->>API : 统一响应格式
+Service-->>API : 处理结果
 API-->>Client : HTTP响应
 Note over Service,Worker : 异步任务通过Celery执行
 Service->>Worker : 任务队列
@@ -164,9 +132,8 @@ Worker->>DB : 后台处理
 ```
 
 **图表来源**
-- [backend/schemas/common.py](file://backend/schemas/common.py#L7-L27)
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L159-L183)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L129-L148)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L73-L101)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L223-L229)
 
 ## 详细组件分析
 
@@ -194,9 +161,10 @@ API自动加载以下关联数据：
 - 章节列表 (Chapter[])
 
 **章节来源**
-- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L25-L67)
-- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L88-L141)
-- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L144-L168)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L25-L63)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L81-L104)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L107-L130)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L133-L149)
 
 ### 角色管理API (Characters)
 
@@ -237,12 +205,12 @@ CharacterRelationshipResponse --> CharacterEdge : 包含
 - [backend/schemas/character.py](file://backend/schemas/character.py#L58-L76)
 
 **章节来源**
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L47)
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L50-L74)
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L77-L133)
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L136-L157)
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L160-L189)
-- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L192-L215)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L24-L45)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L48-L70)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L73-L127)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L130-L149)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L152-L179)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L182-L202)
 
 ### 章节管理API (Chapters)
 
@@ -270,11 +238,11 @@ CharacterRelationshipResponse --> CharacterEdge : 包含
 ```
 
 **章节来源**
-- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L30-L80)
-- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L83-L107)
-- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L110-L146)
-- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L149-L177)
-- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L180-L212)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L29-L76)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L79-L101)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L104-L138)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L141-L167)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L170-L199)
 
 ### 生成任务API (Generation)
 
@@ -304,7 +272,7 @@ Background --> Failed[状态: failed]
 ```
 
 **图表来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L30-L110)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L103)
 
 #### 任务状态流转
 - `pending`: 待执行
@@ -313,13 +281,11 @@ Background --> Failed[状态: failed]
 - `failed`: 执行失败
 - `cancelled`: 已取消
 
-**更新** 任务取消响应现在使用统一的 `TaskCancelResponse` 格式，包含标准的消息和任务ID字段。
-
 **章节来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L30-L110)
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L113-L141)
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L144-L156)
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L159-L183)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L103)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L106-L134)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L137-L149)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L152-L170)
 
 ### 发布管理API (Publishing)
 
@@ -331,7 +297,7 @@ Background --> Failed[状态: failed]
 | GET | `/api/v1/publishing/accounts` | 获取账号列表 | 分页+筛选 | 200 |
 | GET | `/api/v1/publishing/accounts/{account_id}` | 获取账号详情 | - | 200, 404 |
 | PATCH | `/api/v1/publishing/accounts/{account_id}` | 更新账号 | PlatformAccountUpdate | 200, 404 |
-| DELETE | `/api/v1/publishing/accounts/{account_id}` | 删除账号 | DeleteResponse | 200, 404 |
+| DELETE | `/api/v1/publishing/accounts/{account_id}` | 删除账号 | - | 200, 404 |
 | POST | `/api/v1/publishing/accounts/{account_id}/verify` | 验证账号 | - | 200, 404 |
 
 #### 发布任务管理
@@ -341,31 +307,19 @@ Background --> Failed[状态: failed]
 | POST | `/api/v1/publishing/tasks` | 创建发布任务 | PublishTaskCreate | 201 |
 | GET | `/api/v1/publishing/tasks` | 获取任务列表 | 分页+筛选 | 200 |
 | GET | `/api/v1/publishing/tasks/{task_id}` | 获取任务详情 | - | 200, 404 |
-| POST | `/api/v1/publishing/tasks/{task_id}/cancel` | 取消任务 | TaskCancelResponse | 200, 404 |
+| POST | `/api/v1/publishing/tasks/{task_id}/cancel` | 取消任务 | - | 200, 404 |
 | GET | `/api/v1/publishing/tasks/{task_id}/chapters` | 获取章节发布记录 | 分页+筛选 | 200, 404 |
 
 #### 发布预览
 - POST `/api/v1/publishing/preview`: 获取发布预览信息
 - 支持指定章节范围进行预览
 
-**更新** 发布API现在使用统一的响应模型：
-- 删除操作返回 `DeleteResponse` 格式
-- 验证操作返回 `VerifyAccountResponse` 格式
-- 取消任务返回 `TaskCancelResponse` 格式
-
 **章节来源**
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L38-L56)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L59-L91)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L94-L106)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L109-L126)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L129-L148)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L151-L166)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L173-L249)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L252-L284)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L287-L299)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L302-L327)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L330-L364)
-- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L371-L397)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L38-L52)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L55-L83)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L157-L231)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L234-L266)
+- [backend/api/v1/publishing.py](file://backend/api/v1/publishing.py#L346-L368)
 
 ### AI聊天API (AI Chat)
 
@@ -377,7 +331,7 @@ Background --> Failed[状态: failed]
 | POST | `/api/v1/ai-chat/sessions/{session_id}/messages` | 发送消息 | AIChatMessageCreate | 200, 404 |
 | GET | `/api/v1/ai-chat/sessions` | 获取会话列表 | - | 200 |
 | GET | `/api/v1/ai-chat/sessions/{session_id}` | 获取会话详情 | - | 200, 404 |
-| DELETE | `/api/v1/ai-chat/sessions/{session_id}` | 删除会话 | MessageResponse | 200, 404 |
+| DELETE | `/api/v1/ai-chat/sessions/{session_id}` | 删除会话 | - | 200, 404 |
 
 #### WebSocket流式对话
 - WebSocket路径: `/api/v1/ai-chat/ws/{session_id}`
@@ -413,19 +367,14 @@ API-->>Client : ApplySuggestionsResponse
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L302-L363)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L395-L424)
-
-**更新** 会话删除操作现在使用统一的 `MessageResponse` 格式，提供标准的操作结果消息。
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L247-L288)
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L317-L341)
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L58-L92)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L95-L124)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L126-L186)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L188-L220)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L222-L273)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L275-L299)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L302-L424)
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L76)
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L79-L104)
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L106-L151)
+- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L247-L341)
 
 ### 世界观与大纲API (Outlines)
 
@@ -444,10 +393,10 @@ API-->>Client : ApplySuggestionsResponse
 | PATCH | `/api/v1/novels/{novel_id}/outline` | 更新情节大纲 | PlotOutlineUpdate | 200, 404 |
 
 **章节来源**
-- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L25-L54)
-- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L57-L96)
-- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L99-L128)
-- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L131-L170)
+- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L25-L52)
+- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L55-L91)
+- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L94-L121)
+- [backend/api/v1/outlines.py](file://backend/api/v1/outlines.py#L124-L160)
 
 ## 依赖关系分析
 
@@ -543,7 +492,6 @@ A4[Generation API]
 A5[Publishing API]
 A6[AI Chat API]
 A7[Outlines API]
-A8[Common API]
 end
 subgraph "服务层"
 S1[NovelService]
@@ -568,12 +516,6 @@ A4 --> S4
 A5 --> S5
 A6 --> S6
 A7 --> S1
-A8 --> A1
-A8 --> A2
-A8 --> A3
-A8 --> A4
-A8 --> A5
-A8 --> A6
 S1 --> D1
 S2 --> D2
 S3 --> D3
@@ -586,7 +528,6 @@ S6 --> D6
 - [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L13-L19)
 - [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L11-L19)
 - [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L12-L20)
-- [backend/schemas/common.py](file://backend/schemas/common.py#L7-L27)
 
 **章节来源**
 - [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L13-L19)
@@ -628,23 +569,13 @@ S6 --> D6
 - **404**: 资源不存在
 - **500**: 服务器内部错误
 
-#### 统一错误响应格式
-**更新** 所有API现在使用统一的错误响应格式：
-
+#### 错误响应格式
 ```json
 {
   "detail": "错误描述信息",
   "code": "错误代码"
 }
 ```
-
-#### 通用响应模型
-**新增** 统一的响应格式确保API一致性：
-
-- `MessageResponse`: `{ "message": "操作结果消息" }`
-- `TaskCancelResponse`: `{ "message": "取消结果消息", "task_id": "任务ID" }`
-- `VerifyAccountResponse`: `{ "success": true/false, "message": "验证结果消息" }`
-- `DeleteResponse`: `{ "message": "删除结果消息", "account_id": "账号ID" }`
 
 #### 调试建议
 1. **检查请求参数**: 确保UUID格式正确
@@ -653,7 +584,9 @@ S6 --> D6
 4. **数据库连接**: 验证数据库连接状态
 
 **章节来源**
-- [backend/schemas/common.py](file://backend/schemas/common.py#L7-L27)
+- [backend/api/v1/novels.py](file://backend/api/v1/novels.py#L101-L102)
+- [backend/api/v1/characters.py](file://backend/api/v1/characters.py#L146-L147)
+- [backend/api/v1/chapters.py](file://backend/api/v1/chapters.py#L157-L161)
 
 ## 结论
 本小说生成系统提供了完整的小说创作和发布解决方案，具有以下特点：
@@ -663,14 +596,12 @@ S6 --> D6
 - **异步处理**: 高效的异步数据库和WebSocket支持
 - **AI集成**: 完整的AI聊天和内容生成功能
 - **发布自动化**: 支持多平台的自动化发布流程
-- **响应标准化**: 统一的响应格式提升API质量
 
 ### 功能特性
 - **全生命周期管理**: 从创意到发布的完整流程
 - **智能辅助**: AI驱动的内容创作和修订
 - **多平台支持**: 支持主流小说发布平台
 - **实时协作**: WebSocket实现实时对话和反馈
-- **统一接口**: 标准化的响应格式简化集成
 
 ### 扩展性
 系统设计充分考虑了未来的功能扩展，包括：
@@ -692,18 +623,9 @@ S6 --> D6
 2. **参数验证**: 严格的输入验证
 3. **安全措施**: CSRF保护和输入过滤
 4. **性能优化**: 缓存策略和数据库优化
-5. **响应标准化**: 使用统一的响应模型
 
 ### 开发指南
 - **环境配置**: `.env`文件配置
 - **数据库迁移**: Alembic版本管理
 - **测试策略**: 单元测试和集成测试
 - **部署方案**: Docker容器化部署
-
-### 通用响应模型使用指南
-**新增** 开发者在使用API时应注意：
-- 所有成功响应都遵循统一的结构
-- 错误响应包含详细的错误信息
-- 删除操作返回明确的确认信息
-- 任务取消返回标准的结果格式
-- 验证操作返回明确的成功状态

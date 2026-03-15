@@ -22,11 +22,28 @@ async def _execute_planning(novel_id: str, task_id: str):
     """异步执行企划任务。"""
     from core.database import async_session_factory
     from backend.services.generation_service import GenerationService
+    from core.models.generation_task import GenerationTask, TaskStatus
+    from sqlalchemy import select
 
     async with async_session_factory() as session:
+        # 检查是否已有企划任务在运行
+        existing_result = await session.execute(
+            select(GenerationTask)
+            .where(
+                GenerationTask.novel_id == novel_id,
+                GenerationTask.task_type == "planning",
+                GenerationTask.status.in_([TaskStatus.pending, TaskStatus.running])
+            )
+            .order_by(GenerationTask.created_at.desc())
+        )
+        existing_task = existing_result.scalar_one_or_none()
+        if existing_task:
+            logger.warning(f"Other planning task already running for novel {novel_id} (Task ID: {existing_task.id})")
+            return {"status": "failed", "error": f"其他企划任务已在运行中 (Task ID: {existing_task.id})"}
+
         service = GenerationService(session)
         try:
-            result = await service.run_planning(UUID(novel_id), UUID(task_id))
+            result = await service.run_planning(novel_id, task_id)
             return {"status": "completed", "novel_id": novel_id, "task_id": task_id}
         except Exception as e:
             logger.error(f"Planning task failed: {e}")

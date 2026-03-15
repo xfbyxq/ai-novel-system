@@ -4,7 +4,6 @@
 **本文档引用的文件**
 - [backend/api/v1/generation.py](file://backend/api/v1/generation.py)
 - [backend/schemas/generation.py](file://backend/schemas/generation.py)
-- [backend/schemas/common.py](file://backend/schemas/common.py)
 - [backend/services/generation_service.py](file://backend/services/generation_service.py)
 - [core/models/generation_task.py](file://core/models/generation_task.py)
 - [workers/generation_worker.py](file://workers/generation_worker.py)
@@ -15,13 +14,6 @@
 - [llm/qwen_client.py](file://llm/qwen_client.py)
 - [backend/main.py](file://backend/main.py)
 </cite>
-
-## 更新摘要
-**变更内容**
-- 新增任务取消功能，支持在执行过程中的中断操作
-- 改进状态验证机制，确保任务状态的一致性和安全性
-- 新增`TaskCancelResponse`响应模型和相关错误处理
-- 增强任务生命周期管理，完善终态检查机制
 
 ## 目录
 1. [简介](#简介)
@@ -36,7 +28,7 @@
 10. [附录](#附录)
 
 ## 简介
-生成任务API是小说生成系统的核心接口，负责管理AI内容生成任务的完整生命周期。该API支持三种主要任务类型：企划阶段（世界观、角色、大纲）、单章写作和批量写作，为用户提供从创意构思到内容产出的全流程自动化服务。**最新版本增强了任务管理能力，新增了任务取消功能和改进的状态验证机制**。
+生成任务API是小说生成系统的核心接口，负责管理AI内容生成任务的完整生命周期。该API支持三种主要任务类型：企划阶段（世界观、角色、大纲）、单章写作和批量写作，为用户提供从创意构思到内容产出的全流程自动化服务。
 
 ## 项目结构
 生成任务API位于后端的API路由层，采用分层架构设计，确保业务逻辑与接口层的清晰分离。
@@ -88,12 +80,11 @@ DATABASE --> MODEL_NOVEL
 生成任务API由多个核心组件构成，每个组件都有明确的职责和功能边界。
 
 ### 任务类型枚举
-系统定义了四种主要的任务类型，每种类型对应不同的生成流程：
+系统定义了三种主要的任务类型，每种类型对应不同的生成流程：
 
 - **planning（企划阶段）**：执行世界观、角色、情节大纲的生成
 - **writing（单章写作）**：生成单个章节的内容
 - **batch_writing（批量写作）**：批量生成多个章节
-- **editing（编辑阶段）**：编辑和优化现有内容（新增）
 
 ### 任务状态管理
 任务状态采用五状态机设计，确保任务生命周期的完整追踪：
@@ -103,8 +94,6 @@ DATABASE --> MODEL_NOVEL
 - **completed（已完成）**：任务成功执行完毕
 - **failed（失败）**：任务执行过程中发生错误
 - **cancelled（已取消）**：用户主动取消的任务
-
-**更新** 新增了`cancelled`状态，支持任务取消功能。
 
 ### 数据模型结构
 任务数据模型包含完整的元数据和结果存储能力：
@@ -144,10 +133,6 @@ Client->>API : GET /generation/tasks/{task_id}
 API->>DB : 查询任务状态
 DB-->>API : 返回任务详情
 API-->>Client : 任务状态和结果
-Client->>API : POST /generation/tasks/{task_id}/cancel
-API->>DB : 验证任务状态并取消
-DB-->>API : 返回取消确认
-API-->>Client : 取消结果
 ```
 
 **图表来源**
@@ -158,7 +143,7 @@ API-->>Client : 取消结果
 ## 详细组件分析
 
 ### API端点设计
-生成任务API提供了五个核心端点，覆盖任务生命周期的各个阶段，**新增了任务取消功能**。
+生成任务API提供了四个核心端点，覆盖任务生命周期的各个阶段：
 
 #### POST /generation/tasks - 创建生成任务
 该端点负责创建新的生成任务，支持三种任务类型的差异化处理。
@@ -205,24 +190,15 @@ API-->>Client : 取消结果
 - 错误信息（如有）
 
 #### POST /generation/tasks/{task_id}/cancel - 取消任务
-**新增功能**：提供任务取消功能，支持在执行过程中的中断操作。
+提供任务取消功能，支持在执行过程中的中断操作。
 
 **取消规则**：
-- 仅对处于`pending`（等待中）或`running`（执行中）状态的任务有效
-- 终态任务（已完成、已失败、已取消）不可再次取消
+- 仅对处于运行中状态的任务有效
+- 终态任务（已完成/失败/已取消）不可取消
 - 立即更新数据库状态并返回确认信息
 
-**状态验证机制**：
-- 检查任务是否存在
-- 验证任务状态是否为终态
-- 使用原子操作确保状态一致性
-
-**响应数据结构**：
-- `message`：取消结果消息
-- `task_id`：被取消的任务ID
-
 **章节来源**
-- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L183)
+- [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L23-L171)
 
 ### 服务层实现
 服务层负责协调AI代理系统和数据库操作，确保任务的正确执行和数据持久化。
@@ -292,7 +268,7 @@ UpdateTask --> Complete([完成企划阶段])
 - `createGenerationTask()`：创建新任务
 - `getGenerationTasks()`：获取任务列表
 - `getGenerationTask()`：查询单个任务
-- `cancelGenerationTask()`：**新增**取消任务功能
+- `cancelGenerationTask()`：取消任务
 
 #### 状态管理
 使用Zustand状态管理库实现全局状态同步：
@@ -395,7 +371,6 @@ FE --> ANTD
 #### 任务取消错误
 **状态不支持**：对已完成或已取消的任务尝试取消会返回400错误
 **并发冲突**：使用数据库事务确保状态一致性
-**任务不存在**：对不存在的任务ID取消会返回404错误
 
 ### 监控和日志
 系统提供了全面的监控和日志记录功能：
@@ -410,14 +385,13 @@ FE --> ANTD
 - [llm/qwen_client.py](file://llm/qwen_client.py#L140-L161)
 
 ## 结论
-生成任务API为小说生成系统提供了完整、可靠的任务管理解决方案。**最新版本通过新增任务取消功能和改进的状态验证机制，进一步增强了系统的可用性和可靠性**。通过清晰的架构设计、完善的错误处理机制和优秀的用户体验，该API能够满足从个人创作者到专业出版机构的各种需求。
+生成任务API为小说生成系统提供了完整、可靠的任务管理解决方案。通过清晰的架构设计、完善的错误处理机制和优秀的用户体验，该API能够满足从个人创作者到专业出版机构的各种需求。
 
 系统的主要优势包括：
 - **完整的生命周期管理**：从任务创建到结果获取的全流程支持
 - **灵活的任务类型**：支持不同阶段和规模的生成需求
 - **强大的扩展性**：基于异步架构和分布式任务处理
 - **优秀的用户体验**：直观的前端界面和实时状态反馈
-- **安全的状态管理**：完善的终态检查和状态验证机制
 
 ## 附录
 
@@ -479,13 +453,8 @@ console.log(`进度: ${task.output_data.progress || 'N/A'}`);
 try {
   const result = await cancelGenerationTask("task-id");
   console.log(result.message);
-  console.log(`被取消的任务ID: ${result.task_id}`);
 } catch (error) {
   console.error("取消失败:", error.message);
-  // 处理取消失败的情况
-  if (error.response?.data?.detail) {
-    console.error("错误原因:", error.response.data.detail);
-  }
 }
 ```
 
@@ -508,12 +477,6 @@ try {
 - **输出**：批量生成报告和统计信息
 - **适用场景**：快速填充内容和集中创作
 - **关键参数**：起始/结束章节号、卷号范围
-
-#### 编辑阶段（editing）
-- **目标**：编辑和优化现有内容
-- **输出**：优化后的文本和修改建议
-- **适用场景**：内容质量提升和细节完善
-- **关键参数**：待编辑内容标识、优化目标
 
 ### 状态枚举详解
 
@@ -543,13 +506,6 @@ try {
 - **性能监控**：执行时间和成功率统计
 - **错误监控**：错误模式识别和趋势分析
 - **告警机制**：异常情况的自动通知
-
-#### 状态验证机制
-**新增功能**：改进的状态验证确保任务管理的安全性：
-
-- **终态检查**：防止对已完成、失败或已取消任务的重复操作
-- **原子操作**：使用数据库事务确保状态更新的一致性
-- **并发控制**：避免多个请求同时修改同一任务状态
 
 **章节来源**
 - [backend/api/v1/generation.py](file://backend/api/v1/generation.py#L42-L52)

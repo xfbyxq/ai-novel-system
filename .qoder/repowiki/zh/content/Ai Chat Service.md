@@ -13,16 +13,16 @@
 - [aiChat.ts](file://frontend/src/api/aiChat.ts)
 - [config.py](file://backend/config.py)
 - [pyproject.toml](file://pyproject.toml)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增持久化记忆上下文集成，显著提升文学分析深度和准确性
-- 集成SQLite持久化存储，替代内存缓存的短期记忆限制
-- 实现章节摘要、角色状态、伏笔追踪等多维度记忆管理
-- 新增增强的AI分析提示构建，包含完整的上下文信息
-- 实现AgentMesh风格的记忆系统，支持全文搜索和语义检索
+- 新增增量分析合并功能（_merge_analysis），支持分析结果的增量更新
+- 新增安全字段访问功能（_safe_get），提供健壮的嵌套字典访问
+- 增强了小说分析功能，提供更智能的内容分析和建议
+- 实现了智能会话标题生成功能，自动为对话生成简洁标题
+- 支持会话隔离和更好的组织导航，通过novel_id字段实现
+- 优化了内存缓存机制，增强了变化检测和增量更新能力
 
 ## 目录
 1. [简介](#简介)
@@ -39,7 +39,7 @@
 
 AI聊天服务是一个基于FastAPI构建的智能对话系统，专门为网络小说创作提供AI辅助功能。该系统集成了通义千问大模型，支持多种创作场景，包括小说创作、爬虫任务规划、小说修订和内容分析。系统采用内存缓存机制和数据库持久化相结合的方式，提供了高效的会话管理和内容存储能力。
 
-**更新** 系统现已显著增强了分析能力和稳定性，新增了增量分析合并功能、安全字段访问机制、智能标题生成和会话隔离等特性。更重要的是，系统集成了AgentMesh风格的持久化记忆系统，通过SQLite数据库实现长期记忆存储，显著提升了文学分析的深度和准确性。
+**更新** 系统现已显著增强了分析能力和稳定性，新增了增量分析合并功能、安全字段访问机制、智能标题生成和会话隔离等特性。这些改进大幅提升了系统的智能化水平和用户体验。
 
 ## 项目结构
 
@@ -58,7 +58,6 @@ end
 subgraph "服务层"
 Service[AI聊天服务<br/>AiChatService]
 Memory[内存服务<br/>MemoryService]
-PersistentMemory[持久化记忆<br/>NovelMemoryAdapter]
 Cost[成本追踪<br/>CostTracker]
 end
 subgraph "LLM层"
@@ -67,24 +66,20 @@ end
 subgraph "数据层"
 Models[数据库模型<br/>AIChatSession/AIChatMessage]
 DB[(PostgreSQL数据库)]
-PersistentDB[(SQLite持久化数据库)]
 end
 FE --> API
 API --> Router
 Router --> Service
 Service --> Memory
-Service --> PersistentMemory
 Service --> Qwen
 Service --> Models
 Models --> DB
-PersistentMemory --> PersistentDB
 Qwen --> Cost
 ```
 
 **图表来源**
 - [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L50)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L189-L200)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
 - [qwen_client.py](file://llm/qwen_client.py#L16-L45)
 
 **章节来源**
@@ -105,7 +100,6 @@ class AiChatService {
 +QwenClient client
 +dict sessions
 +NovelMemoryService memory_service
-+NovelMemoryAdapter persistent_memory
 +create_session(scene, context) ChatSession
 +send_message(session_id, message) str
 +send_message_stream(session_id, message) AsyncIterator~str~
@@ -116,8 +110,6 @@ class AiChatService {
 +_merge_analysis(existing, new) dict
 +_safe_get(data, path, default) Any
 +_generate_session_title(session) str
-+_get_persistent_memory_context(novel_id, current_chapter) str
-+_initialize_persistent_memory_for_novel(novel_id, novel_info) void
 }
 class ChatSession {
 +str session_id
@@ -143,34 +135,14 @@ class QwenClient {
 +chat(prompt, system) dict
 +stream_chat(prompt, system) AsyncIterator~str~
 }
-class NovelMemoryAdapter {
-+NovelMemoryStorage storage
-+save_chapter_memory(novel_id, chapter_number, content, summary) str
-+get_chapter_context(novel_id, chapter_number, context_chapters) str
-+initialize_novel_memory(novel_id, novel_data) void
-+update_character_state(novel_id, character_name, chapter_number, updates) void
-}
-class NovelMemoryStorage {
-+sqlite3 Connection conn
-+save_chapter_summary(novel_id, chapter_number, summary, full_content_hash) str
-+get_recent_chapter_summaries(novel_id, current_chapter, count) List
-+save_character_state(novel_id, character_name, state) str
-+get_all_character_states(novel_id) Dict
-+save_novel_metadata(novel_id, metadata) str
-+search_memories(novel_id, query, source_types, limit) List
-}
 AiChatService --> ChatSession : creates
 AiChatService --> QwenClient : uses
-AiChatService --> NovelMemoryAdapter : uses
 ChatSession --> ChatMessage : contains
-NovelMemoryAdapter --> NovelMemoryStorage : uses
 ```
 
 **图表来源**
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L189-L200)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L128-L187)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L20-L32)
 - [qwen_client.py](file://llm/qwen_client.py#L16-L45)
 
 ### 数据模型
@@ -216,15 +188,12 @@ participant Client as 客户端
 participant API as FastAPI接口
 participant Service as AI聊天服务
 participant Memory as 内存服务
-participant PersistentMemory as 持久化记忆
 participant LLM as 通义千问
 participant DB as 数据库
 Client->>API : POST /ai-chat/sessions
 API->>Service : create_session()
 Service->>Memory : get_novel_memory()
 Memory-->>Service : 缓存数据
-Service->>PersistentMemory : 初始化持久化记忆
-PersistentMemory-->>Service : 存储元数据
 Service->>LLM : 获取小说分析
 LLM-->>Service : 分析结果
 Service->>DB : 保存会话含novel_id和title
@@ -233,9 +202,7 @@ Service-->>API : 会话信息
 API-->>Client : 会话创建成功
 Client->>API : POST /ai-chat/sessions/{id}/messages
 API->>Service : send_message()
-Service->>PersistentMemory : 获取上下文
-PersistentMemory-->>Service : 章节摘要、角色状态
-Service->>LLM : 生成回复含完整上下文
+Service->>LLM : 生成回复
 LLM-->>Service : AI回复
 Service->>DB : 保存消息
 Service-->>API : 回复内容
@@ -245,7 +212,6 @@ API-->>Client : 消息响应
 **图表来源**
 - [ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L104)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L968-L1015)
 
 ## 详细组件分析
 
@@ -270,12 +236,10 @@ API-->>Client : 消息响应
 stateDiagram-v2
 [*] --> 创建会话
 创建会话 --> 初始化上下文 : 加载小说信息
-初始化上下文 --> 初始化持久化记忆 : 保存元数据和角色状态
-初始化持久化记忆 --> 生成标题 : AI智能生成
+初始化上下文 --> 生成标题 : AI智能生成
 生成标题 --> 等待消息 : 生成欢迎消息
 等待消息 --> 处理消息 : 用户发送消息
-处理消息 --> 获取持久化上下文 : 从SQLite获取章节摘要、角色状态
-获取持久化上下文 --> 生成回复 : AI生成回复含完整上下文
+处理消息 --> 生成回复 : AI生成回复
 生成回复 --> 保存会话 : 异步保存到数据库含novel_id和title
 保存会话 --> 等待消息 : 继续对话
 处理消息 --> 需要澄清 : 意图不明确
@@ -288,105 +252,10 @@ stateDiagram-v2
 **图表来源**
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L572-L574)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L968-L1015)
 
 **章节来源**
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L53-L115)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
-
-### 持久化记忆系统
-
-**更新** 系统新增了AgentMesh风格的持久化记忆系统，通过SQLite数据库实现长期记忆存储，显著提升了分析能力：
-
-#### 持久化记忆架构
-
-```mermaid
-graph TB
-subgraph "持久化记忆层"
-Adapter[NovelMemoryAdapter]
-Storage[NovelMemoryStorage]
-DB[(SQLite数据库)]
-end
-subgraph "存储表结构"
-ChapterSummaries[章节摘要表<br/>chapter_summaries]
-CharacterStates[角色状态表<br/>character_states]
-NovelMetadata[小说元数据表<br/>novel_metadata]
-Foreshadowing[伏笔追踪表<br/>foreshadowing]
-MemoryChunks[记忆块表<br/>memory_chunks]
-FTSIndex[FTS5全文索引<br/>memory_fts]
-end
-subgraph "功能模块"
-ContextBuilder[上下文构建器]
-SearchEngine[搜索引擎]
-StatsCollector[统计收集器]
-end
-Adapter --> Storage
-Storage --> DB
-ChapterSummaries --> DB
-CharacterStates --> DB
-NovelMetadata --> DB
-Foreshadowing --> DB
-MemoryChunks --> DB
-FTSIndex --> MemoryChunks
-ContextBuilder --> ChapterSummaries
-ContextBuilder --> CharacterStates
-ContextBuilder --> Foreshadowing
-SearchEngine --> FTSIndex
-StatsCollector --> DB
-```
-
-**图表来源**
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L20-L32)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L47-L168)
-
-#### 持久化记忆功能
-
-系统实现了多维度的记忆管理：
-
-1. **章节摘要管理**：保存每章的关键事件、角色变化、情节进展
-2. **角色状态追踪**：记录角色的位置、境界、情感状态、关系变化
-3. **伏笔追踪系统**：管理埋设的伏笔及其解决状态
-4. **全文搜索能力**：通过FTS5实现关键词搜索和语义检索
-5. **统计分析功能**：提供小说记忆的统计信息
-
-**章节来源**
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L20-L168)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L183-L344)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L374-L497)
-
-### 增强的AI分析提示构建
-
-**更新** 系统现在能够从持久化记忆中获取完整的上下文信息，显著提升了分析的深度和准确性：
-
-#### 增强的分析流程
-
-```mermaid
-flowchart TD
-Start([开始分析]) --> GetNovelInfo[获取小说信息]
-GetNovelInfo --> AnalyzeContent[分析小说内容]
-AnalyzeContent --> BuildBasicPrompt[构建基础提示词]
-BuildBasicPrompt --> GetPersistentContext[获取持久化记忆上下文]
-GetPersistentContext --> CheckContext{有上下文?}
-CheckContext --> |是| AddContext[添加章节摘要、角色状态、伏笔等]
-CheckContext --> |否| SkipContext[跳过上下文]
-AddContext --> BuildEnhancedPrompt[构建增强提示词]
-SkipContext --> BuildEnhancedPrompt
-BuildEnhancedPrompt --> CallLLM[调用LLM生成分析]
-CallLLM --> ReturnAnalysis[返回分析结果]
-```
-
-#### 持久化上下文内容
-
-系统从持久化记忆中获取以下信息：
-
-1. **章节摘要**：最近N章的主要事件、角色变化、情节进展
-2. **角色状态**：主要角色的当前位置、修炼境界、情感状态
-3. **伏笔追踪**：待解决的伏笔及其相关信息
-4. **时间线事件**：关键事件的时间线梳理
-
-**章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L994-L1061)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1137-L1143)
 
 ### 智能标题生成功能
 
@@ -602,7 +471,6 @@ WS-->>Client : 连接确认
 loop 持续对话
 Client->>WS : {"message" : "用户消息"}
 WS->>Service : 处理消息
-Service->>Service : 获取持久化上下文
 Service->>WS : 流式响应块
 WS-->>Client : {"chunk" : "部分回复", "done" : false}
 Service->>WS : 最终响应
@@ -730,8 +598,6 @@ class AiChatService {
 +_analyze_novel_content(novel_info) dict
 +_safe_get(data, path, default) Any
 +_merge_analysis(existing, new) dict
-+_get_persistent_memory_context(novel_id, current_chapter) str
-+_initialize_persistent_memory_for_novel(novel_id, novel_info) void
 }
 class AnalysisResult {
 +list strengths
@@ -739,49 +605,12 @@ class AnalysisResult {
 +list suggestions
 +list genre_specific
 }
-class PersistentMemoryContext {
-+list recent_summaries
-+dict character_states
-+list foreshadowing_list
-+list timeline_events
-}
 AiChatService --> AnalysisResult : generates
-AiChatService --> PersistentMemoryContext : uses
 ```
 
 **章节来源**
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L869-L923)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L925-L985)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L994-L1061)
-
-#### 持久化记忆上下文获取
-
-**更新** 系统新增了`_get_persistent_memory_context`方法，从SQLite数据库获取增强的上下文信息：
-
-```mermaid
-flowchart TD
-Start([获取持久化上下文]) --> GetRecentSummaries[获取最近章节摘要]
-GetRecentSummaries --> CheckSummaries{有摘要?}
-CheckSummaries --> |是| AddSummaries[添加章节摘要到上下文]
-CheckSummaries --> |否| GetCharacterStates[获取角色状态]
-AddSummaries --> GetCharacterStates
-GetCharacterStates --> CheckStates{有状态?}
-CheckStates --> |是| AddStates[添加角色状态到上下文]
-CheckStates --> |否| GetForeshadowing[获取伏笔]
-AddStates --> GetForeshadowing
-GetForeshadowing --> CheckForeshadowing{有伏笔?}
-CheckForeshadowing --> |是| AddForeshadowing[添加伏笔到上下文]
-CheckForeshadowing --> |否| GetTimeline[获取时间线]
-AddForeshadowing --> GetTimeline
-GetTimeline --> CheckTimeline{有时间线?}
-CheckTimeline --> |是| AddTimeline[添加时间线到上下文]
-CheckTimeline --> |否| ReturnContext[返回上下文]
-AddTimeline --> ReturnContext
-ReturnContext --> End([结束])
-```
-
-**章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L994-L1061)
 
 ## 依赖关系分析
 
@@ -799,7 +628,6 @@ end
 subgraph "数据库"
 AsyncPG[asyncpg]
 Alembic[Alembic 1.14.0]
-SQLite[SQLite 3.40.0]
 end
 subgraph "LLM服务"
 DashScope[DashScope 1.20.0]
@@ -836,7 +664,6 @@ end
 subgraph "服务层"
 Service[backend/services/ai_chat_service.py]
 Memory[backend/services/memory_service.py]
-PersistentMemory[backend/services/agentmesh_memory_adapter.py]
 Cost[llm/cost_tracker.py]
 end
 subgraph "模型层"
@@ -850,7 +677,6 @@ Config[backend/config.py]
 end
 API --> Service
 Service --> Memory
-Service --> PersistentMemory
 Service --> Qwen
 Service --> Models
 Service --> Config
@@ -860,7 +686,6 @@ Qwen --> Cost
 **图表来源**
 - [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L37)
 - [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L15)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
 
 **章节来源**
 - [pyproject.toml](file://pyproject.toml#L8-L37)
@@ -893,15 +718,6 @@ Qwen --> Cost
 - **Token统计**：精确记录输入输出tokens
 - **成本计算**：根据模型定价自动计算费用
 - **预算控制**：可配置的成本上限
-
-### 持久化存储优化
-
-**更新** 新增的持久化记忆系统具有以下性能特点：
-
-- **SQLite WAL模式**：提升并发读写性能
-- **FTS5全文索引**：支持高效的关键词搜索
-- **哈希校验**：避免重复存储相同内容
-- **批量操作**：支持批量保存和查询
 
 ## 故障排除指南
 
@@ -964,23 +780,6 @@ Qwen --> Cost
 3. 查看内存服务日志，确认缓存服务正常运行
 4. 检查`force_db`参数设置，必要时强制从数据库加载
 
-#### 持久化记忆系统异常
-
-**问题症状**：`_get_persistent_memory_context`返回空内容或报错
-
-**可能原因**：
-1. SQLite数据库文件损坏
-2. 数据库连接问题
-3. 表结构不完整
-4. FTS5索引异常
-
-**解决步骤**：
-1. 检查`novel_memory.db`文件是否存在且可读写
-2. 验证数据库连接字符串和权限
-3. 运行数据库初始化脚本重建表结构
-4. 检查FTS5扩展是否可用
-5. 查看日志中的具体错误信息
-
 #### 会话标题生成失败
 
 **问题症状**：会话标题显示为"新会话"或生成异常
@@ -1011,25 +810,9 @@ Qwen --> Cost
 3. 查看合并过程的日志信息
 4. 验证安全访问方法的使用
 
-#### 增强的AI分析提示构建失败
-
-**问题症状**：分析提示词构建不完整或缺少上下文
-
-**可能原因**：
-1. 持久化记忆上下文获取失败
-2. 上下文格式化错误
-3. LLM调用参数配置问题
-
-**解决步骤**：
-1. 检查持久化记忆系统的可用性
-2. 验证获取的上下文数据格式
-3. 确认LLM调用参数的完整性
-4. 查看日志中的错误堆栈信息
-
 **章节来源**
 - [ai_chat.py](file://backend/api/v1/ai_chat.py#L98-L104)
 - [qwen_client.py](file://llm/qwen_client.py#L97-L106)
-- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py#L47-L168)
 
 ## 结论
 
@@ -1041,6 +824,6 @@ AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过
 4. **易扩展性**：模块化设计，便于功能扩展和维护
 5. **智能组织**：新增的会话隔离和智能标题生成功能，提升了用户体验
 
-**更新** 系统现已显著增强了分析能力和稳定性，通过新增的增量分析合并功能、安全字段访问机制、智能标题生成、会话隔离以及最重要的持久化记忆系统等特性，大幅提升了系统的智能化水平和用户体验。特别是AgentMesh风格的SQLite持久化记忆系统，通过章节摘要、角色状态、伏笔追踪等功能，为AI分析提供了完整的上下文信息，显著提升了文学分析的深度和准确性。
+**更新** 系统现已显著增强了分析能力和稳定性，通过新增的增量分析合并功能、安全字段访问机制、智能标题生成和会话隔离等特性，大幅提升了系统的智能化水平和用户体验。这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务。
 
-该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量。持久化记忆系统的集成使得AI能够理解小说的完整发展脉络，提供更加精准和个性化的分析与建议，真正实现了"有记忆"的智能创作助手。
+该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量。

@@ -45,6 +45,24 @@ async def create_generation_task(
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {task_in.novel_id} 未找到")
 
+    # 企划任务并发控制：同一小说只能有一个企划任务在运行
+    if task_in.task_type == "planning":
+        running_planning_task = await db.execute(
+            select(GenerationTask)
+            .where(
+                GenerationTask.novel_id == task_in.novel_id,
+                GenerationTask.task_type == "planning",
+                GenerationTask.status.in_(["pending", "running"])
+            )
+            .order_by(GenerationTask.created_at.desc())
+        )
+        existing_task = running_planning_task.scalar_one_or_none()
+        if existing_task:
+            raise HTTPException(
+                status_code=400,
+                detail=f"该小说已有企划任务在运行中 (Task ID: {existing_task.id}), 请等待完成后在创建新的企划任务"
+            )
+
     # 批量写作验证
     if task_in.task_type == "batch_writing":
         if not task_in.from_chapter or not task_in.to_chapter:

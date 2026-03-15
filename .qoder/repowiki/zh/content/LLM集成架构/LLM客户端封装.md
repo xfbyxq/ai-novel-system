@@ -15,12 +15,6 @@
 - [llm/cost_tracker.py](file://llm/cost_tracker.py)
 </cite>
 
-## 更新摘要
-**变更内容**
-- 更新了OpenAI兼容模式的超时配置说明，新增60秒读取超时和10秒连接超时设置
-- 增强了客户端在网络不稳定时的可靠性说明
-- 更新了配置管理和性能考量相关内容
-
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -34,7 +28,7 @@
 10. [附录](#附录)
 
 ## 简介
-本文件为"LLM客户端封装"的技术文档，聚焦于QwenClient类的设计与实现，覆盖以下主题：
+本文件为“LLM客户端封装”的技术文档，聚焦于QwenClient类的设计与实现，覆盖以下主题：
 - OpenAI兼容模式与标准DashScope SDK两种调用方式的实现差异
 - 异步调用机制：事件循环处理、线程池使用、阻塞避免策略
 - 重试机制：指数退避算法、错误分类处理、超时配置
@@ -78,8 +72,8 @@ QC --> CFG
 CFG --> ENV
 ```
 
-**图表来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L234)
+图表来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L231)
 - [llm/cost_tracker.py](file://llm/cost_tracker.py#L16-L74)
 - [agents/crew_manager.py](file://agents/crew_manager.py#L19-L480)
 - [agents/agent_dispatcher.py](file://agents/agent_dispatcher.py#L17-L440)
@@ -89,18 +83,18 @@ CFG --> ENV
 - [backend/config.py](file://backend/config.py#L5-L59)
 - [.env](file://.env#L1-L22)
 
-**章节来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L1-L234)
+章节来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L1-L232)
 - [backend/config.py](file://backend/config.py#L1-L59)
 - [.env](file://.env#L1-L22)
 
 ## 核心组件
-- QwenClient：统一的通义千问客户端封装，支持OpenAI兼容模式与标准DashScope SDK；提供同步/异步聊天与流式输出；内置指数退避重试；**新增超时配置增强网络稳定性**。
+- QwenClient：统一的通义千问客户端封装，支持OpenAI兼容模式与标准DashScope SDK；提供同步/异步聊天与流式输出；内置指数退避重试。
 - CostTracker：按模型定价追踪token用量与成本，支持记录、汇总与重置。
 - GenerationService：服务层编排器，负责调用Agent调度器与QwenClient，持久化结果与token使用。
 
-**章节来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L234)
+章节来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L231)
 - [llm/cost_tracker.py](file://llm/cost_tracker.py#L16-L74)
 - [backend/services/generation_service.py](file://backend/services/generation_service.py#L27-L689)
 
@@ -118,7 +112,7 @@ participant Exec as "线程池执行"
 Caller->>QC : chat(prompt, system, ...)
 QC->>Mode : use_openai_mode?
 alt OpenAI兼容模式
-QC->>OA : AsyncOpenAI.chat.completions.create(timeout=...)
+QC->>OA : AsyncOpenAI.chat.completions.create(...)
 OA-->>QC : choices[0].message.content, usage
 else 标准SDK模式
 QC->>Exec : loop.run_in_executor(..., Generation.call(...))
@@ -128,10 +122,10 @@ end
 QC-->>Caller : {"content" : "...", "usage" : {...}}
 ```
 
-**图表来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L46-L163)
+图表来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L46-L161)
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L29-L63)
 
 ## 组件详解
@@ -146,8 +140,6 @@ QC-->>Caller : {"content" : "...", "usage" : {...}}
 - 重试机制
   - 采用指数退避（2^attempt秒），最多retries次尝试。
   - 对API错误与异常分别记录warning，并在最终失败时抛出RuntimeError。
-- **超时配置增强**
-  - OpenAI兼容模式下使用httpx.Timeout(60.0, connect=10.0)，提供60秒读取超时和10秒连接超时，增强网络不稳定时的可靠性。
 - 流式输出
   - OpenAI兼容模式：直接使用异步流式接口，逐块yield delta内容。
   - 标准SDK模式：通过线程池执行同步流式调用，遍历响应对象，逐块yield content。
@@ -170,13 +162,13 @@ class QwenClient {
 }
 ```
 
-**图表来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L234)
+图表来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L231)
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L19-L63)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L65-L163)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L165-L230)
+- [llm/qwen_client.py](file://llm/qwen_client.py#L65-L161)
+- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L228)
 
 ### 异步调用与线程池策略
 - 事件循环处理
@@ -198,11 +190,11 @@ DirectAsync --> Wait
 Wait --> Return(["返回结果"])
 ```
 
-**图表来源**
+图表来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L126-L138)
 - [llm/qwen_client.py](file://llm/qwen_client.py#L184-L196)
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L126-L138)
 - [llm/qwen_client.py](file://llm/qwen_client.py#L184-L196)
 
@@ -211,8 +203,8 @@ Wait --> Return(["返回结果"])
   - 等待时间为2^attempt秒，最多retries次尝试。
 - 错误分类
   - API错误（status_code!=200）与异常捕获分别记录warning。
-- **超时配置**
-  - OpenAI兼容模式下已集成超时配置：60秒读取超时和10秒连接超时，增强网络不稳定时的可靠性。
+- 超时配置
+  - 当前实现未显式设置HTTP请求超时，若需增强可在AsyncOpenAI或dashscope SDK层增加timeout参数。
 
 ```mermaid
 flowchart TD
@@ -226,13 +218,13 @@ Backoff --> Attempt
 IsLast --> |是| RaiseErr["抛出异常"]
 ```
 
-**图表来源**
+图表来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L80-L106)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L124-L163)
+- [llm/qwen_client.py](file://llm/qwen_client.py#L124-L161)
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L80-L106)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L124-L163)
+- [llm/qwen_client.py](file://llm/qwen_client.py#L124-L161)
 
 ### 流式输出实现原理
 - OpenAI兼容模式
@@ -264,11 +256,11 @@ QC-->>Caller : yield content
 end
 ```
 
-**图表来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L165-L230)
+图表来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L228)
 
-**章节来源**
-- [llm/qwen_client.py](file://llm/qwen_client.py#L165-L230)
+章节来源
+- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L228)
 
 ### 配置管理
 - 配置来源
@@ -276,12 +268,10 @@ end
   - .env中示例使用OpenAI兼容模式的base_url。
 - 模式切换
   - 当base_url包含特定标识时启用OpenAI兼容模式；否则使用标准DashScope SDK。
-- **超时配置**
-  - OpenAI兼容模式下自动配置httpx.Timeout(60.0, connect=10.0)，提供60秒读取超时和10秒连接超时。
 - 模块导出
   - llm/__init__.py导出QwenClient、qwen_client、CostTracker、PromptManager。
 
-**章节来源**
+章节来源
 - [backend/config.py](file://backend/config.py#L5-L59)
 - [.env](file://.env#L1-L22)
 - [.env.example](file://.env.example#L1-L21)
@@ -295,7 +285,7 @@ end
 - 成本追踪
   - NovelCrewManager在每次调用后记录usage到CostTracker，并在服务层持久化token使用情况。
 
-**章节来源**
+章节来源
 - [backend/services/generation_service.py](file://backend/services/generation_service.py#L27-L689)
 - [agents/crew_manager.py](file://agents/crew_manager.py#L104-L163)
 - [agents/specific_agents.py](file://agents/specific_agents.py#L37-L113)
@@ -326,7 +316,7 @@ CT --> AM
 CT --> SA
 ```
 
-**图表来源**
+图表来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L7-L11)
 - [backend/config.py](file://backend/config.py#L5-L59)
 - [agents/crew_manager.py](file://agents/crew_manager.py#L12-L35)
@@ -335,7 +325,7 @@ CT --> SA
 - [agents/specific_agents.py](file://agents/specific_agents.py#L7-L36)
 - [backend/services/generation_service.py](file://backend/services/generation_service.py#L21-L34)
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L7-L11)
 - [backend/config.py](file://backend/config.py#L5-L59)
 - [agents/crew_manager.py](file://agents/crew_manager.py#L12-L35)
@@ -349,8 +339,6 @@ CT --> SA
   - 标准SDK调用通过线程池执行，避免阻塞事件循环，适合高并发场景。
 - 指数退避
   - 降低对上游API的压力，提高稳定性；可根据业务需求调整retries与等待策略。
-- **超时配置优化**
-  - OpenAI兼容模式下60秒读取超时和10秒连接超时配置，有效应对网络波动和服务器延迟。
 - 流式输出
   - 减少内存占用，提升交互体验；注意在异常时及时中断流。
 - 成本控制
@@ -361,35 +349,30 @@ CT --> SA
   - API错误：检查status_code与message，确认网络连通与鉴权信息。
   - 异常：查看warning日志中的last_error，定位具体异常类型。
   - 流式中断：若出现非200状态，立即抛出RuntimeError，需检查请求参数与模型可用性。
-  - **超时问题**：OpenAI兼容模式下如遇超时，检查网络连接质量和服务器响应时间。
 - 调试建议
   - 在调用前后打印usage，核对prompt_tokens与completion_tokens。
   - 在Agent层与服务层分别记录调用耗时与结果，便于定位瓶颈。
   - 使用较小max_tokens与temperature快速验证流程。
-  - **网络不稳定时**：考虑调整retries参数或检查代理设置。
 
-**章节来源**
+章节来源
 - [llm/qwen_client.py](file://llm/qwen_client.py#L97-L106)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L152-L163)
+- [llm/qwen_client.py](file://llm/qwen_client.py#L152-L161)
 - [llm/qwen_client.py](file://llm/qwen_client.py#L204-L204)
 
 ## 结论
-QwenClient提供了统一、健壮的通义千问调用封装，支持OpenAI兼容模式与标准SDK两种路径，具备完善的异步与重试机制、流式输出能力以及成本追踪支持。**新增的超时配置进一步增强了客户端在网络不稳定时的可靠性**，结合编排层与服务层的协同，可高效支撑小说创作全流程的自动化生成与发布。
+QwenClient提供了统一、健壮的通义千问调用封装，支持OpenAI兼容模式与标准SDK两种路径，具备完善的异步与重试机制、流式输出能力以及成本追踪支持。结合编排层与服务层的协同，可高效支撑小说创作全流程的自动化生成与发布。
 
 ## 附录
 - 配置项说明
   - DASHSCOPE_API_KEY：通义千问API密钥
   - DASHSCOPE_MODEL：默认模型名称
   - DASHSCOPE_BASE_URL：基础URL，包含特定标识时启用OpenAI兼容模式
-- **超时配置说明**
-  - OpenAI兼容模式：httpx.Timeout(60.0, connect=10.0) - 60秒读取超时，10秒连接超时
 - 使用建议
   - 在生产环境建议开启指数退避与合理的retries上限
   - 对于高并发场景，优先使用OpenAI兼容模式的异步接口
   - 结合CostTracker进行成本监控与优化
-  - **网络不稳定环境**：适当增加retries参数，合理设置超时时间
 
-**章节来源**
+章节来源
 - [.env](file://.env#L1-L22)
 - [.env.example](file://.env.example#L1-L21)
 - [backend/config.py](file://backend/config.py#L5-L59)
