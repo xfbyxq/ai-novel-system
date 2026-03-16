@@ -14,9 +14,9 @@
 
 ## 更新摘要
 **所做更改**
-- 移除了关于持久化记忆系统的详细说明，因为原文档已被删除
-- 更新了架构概览，反映当前的内存缓存架构
-- 移除了持久化存储相关的章节和图表
+- 更新了架构概览，反映当前保留的持久化存储功能
+- 移除了关于移除持久化存储功能的说明，因为代码中仍保留相关实现
+- 更新了依赖关系分析，包含持久化记忆适配器
 - 保持了内存缓存功能的完整描述
 
 ## 目录
@@ -36,11 +36,11 @@
 
 该服务主要服务于AI聊天功能，通过智能缓存机制显著提升小说信息的访问速度，同时提供完整的版本控制和增量更新能力，确保小说创作过程中的数据一致性。
 
-**更新** 移除了持久化记忆系统的详细说明，系统目前仅保留基本的内存缓存功能。
+**更新** 系统当前采用混合架构，在保留内存缓存功能的同时，也集成了持久化存储适配器，为未来的架构简化奠定基础。
 
 ## 项目结构
 
-内存服务在当前架构中采用纯内存缓存设计，位于服务层的核心位置：
+内存服务在当前架构中采用混合设计，既包含内存缓存也包含持久化存储：
 
 ```mermaid
 graph TB
@@ -54,30 +54,36 @@ end
 subgraph "服务层"
 AI_CHAT_SERVICE[AI聊天服务]
 MEMORY_SERVICE[内存缓存服务]
+PERSISTENT_ADAPTER[持久化记忆适配器]
 end
 subgraph "数据层"
 DB[(数据库)]
 MODELS[ORM模型]
+PERSISTENT_DB[(持久化数据库)]
 end
 FE --> API
 API --> AI_CHAT_SERVICE
 AI_CHAT_SERVICE --> MEMORY_SERVICE
+AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
 AI_CHAT_SERVICE --> DB
 MEMORY_SERVICE --> DB
+PERSISTENT_ADAPTER --> PERSISTENT_DB
 DB --> MODELS
 ```
 
 **图表来源**
 - [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
+- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
 
 **章节来源**
 - [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
+- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
 
 ## 核心组件
 
-内存服务包含两个核心组件：
+内存服务包含三个核心组件：
 
 ### 1. MemoryCache 内存缓存系统
 - **内存缓存实现**：提供LRU（最近最少使用）淘汰策略
@@ -91,13 +97,20 @@ DB --> MODELS
 - **结构化数据存储**：按层次结构组织小说数据
 - **增量更新支持**：仅在内容发生变化时更新缓存
 
+### 3. NovelMemoryAdapter 持久化记忆适配器
+- **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
+- **全文搜索支持**：集成FTS5全文搜索引擎
+- **分层记忆管理**：支持章节摘要、角色状态、伏笔追踪等多维度记忆
+- **线程安全设计**：使用线程本地连接确保并发安全性
+
 **章节来源**
 - [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
 - [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
+- [agentmesh_memory_adapter.py:922-1181](file://backend/services/agentmesh_memory_adapter.py#L922-L1181)
 
 ## 架构概览
 
-内存服务采用纯内存缓存架构设计，与AI聊天服务紧密集成：
+内存服务采用混合架构设计，与AI聊天服务紧密集成：
 
 ```mermaid
 sequenceDiagram
@@ -105,6 +118,7 @@ participant Client as 客户端
 participant API as API层
 participant ChatService as AI聊天服务
 participant MemoryService as 内存缓存服务
+participant PersistentAdapter as 持久化适配器
 participant Cache as 内存缓存
 participant DB as 数据库
 Client->>API : 请求小说信息
@@ -117,6 +131,8 @@ MemoryService-->>ChatService : 返回小说信息
 else 缓存未命中
 MemoryService->>DB : 查询数据库
 DB-->>MemoryService : 返回数据库数据
+MemoryService->>PersistentAdapter : 初始化持久化记忆
+PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
 MemoryService->>MemoryService : set_novel_memory()
 MemoryService->>Cache : 存储到缓存
 MemoryService-->>ChatService : 返回小说信息
@@ -128,6 +144,7 @@ API-->>Client : 返回结果
 **图表来源**
 - [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
 - [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
+- [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
 
 ## 详细组件分析
 
@@ -276,6 +293,97 @@ NO_CHANGE --> END
 **章节来源**
 - [memory_service.py:335-385](file://backend/services/memory_service.py#L335-L385)
 
+### NovelMemoryAdapter 类分析
+
+NovelMemoryAdapter 提供了完整的持久化存储解决方案：
+
+#### 数据库表结构设计
+
+```mermaid
+erDiagram
+CHAPTER_SUMMARIES {
+id STRING PK
+novel_id STRING
+chapter_number INTEGER
+key_events TEXT
+character_changes TEXT
+plot_progress TEXT
+foreshadowing TEXT
+ending_state TEXT
+full_content_hash TEXT
+word_count INTEGER
+created_at TEXT
+updated_at TEXT
+}
+CHARACTER_STATES {
+id STRING PK
+novel_id STRING
+character_name STRING
+last_appearance_chapter INTEGER
+current_location TEXT
+cultivation_level TEXT
+emotional_state TEXT
+relationships TEXT
+status TEXT
+pending_events TEXT
+state_hash TEXT
+created_at TEXT
+updated_at TEXT
+}
+NOVEL_METADATA {
+id STRING PK
+novel_id STRING UK
+title TEXT
+genre TEXT
+synopsis TEXT
+world_setting TEXT
+characters TEXT
+plot_outline TEXT
+metadata_hash TEXT
+created_at TEXT
+updated_at TEXT
+}
+FORESHADOWING {
+id STRING PK
+novel_id STRING
+planted_chapter INTEGER
+content TEXT
+foreshadowing_type TEXT
+importance INTEGER
+expected_resolve_chapter INTEGER
+resolved_chapter INTEGER
+related_characters TEXT
+notes TEXT
+status TEXT
+created_at TEXT
+updated_at TEXT
+}
+MEMORY_CHUNKS {
+id STRING PK
+novel_id STRING
+source_type TEXT
+source_id TEXT
+chapter_number INTEGER
+text TEXT
+text_hash TEXT
+token_count INTEGER
+created_at TEXT
+}
+```
+
+**图表来源**
+- [agentmesh_memory_adapter.py:52-167](file://backend/services/agentmesh_memory_adapter.py#L52-L167)
+
+#### 核心功能特性
+
+1. **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
+2. **全文搜索支持**：集成FTS5全文搜索引擎
+3. **线程安全设计**：使用线程本地连接确保并发安全性
+4. **索引优化**：为常用查询建立索引提升性能
+
+**章节来源**
+- [agentmesh_memory_adapter.py:20-167](file://backend/services/agentmesh_memory_adapter.py#L20-L167)
+
 ## 依赖关系分析
 
 内存服务与其他组件的依赖关系如下：
@@ -283,28 +391,38 @@ NO_CHANGE --> END
 ```mermaid
 graph TB
 subgraph "外部依赖"
-SQLALCHEMY[SQLAlchemy ORM]
+SQLAlchemy[SQLAlchemy ORM]
 UUID[UUID库]
+SQLite[SQLite3]
+FTS5[FTS5全文搜索]
+threading[线程模块]
+uuid[UUID库]
+json[JSON处理]
+hashlib[哈希算法]
+datetime[日期时间]
+pathlib[路径处理]
 end
 subgraph "内部依赖"
 AI_CHAT_SERVICE[AI聊天服务]
 DATABASE_MODELS[数据库模型]
-end
-subgraph "核心服务"
 MEMORY_SERVICE[内存缓存服务]
-MEMORY_CACHE[内存缓存]
+PERSISTENT_ADAPTER[持久化适配器]
 end
 AI_CHAT_SERVICE --> MEMORY_SERVICE
-MEMORY_SERVICE --> MEMORY_CACHE
+AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
 MEMORY_SERVICE --> DATABASE_MODELS
-AI_CHAT_SERVICE --> DATABASE_MODELS
+PERSISTENT_ADAPTER --> DATABASE_MODELS
 MEMORY_SERVICE --> UUID
 MEMORY_SERVICE --> SQLALCHEMY
+PERSISTENT_ADAPTER --> SQLite
+PERSISTENT_ADAPTER --> FTS5
+PERSISTENT_ADAPTER --> threading
 ```
 
 **图表来源**
 - [memory_service.py:1-10](file://backend/services/memory_service.py#L1-L10)
 - [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
+- [agentmesh_memory_adapter.py:1-16](file://backend/services/agentmesh_memory_adapter.py#L1-L16)
 
 ### 与AI聊天服务的集成
 
@@ -314,6 +432,7 @@ MEMORY_SERVICE --> SQLALCHEMY
 sequenceDiagram
 participant ChatService as AI聊天服务
 participant MemoryService as 内存缓存服务
+participant PersistentAdapter as 持久化适配器
 participant Cache as 内存缓存
 participant DB as 数据库
 ChatService->>MemoryService : get_novel_info(novel_id)
@@ -324,6 +443,8 @@ MemoryService-->>ChatService : 返回小说信息
 else 缓存未命中
 MemoryService->>DB : 查询数据库
 DB-->>MemoryService : 返回数据库数据
+MemoryService->>PersistentAdapter : 初始化持久化记忆
+PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
 MemoryService->>MemoryService : set_novel_memory()
 MemoryService->>Cache : 存储到缓存
 MemoryService-->>ChatService : 返回小说信息
@@ -333,10 +454,12 @@ end
 **图表来源**
 - [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
 - [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
+- [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
 
 **章节来源**
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 - [memory_service.py:407-416](file://backend/services/memory_service.py#L407-L416)
+- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
 
 ## 性能考虑
 
@@ -346,6 +469,13 @@ end
 2. **哈希计算优化**：使用MD5哈希快速检测内容变化
 3. **增量更新机制**：仅在内容变化时更新缓存
 4. **内存使用控制**：限制最大缓存条目数量（默认100个）
+
+### 数据库性能优化
+
+1. **WAL模式**：启用SQLite WAL模式提升并发性能
+2. **索引优化**：为常用查询字段建立索引
+3. **线程本地连接**：避免线程安全问题
+4. **全文搜索优化**：使用FTS5进行高效的全文检索
 
 ### 数据结构优化
 
@@ -373,20 +503,32 @@ end
 - **原因**：并发更新导致的竞态条件
 - **解决方案**：使用原子操作更新版本号
 
+#### 数据库连接问题
+- **症状**：SQLite连接超时或锁定
+- **原因**：并发访问导致的连接问题
+- **解决方案**：检查线程本地连接配置和超时设置
+
+#### FTS5搜索问题
+- **症状**：全文搜索性能下降或失败
+- **原因**：FTS5索引损坏或不支持
+- **解决方案**：重建FTS5索引或降级到LIKE搜索
+
 **章节来源**
 - [memory_service.py:56-67](file://backend/services/memory_service.py#L56-L67)
 - [memory_service.py:155-158](file://backend/services/memory_service.py#L155-L158)
+- [agentmesh_memory_adapter.py:33-45](file://backend/services/agentmesh_memory_adapter.py#L33-L45)
 
 ## 结论
 
-内存服务作为小说创作系统的核心组件，提供了高效、可靠的内存缓存和数据管理能力。其设计特点包括：
+内存服务作为小说创作系统的核心组件，提供了高效、可靠的记忆管理和数据存储能力。其设计特点包括：
 
 1. **智能缓存管理**：通过LRU算法和过期机制确保内存使用效率
 2. **深度变化检测**：精确识别小说内容的细微变化
 3. **版本控制系统**：完整追踪内容演进历史
 4. **结构化数据存储**：针对小说创作场景优化的数据组织方式
-5. **高性能架构**：与AI聊天服务无缝集成，提供流畅的用户体验
+5. **持久化存储支持**：提供SQLite数据库的长期数据保存能力
+6. **高性能架构**：与AI聊天服务无缝集成，提供流畅的用户体验
 
-**更新** 系统当前采用纯内存缓存架构，移除了持久化存储功能，但仍保持了完整的内存缓存和版本控制能力。这种简化设计确保了系统的稳定性和性能，同时降低了部署复杂度。
+**更新** 系统当前采用混合架构设计，在保留内存缓存功能的同时，集成了持久化存储适配器。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
 
 该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，是系统能够高效运行的关键保障。

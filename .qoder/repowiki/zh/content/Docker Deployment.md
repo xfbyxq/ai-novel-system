@@ -11,13 +11,21 @@
 - [docker-start.sh](file://docker-start.sh)
 - [docker-stop.sh](file://docker-stop.sh)
 - [rebuild_docker.sh](file://rebuild_docker.sh)
+- [start_dev.sh](file://start_dev.sh)
+- [start_local_dev.sh](file://start_local_dev.sh)
 - [.dockerignore](file://.dockerignore)
 - [frontend/docker-entrypoint.sh](file://frontend/docker-entrypoint.sh)
-- [DEPLOYMENT_SUMMARY.md](file://DEPLOYMENT_SUMMARY.md)
 - [backend/main.py](file://backend/main.py)
 - [backend/config.py](file://backend/config.py)
 - [pyproject.toml](file://pyproject.toml)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新了部署脚本章节，反映新的错误处理和用户反馈改进
+- 新增了开发环境启动脚本的详细说明
+- 增强了故障排除指南中的错误处理部分
+- 更新了服务编排配置的健康检查和依赖管理说明
 
 ## 目录
 1. [简介](#简介)
@@ -40,6 +48,8 @@
 - **自动化运维**：提供完整的部署、启动、停止和重建脚本
 - **健康检查**：内置服务健康状态监控
 - **数据库迁移**：集成 Alembic 数据库版本管理
+
+**更新** 新的部署脚本增强了错误处理机制和用户反馈，提供更好的用户体验和故障诊断能力。
 
 ## 项目结构
 
@@ -308,58 +318,130 @@ end
 
 #### 一键部署脚本
 
-部署脚本提供完整的自动化部署流程：
+**更新** 新的部署脚本增强了错误处理和用户反馈机制：
 
 ```mermaid
 flowchart TD
 START[执行部署脚本] --> STOP_OLD[停止旧容器]
-STOP_OLD --> BUILD_IMAGES[构建镜像]
+STOP_OLD --> BUILD_IMAGES[构建镜像使用缓存]
 BUILD_IMAGES --> START_SERVICES[启动服务]
 START_SERVICES --> WAIT[等待服务启动]
 WAIT --> CHECK_STATUS[检查服务状态]
 CHECK_STATUS --> DONE[部署完成]
-subgraph "部署步骤"
-STEP1[停止旧容器]
-STEP2[构建镜像]
-STEP3[启动服务]
-STEP4[检查状态]
+subgraph "增强功能"
+COLOR_OUTPUT[彩色输出提示]
+ERROR_HANDLING[错误自动终止]
+STATUS_CHECK[服务状态检查]
+USER_FEEDBACK[用户反馈]
 end
 ```
 
 **图表来源**
-- [deploy_docker.sh:19-44](file://deploy_docker.sh#L19-L44)
+- [deploy_docker.sh:1-35](file://deploy_docker.sh#L1-L35)
 
 **自动化特性：**
-- 颜色化输出提示
-- 失败自动终止
-- 服务状态检查
+- 彩色输出提示，区分不同操作阶段
+- 失败自动终止，防止错误扩散
+- 详细的用户反馈信息
+- 服务状态检查确认部署结果
 
 #### 重建部署脚本
 
-重建脚本提供完全重新构建的能力：
+**更新** 重建脚本提供了更彻底的清理和重新构建能力：
 
 ```mermaid
 flowchart TD
-START[执行重建脚本] --> STOP_CLEAN[停止并清理]
+START[执行重建脚本] --> STOP_CLEAN[停止并清理旧容器]
 STOP_CLEAN --> PRUNE_IMAGES[清理悬空镜像]
 PRUNE_IMAGES --> BUILD_NO_CACHE[无缓存构建]
 BUILD_NO_CACHE --> START_SERVICES[启动服务]
 START_SERVICES --> WAIT[等待启动]
 WAIT --> CHECK_STATUS[检查状态]
 CHECK_STATUS --> DONE[重建完成]
+subgraph "重建特性"
+ORPHAN_CLEAN[清理孤立容器]
+IMAGE_PRUNE[清理悬空镜像]
+NO_CACHE_BUILD[强制重新构建]
+CLEAN_START[完全重新部署]
+end
 ```
 
 **图表来源**
-- [rebuild_docker.sh:19-48](file://rebuild_docker.sh#L19-L48)
+- [rebuild_docker.sh:1-38](file://rebuild_docker.sh#L1-L38)
 
 **重建特性：**
-- 清理所有旧资源
-- 强制重新构建
-- 完全重新部署
+- 清理所有旧容器和资源
+- 强制重新构建，跳过缓存
+- 完全重新部署，确保干净环境
+- 彻底的系统清理
+
+#### 开发环境启动脚本
+
+**新增** 专门的开发环境启动脚本提供了更智能的启动流程：
+
+```mermaid
+flowchart TD
+START[执行开发启动脚本] --> CHECK_RUNNING[检查现有服务]
+CHECK_RUNNING --> START_BASE[启动基础服务]
+START_BASE --> WAIT_DB[等待数据库就绪]
+WAIT_DB --> CHECK_TABLES[检查数据库表]
+CHECK_TABLES --> INIT_TABLES[初始化表结构]
+INIT_TABLES --> START_APP[启动应用服务]
+START_APP --> DONE[开发环境就绪]
+subgraph "智能启动"
+CONTAINER_CHECK[容器状态检查]
+DATABASE_WAIT[数据库就绪检测]
+TABLE_INIT[表结构初始化]
+APP_START[应用服务启动]
+end
+```
+
+**图表来源**
+- [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
+
+**智能特性：**
+- 智能检测现有运行状态
+- 数据库就绪自动等待机制
+- 表结构自动初始化
+- 分阶段启动确保依赖关系
+
+#### 本地开发启动脚本
+
+**新增** 本地开发模式启动脚本提供了非Docker开发环境支持：
+
+```mermaid
+flowchart TD
+START[执行本地启动脚本] --> CHECK_SERVICES[检查基础服务]
+CHECK_SERVICES --> START_POSTGRES[启动PostgreSQL]
+START_POSTGRES --> START_REDIS[启动Redis]
+START_REDIS --> CHECK_TABLES[检查数据库表]
+CHECK_TABLES --> INIT_TABLES[初始化表结构]
+INIT_TABLES --> SHOW_COMMANDS[显示启动命令]
+SHOW_COMMANDS --> DONE[本地环境就绪]
+subgraph "本地开发"
+SERVICE_CHECK[服务状态检查]
+DOCKER_ONLY[仅启动必要服务]
+LOCAL_COMMANDS[本地启动命令]
+DEBUG_READY[调试环境就绪]
+end
+```
+
+**图表来源**
+- [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
+
+**本地特性：**
+- 仅启动必要的基础服务
+- 支持Docker外部的本地开发
+- 提供详细的启动命令指导
+- 独立的开发环境配置
 
 **章节来源**
-- [deploy_docker.sh:1-51](file://deploy_docker.sh#L1-L51)
-- [rebuild_docker.sh:1-66](file://rebuild_docker.sh#L1-L66)
+- [deploy_docker.sh:1-35](file://deploy_docker.sh#L1-L35)
+- [rebuild_docker.sh:1-38](file://rebuild_docker.sh#L1-L38)
+- [docker-start.sh:1-29](file://docker-start.sh#L1-L29)
+- [docker-stop.sh:1-23](file://docker-stop.sh#L1-L23)
+- [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
+- [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
 
 ## 依赖分析
 
@@ -534,7 +616,7 @@ curl http://localhost:8000/health
 **解决方法：**
 ```bash
 # 检查端口使用情况
-netstat -tulpn | grep ':8000\|:3000\|:5434'
+netstat -tulpn | grep ':8000\|':3000\|:5434'
 
 # 修改 docker-compose.yml 中的端口映射
 # 或停止占用端口的进程
@@ -630,9 +712,56 @@ docker-compose restart backend frontend postgres redis
 docker system df
 ```
 
+### 新增的部署脚本故障排除
+
+**更新** 增强的部署脚本提供了更好的错误处理和诊断能力：
+
+#### 部署脚本错误处理
+
+**症状**：部署过程中出现错误但没有明确提示
+
+**诊断方法：**
+1. 检查脚本的彩色输出，区分不同操作阶段
+2. 查看详细的错误信息和状态检查结果
+3. 使用重建脚本进行完全重新部署
+
+**解决步骤：**
+```bash
+# 使用彩色输出查看详细信息
+./deploy_docker.sh
+
+# 如果失败，使用重建脚本
+./rebuild_docker.sh
+
+# 检查服务状态
+docker-compose ps
+```
+
+#### 开发环境启动问题
+
+**症状**：开发环境启动失败或部分服务不可用
+
+**诊断方法：**
+1. 使用 start_dev.sh 的智能检测功能
+2. 检查数据库就绪状态
+3. 验证表结构初始化是否成功
+
+**解决步骤：**
+```bash
+# 使用智能启动脚本
+./start_dev.sh
+
+# 检查数据库表
+docker exec novel_postgres psql -U novel_user -d novel_system -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
+
+# 重新启动应用服务
+docker-compose -f docker-compose.dev.yml up -d backend frontend
+```
+
 **章节来源**
-- [DEPLOYMENT_SUMMARY.md:210-253](file://DEPLOYMENT_SUMMARY.md#L210-L253)
-- [docker-stop.sh:1-20](file://docker-stop.sh#L1-L20)
+- [docker-stop.sh:1-23](file://docker-stop.sh#L1-L23)
+- [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
+- [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
 
 ## 结论
 
@@ -646,6 +775,8 @@ docker system df
 4. **完善的监控机制**：内置健康检查和状态监控
 5. **优秀的开发体验**：热重载和调试支持
 
+**更新** 最新的部署脚本改进显著提升了用户体验和故障诊断能力，提供了更好的错误处理和用户反馈机制。
+
 ### 技术亮点
 
 - **多阶段构建优化**：减少镜像大小，提升部署效率
@@ -653,6 +784,8 @@ docker system df
 - **健康检查集成**：确保服务可用性
 - **数据持久化**：Docker 卷管理确保数据安全
 - **网络隔离**：Docker 网络提供安全的服务通信
+- **增强的错误处理**：彩色输出和详细的状态反馈
+- **智能开发启动**：自动化的环境检测和初始化
 
 ### 未来改进方向
 
@@ -661,5 +794,6 @@ docker system df
 3. **扩展性优化**：支持水平扩展和负载均衡
 4. **安全性增强**：网络隔离和访问控制
 5. **备份策略**：完善的数据备份和恢复机制
+6. **部署脚本优化**：进一步提升自动化程度和用户体验
 
-该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。
+该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。最新的脚本改进使得部署和维护变得更加简单可靠，为开发者提供了更好的开发体验。

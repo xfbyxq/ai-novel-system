@@ -24,6 +24,8 @@
 
 ## 更新摘要
 **所做更改**
+- 实施三层并发控制机制（API层、服务层、Worker层），防止同一小说同时执行多个企划任务
+- 扩展支持编辑任务，包括编辑Agent调度和审查循环
 - 增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理
 - 新增字符年龄字段的类型转换机制
 - 实现情节大纲的多卷结构支持
@@ -46,12 +48,13 @@
 
 生成服务是小说创作自动化系统的核心模块，负责协调AI代理完成小说的企划、写作和批量生成任务。该服务通过异步架构设计，结合FastAPI后端、Celery任务队列和多种AI模型，实现了高效的小说生成流水线。
 
-系统支持三种主要任务类型：
+系统支持四种主要任务类型：
 - **企划阶段**：生成世界观设定、角色信息和情节大纲
 - **单章写作**：生成单个章节的完整内容
 - **批量写作**：并行生成多个章节内容
+- **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理、字符年龄字段的类型转换、情节大纲的多卷结构支持，以及改进的成本跟踪和错误处理机制
+**更新** 实施了三层并发控制机制（API层、服务层、Worker层），防止同一小说同时执行多个企划任务；扩展支持编辑任务，包括编辑Agent调度和审查循环；增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理、字符年龄字段的类型转换、情节大纲的多卷结构支持，以及改进的成本跟踪和错误处理机制
 
 ## 项目结构
 
@@ -83,7 +86,7 @@ Model[ORM模型<br/>小说/章节/任务]
 PM[持久化记忆<br/>SQLite + FTS5]
 end
 subgraph "任务队列"
-Celery[Celery任务队列]
+Celery[Celery任务队列<br/>并发控制=2]
 Worker[生成Worker]
 end
 FE --> API
@@ -104,10 +107,11 @@ Celery --> Worker
 - [generation_service.py:34-76](file://backend/services/generation_service.py#L34-L76)
 - [agent_dispatcher.py:17-87](file://agents/agent_dispatcher.py#L17-L87)
 - [agent_activity_recorder.py:14-25](file://backend/services/agent_activity_recorder.py#L14-L25)
+- [celery_app.py:21-22](file://workers/celery_app.py#L21-L22)
 
 **章节来源**
-- [generation_service.py:1-800](file://backend/services/generation_service.py#L1-L800)
-- [generation.py:1-171](file://backend/api/v1/generation.py#L1-L171)
+- [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
+- [generation.py:1-204](file://backend/api/v1/generation.py#L1-L204)
 
 ## 核心组件
 
@@ -120,6 +124,7 @@ Celery --> Worker
 - **成本控制**：追踪和管理AI模型调用成本
 - **状态管理**：维护任务的生命周期状态
 - **Agent活动记录**：记录详细的Agent执行活动
+- **并发控制**：实施三层并发控制机制
 
 ```mermaid
 classDiagram
@@ -137,6 +142,7 @@ class GenerationService {
 +_build_previous_context_enhanced(novel_id, novel, chapter_number) str
 +_initialize_novel_persistent_memory(novel_id, planning_result) void
 +_record_planning_activities(novel_id, task_id, planning_result, cost_summary) void
++run_editing_task(novel_id, task_id, draft_content, chapter_number) dict
 }
 class AgentDispatcher {
 +QwenClient client
@@ -145,6 +151,7 @@ class AgentDispatcher {
 +run_planning(novel_id, task_id, **kwargs) dict
 +run_chapter_writing(novel_id, task_id, chapter_number, volume_number, **kwargs) dict
 +run_batch_writing(novel_id, task_id, from_chapter, to_chapter, volume_number, **kwargs) dict
++run_editing_task(novel_id, task_id, draft_content, chapter_number, **kwargs) dict
 }
 class QwenClient {
 +str api_key
@@ -173,12 +180,17 @@ AgentDispatcher --> QwenClient : "使用"
 
 ### API接口层
 
-API层提供了RESTful接口来管理生成任务：
+API层提供了RESTful接口来管理生成任务，现已实施三层并发控制：
 
-- **POST /generation/tasks**：创建新的生成任务
+- **POST /generation/tasks**：创建新的生成任务（企划、单章写作、批量写作、编辑任务）
 - **GET /generation/tasks**：获取任务列表
 - **GET /generation/tasks/{task_id}**：获取特定任务状态
 - **POST /generation/tasks/{task_id}/cancel**：取消任务
+
+**更新** 实施了三层并发控制机制：
+1. **API层并发控制**：防止同一小说同时创建多个企划任务
+2. **服务层并发控制**：在服务层检查并阻止重复的企划任务
+3. **Worker层并发控制**：在Celery Worker中检查并阻止重复的企划任务
 
 **章节来源**
 - [generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
@@ -186,11 +198,16 @@ API层提供了RESTful接口来管理生成任务：
 
 ### 任务队列系统
 
-系统采用Celery分布式任务队列来处理长时间运行的任务：
+系统采用Celery分布式任务队列来处理长时间运行的任务，现已增强并发控制：
 
 - **规划任务**：`run_planning_task`
 - **写作任务**：`run_writing_task`
 - **批量任务**：自动批处理多个章节
+- **编辑任务**：`run_editing_task`
+
+**更新** Celery配置已调整：
+- `worker_concurrency=2`：限制并发worker数量
+- `worker_prefetch_multiplier=1`：长任务不预取，避免长时间占用
 
 **章节来源**
 - [generation_worker.py:58-70](file://workers/generation_worker.py#L58-L70)
@@ -198,7 +215,7 @@ API层提供了RESTful接口来管理生成任务：
 
 ## 架构概览
 
-生成服务采用异步事件驱动架构，支持高并发和可扩展性：
+生成服务采用异步事件驱动架构，支持高并发和可扩展性，现已实施三层并发控制：
 
 ```mermaid
 sequenceDiagram
@@ -209,10 +226,13 @@ participant Queue as Celery队列
 participant Worker as 生成Worker
 participant LLM as AI模型
 Client->>API : POST /generation/tasks
+API->>API : 检查并发控制
 API->>Service : 创建任务记录
 API->>Queue : 添加后台任务
 Queue->>Worker : 分发任务
+Worker->>Worker : 检查并发控制
 Worker->>Service : 执行生成任务
+Service->>Service : 检查并发控制
 Service->>LLM : 调用AI模型
 LLM-->>Service : 返回生成结果
 Service->>Service : 保存到数据库
@@ -230,11 +250,12 @@ API-->>Client : 返回任务ID
 
 ### 企划阶段 (Planning Phase)
 
-企划阶段负责生成小说的基础框架，现已增强对复杂数据结构的处理能力：
+企划阶段负责生成小说的基础框架，现已增强对复杂数据结构的处理能力和三层并发控制：
 
 ```mermaid
 flowchart TD
-Start([开始企划阶段]) --> LoadNovel["加载小说信息"]
+Start([开始企划阶段]) --> CheckConcurrency["检查并发控制<br/>- API层检查<br/>- 服务层检查<br/>- Worker层检查"]
+CheckConcurrency --> LoadNovel["加载小说信息"]
 LoadNovel --> InitTask["初始化任务状态"]
 InitTask --> InitAgent["初始化代理调度器"]
 InitAgent --> CallLLM["调用AI模型生成内容"]
@@ -258,7 +279,7 @@ RecordActivities --> End([完成])
 
 ### 单章写作 (Chapter Writing)
 
-单章写作流程包括上下文构建和内容生成，现已增强记忆系统集成：
+单章写作流程包括上下文构建和内容生成，现已增强记忆系统集成和编辑任务支持：
 
 ```mermaid
 flowchart TD
@@ -285,7 +306,7 @@ UpdateTask --> End([完成])
 
 ### 批量写作 (Batch Writing)
 
-批量写作支持连续章节的并行生成，现已增强错误处理和中断机制：
+批量写作支持连续章节的并行生成，现已增强错误处理、中断机制和编辑任务支持：
 
 ```mermaid
 flowchart TD
@@ -309,9 +330,32 @@ UpdateTask --> End([完成])
 **章节来源**
 - [generation_service.py:576-798](file://backend/services/generation_service.py#L576-L798)
 
+### 编辑任务 (Editing Task)
+
+新增的编辑任务支持对生成内容进行润色和质量提升：
+
+```mermaid
+flowchart TD
+Start([开始编辑任务]) --> LoadDraft["加载草稿内容"]
+LoadDraft --> InitEditor["初始化编辑器"]
+InitEditor --> CallEditor["调用编辑Agent"]
+CallEditor --> ParseResult["解析编辑结果"]
+ParseResult --> SaveEdited["保存编辑后内容"]
+SaveEdited --> UpdateStats["更新统计信息"]
+UpdateStats --> SaveTokens["保存Token记录"]
+SaveTokens --> UpdateTask["更新任务状态"]
+UpdateTask --> End([完成])
+```
+
+**图表来源**
+- [generation_service.py:800-948](file://backend/services/generation_service.py#L800-L948)
+
+**章节来源**
+- [generation_service.py:800-948](file://backend/services/generation_service.py#L800-L948)
+
 ### 代理调度器 (Agent Dispatcher)
 
-代理调度器负责协调不同类型的AI代理，现已增强配置管理和错误处理：
+代理调度器负责协调不同类型的AI代理，现已增强配置管理、错误处理和编辑任务支持：
 
 ```mermaid
 classDiagram
@@ -325,6 +369,7 @@ class AgentDispatcher {
 +run_planning(**kwargs) dict
 +run_chapter_writing(**kwargs) dict
 +run_batch_writing(**kwargs) dict
++run_editing_task(**kwargs) dict
 +set_use_scheduled_agents(use_scheduled) void
 }
 class AgentManager {
@@ -336,12 +381,14 @@ class AgentManager {
 class NovelCrewManager {
 +run_planning_phase(**kwargs) dict
 +run_writing_phase(**kwargs) dict
++run_editing_phase(**kwargs) dict
 }
 class CrewManager {
 +_extract_json_from_response(response) dict|list
 +_retry_json_extraction(agent_name, ...) dict|str
 +run_planning_phase(**kwargs) dict
 +run_writing_phase(**kwargs) dict
++run_editing_phase(**kwargs) dict
 }
 AgentDispatcher --> AgentManager : "使用"
 AgentDispatcher --> NovelCrewManager : "使用"
@@ -397,13 +444,13 @@ AgentActivityRecorder --> AgentActivity : "创建"
 
 ## 依赖关系分析
 
-生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统和活动记录功能：
+生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能和编辑任务支持：
 
 ```mermaid
 graph TB
 subgraph "外部依赖"
 FastAPI[FastAPI框架]
-Celery[Celery任务队列]
+Celery[Celery任务队列<br/>并发控制=2]
 DashScope[通义千问API]
 PostgreSQL[PostgreSQL数据库]
 Redis[Redis缓存]
@@ -417,7 +464,7 @@ CostTracker[成本追踪器]
 AgentActivityRecorder[Agent活动记录器]
 end
 subgraph "数据模型"
-GenerationTask[生成任务模型]
+GenerationTask[生成任务模型<br/>支持editing类型]
 Novel[小说模型]
 Chapter[章节模型]
 Character[角色模型]
@@ -449,9 +496,10 @@ GenerationService --> AgentActivityRecorder
 **图表来源**
 - [generation_service.py:12-76](file://backend/services/generation_service.py#L12-L76)
 - [agent_dispatcher.py:7-11](file://agents/agent_dispatcher.py#L7-L11)
+- [generation_task.py:12-16](file://core/models/generation_task.py#L12-L16)
 
 **章节来源**
-- [generation_service.py:1-800](file://backend/services/generation_service.py#L1-L800)
+- [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
 - [agent_dispatcher.py:1-491](file://agents/agent_dispatcher.py#L1-L491)
 
 ## 性能考虑
@@ -492,6 +540,30 @@ Pause --> End
 - **任务状态缓存**：快速查询任务执行状态
 - **持久化记忆**：SQLite + FTS5支持长期记忆存储
 
+### 三层并发控制机制
+
+**更新** 系统现已实施严格的三层并发控制机制：
+
+#### API层并发控制
+- 防止同一小说同时创建多个企划任务
+- 实时检查现有运行中的企划任务
+- 返回明确的错误信息指导用户
+
+#### 服务层并发控制  
+- 在生成服务内部再次检查并发限制
+- 防止服务层级别的竞态条件
+- 确保数据库层面的一致性
+
+#### Worker层并发控制
+- Celery Worker内部的最终检查
+- 防止Worker级别的重复执行
+- 保证系统资源的合理分配
+
+**章节来源**
+- [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
+- [generation_worker.py:29-42](file://workers/generation_worker.py#L29-L42)
+- [generation_service.py:87-100](file://backend/services/generation_service.py#L87-L100)
+
 ## 故障排除指南
 
 ### 常见问题及解决方案
@@ -505,6 +577,8 @@ Pause --> End
 | JSON解析失败 | 企划阶段数据处理异常 | 检查复杂数据结构处理逻辑 |
 | 多卷大纲错误 | 情节大纲结构不正确 | 验证多卷结构转换逻辑 |
 | 角色状态不一致 | 写作阶段角色信息错误 | 检查持久化记忆同步机制 |
+| 并发控制错误 | "已有企划任务在运行中" | 等待现有任务完成后重试 |
+| 编辑任务失败 | 编辑阶段内容质量不佳 | 检查编辑Agent配置和提示词 |
 
 ### 日志监控
 
@@ -514,6 +588,7 @@ Pause --> End
 - **Token使用**：追踪每次AI调用的成本
 - **错误信息**：保存详细的异常堆栈信息
 - **Agent活动**：记录详细的Agent执行过程
+- **并发控制**：记录并发检查的结果和拒绝原因
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
@@ -532,5 +607,7 @@ Pause --> End
 6. **智能数据处理**：增强的JSON解析和数据结构处理能力
 7. **详细活动记录**：全面的Agent执行过程追踪
 8. **持久化记忆**：长期记忆支持和状态同步
+9. **三层并发控制**：严格的并发限制防止资源竞争
+10. **编辑任务支持**：完整的润色和质量提升流程
 
-**更新** 该系统现已显著增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理、字符年龄字段的类型转换、情节大纲的多卷结构支持，以及改进的成本跟踪和错误处理机制。这些增强为AI驱动的小说创作提供了更加稳健和智能化的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程。
+**更新** 该系统现已显著增强了并发控制能力和编辑任务支持。三层并发控制机制（API层、服务层、Worker层）有效防止了资源竞争和系统过载；编辑任务的引入为内容质量提升提供了完整的自动化流程。这些增强为AI驱动的小说创作提供了更加稳健和智能化的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程。
