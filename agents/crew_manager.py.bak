@@ -312,9 +312,6 @@ class NovelCrewManager:
         
         适用于连续性审查员等特定 Agent 的输出
         """
-        if not response or not isinstance(response, str):
-            return None
-        
         result = {}
         
         # 提取 has_issues

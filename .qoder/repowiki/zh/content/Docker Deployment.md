@@ -6,13 +6,13 @@
 - [Dockerfile.frontend](file://Dockerfile.frontend)
 - [docker-compose.yml](file://docker-compose.yml)
 - [docker-compose.dev.yml](file://docker-compose.dev.yml)
-- [docker-compose.migration.yml](file://docker-compose.migration.yml)
 - [deploy_docker.sh](file://deploy_docker.sh)
 - [docker-start.sh](file://docker-start.sh)
 - [docker-stop.sh](file://docker-stop.sh)
 - [rebuild_docker.sh](file://rebuild_docker.sh)
 - [start_dev.sh](file://start_dev.sh)
 - [start_local_dev.sh](file://start_local_dev.sh)
+- [scripts/init_local_dev.sh](file://scripts/init_local_dev.sh)
 - [.dockerignore](file://.dockerignore)
 - [frontend/docker-entrypoint.sh](file://frontend/docker-entrypoint.sh)
 - [backend/main.py](file://backend/main.py)
@@ -22,9 +22,9 @@
 
 ## 更新摘要
 **所做更改**
+- 新增了智能开发环境启动脚本章节，详细介绍 start_dev.sh 和 start_local_dev.sh 的功能
 - 更新了部署脚本章节，反映新的错误处理和用户反馈改进
-- 新增了开发环境启动脚本的详细说明
-- 增强了故障排除指南中的错误处理部分
+- 增强了故障排除指南中的开发环境启动问题部分
 - 更新了服务编排配置的健康检查和依赖管理说明
 
 ## 目录
@@ -33,10 +33,11 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖分析](#依赖分析)
-7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
-9. [结论](#结论)
+6. [开发环境启动脚本](#开发环境启动脚本)
+7. [依赖分析](#依赖分析)
+8. [性能考虑](#性能考虑)
+9. [故障排除指南](#故障排除指南)
+10. [结论](#结论)
 
 ## 简介
 
@@ -46,10 +47,11 @@
 - **容器化部署**：通过 Docker 和 docker-compose 实现服务编排
 - **多环境支持**：同时支持开发和生产环境配置
 - **自动化运维**：提供完整的部署、启动、停止和重建脚本
+- **智能开发环境管理**：新增的开发环境启动脚本提供更便捷的开发体验
 - **健康检查**：内置服务健康状态监控
 - **数据库迁移**：集成 Alembic 数据库版本管理
 
-**更新** 新的部署脚本增强了错误处理机制和用户反馈，提供更好的用户体验和故障诊断能力。
+**更新** 新的部署脚本增强了错误处理机制和用户反馈，提供更好的用户体验和故障诊断能力。新增的开发环境启动脚本提供了智能的环境检测和自动化的服务启动流程。
 
 ## 项目结构
 
@@ -443,6 +445,137 @@ end
 - [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
 - [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
 
+## 开发环境启动脚本
+
+### 智能开发环境启动脚本 (start_dev.sh)
+
+**新增** start_dev.sh 是专门为Docker开发环境设计的智能启动脚本，提供了完整的开发环境自动化管理功能。
+
+#### 核心功能特性
+
+```mermaid
+flowchart TD
+START[执行 start_dev.sh] --> CHECK_CONTAINER[检查现有容器运行状态]
+CHECK_CONTAINER --> STOP_EXISTING[如有运行则停止]
+STOP_EXISTING --> START_BASE_SERVICES[启动基础服务<br/>PostgreSQL, Redis]
+START_BASE_SERVICES --> WAIT_DATABASE[等待数据库就绪<br/>最多10次尝试]
+WAIT_DATABASE --> CHECK_TABLES[检查数据库表结构]
+CHECK_TABLES --> INIT_TABLES[如需则初始化表结构]
+INIT_TABLES --> START_APP_SERVICES[启动应用服务<br/>Backend, Frontend]
+START_APP_SERVICES --> DISPLAY_INFO[显示访问信息]
+DISPLAY_INFO --> DONE[开发环境就绪]
+```
+
+**图表来源**
+- [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
+
+#### 智能检测机制
+
+1. **容器状态检查**：自动检测现有运行的开发环境容器
+2. **数据库就绪检测**：智能等待数据库服务启动完成
+3. **表结构自动初始化**：根据需要自动创建数据库表
+4. **分阶段启动**：确保服务依赖关系正确
+
+#### 使用方法
+
+```bash
+# 启动开发环境
+./start_dev.sh
+
+# 输出示例
+停止现有服务...
+启动基础服务（PostgreSQL, Redis）...
+等待数据库启动... (1/10)
+等待数据库启动... (2/10)
+✓ 数据库已就绪
+启动后端和前端服务...
+✓ 开发环境启动完成！
+
+访问地址：
+  前端：http://localhost:3000
+  后端：http://localhost:8000
+  API 文档：http://localhost:8000/docs
+```
+
+### 本地开发启动脚本 (start_local_dev.sh)
+
+**新增** start_local_dev.sh 提供了完全本地化的开发环境启动能力，无需Docker即可进行开发。
+
+#### 本地开发特性
+
+```mermaid
+flowchart TD
+START[执行 start_local_dev.sh] --> CHECK_BASE_SERVICES[检查基础服务状态]
+CHECK_BASE_SERVICES --> START_POSTGRES[如未运行则启动 PostgreSQL]
+START_POSTGRES --> START_REDIS[如未运行则启动 Redis]
+START_REDIS --> CHECK_TABLES[检查数据库表结构]
+CHECK_TABLES --> INIT_TABLES[如需则初始化表结构]
+INIT_TABLES --> SHOW_LOCAL_COMMANDS[显示本地启动命令]
+SHOW_LOCAL_COMMANDS --> DONE[本地开发环境就绪]
+```
+
+**图表来源**
+- [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
+
+#### 本地开发优势
+
+1. **完全本地化**：无需Docker环境即可开发
+2. **直接调试**：支持本地IDE调试
+3. **灵活配置**：可根据需要调整开发环境
+4. **快速启动**：最小化依赖启动
+
+#### 本地启动命令
+
+```bash
+# 启动本地开发环境
+./start_local_dev.sh
+
+# 输出示例
+本地开发启动命令：
+  后端：cd  && uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+  前端：cd frontend && npm run dev
+
+访问地址：
+  前端：http://localhost:3000
+  后端：http://localhost:8000
+  API 文档：http://localhost:8000/docs
+```
+
+### 本地开发初始化脚本 (scripts/init_local_dev.sh)
+
+**新增** init_local_dev.sh 提供了完整的本地开发环境初始化功能，包括Python虚拟环境和依赖安装。
+
+#### 初始化流程
+
+```mermaid
+flowchart TD
+START[执行 init_local_dev.sh] --> CHECK_PYTHON[检查Python版本]
+CHECK_PYTHON --> CHECK_POETRY[检查Poetry安装]
+CHECK_POETRY --> CREATE_VENV[创建Python虚拟环境]
+CREATE_VENV --> ACTIVATE_VENV[激活虚拟环境]
+ACTIVATE_VENV --> INSTALL_DEPS[安装Python依赖]
+INSTALL_DEPS --> CREATE_ENV_FILE[创建.env文件]
+CREATE_ENV_FILE --> CHECK_API_KEY[检查API密钥配置]
+CHECK_API_KEY --> CREATE_TABLES[创建数据库表]
+CREATE_TABLES --> INSTALL_FRONTEND[可选：安装前端依赖]
+INSTALL_FRONTEND --> READY[本地开发环境就绪]
+```
+
+**图表来源**
+- [scripts/init_local_dev.sh:1-83](file://scripts/init_local_dev.sh#L1-L83)
+
+#### 自动化特性
+
+1. **环境检测**：自动检查和安装必要的开发工具
+2. **依赖管理**：支持Poetry和pip两种依赖管理方式
+3. **配置管理**：自动生成和配置环境变量文件
+4. **数据库初始化**：自动执行数据库迁移
+
+**章节来源**
+- [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
+- [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
+- [scripts/init_local_dev.sh:1-83](file://scripts/init_local_dev.sh#L1-L83)
+
 ## 依赖分析
 
 ### 系统依赖关系
@@ -684,6 +817,36 @@ curl http://localhost:8000/health
 docker-compose exec frontend ping backend
 ```
 
+#### 智能开发环境启动问题
+
+**新增** 使用 start_dev.sh 和 start_local_dev.sh 时可能遇到的问题
+
+**症状**：开发环境启动失败或部分服务不可用
+
+**诊断方法：**
+1. 使用 start_dev.sh 的智能检测功能
+2. 检查数据库就绪状态
+3. 验证表结构初始化是否成功
+4. 确认本地开发环境配置
+
+**解决步骤：**
+```bash
+# 使用智能启动脚本
+./start_dev.sh
+
+# 检查数据库表
+docker exec novel_postgres psql -U novel_user -d novel_system -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
+
+# 重新启动应用服务
+docker-compose -f docker-compose.dev.yml up -d backend frontend
+
+# 检查本地开发环境
+./start_local_dev.sh
+
+# 验证本地启动命令
+cd  && uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 ### 生产环境监控
 
 #### 性能监控
@@ -737,31 +900,63 @@ docker system df
 docker-compose ps
 ```
 
-#### 开发环境启动问题
+### 本地开发环境故障排除
 
-**症状**：开发环境启动失败或部分服务不可用
+**新增** 本地开发环境特有的问题和解决方案
+
+#### Python 环境问题
+
+**症状**：本地开发环境无法启动或依赖安装失败
 
 **诊断方法：**
-1. 使用 start_dev.sh 的智能检测功能
-2. 检查数据库就绪状态
-3. 验证表结构初始化是否成功
+1. 检查 Python 版本兼容性
+2. 验证虚拟环境激活状态
+3. 确认依赖安装是否成功
 
 **解决步骤：**
 ```bash
-# 使用智能启动脚本
-./start_dev.sh
+# 使用初始化脚本
+./scripts/init_local_dev.sh
 
-# 检查数据库表
-docker exec novel_postgres psql -U novel_user -d novel_system -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
+# 检查Python版本
+python3 --version
 
-# 重新启动应用服务
-docker-compose -f docker-compose.dev.yml up -d backend frontend
+# 检查虚拟环境
+source venv/bin/activate
+
+# 重新安装依赖
+poetry install
+
+# 或使用pip
+pip install -e .
+```
+
+#### 数据库连接问题
+
+**症状**：本地开发环境数据库连接失败
+
+**诊断方法：**
+1. 检查 PostgreSQL 服务状态
+2. 验证数据库配置
+3. 确认端口和权限设置
+
+**解决步骤：**
+```bash
+# 启动PostgreSQL服务
+docker-compose -f docker-compose.dev.yml up -d postgres
+
+# 检查数据库连接
+psql -h localhost -p 5434 -U novel_user -d novel_system
+
+# 执行数据库迁移
+alembic upgrade head
 ```
 
 **章节来源**
 - [docker-stop.sh:1-23](file://docker-stop.sh#L1-L23)
 - [start_dev.sh:1-58](file://start_dev.sh#L1-L58)
 - [start_local_dev.sh:1-53](file://start_local_dev.sh#L1-L53)
+- [scripts/init_local_dev.sh:1-83](file://scripts/init_local_dev.sh#L1-L83)
 
 ## 结论
 
@@ -774,8 +969,9 @@ docker-compose -f docker-compose.dev.yml up -d backend frontend
 3. **灵活的环境配置**：支持开发和生产环境的无缝切换
 4. **完善的监控机制**：内置健康检查和状态监控
 5. **优秀的开发体验**：热重载和调试支持
+6. **智能开发环境管理**：新增的开发环境启动脚本提供更便捷的开发体验
 
-**更新** 最新的部署脚本改进显著提升了用户体验和故障诊断能力，提供了更好的错误处理和用户反馈机制。
+**更新** 最新的部署脚本改进显著提升了用户体验和故障诊断能力，提供了更好的错误处理和用户反馈机制。新增的智能开发环境启动脚本（start_dev.sh 和 start_local_dev.sh）大幅简化了开发环境的启动和管理流程。
 
 ### 技术亮点
 
@@ -786,6 +982,7 @@ docker-compose -f docker-compose.dev.yml up -d backend frontend
 - **网络隔离**：Docker 网络提供安全的服务通信
 - **增强的错误处理**：彩色输出和详细的状态反馈
 - **智能开发启动**：自动化的环境检测和初始化
+- **本地开发支持**：完全本地化的开发环境配置
 
 ### 未来改进方向
 
@@ -795,5 +992,6 @@ docker-compose -f docker-compose.dev.yml up -d backend frontend
 4. **安全性增强**：网络隔离和访问控制
 5. **备份策略**：完善的数据备份和恢复机制
 6. **部署脚本优化**：进一步提升自动化程度和用户体验
+7. **开发工具集成**：更好的IDE和调试工具支持
 
-该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。最新的脚本改进使得部署和维护变得更加简单可靠，为开发者提供了更好的开发体验。
+该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。最新的脚本改进使得部署和维护变得更加简单可靠，为开发者提供了更好的开发体验。智能的开发环境启动脚本（start_dev.sh 和 start_local_dev.sh）特别提升了开发效率，减少了环境配置的复杂性和出错概率。
