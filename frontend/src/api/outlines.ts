@@ -21,7 +21,24 @@ export async function getPlotOutline(novelId: string): Promise<PlotOutline> {
 
 export async function updatePlotOutline(
   novelId: string,
-  payload: Partial<PlotOutline>,
+  payload: Partial<PlotOutline> & {
+    volumes?: Array<{
+      number: number;
+      title: string;
+      summary?: string;
+      chapters: number[];
+      core_conflict?: string;
+      main_events?: any[];
+      key_turning_points?: any[];
+      tension_cycles?: any[];
+      emotional_arc?: string;
+      character_arcs?: any[];
+      side_plots?: any[];
+      foreshadowing?: any[];
+      themes?: string[];
+      word_count_range?: number[];
+    }>;
+  },
 ): Promise<PlotOutline> {
   const { data } = await apiClient.patch(`/novels/${novelId}/outline`, payload);
   return data;

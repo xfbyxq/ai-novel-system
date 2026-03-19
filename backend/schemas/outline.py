@@ -9,22 +9,22 @@ from pydantic import BaseModel, ConfigDict, Field
 class WorldSettingResponse(BaseModel):
     """世界观设定响应模型"""
     id: UUID = Field(..., description="世界观设定唯一标识符")
-    novel_id: UUID = Field(..., description="所属小说ID")
+    novel_id: UUID = Field(..., description="所属小说 ID")
     world_name: Optional[str] = Field(default=None, description="世界名称，如'青玄大陆'、'蔚蓝星'")
     world_type: Optional[str] = Field(
         default=None, description="世界类型：仙侠/都市/科幻/武侠/悬疑等"
     )
     power_system: Optional[dict] = Field(
         default=None,
-        description="力量体系，格式: {name: 体系名, levels: [等级列表], description: 描述}"
+        description="力量体系，格式：{name: 体系名，levels: [等级列表], description: 描述}"
     )
     geography: Optional[dict] = Field(
         default=None,
-        description="地理设定，格式: {regions: [{name, description, features}], landmarks: [...]}}"
+        description="地理设定，格式：{regions: [{name, description, features}], landmarks: [...]}}"
     )
     factions: Optional[list] = Field(
         default=None,
-        description="势力组织列表，每项格式: {name, type, power_level, leader, description}"
+        description="势力组织列表，每项格式：{name, type, power_level, leader, description}"
     )
     rules: Optional[list] = Field(
         default=None, description="世界运行规则列表"
@@ -50,49 +50,105 @@ class WorldSettingUpdate(BaseModel):
     )
     power_system: Optional[dict] = Field(
         default=None,
-        description="力量体系，格式: {name, levels: [], description}"
+        description="力量体系，格式：{name, levels: [], description}"
     )
     geography: Optional[dict] = Field(
         default=None,
-        description="地理设定，格式: {regions: [{name: '东域', features: [...]}], landmarks: [...]}"
+        description="地理设定，格式：{regions: [{name: '东域', features: [...]}], landmarks: [...]}"
     )
     factions: Optional[list] = Field(
         default=None,
-        description="势力组织列表，每项格式: {name: '天剑宗', type: '宗门', power_level: 'S级'}"
+        description="势力组织列表，每项格式：{name: '天剑宗', type: '宗门', power_level: 'S 级'}"
     )
     rules: Optional[list] = Field(default=None, description="世界运行规则列表")
     timeline: Optional[list] = Field(
         default=None,
-        description="历史时间线，每项格式: {time, event, significance}"
+        description="历史时间线，每项格式：{time, event, significance}"
     )
     special_elements: Optional[list] = Field(
         default=None, description="特殊元素列表"
     )
 
 
+class VolumeInfo(BaseModel):
+    """卷信息详细模型（增强版）"""
+    number: int = Field(..., description="卷号")
+    title: str = Field(..., description="卷标题")
+    summary: Optional[str] = Field(default=None, description="卷概要")
+    chapters: list[int] = Field(default_factory=list, description="章节范围 [start, end]")
+    
+    # 核心冲突
+    core_conflict: Optional[str] = Field(default=None, description="本卷核心矛盾")
+    
+    # 主线事件
+    main_events: Optional[list] = Field(
+        default_factory=list,
+        description="主线事件列表，每项格式：{chapter, event, impact}"
+    )
+    
+    # 关键转折点
+    key_turning_points: Optional[list] = Field(
+        default_factory=list,
+        description="关键转折点列表，每项格式：{chapter, event, significance}"
+    )
+    
+    # 张力循环
+    tension_cycles: Optional[list] = Field(
+        default_factory=list,
+        description="张力循环列表，每项格式：{chapters, suppress_events, release_event, tension_level}"
+    )
+    
+    # 情感弧线
+    emotional_arc: Optional[str] = Field(default=None, description="情感变化曲线描述")
+    
+    # 角色发展弧线
+    character_arcs: Optional[list] = Field(
+        default_factory=list,
+        description="角色发展弧线列表，每项格式：{character_id, arc_description, key_moments}"
+    )
+    
+    # 支线情节
+    side_plots: Optional[list] = Field(
+        default_factory=list,
+        description="支线情节列表，每项格式：{name, description, chapters}"
+    )
+    
+    # 伏笔分配
+    foreshadowing: Optional[list] = Field(
+        default_factory=list,
+        description="伏笔分配列表，每项格式：{description, setup_chapter, payoff_chapter}"
+    )
+    
+    # 主题
+    themes: Optional[list] = Field(default_factory=list, description="本卷主题列表")
+    
+    # 字数范围
+    word_count_range: Optional[list[int]] = Field(default=None, description="字数范围 [min, max]")
+
+
 class PlotOutlineResponse(BaseModel):
     """剧情大纲响应模型"""
     id: UUID = Field(..., description="大纲唯一标识符")
-    novel_id: UUID = Field(..., description="所属小说ID")
+    novel_id: UUID = Field(..., description="所属小说 ID")
     structure_type: Optional[str] = Field(
         default=None,
         description="结构类型，如：三幕式、英雄之旅、多线叙事等"
     )
-    volumes: Optional[list] = Field(
+    volumes: Optional[list[VolumeInfo]] = Field(
         default=None,
-        description="卷/篇设定列表，每项格式: {number, title, chapters, summary}"
+        description="卷/篇设定列表，每项格式：{number, title, chapters, summary}"
     )
     main_plot: Optional[dict] = Field(
         default=None,
-        description="主线剧情，格式: {setup, conflict, climax, resolution}"
+        description="主线剧情，格式：{setup, conflict, climax, resolution}"
     )
     sub_plots: Optional[list] = Field(
         default=None,
-        description="支线剧情列表，每项格式: {name: '感情线', characters: [...], arc: '...'}"
+        description="支线剧情列表，每项格式：{name: '感情线', characters: [...], arc: '...'}"
     )
     key_turning_points: Optional[list] = Field(
         default=None,
-        description="关键转折点列表，每项格式: {chapter: 10, event: '获得神器', impact: '实力飞跃'}"
+        description="关键转折点列表，每项格式：{chapter: 10, event: '获得神器', impact: '实力飞跃'}"
     )
     climax_chapter: Optional[int] = Field(default=None, description="高潮章节号")
     version: int = Field(default=1, description="大纲版本号")
@@ -107,28 +163,28 @@ class PlotOutlineUpdate(BaseModel):
     structure_type: Optional[str] = Field(
         default=None, description="结构类型：三幕式/英雄之旅等"
     )
-    volumes: Optional[list] = Field(
+    volumes: Optional[list[dict]] = Field(
         default=None,
-        description="卷/篇设定列表，每项格式: {number, title, chapters: [start, end], summary}"
+        description="卷/篇设定列表，每项格式：{number, title, chapters: [start, end], summary, core_conflict, main_events, key_turning_points, tension_cycles, emotional_arc, character_arcs, side_plots, foreshadowing, themes, word_count_range}"
     )
     main_plot: Optional[dict] = Field(
         default=None,
-        description="主线剧情，格式: {setup, conflict, climax, resolution}"
+        description="主线剧情，格式：{setup, conflict, climax, resolution}"
     )
     sub_plots: Optional[list] = Field(
         default=None,
-        description="支线剧情列表，每项格式: {name, characters, arc}"
+        description="支线剧情列表，每项格式：{name, characters, arc}"
     )
     key_turning_points: Optional[list] = Field(
         default=None,
-        description="关键转折点列表，每项格式: {chapter, event, impact}"
+        description="关键转折点列表，每项格式：{chapter, event, impact}"
     )
     climax_chapter: Optional[int] = Field(default=None, description="高潮章节号")
 
 
 class ChapterCreate(BaseModel):
     """创建章节的请求模型"""
-    chapter_number: int = Field(..., description="章节号（从1开始）")
+    chapter_number: int = Field(..., description="章节号（从 1 开始）")
     volume_number: int = Field(default=1, description="所属卷号")
     title: Optional[str] = Field(default=None, description="章节标题")
 
@@ -146,14 +202,14 @@ class ChapterUpdate(BaseModel):
 class ChapterResponse(BaseModel):
     """章节响应模型"""
     id: UUID = Field(..., description="章节唯一标识符")
-    novel_id: UUID = Field(..., description="所属小说ID")
+    novel_id: UUID = Field(..., description="所属小说 ID")
     chapter_number: int = Field(..., description="章节号")
     volume_number: int = Field(..., description="所属卷号")
     title: Optional[str] = Field(default=None, description="章节标题")
     content: Optional[str] = Field(default=None, description="章节正文内容")
     word_count: int = Field(..., description="章节字数")
     status: str = Field(..., description="章节状态：draft/reviewing/published")
-    quality_score: Optional[float] = Field(default=None, description="AI评估的质量评分（0-10）")
+    quality_score: Optional[float] = Field(default=None, description="AI 评估的质量评分（0-10）")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="最后更新时间")
 
@@ -291,7 +347,7 @@ class EnhancementOptions(BaseModel):
     )
     update_database: Optional[bool] = Field(
         default=False,
-        description="是否直接更新数据库（false时只返回预览）"
+        description="是否直接更新数据库（false 时只返回预览）"
     )
 
 
@@ -305,7 +361,7 @@ class OutlineQualityReport(BaseModel):
     )
     dimension_scores: dict = Field(
         ...,
-        description="各维度评分，格式: {'完整性': 8.5, '逻辑性': 7.2, ...}"
+        description="各维度评分，格式：{'完整性': 8.5, '逻辑性': 7.2, ...}"
     )
     strengths: list = Field(
         default_factory=list,
@@ -328,7 +384,7 @@ class EnhancementPreviewResponse(BaseModel):
     enhanced_outline: PlotOutlineResponse = Field(..., description="增强后的大纲")
     quality_comparison: dict = Field(
         ...,
-        description="质量对比数据，格式: {original_score, enhanced_score, improvement, dimension_improvements}"
+        description="质量对比数据，格式：{original_score, enhanced_score, improvement, dimension_improvements}"
     )
     improvements_made: list = Field(
         default_factory=list,
@@ -341,7 +397,7 @@ class EnhancementPreviewResponse(BaseModel):
 
 
 class AIAssistRequest(BaseModel):
-    """AI辅助生成大纲字段请求模型"""
+    """AI 辅助生成大纲字段请求模型"""
     field_name: str = Field(
         ...,
         description="需要辅助的字段名：structure_type/volumes/main_plot/sub_plots/key_turning_points/climax_chapter"
@@ -357,9 +413,9 @@ class AIAssistRequest(BaseModel):
 
 
 class AIAssistResponse(BaseModel):
-    """AI辅助生成响应模型"""
+    """AI 辅助生成响应模型"""
     field_name: str = Field(..., description="字段名")
-    suggestion: str = Field(..., description="AI生成的建议内容")
+    suggestion: str = Field(..., description="AI 生成的建议内容")
     confidence: Optional[float] = Field(
         default=None,
         description="置信度（0-1）",

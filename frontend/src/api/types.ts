@@ -131,11 +131,74 @@ export interface WorldSetting {
 }
 
 // --- PlotOutline ---
+// --- VolumeInfo (增强版卷信息) ---
+export interface VolumeInfo {
+  number: number;
+  title: string;
+  summary?: string;
+  chapters: number[];  // [start, end]
+  
+  // 核心冲突
+  core_conflict?: string;
+  
+  // 主线事件
+  main_events?: Array<{
+    chapter: number;
+    event: string;
+    impact: string;
+  }>;
+  
+  // 关键转折点
+  key_turning_points?: Array<{
+    chapter: number;
+    event: string;
+    significance: string;
+  }>;
+  
+  // 张力循环
+  tension_cycles?: Array<{
+    chapters: number[];  // [start, end]
+    suppress_events: string[];
+    release_event: string;
+    tension_level?: number;  // 0-10
+  }>;
+  
+  // 情感弧线
+  emotional_arc?: string;
+  
+  // 角色发展弧线
+  character_arcs?: Array<{
+    character_id?: string;
+    arc_description: string;
+    key_moments: number[];  // 关键章节号
+  }>;
+  
+  // 支线情节
+  side_plots?: Array<{
+    name: string;
+    description: string;
+    chapters: number[];  // [start, end]
+  }>;
+  
+  // 伏笔分配
+  foreshadowing?: Array<{
+    description: string;
+    setup_chapter: number;
+    payoff_chapter: number;
+  }>;
+  
+  // 主题
+  themes?: string[];
+  
+  // 字数范围
+  word_count_range?: number[];  // [min, max]
+}
+
 export interface PlotOutline {
   id: string;
   novel_id: string;
   structure_type: string | null;
-  volumes: unknown[] | null;
+  volumes: VolumeInfo[] | null;
   main_plot: Record<string, unknown> | null;
   sub_plots: unknown[] | null;
   key_turning_points: unknown[] | null;

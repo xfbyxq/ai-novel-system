@@ -31,6 +31,10 @@ from backend.schemas.outline import (
     WorldSettingResponse,
     WorldSettingUpdate,
 )
+from core.models.plot_outline import PlotOutline
+import logging
+
+core_logger = logging.getLogger(__name__)
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.world_setting import WorldSetting
@@ -144,6 +148,9 @@ async def get_plot_outline(
             detail=f"小说 {novel_id} 的情节大纲未找到"
         )
 
+    # 修复数据格式：确保volumes中的每个卷都有number字段
+    plot_outline = fix_plot_outline_volumes(plot_outline)
+
     return plot_outline
 
 
@@ -186,6 +193,10 @@ async def update_plot_outline(
 
     await db.commit()
     await db.refresh(plot_outline)
+    
+    # 修复数据格式：确保volumes中的每个卷都有number字段
+    plot_outline = fix_plot_outline_volumes(plot_outline)
+    
     return plot_outline
 
 
@@ -234,6 +245,9 @@ async def generate_complete_outline(
     db.add(plot_outline)
     await db.commit()
     await db.refresh(plot_outline)
+    
+    # 修复数据格式：确保volumes中的每个卷都有number字段
+    plot_outline = fix_plot_outline_volumes(plot_outline)
     
     return plot_outline
 
@@ -662,6 +676,10 @@ async def update_plot_outline_with_version(
 
     await db.commit()
     await db.refresh(plot_outline)
+    
+    # 修复数据格式：确保volumes中的每个卷都有number字段
+    plot_outline = fix_plot_outline_volumes(plot_outline)
+    
     return plot_outline
 @router.post("/outline/enhance-preview", response_model=EnhancementPreviewResponse)
 async def enhance_outline_preview(
@@ -734,9 +752,24 @@ async def enhance_outline_preview(
         processing_time = time.time() - start_time
         cost_estimate = 0.0
         
+        # 修复原始和增强大纲中的卷数据格式
+        fixed_original_outline = initial_outline.copy() if initial_outline else {}
+        if 'volumes' in fixed_original_outline and fixed_original_outline['volumes']:
+            fixed_original_outline['volumes'] = [
+                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)} 
+                for idx, vol in enumerate(fixed_original_outline['volumes'])
+            ]
+        
+        fixed_enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"].copy()
+        if 'volumes' in fixed_enhanced_outline and fixed_enhanced_outline['volumes']:
+            fixed_enhanced_outline['volumes'] = [
+                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)} 
+                for idx, vol in enumerate(fixed_enhanced_outline['volumes'])
+            ]
+        
         return EnhancementPreviewResponse(
-            original_outline=initial_outline,
-            enhanced_outline=enhancement_result["enhancement_result"]["enhanced_outline"],
+            original_outline=fixed_original_outline,
+            enhanced_outline=fixed_enhanced_outline,
             quality_comparison={
                 "original_score": original_quality.overall_score,
                 "enhanced_score": enhanced_quality.overall_score,
@@ -795,6 +828,25 @@ async def apply_outline_enhancement(
         logger.error(f"应用大纲优化失败：{e}")
         raise HTTPException(status_code=500, detail=f"应用优化失败：{str(e)}")
 
+
+def fix_plot_outline_volumes(plot_outline):
+    """修复情节大纲中的卷数据格式，确保volumes中的每个卷都有number字段"""
+    if plot_outline.volumes:
+        fixed_volumes = []
+        for vol in plot_outline.volumes:
+            # 如果没有number字段但有volume_num字段，则复制volume_num作为number
+            if 'number' not in vol and 'volume_num' in vol:
+                vol_copy = vol.copy()
+                vol_copy['number'] = vol_copy['volume_num']
+                fixed_volumes.append(vol_copy)
+            else:
+                # 如果既有volume_num又有number，保持number优先
+                vol_copy = vol.copy()
+                if 'volume_num' in vol_copy and 'number' not in vol_copy:
+                    vol_copy['number'] = vol_copy['volume_num']
+                fixed_volumes.append(vol_copy)
+        plot_outline.volumes = fixed_volumes
+    return plot_outline
 
 def model_to_dict(model_instance):
     """将SQLAlchemy模型实例转换为字典"""

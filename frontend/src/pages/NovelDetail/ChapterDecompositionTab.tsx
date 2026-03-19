@@ -25,7 +25,6 @@ import {
   DeleteOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import { Select } from 'antd';
 import type { PlotOutline } from '@/api/types';
 import { getPlotOutline, updatePlotOutline } from '@/api/outlines';
 
@@ -40,6 +39,28 @@ interface Volume {
   tension_cycle?: string;
   foreshadowing?: string[];
   key?: string;
+  
+  // 新增增强字段
+  core_conflict?: string;
+  key_turning_points?: Array<{
+    chapter: number;
+    event: string;
+    significance: string;
+  }>;
+  tension_cycles?: Array<{
+    chapters: number[];
+    suppress_events: string[];
+    release_event: string;
+    tension_level?: number;
+  }>;
+  emotional_arc?: string;
+  character_arcs?: Array<{
+    character_id?: string;
+    arc_description: string;
+    key_moments: number[];
+  }>;
+  themes?: string[];
+  word_count_range?: number[];
 }
 
 interface ChapterDecomposition {
@@ -70,7 +91,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
     try {
       const data = await getPlotOutline(novelId);
       
-      const volumes = (data.volumes || []) as unknown[];
+      const volumes = (data.volumes || []) as any[];
       
       if (volumes.length > 0) {
         const existingDecomposition: ChapterDecomposition = {
@@ -280,14 +301,35 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
     setSaving(true);
     try {
       const volumesData = decomposition.volumes.map((vol) => ({
-        volume_num: vol.volume_num,
+        number: vol.volume_num,
         title: vol.title,
         summary: vol.summary,
-        chapter_range: [vol.chapter_start, vol.chapter_end],
-        main_events: vol.main_events,
-        side_plots: vol.side_plots,
-        tension_cycle: vol.tension_cycle,
-        foreshadowing: vol.foreshadowing,
+        chapters: [vol.chapter_start, vol.chapter_end],
+        core_conflict: vol.core_conflict,
+        // 将字符串数组转换为对象数组以匹配API要求
+        main_events: vol.main_events ? vol.main_events.map(event => ({
+          chapter: vol.chapter_start, // 默认使用卷起始章节
+          event,
+          impact: "medium" // 默认影响程度
+        })) : undefined,
+        key_turning_points: vol.key_turning_points,
+        tension_cycles: vol.tension_cycles,
+        emotional_arc: vol.emotional_arc,
+        character_arcs: vol.character_arcs,
+        // 将字符串数组转换为对象数组
+        side_plots: vol.side_plots ? vol.side_plots.map(plot => ({
+          name: plot.substring(0, 50), // 截取前50个字符作为名称
+          description: plot,
+          chapters: [vol.chapter_start, vol.chapter_end]
+        })) : undefined,
+        // 将字符串数组转换为对象数组
+        foreshadowing: vol.foreshadowing ? vol.foreshadowing.map(f => ({
+          description: f,
+          setup_chapter: vol.chapter_start,
+          payoff_chapter: vol.chapter_end
+        })) : undefined,
+        themes: vol.themes,
+        word_count_range: vol.word_count_range,
       }));
 
       console.log('📤 发送的数据:', { 
@@ -296,7 +338,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
       });
 
       await updatePlotOutline(novelId, {
-        volumes: volumesData as unknown[],
+        volumes: volumesData,
       });
 
       // 保存成功后重新获取最新数据
@@ -475,6 +517,21 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
                        volume.tension_cycle === 'climax' ? '高潮' : '下降'}
                     </Tag>
                   )}
+                  {volume.core_conflict && (
+                    <Tag color="purple" title={volume.core_conflict}>
+                      核心冲突
+                    </Tag>
+                  )}
+                  {volume.themes && volume.themes.length > 0 && (
+                    <Tag color="cyan">
+                      主题：{volume.themes.join(', ')}
+                    </Tag>
+                  )}
+                  {volume.word_count_range && (
+                    <Tag color="gray">
+                      {Math.round(volume.word_count_range[0] / 1000)}万-{Math.round(volume.word_count_range[1] / 1000)}万字
+                    </Tag>
+                  )}
                 </Space>
               </Col>
               <Col>
@@ -555,7 +612,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
                     onChange={(e) => handleVolumeChange(
                       index,
                       'main_events',
-                      e.target.value.split(',').filter((s) => s.trim())
+                      e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0)
                     )}
                     placeholder="用逗号分隔多个事件"
                   />
@@ -570,7 +627,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
                     onChange={(e) => handleVolumeChange(
                       index,
                       'side_plots',
-                      e.target.value.split('\n').filter((s) => s.trim())
+                      e.target.value.split('\n').map(s => s.trim()).filter(s => s.length > 0)
                     )}
                     placeholder="每行一个支线情节"
                     rows={2}
@@ -586,11 +643,86 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
                     onChange={(e) => handleVolumeChange(
                       index,
                       'foreshadowing',
-                      e.target.value.split('\n').filter((s) => s.trim())
+                      e.target.value.split('\n').map(s => s.trim()).filter(s => s.length > 0)
                     )}
                     placeholder="每行一个伏笔"
                     rows={2}
                   />
+                </Space>
+              </Col>
+
+              <Col span={12}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Text strong>核心冲突</Typography.Text>
+                  <Input.TextArea
+                    value={volume.core_conflict || ''}
+                    onChange={(e) => handleVolumeChange(index, 'core_conflict', e.target.value)}
+                    placeholder="描述本卷的核心矛盾"
+                    rows={2}
+                    showCount
+                    maxLength={500}
+                  />
+                </Space>
+              </Col>
+
+              <Col span={12}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Text strong>情感弧线</Typography.Text>
+                  <Input.TextArea
+                    value={volume.emotional_arc || ''}
+                    onChange={(e) => handleVolumeChange(index, 'emotional_arc', e.target.value)}
+                    placeholder="描述情感变化曲线"
+                    rows={2}
+                    showCount
+                    maxLength={500}
+                  />
+                </Space>
+              </Col>
+
+              <Col span={12}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Text strong>主题 (用逗号分隔)</Typography.Text>
+                  <Input
+                    value={volume.themes?.join(', ') || ''}
+                    onChange={(e) => handleVolumeChange(
+                      index,
+                      'themes',
+                      e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                    )}
+                    placeholder="例如：成长，复仇，爱情"
+                  />
+                </Space>
+              </Col>
+
+              <Col span={12}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Text strong>字数范围 (千字)</Typography.Text>
+                  <Row gutter={8}>
+                    <Col span={12}>
+                      <InputNumber
+                        min={0}
+                        value={volume.word_count_range?.[0] || 0}
+                        onChange={(val) => {
+                          const current = volume.word_count_range || [0, 0];
+                          handleVolumeChange(index, 'word_count_range', [val || 0, current[1]]);
+                        }}
+                        placeholder="最小"
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <InputNumber
+                        min={0}
+                        value={volume.word_count_range?.[1] || 0}
+                        onChange={(val) => {
+                          const current = volume.word_count_range || [0, 0];
+                          handleVolumeChange(index, 'word_count_range', [current[0], val || 0]);
+                        }}
+                        placeholder="最大"
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                  </Row>
                 </Space>
               </Col>
             </Row>
@@ -616,6 +748,11 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
 }
 
 
+
+interface TensionCycleProps {
+  value?: string;
+  onChange?: (value: string) => void;
+}
 
 function SelectTensionCycle({ value, onChange }: TensionCycleProps) {
   const options = [

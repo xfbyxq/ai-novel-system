@@ -22,11 +22,18 @@
 - [agents/enhanced_context_manager.py](file://agents/enhanced_context_manager.py)
 - [agents/theme_guardian.py](file://agents/theme_guardian.py)
 - [agents/continuity_integration.py](file://agents/continuity_integration.py)
-- [agents/continuity_inference.py](file://agents/continuity_inference.py)
-- [agents/continuity_validation.py](file://agents/continuity_validation.py)
-- [agents/continuity_models.py](file://agents/continuity_models.py)
-- [llm/qwen_client.py](file://llm/qwen_client.py)
-- [llm/cost_tracker.py](file://llm/cost_tracker.py)
+- [agents/outline_dynamic_updater.py](file://agents/outline_dynamic_updater.py)
+- [agents/character_consistency_tracker.py](file://agents/character_consistency_tracker.py)
+- [agents/foreshadowing_auto_injector.py](file://agents/foreshadowing_auto_injector.py)
+- [agents/foreshadowing_tracker.py](file://agents/foreshadowing_tracker.py)
+- [agents/prevention_continuity_checker.py](file://agents/prevention_continuity_checker.py)
+- [agents/similarity_detector.py](file://agents/similarity_detector.py)
+- [agents/voting_manager.py](file://agents/voting_manager.py)
+- [agents/world_review_loop.py](file://agents/world_review_loop.py)
+- [backend/services/character_auto_detector.py](file://backend/services/character_auto_detector.py)
+- [backend/services/outline_service.py](file://backend/services/outline_service.py)
+- [backend/services/generation_service.py](file://backend/services/generation_service.py)
+- [core/models/plot_outline.py](file://core/models/plot_outline.py)
 - [backend/config.py](file://backend/config.py)
 - [core/logging_config.py](file://core/logging_config.py)
 - [scripts/start_agents.py](file://scripts/start_agents.py)
@@ -34,12 +41,13 @@
 
 ## 更新摘要
 **所做更改**
-- 完全移除 NovelCrewManager 和相关协作机制，包括 CrewAI 风格的任务编排系统
-- 新增 ContinuityIntegrationModule 架构，提供统一的连贯性保障系统集成
-- 更新架构图以反映新的连贯性保障系统，替代原有的 CrewManager 协作机制
-- 移除多阶段质量评估系统中的 CrewManager 相关内容
-- 新增基于 LLM 的约束推断和验证引擎
-- 更新智能体通信协议和消息传递机制，移除 CrewManager 的任务分配功能
+- 新增动态大纲更新系统，实现基于章节内容偏差分析的大纲自适应调整
+- 新增角色自动检测系统，实现章节内容中的新角色自动识别与注册
+- 集成大纲动态更新到生成服务流程，实现每N章触发一次偏差评估
+- 集成角色自动检测到章节生成流程，实现新角色自动注册
+- 新增大纲动态更新相关数据库字段和版本管理机制
+- 新增角色自动检测的多层去重过滤策略
+- 更新智能体协作机制，支持动态大纲更新和角色检测的协同工作
 
 ## 目录
 1. [引言](#引言)
@@ -47,20 +55,24 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [连贯性保障系统](#连贯性保障系统)
-7. [约束推断引擎](#约束推断引擎)
-8. [验证引擎](#验证引擎)
-9. [数据模型](#数据模型)
-10. [智能体通信协议](#智能体通信协议)
-11. [错误处理策略](#错误处理策略)
-12. [依赖关系分析](#依赖关系分析)
-13. [性能考量](#性能考量)
-14. [故障排查指南](#故障排查指南)
-15. [结论](#结论)
-16. [附录](#附录)
+6. [动态大纲更新系统](#动态大纲更新系统)
+7. [角色自动检测系统](#角色自动检测系统)
+8. [连贯性保障系统](#连贯性保障系统)
+9. [约束推断引擎](#约束推断引擎)
+10. [验证引擎](#验证引擎)
+11. [数据模型](#数据模型)
+12. [智能体通信协议](#智能体通信协议)
+13. [错误处理策略](#错误处理策略)
+14. [依赖关系分析](#依赖关系分析)
+15. [性能考量](#性能考量)
+16. [故障排查指南](#故障排查指南)
+17. [结论](#结论)
+18. [附录](#附录)
 
 ## 引言
-本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用全新的连贯性保障架构，集成了智能体类型设计、约束推断、验证引擎和统一的连贯性保障模块。文档将深入解析：
+本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用全新的连贯性保障架构，集成了智能体类型设计、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统和角色自动检测系统。文档将深入解析：
+- 动态大纲更新系统的设计与实现
+- 角色自动检测系统的设计与实现
 - 连贯性保障系统的设计与实现
 - 智能体类型设计与职责分工
 - 基于 LLM 的约束推断和验证机制
@@ -70,11 +82,20 @@
 - 性能监控、负载均衡与扩展性设计
 
 ## 项目结构
-系统采用模块化的分层架构，包含智能体核心、连贯性保障、质量评估、团队协作、章节管理、大纲优化等多个子系统：
+系统采用模块化的分层架构，包含智能体核心、连贯性保障、质量评估、团队协作、章节管理、大纲优化、动态更新、角色检测等多个子系统：
 - agents：智能体与通信相关的核心实现
 - agents/base：质量评估和审查循环的基础组件
 - agents/continuity_*：连贯性保障相关组件
 - agents/outline_*：大纲级别的质量评估和迭代优化组件
+- agents/outline_dynamic_updater.py：动态大纲更新器
+- agents/character_consistency_tracker.py：角色一致性追踪器
+- agents/foreshadowing_*：伏笔管理和追踪组件
+- backend/services：后端服务与业务逻辑
+- backend/services/character_auto_detector.py：角色自动检测服务
+- backend/services/outline_service.py：大纲服务
+- backend/services/generation_service.py：生成服务
+- core/models：数据库模型定义
+- core/models/plot_outline.py：大纲模型（新增版本管理字段）
 - llm：大模型客户端与成本追踪
 - backend：后端服务与配置
 - core：通用日志与基础设施
@@ -85,6 +106,8 @@ graph TB
 subgraph "智能体层"
 AC["AgentCommunicator<br/>消息通信"]
 SA["SpecificAgents<br/>市场/策划/创作/编辑/发布"]
+ODU["OutlineDynamicUpdater<br/>动态大纲更新器"]
+CAD["CharacterAutoDetector<br/>角色自动检测器"]
 end
 subgraph "连贯性保障系统"
 CIM["ContinuityIntegrationModule<br/>集成模块"]
@@ -119,10 +142,16 @@ end
 subgraph "后端与配置"
 CFG["Settings<br/>环境变量"]
 LOG["LoggingConfig<br/>日志"]
+OS["OutlineService<br/>大纲服务"]
+GS["GenerationService<br/>生成服务"]
 end
 SA --> AC
 SA --> QC
 SA --> CT
+ODU --> QC
+ODU --> CT
+CAD --> QC
+CAD --> CT
 CIM --> CIE
 CIM --> VE
 CIM --> CM
@@ -136,6 +165,8 @@ TC --> CS
 TC --> TL
 COM --> COT
 COM --> OVR
+OS --> CFG
+GS --> CFG
 QC --> CFG
 LOG --> SA
 ```
@@ -143,6 +174,8 @@ LOG --> SA
 **图表来源**
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
 - [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
@@ -152,14 +185,19 @@ LOG --> SA
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
+- [backend/services/outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
+- [backend/services/generation_service.py:34-1707](file://backend/services/generation_service.py#L34-L1707)
+- [core/models/plot_outline.py:11-114](file://core/models/plot_outline.py#L11-L114)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
+- [backend/config.py:5-156](file://backend/config.py#L5-L156)
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
 
 **章节来源**
 - [agents/agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
+- [agents/outline_dynamic_updater.py:1-745](file://agents/outline_dynamic_updater.py#L1-L745)
+- [backend/services/character_auto_detector.py:1-422](file://backend/services/character_auto_detector.py#L1-L422)
 - [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
 - [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
 - [agents/continuity_validation.py:1-363](file://agents/continuity_validation.py#L1-L363)
@@ -169,14 +207,19 @@ LOG --> SA
 - [agents/chapter_outline_mapper.py:1-1109](file://agents/chapter_outline_mapper.py#L1-L1109)
 - [agents/outline_iteration_controller.py:1-404](file://agents/outline_iteration_controller.py#L1-L404)
 - [agents/outline_quality_evaluator.py:1-440](file://agents/outline_quality_evaluator.py#L1-L440)
+- [backend/services/outline_service.py:1-932](file://backend/services/outline_service.py#L1-L932)
+- [backend/services/generation_service.py:1-1707](file://backend/services/generation_service.py#L1-L1707)
+- [core/models/plot_outline.py:1-114](file://core/models/plot_outline.py#L1-L114)
 - [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
 - [llm/cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
-- [backend/config.py:1-59](file://backend/config.py#L1-L59)
+- [backend/config.py:1-156](file://backend/config.py#L1-L156)
 - [core/logging_config.py:1-55](file://core/logging_config.py#L1-L55)
 
 ## 核心组件
 - AgentCommunicator：消息通信中枢，提供注册、发送、接收、广播与历史记录能力。
 - SpecificAgents：五类智能体，分别承担市场分析、内容策划、创作、编辑、发布职责。
+- OutlineDynamicUpdater：动态大纲更新器，基于章节内容偏差分析自动调整未来章节大纲。
+- CharacterAutoDetector：角色自动检测器，从章节内容中自动识别并注册新角色。
 - ContinuityIntegrationModule：连贯性保障集成模块，将所有连贯性保障组件集成到统一接口中。
 - ConstraintInferenceEngine：约束推断引擎，从上一章内容中自动推断读者期待和连贯性约束。
 - ValidationEngine：验证引擎，使用 LLM 验证新章节是否满足连贯性约束。
@@ -190,6 +233,8 @@ LOG --> SA
 - OutlineQualityEvaluator：大纲质量评估器，扩展现有的质量评估维度。
 - EnhancedContextManager：增强型上下文管理器，采用四层记忆架构确保关键信息不丢失。
 - ThemeGuardian：主题守护者，负责定义小说核心主题并审查内容一致性。
+- OutlineService：大纲服务，提供大纲生成、分解、验证和版本管理功能。
+- GenerationService：生成服务，编排整个小说生成流程，集成动态更新和角色检测。
 - QwenClient：DashScope/OpenAI兼容的大模型客户端，支持重试与流式输出。
 - CostTracker：Token用量与成本统计，按模型定价计算累计成本。
 - Settings与LoggingConfig：配置与日志基础设施。
@@ -197,6 +242,8 @@ LOG --> SA
 **章节来源**
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
 - [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
@@ -208,13 +255,15 @@ LOG --> SA
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
 - [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
 - [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
+- [backend/services/outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
+- [backend/services/generation_service.py:34-1707](file://backend/services/generation_service.py#L34-L1707)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
+- [backend/config.py:5-156](file://backend/config.py#L5-L156)
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
 
 ## 架构总览
-系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎和统一的连贯性保障模块：
+系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统和角色自动检测系统：
 - 通过AgentCommunicator实现智能体间的异步消息传递
 - 通过ContinuityIntegrationModule实现统一的连贯性保障接口
 - 通过ConstraintInferenceEngine实现基于 LLM 的约束推断
@@ -223,6 +272,10 @@ LOG --> SA
 - 通过TeamContext实现团队协作和上下文共享
 - 通过ChapterOutlineMapper实现章节级任务管理和进度追踪
 - 通过OutlineIterationController和OutlineQualityEvaluator实现大纲级别的迭代优化
+- 通过OutlineDynamicUpdater实现动态大纲更新功能
+- 通过CharacterAutoDetector实现角色自动检测功能
+- 通过GenerationService集成所有功能到统一的生成流程
+- 通过OutlineService提供大纲管理服务
 - 通过SpecificAgents实现小说生成的各个阶段
 - 通过QwenClient和CostTracker实现大模型调用与成本追踪
 
@@ -230,6 +283,9 @@ LOG --> SA
 sequenceDiagram
 participant Agent as "SpecificAgents"
 participant Comm as "AgentCommunicator"
+participant GS as "GenerationService"
+participant ODUE as "OutlineDynamicUpdater"
+participant CAD as "CharacterAutoDetector"
 participant CIM as "ContinuityIntegrationModule"
 participant CIE as "ConstraintInferenceEngine"
 participant VE as "ValidationEngine"
@@ -241,30 +297,40 @@ participant OQE as "OutlineQualityEvaluator"
 participant Qwen as "QwenClient"
 participant Tracker as "CostTracker"
 Agent->>Comm : 注册Agent
-Agent->>CIM : 连贯性保障检查
+Agent->>GS : 触发章节生成
+GS->>ODUE : 每N章触发动态更新
+ODUE->>ODUE : 偏差分析
+ODUE->>Qwen : 调用大模型
+Qwen-->>ODUE : 返回更新方案
+ODUE->>GS : 应用大纲更新
+GS->>CAD : 章节生成后检测角色
+CAD->>CAD : LLM提取角色信息
+CAD->>CAD : 多层去重过滤
+CAD->>Qwen : 调用大模型
+Qwen-->>CAD : 返回角色列表
+CAD->>GS : 注册新角色
+GS->>CIM : 连贯性保障检查
 CIM->>CIE : 推断约束
 CIE-->>CIM : 返回约束列表
 CIM->>VE : 验证章节过渡
 VE-->>CIM : 返回验证报告
-CIM-->>Agent : 返回连贯性检查结果
-Agent->>RL : 执行质量评估循环
+CIM-->>GS : 返回连贯性检查结果
+GS->>RL : 执行质量评估循环
 RL->>Qwen : 调用大模型
 Qwen-->>RL : 返回评估结果
 RL->>TC : 记录审查反馈
 RL->>Tracker : 记录Token使用
-RL-->>Agent : 返回最终结果
-Agent->>COM : 映射章节大纲
-COM-->>Agent : 返回章节任务
-Agent->>OIC : 大纲迭代优化
-OIC->>OQE : 大纲质量评估
-OQE-->>OIC : 返回评估结果
-Agent-->>Comm : 发送完成消息
+RL-->>GS : 返回最终结果
+GS-->>Agent : 发送完成消息
 Comm-->>Agent : 接收后续任务
 ```
 
 **图表来源**
 - [agents/specific_agents.py:37-505](file://agents/specific_agents.py#L37-L505)
 - [agents/agent_communicator.py:91-135](file://agents/agent_communicator.py#L91-L135)
+- [backend/services/generation_service.py:1227-1332](file://backend/services/generation_service.py#L1227-L1332)
+- [agents/outline_dynamic_updater.py:82-195](file://agents/outline_dynamic_updater.py#L82-L195)
+- [backend/services/character_auto_detector.py:44-105](file://backend/services/character_auto_detector.py#L44-L105)
 - [agents/continuity_integration_module.py:176-352](file://agents/continuity_integration_module.py#L176-L352)
 - [agents/continuity_inference.py:72-144](file://agents/continuity_inference.py#L72-L144)
 - [agents/continuity_validation.py:86-145](file://agents/continuity_validation.py#L86-L145)
@@ -344,12 +410,142 @@ Comm-->>Receiver : processed
 - 任务处理：Agent基类在任务处理异常时设置状态为ERROR，并记录日志；调度器在任务完成消息缺失或UUID解析失败时进行保护性处理。
 - 连贯性保障：ContinuityIntegrationModule对约束推断和验证失败进行保护性处理，返回默认结果而非中断流程。
 - 大纲优化：OutlineIterationController提供成本控制和迭代终止机制，防止无限循环。
+- 动态更新：OutlineDynamicUpdater对LLM调用失败进行保护性处理，返回空报告而非中断流程。
+- 角色检测：CharacterAutoDetector对LLM调用失败进行保护性处理，返回空列表而非中断流程。
 
 **章节来源**
 - [llm/qwen_client.py:65-161](file://llm/qwen_client.py#L65-L161)
 - [agents/agent_scheduler.py:191-220](file://agents/agent_scheduler.py#L191-L220)
 - [agents/continuity_integration_module.py:141-144](file://agents/continuity_integration_module.py#L141-L144)
 - [agents/outline_iteration_controller.py:68-123](file://agents/outline_iteration_controller.py#L68-L123)
+- [agents/outline_dynamic_updater.py:263-265](file://agents/outline_dynamic_updater.py#L263-L265)
+- [backend/services/character_auto_detector.py:155-157](file://backend/services/character_auto_detector.py#L155-L157)
+
+## 动态大纲更新系统
+
+### OutlineDynamicUpdater架构设计
+OutlineDynamicUpdater是一个独立的智能体组件，专门负责基于章节内容偏差分析来动态调整未来章节的大纲。系统采用三层处理流程：偏差分析、更新决策、方案应用。
+
+```mermaid
+classDiagram
+class DeviationReport {
++character_deviation : float
++plot_deviation : float
++pacing_deviation : float
++foreshadowing_deviation : float
++overall_deviation : float
++details : Dict[str, Any]
++major_deviations : List[str]
++needs_update : bool
++compute_overall() float
+}
+class OutlineUpdatePlan {
++updated_volumes : List[Dict]
++updated_sub_plots : List[Dict]
++updated_key_turning_points : List[Dict]
++updated_main_plot : Dict
++updated_climax_chapter : int
++change_summary : List[str]
++affected_chapter_range : Tuple[int, int]
+}
+class OutlineDynamicUpdater {
++client : QwenClient
++cost_tracker : CostTracker
++deviation_threshold : float
++pm : PromptManager
++run_dynamic_update(db, novel_id, current_chapter, recent_chapters, outline_data, world_setting, characters) Dict[str, Any]
++analyze_deviation(recent_chapters, outline_data, current_chapter) DeviationReport
++generate_outline_update(outline_data, deviation, current_chapter, world_setting, characters) OutlineUpdatePlan
++apply_update(db, novel_id, update_plan, current_chapter, deviation_report) Dict[str, Any]
++_extract_outline_plan_for_chapters(outline_data, recent_chapters, current_chapter) str
++_compute_affected_range(plan, outline_data, current_chapter) Tuple[int, int]
+}
+OutlineDynamicUpdater --> DeviationReport
+OutlineDynamicUpdater --> OutlineUpdatePlan
+```
+
+**图表来源**
+- [agents/outline_dynamic_updater.py:25-745](file://agents/outline_dynamic_updater.py#L25-L745)
+
+### 偏差分析与评估机制
+系统通过多维度偏差分析来评估实际章节内容与大纲计划的偏离程度，采用加权平均算法计算综合偏差分：
+
+- 角色偏差（权重30%）：评估角色发展、出场频率、角色关系等与大纲计划的偏离
+- 情节偏差（权重35%）：评估主线剧情推进、转折点发生、情节逻辑等与大纲计划的偏离  
+- 节奏偏差（权重20%）：评估张力循环、高潮安排、节奏变化等与大纲计划的偏离
+- 伏笔偏差（权重15%）：评估伏笔埋设、发展、回收等与大纲计划的偏离
+
+**章节来源**
+- [agents/outline_dynamic_updater.py:25-745](file://agents/outline_dynamic_updater.py#L25-L745)
+
+### 更新决策与应用流程
+系统采用阈值驱动的更新决策机制，只有当综合偏差分超过预设阈值时才会执行大纲更新。更新应用采用增量更新策略，仅修改未来章节的大纲内容，确保已完成章节不受影响。
+
+**章节来源**
+- [agents/outline_dynamic_updater.py:82-195](file://agents/outline_dynamic_updater.py#L82-L195)
+- [agents/outline_dynamic_updater.py:360-474](file://agents/outline_dynamic_updater.py#L360-L474)
+
+## 角色自动检测系统
+
+### CharacterAutoDetector架构设计
+CharacterAutoDetector是一个独立的服务组件，专门负责从章节内容中自动识别并注册新角色。系统采用多层去重过滤策略，确保只注册真正的新角色。
+
+```mermaid
+classDiagram
+class CharacterAutoDetector {
++db : AsyncSession
++client : QwenClient
++cost_tracker : CostTracker
++pm : PromptManager
++detect_and_register_new_characters(novel_id, chapter_number, chapter_content, existing_characters) List[Character]
++_extract_characters_from_content(chapter_content, chapter_number, existing_character_names) List[Dict[str, Any]]
++_filter_new_characters(extracted, existing) List[Dict[str, Any]]
++_register_characters(novel_id, chapter_number, new_chars) List[Character]
++_normalize_name(name) str
++_extract_json_array(text) List[Dict[str, Any]]
+}
+class CharacterFilterStrategy {
+<<interface>>
++filter(extracted, existing) List[Dict[str, Any]]
+}
+class ExactMatchFilter {
++filter(extracted, existing) List[Dict[str, Any]]
+}
+class SubstringFilter {
++filter(extracted, existing) List[Dict[str, Any]]
+}
+class VariantFilter {
++filter(extracted, existing) List[Dict[str, Any]]
+}
+class ConfidenceFilter {
++filter(extracted, existing) List[Dict[str, Any]]
+}
+CharacterAutoDetector --> CharacterFilterStrategy
+CharacterFilterStrategy <|-- ExactMatchFilter
+CharacterFilterStrategy <|-- SubstringFilter
+CharacterFilterStrategy <|-- VariantFilter
+CharacterFilterStrategy <|-- ConfidenceFilter
+```
+
+**图表来源**
+- [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
+
+### 多层去重过滤策略
+系统采用四层去重过滤策略，确保只返回真正的新角色：
+
+1. **精确名字匹配**：使用标准化后的姓名进行精确匹配，避免重复注册
+2. **子串包含检查**：检查新角色名与现有角色名的子串关系，处理简称与全名的情况
+3. **别名交叉检查**：检查角色别名与现有角色的匹配关系
+4. **置信度阈值过滤**：基于LLM输出的置信度进行过滤，低于阈值的角色不注册
+
+**章节来源**
+- [backend/services/character_auto_detector.py:159-257](file://backend/services/character_auto_detector.py#L159-L257)
+
+### 角色注册与回填机制
+系统提供完整的角色注册流程，包括角色信息提取、去重过滤、数据库注册和章节关联回填。注册的角色具有标准的角色属性，包括角色类型、性别、首次出现章节等。
+
+**章节来源**
+- [backend/services/character_auto_detector.py:259-330](file://backend/services/character_auto_detector.py#L259-L330)
 
 ## 连贯性保障系统
 
@@ -657,8 +853,14 @@ ValidationReport --> ChapterTransition
 **图表来源**
 - [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 
+### PlotOutline模型增强
+PlotOutline模型新增了动态更新相关字段，支持大纲版本管理和更新历史追踪：
+
+- **version**：大纲版本号，每次动态更新自动+1
+- **update_history**：动态更新历史记录，包含更新时间、触发章节、偏差分数、变更摘要等信息
+
 **章节来源**
-- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
+- [core/models/plot_outline.py:95-114](file://core/models/plot_outline.py#L95-L114)
 
 ## 多阶段质量评估系统
 
@@ -1011,12 +1213,16 @@ OutlineQualityEvaluator --> OutlineQualityScore
 ## 依赖关系分析
 - 组件耦合：
   - SpecificAgents依赖AgentCommunicator与QwenClient/CostTracker/PromptManager。
+  - OutlineDynamicUpdater依赖QwenClient、CostTracker和PromptManager。
+  - CharacterAutoDetector依赖QwenClient、CostTracker和PromptManager。
   - ContinuityIntegrationModule依赖EnhancedContextManager、ThemeGuardian、ChapterOutlineMapper、CharacterConsistencyTracker、ForeshadowingAutoInjector、PreventionContinuityChecker。
   - ConstraintInferenceEngine和ValidationEngine依赖ContinuityModels。
   - ReviewLoopBase依赖QualityReport、ReviewResult、IssueTracker等基础组件。
   - TeamContext提供跨Agent的状态共享和协作机制。
   - ChapterOutlineMapper依赖TeamContext进行上下文构建。
   - OutlineIterationController和OutlineQualityEvaluator提供大纲级别的质量控制。
+  - GenerationService集成所有功能到统一的生成流程。
+  - OutlineService提供大纲管理服务。
 - 外部依赖：
   - DashScope/OpenAI SDK用于大模型推理。
   - Settings提供配置注入，LoggingConfig提供统一日志。
@@ -1024,12 +1230,17 @@ OutlineQualityEvaluator --> OutlineQualityScore
   - 并发环境下消息队列与任务状态更新需保持原子性，已在关键路径加锁。
   - 连贯性保障过程中的约束推断和验证需要合理配置阈值。
   - 大纲优化过程中的成本控制和迭代终止机制需要合理配置阈值。
+  - 动态更新和角色检测的LLM调用需要合理的重试和降级策略。
 
 ```mermaid
 graph LR
 SA["SpecificAgents"] --> AC["AgentCommunicator"]
 SA --> QC["QwenClient"]
 SA --> CT["CostTracker"]
+ODU["OutlineDynamicUpdater"] --> QC
+ODU --> CT
+CAD["CharacterAutoDetector"] --> QC
+CAD --> CT
 CIM["ContinuityIntegrationModule"] --> ECM["EnhancedContextManager"]
 CIM --> TG["ThemeGuardian"]
 CIM --> COM["ChapterOutlineMapper"]
@@ -1048,12 +1259,16 @@ TC --> TL["TimelineEvent"]
 COM --> COT["ChapterOutlineTask"]
 COM --> OVR["OutlineValidationReport"]
 OIC["OutlineIterationController"] --> OQE["OutlineQualityEvaluator"]
-QC --> CFG["Settings"]
+GS["GenerationService"] --> ODUE["OutlineDynamicUpdater"]
+GS --> CAD
+OS["OutlineService"] --> CFG["Settings"]
 LOG --> SA
 ```
 
 **图表来源**
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
 - [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
@@ -1063,14 +1278,18 @@ LOG --> SA
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
+- [backend/services/generation_service.py:1227-1332](file://backend/services/generation_service.py#L1227-L1332)
+- [backend/services/outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
+- [backend/config.py:5-156](file://backend/config.py#L5-L156)
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
 
 **章节来源**
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
+- [agents/outline_dynamic_updater.py:1-745](file://agents/outline_dynamic_updater.py#L1-L745)
+- [backend/services/character_auto_detector.py:1-422](file://backend/services/character_auto_detector.py#L1-L422)
 - [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
 - [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
 - [agents/continuity_validation.py:1-363](file://agents/continuity_validation.py#L1-L363)
@@ -1080,10 +1299,12 @@ LOG --> SA
 - [agents/chapter_outline_mapper.py:1-1109](file://agents/chapter_outline_mapper.py#L1-L1109)
 - [agents/outline_iteration_controller.py:1-404](file://agents/outline_iteration_controller.py#L1-L404)
 - [agents/outline_quality_evaluator.py:1-440](file://agents/outline_quality_evaluator.py#L1-L440)
+- [backend/services/generation_service.py:1-1707](file://backend/services/generation_service.py#L1-L1707)
+- [backend/services/outline_service.py:1-932](file://backend/services/outline_service.py#L1-L932)
 - [agents/agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
 - [llm/cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
-- [backend/config.py:1-59](file://backend/config.py#L1-L59)
+- [backend/config.py:1-156](file://backend/config.py#L1-L156)
 - [core/logging_config.py:1-55](file://core/logging_config.py#L1-L55)
 
 ## 性能考量
@@ -1096,11 +1317,14 @@ LOG --> SA
 - 连贯性检查：ContinuityIntegrationModule采用分层检查策略，先进行快速筛选再进行深度分析。
 - 约束推断优化：ConstraintInferenceEngine提供多策略解析，确保约束推断的稳定性。
 - 验证引擎优化：ValidationEngine区分连贯性问题和艺术性打破期待，避免过度严格的标准。
+- 动态更新优化：OutlineDynamicUpdater采用阈值驱动的更新策略，避免频繁更新造成性能问题。
+- 角色检测优化：CharacterAutoDetector采用多层去重策略，减少重复处理和数据库操作。
 - 可观测性：统一日志与消息历史，便于定位瓶颈与异常。
 - 扩展性建议：
   - 引入限流与熔断（如令牌桶/滑动窗口），防止LLM调用峰值冲击。
   - 任务队列持久化与重试策略，增强可靠性。
   - 负载均衡：按Agent类型与资源占用动态分配任务，避免热点。
+  - 缓存策略：对常用的大纲数据和角色信息进行缓存，提高访问速度。
 
 ## 故障排查指南
 - Agent未启动/状态异常
@@ -1111,6 +1335,14 @@ LOG --> SA
 - 成本统计异常
   - 确认CostTracker的record调用是否覆盖所有Agent调用路径。
   - 检查模型定价表与Token统计是否一致。
+- 动态更新异常
+  - 检查OutlineDynamicUpdater的偏差分析是否成功。
+  - 确认LLM调用的JSON解析是否正确。
+  - 验证数据库更新操作是否成功提交。
+- 角色检测异常
+  - 检查CharacterAutoDetector的LLM调用是否成功。
+  - 确认多层去重过滤逻辑是否正确执行。
+  - 验证角色注册和章节回填操作是否成功。
 - 连贯性保障异常
   - 检查ContinuityIntegrationModule的组件初始化顺序。
   - 确认EnhancedContextManager的上下文构建逻辑。
@@ -1129,15 +1361,16 @@ LOG --> SA
 - 大纲优化失败
   - 检查OutlineIterationController的成本阈值和迭代次数配置。
   - 验证OutlineQualityEvaluator的评估维度权重设置。
-- 连贯性保障异常
-  - 检查ContinuityIntegrationModule的组件初始化顺序。
-  - 确认EnhancedContextManager的上下文构建逻辑。
-  - 验证ThemeGuardian的主题定义提取是否正确。
+- 生成服务集成问题
+  - 检查GenerationService的动态更新触发逻辑。
+  - 确认角色检测的集成是否正确执行。
 
 **章节来源**
 - [agents/agent_communicator.py:80-135](file://agents/agent_communicator.py#L80-L135)
 - [llm/qwen_client.py:65-161](file://llm/qwen_client.py#L65-L161)
 - [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
+- [agents/outline_dynamic_updater.py:263-265](file://agents/outline_dynamic_updater.py#L263-L265)
+- [backend/services/character_auto_detector.py:155-157](file://backend/services/character_auto_detector.py#L155-L157)
 - [agents/continuity_integration_module.py:98-123](file://agents/continuity_integration_module.py#L98-L123)
 - [agents/continuity_inference.py:141-144](file://agents/continuity_inference.py#L141-L144)
 - [agents/continuity_validation.py:138-145](file://agents/continuity_validation.py#L138-L145)
@@ -1146,13 +1379,16 @@ LOG --> SA
 - [agents/chapter_outline_mapper.py:463-566](file://agents/chapter_outline_mapper.py#L463-L566)
 - [agents/outline_iteration_controller.py:68-123](file://agents/outline_iteration_controller.py#L68-L123)
 - [agents/outline_quality_evaluator.py:143-157](file://agents/outline_quality_evaluator.py#L143-L157)
+- [backend/services/generation_service.py:1227-1332](file://backend/services/generation_service.py#L1227-L1332)
 
 ## 结论
-该系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎和统一的连贯性保障模块。通过ContinuityIntegrationModule提供的统一接口、ConstraintInferenceEngine提供的基于 LLM 的约束推断、ValidationEngine提供的章节过渡验证、ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、EnhancedContextManager的四层记忆架构、ThemeGuardian的主题一致性检查，系统具备了强大的连贯性保障能力和团队协作能力。未来可在限流熔断、任务持久化与负载均衡方面进一步增强，以应对更高并发与更复杂业务场景。
+该系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统和角色自动检测系统。通过OutlineDynamicUpdater提供的动态大纲更新能力、CharacterAutoDetector提供的角色自动检测能力、ContinuityIntegrationModule提供的统一接口、ConstraintInferenceEngine提供的基于 LLM 的约束推断、ValidationEngine提供的章节过渡验证、ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、EnhancedContextManager的四层记忆架构、ThemeGuardian的主题一致性检查，系统具备了强大的连贯性保障能力和团队协作能力。新增的动态大纲更新系统和角色自动检测系统进一步增强了系统的智能化水平和自动化程度，能够根据实际写作内容自动调整大纲和发现新角色，大大提高了小说生成的效率和质量。未来可在限流熔断、任务持久化与负载均衡方面进一步增强，以应对更高并发与更复杂业务场景。
 
 ## 附录
 - 启动方式：可通过scripts/start_agents.py启动Agent系统，自动注册并运行五类Agent，支持信号处理与成本统计。
 - 配置项：Settings提供DashScope API Key、模型、数据库、Redis、Celery等配置；LoggingConfig统一日志级别与输出。
+- 动态更新配置：ENABLE_DYNAMIC_OUTLINE_UPDATE、OUTLINE_UPDATE_INTERVAL、OUTLINE_DEVIATION_THRESHOLD等配置项控制动态更新行为。
+- 角色检测配置：ENABLE_CHARACTER_AUTO_DETECTION、CHARACTER_DETECTION_CONFIDENCE_THRESHOLD、CHARACTER_DETECTION_MAX_CONTENT_LENGTH等配置项控制角色检测行为。
 - 连贯性保障：ContinuityIntegrationModule提供统一的连贯性检查和优化接口。
 - 约束推断：ConstraintInferenceEngine支持多策略解析，确保约束推断的稳定性。
 - 验证引擎：ValidationEngine区分连贯性问题和艺术性打破期待，避免过度严格的标准。
@@ -1160,12 +1396,17 @@ LOG --> SA
 - 团队协作：TeamContext提供线程安全的上下文共享，支持异步和同步操作模式。
 - 章节管理：ChapterOutlineMapper支持张力循环分析和智能任务分配，提供完整的进度追踪功能。
 - 大纲优化：OutlineIterationController和OutlineQualityEvaluator提供全面的大纲质量控制和优化能力。
-- 增强CrewManager：提供综合的大纲完善功能和连贯性保障集成，提升整体质量控制水平。
+- 增强上下文管理：EnhancedContextManager提供四层记忆架构，确保关键信息不丢失。
+- 主题守护者：ThemeGuardian提供主题一致性检查和评估功能。
+- 大纲服务：OutlineService提供大纲生成、分解、验证和版本管理功能。
+- 生成服务：GenerationService集成所有功能到统一的生成流程，支持动态更新和角色检测。
 
 **章节来源**
 - [scripts/start_agents.py:37-204](file://scripts/start_agents.py#L37-L204)
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
+- [backend/config.py:5-156](file://backend/config.py#L5-L156)
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
+- [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
 - [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
@@ -1177,3 +1418,5 @@ LOG --> SA
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
 - [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
 - [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
+- [backend/services/outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
+- [backend/services/generation_service.py:34-1707](file://backend/services/generation_service.py#L34-L1707)

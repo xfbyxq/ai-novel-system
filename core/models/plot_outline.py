@@ -14,7 +14,62 @@ class PlotOutline(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     novel_id = Column(UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, unique=True)
     structure_type = Column(String(50), default="three_act")  # 三幕式/英雄之旅
-    volumes = Column(JSONB, default=list)  # [{volume_num, title, summary, chapters, key_events}]
+    volumes = Column(JSONB, default=list)  # 卷信息列表，增强结构：
+    # [
+    #     {
+    #         "number": 1,                    # 卷号
+    #         "title": "卷名",                 # 卷标题
+    #         "summary": "卷概述",              # 卷概要 (200-300 字)
+    #         "chapters": [1, 20],            # 章节范围 [start, end]
+    #         "core_conflict": "核心冲突",     # 本卷核心矛盾
+    #         "main_events": [                # 主线事件列表
+    #             {
+    #                 "chapter": 3,
+    #                 "event": "事件描述",
+    #                 "impact": "影响"
+    #             }
+    #         ],
+    #         "key_turning_points": [         # 关键转折点
+    #             {
+    #                 "chapter": 5,
+    #                 "event": "转折事件",
+    #                 "significance": "重要性"
+    #             }
+    #         ],
+    #         "tension_cycles": [             # 张力循环 (欲扬先抑)
+    #             {
+    #                 "chapters": [1, 7],
+    #                 "suppress_events": ["压制事件 1", "压制事件 2"],
+    #                 "release_event": "释放事件",
+    #                 "tension_level": 7.5    # 紧张度 (0-10)
+    #             }
+    #         ],
+    #         "emotional_arc": "情感弧线",    # 情感变化曲线描述
+    #         "character_arcs": [             # 角色发展弧线
+    #             {
+    #                 "character_id": "xxx",
+    #                 "arc_description": "成长描述",
+    #                 "key_moments": [1, 5, 10]
+    #             }
+    #         ],
+    #         "side_plots": [                 # 支线情节
+    #             {
+    #                 "name": "支线名",
+    #                 "description": "描述",
+    #                 "chapters": [2, 8]
+    #             }
+    #         ],
+    #         "foreshadowing": [              # 伏笔分配
+    #             {
+    #                 "description": "伏笔描述",
+    #                 "setup_chapter": 2,
+    #                 "payoff_chapter": 15
+    #             }
+    #         ],
+    #         "themes": ["主题 1", "主题 2"],  # 本卷主题
+    #         "word_count_range": [20000, 30000]  # 字数范围
+    #     }
+    # ]
     
     # 主线剧情详细字段 - 增强版
     main_plot = Column(JSONB, default=dict)  # 保留向后兼容
