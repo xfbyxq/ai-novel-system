@@ -95,6 +95,7 @@ class PlotOutlineResponse(BaseModel):
         description="关键转折点列表，每项格式: {chapter: 10, event: '获得神器', impact: '实力飞跃'}"
     )
     climax_chapter: Optional[int] = Field(default=None, description="高潮章节号")
+    version: int = Field(default=1, description="大纲版本号")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="最后更新时间")
 

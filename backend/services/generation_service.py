@@ -73,6 +73,10 @@ class GenerationService:
         self.persistent_memory = get_novel_memory_adapter()
         # 新增：TeamContext 缓存（按 novel_id 索引）
         self._team_contexts: dict[str, NovelTeamContext] = {}
+        # 章节写作计数器（用于大纲动态更新触发）
+        self._chapter_write_counter: dict[str, int] = {}
+        # 记录小说最后活跃时间，用于清理长期未使用的计数器
+        self._last_active_time: dict[str, datetime] = {}
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行企划阶段并保存结果到数据库。"""
@@ -728,6 +732,26 @@ class GenerationService:
                     updates=state
                 )
 
+            # ===== 新增：角色自动检测 =====
+            if settings.ENABLE_CHARACTER_AUTO_DETECTION:
+                try:
+                    from backend.services.character_auto_detector import CharacterAutoDetector
+                    detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
+                    new_characters = await detector.detect_and_register_new_characters(
+                        novel_id=novel_id,
+                        chapter_number=chapter_number,
+                        chapter_content=final_content,
+                        existing_characters=list(novel.characters),
+                    )
+                    if new_characters:
+                        logger.info(
+                            f"第{chapter_number}章检测到 {len(new_characters)} 个新角色: "
+                            f"{[c.name for c in new_characters]}"
+                        )
+                except Exception as e:
+                    logger.warning(f"新角色检测失败（不影响章节生成）: {e}")
+            # ===== 角色自动检测结束 =====
+
             # 更新小说统计
             novel.chapter_count = (novel.chapter_count or 0) + 1
             novel.word_count = (novel.word_count or 0) + word_count
@@ -763,6 +787,18 @@ class GenerationService:
             novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
 
             await self.db.commit()
+
+            # ===== 新增：大纲动态更新触发 =====
+            if settings.ENABLE_DYNAMIC_OUTLINE_UPDATE:
+                novel_id_str = str(novel_id)
+                self._chapter_write_counter[novel_id_str] = (
+                    self._chapter_write_counter.get(novel_id_str, 0) + 1
+                )
+                # 更新最后活跃时间
+                self._last_active_time[novel_id_str] = datetime.now()
+                if self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL == 0:
+                    await self._try_dynamic_outline_update(novel_id, chapter_number)
+            # ===== 大纲动态更新触发结束 =====
 
             logger.info(
                 f"第{chapter_number}章写作完成，"
@@ -1133,6 +1169,27 @@ class GenerationService:
         )
         self.memory_service.update_chapter_summary(str(novel_id), chapter_number, chapter_summary)
 
+        # ===== 新增：角色自动检测 =====
+        if settings.ENABLE_CHARACTER_AUTO_DETECTION:
+            try:
+                from backend.services.character_auto_detector import CharacterAutoDetector
+                detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
+                new_characters = await detector.detect_and_register_new_characters(
+                    novel_id=novel_id,
+                    chapter_number=chapter_number,
+                    chapter_content=final_content,
+                    existing_characters=list(novel.characters),
+                )
+                if new_characters:
+                    logger.info(
+                        f"[_write_single_chapter] 第{chapter_number}章检测到 "
+                        f"{len(new_characters)} 个新角色: "
+                        f"{[c.name for c in new_characters]}"
+                    )
+            except Exception as e:
+                logger.warning(f"新角色检测失败（不影响章节生成）: {e}")
+        # ===== 角色自动检测结束 =====
+
         # 更新小说统计
         novel.chapter_count = (novel.chapter_count or 0) + 1
         novel.word_count = (novel.word_count or 0) + word_count
@@ -1144,6 +1201,18 @@ class GenerationService:
 
         await self.db.commit()
 
+        # ===== 新增：大纲动态更新触发 =====
+        if settings.ENABLE_DYNAMIC_OUTLINE_UPDATE:
+            novel_id_str = str(novel_id)
+            self._chapter_write_counter[novel_id_str] = (
+                self._chapter_write_counter.get(novel_id_str, 0) + 1
+            )
+            # 更新最后活跃时间
+            self._last_active_time[novel_id_str] = datetime.now()
+            if self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL == 0:
+                await self._try_dynamic_outline_update(novel_id, chapter_number)
+        # ===== 大纲动态更新触发结束 =====
+
         return {
             "chapter_number": chapter_number,
             "title": chapter_plan.get("title", ""),
@@ -1153,7 +1222,136 @@ class GenerationService:
             "cost": cost_summary["total_cost"],
         }
 
+    # ==================== 大纲动态更新 ====================
+
+    async def _try_dynamic_outline_update(
+        self, novel_id: UUID, current_chapter: int
+    ) -> None:
+        """尝试执行大纲动态更新（不阻塞章节写作流程）"""
+        try:
+            logger.info(
+                f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}"
+            )
+
+            # 加载最近 N 章的摘要
+            interval = settings.OUTLINE_UPDATE_INTERVAL
+            recent_chapters = []
+            start_ch = max(1, current_chapter - interval + 1)
+            for ch_num in range(start_ch, current_chapter + 1):
+                summary = self.memory_service.get_chapter_summaries(str(novel_id)).get(
+                    str(ch_num), {}
+                )
+                if summary:
+                    summary["chapter_number"] = ch_num
+                    recent_chapters.append(summary)
+
+            if not recent_chapters:
+                logger.info("[DynamicOutline] 未找到最近章节摘要，跳过")
+                return
+
+            # 加载大纲、世界观、角色
+            result = await self.db.execute(
+                select(Novel)
+                .where(Novel.id == novel_id)
+                .options(
+                    selectinload(Novel.world_setting),
+                    selectinload(Novel.characters),
+                    selectinload(Novel.plot_outline),
+                )
+            )
+            novel = result.scalar_one_or_none()
+            if not novel or not novel.plot_outline:
+                logger.info("[DynamicOutline] 未找到小说或大纲，跳过")
+                return
+
+            po = novel.plot_outline
+            outline_data = {
+                "structure_type": po.structure_type,
+                "volumes": po.volumes or [],
+                "main_plot": po.main_plot or {},
+                "main_plot_detailed": po.main_plot_detailed or {},
+                "sub_plots": po.sub_plots or [],
+                "key_turning_points": po.key_turning_points or [],
+                "climax_chapter": po.climax_chapter,
+            }
+
+            world_setting_dict = {}
+            if novel.world_setting:
+                ws = novel.world_setting
+                world_setting_dict = {
+                    "world_name": ws.world_name,
+                    "world_type": ws.world_type,
+                    "power_system": ws.power_system or {},
+                    "geography": ws.geography or {},
+                }
+
+            characters_list = [
+                {
+                    "name": c.name,
+                    "role_type": c.role_type.value if hasattr(c.role_type, "value") else str(c.role_type or "minor"),
+                    "personality": c.personality or "",
+                }
+                for c in novel.characters
+            ]
+
+            # 执行动态更新
+            from agents.outline_dynamic_updater import OutlineDynamicUpdater
+
+            updater = OutlineDynamicUpdater(
+                client=self.client,
+                cost_tracker=self.cost_tracker,
+                deviation_threshold=settings.OUTLINE_DEVIATION_THRESHOLD,
+            )
+            update_result = await updater.run_dynamic_update(
+                db=self.db,
+                novel_id=novel_id,
+                current_chapter=current_chapter,
+                recent_chapters=recent_chapters,
+                outline_data=outline_data,
+                world_setting=world_setting_dict,
+                characters=characters_list,
+            )
+
+            if update_result.get("updated"):
+                logger.info(
+                    f"[DynamicOutline] 大纲已更新: "
+                    f"{update_result.get('change_summary', [])}"
+                )
+                await self.db.commit()
+            else:
+                logger.info(
+                    f"[DynamicOutline] 跳过更新: "
+                    f"{update_result.get('reason', '未知原因')}"
+                )
+
+        except Exception as e:
+            logger.warning(f"[DynamicOutline] 大纲动态更新失败（不影响章节生成）: {e}")
+        finally:
+            # 定期清理过期的计数器，防止内存泄漏
+            self._cleanup_expired_counters()
+
     # ==================== 辅助方法 ====================
+
+    def _cleanup_expired_counters(self, max_inactive_hours: int = 24):
+        """清理长期未活跃的小说计数器，防止内存泄漏
+        
+        Args:
+            max_inactive_hours: 最大非活跃小时数，默认24小时
+        """
+        from datetime import timedelta
+        
+        cutoff_time = datetime.now() - timedelta(hours=max_inactive_hours)
+        expired_novels = []
+        
+        for novel_id, last_active in self._last_active_time.items():
+            if last_active < cutoff_time:
+                expired_novels.append(novel_id)
+        
+        # 删除过期的小说计数器和活跃时间记录
+        for novel_id in expired_novels:
+            self._chapter_write_counter.pop(novel_id, None)
+            self._last_active_time.pop(novel_id, None)
+            logger.debug(f"清理过期计数器: {novel_id}")
 
     def _build_previous_context(self, novel_id: UUID, novel: Novel, chapter_number: int) -> str:
         """构建结构化的前置章节上下文

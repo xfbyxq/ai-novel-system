@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Spin, Empty, Tree, Card, Typography, Descriptions, Button, Space, Modal, List, Tag } from 'antd';
-import { RocketOutlined, EditOutlined, HistoryOutlined } from '@ant-design/icons';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Spin, Empty, Tree, Card, Typography, Descriptions, Button, Space, Modal, List, Tag, message } from 'antd';
+import { RocketOutlined, EditOutlined, HistoryOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { PlotOutline } from '@/api/types';
 import { getPlotOutline, getOutlineVersions } from '@/api/outlines';
 import { formatDate } from '@/utils/format';
@@ -33,6 +33,9 @@ export default function PlotOutlineTab({ novelId }: Props) {
   const [versionsVisible, setVersionsVisible] = useState(false);
   const [versions, setVersions] = useState<OutlineVersion[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  
+  // 添加轮询相关状态
+  const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchOutline = useCallback(async (nid: string) => {
     setLoading(true);
@@ -44,6 +47,21 @@ export default function PlotOutlineTab({ novelId }: Props) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // 刷新数据函数
+  const handleRefresh = useCallback(async () => {
+    await fetchOutline(novelId);
+    message.success('大纲数据已刷新');
+  }, [novelId, fetchOutline]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -114,9 +132,16 @@ export default function PlotOutlineTab({ novelId }: Props) {
           <Descriptions.Item label="结构类型">{outline.structure_type || '-'}</Descriptions.Item>
           <Descriptions.Item label="高潮章节">{outline.climax_chapter ?? '-'}</Descriptions.Item>
           <Descriptions.Item label="卷数">{volumes.length}</Descriptions.Item>
+          <Descriptions.Item label="大纲版本">v{outline.version || 1}</Descriptions.Item>
           <Descriptions.Item label="更新时间">{formatDate(outline.updated_at)}</Descriptions.Item>
         </Descriptions>
         <Space style={{ marginTop: 16 }}>
+          <Button 
+            icon={<ReloadOutlined />} 
+            onClick={handleRefresh}
+          >
+            刷新大纲
+          </Button>
           <Button 
             icon={<EditOutlined />} 
             onClick={() => {

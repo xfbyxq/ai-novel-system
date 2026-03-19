@@ -36,6 +36,22 @@ class PlotOutline(Base):
     key_turning_points = Column(JSONB, default=list)
     climax_chapter = Column(Integer, nullable=True)
     raw_content = Column(Text, nullable=True)  # Agent 原始输出
+
+    # 大纲动态更新相关字段
+    update_history = Column(JSONB, default=list)   # 动态更新历史记录
+    # update_history 结构：
+    # [
+    #     {
+    #         "version": 2,
+    #         "updated_at": "2026-03-19T12:00:00",
+    #         "trigger_chapter": 3,
+    #         "deviation_score": 7.2,
+    #         "change_summary": ["调整了第二卷支线走向", "新增转折点"],
+    #         "affected_chapters": [4, 5, 6, 7, 8]
+    #     }
+    # ]
+    version = Column(Integer, default=1)           # 大纲版本号，每次动态更新 +1
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

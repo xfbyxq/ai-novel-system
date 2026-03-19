@@ -120,6 +120,30 @@ class Settings(BaseSettings):
     MAX_CHAPTER_REVIEW_ITERATIONS: int = 5    # 章节审查最大迭代（从3增加到5）
     MAX_FIX_ITERATIONS: int = 3               # 连续性修复最大迭代（从2增加到3）
 
+    # --- 角色自动检测 ---
+    # 每章生成后自动检测内容中的新角色并注册到角色库
+    ENABLE_CHARACTER_AUTO_DETECTION: bool = True
+    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.6  # 置信度阈值，低于此值的角色不注册
+    CHARACTER_DETECTION_MAX_CONTENT_LENGTH: int = 6000      # 传入 LLM 的内容最大字符数
+
+    # --- 大纲动态更新 ---
+    # 每 N 章自动评估大纲偏差并更新未来章节的大纲
+    ENABLE_DYNAMIC_OUTLINE_UPDATE: bool = True
+    OUTLINE_UPDATE_INTERVAL: int = 3            # 每 N 章触发一次偏差评估
+    OUTLINE_DEVIATION_THRESHOLD: float = 6.0    # 偏差综合分超过此阈值才执行更新 (0-10)
+
+    def __init__(self, **values):
+        super().__init__(**values)
+        # 验证配置值的合理性
+        if self.CHARACTER_DETECTION_CONFIDENCE_THRESHOLD < 0 or self.CHARACTER_DETECTION_CONFIDENCE_THRESHOLD > 1:
+            raise ValueError("CHARACTER_DETECTION_CONFIDENCE_THRESHOLD must be between 0 and 1")
+        if self.OUTLINE_DEVIATION_THRESHOLD < 0 or self.OUTLINE_DEVIATION_THRESHOLD > 10:
+            raise ValueError("OUTLINE_DEVIATION_THRESHOLD must be between 0 and 10")
+        if self.OUTLINE_UPDATE_INTERVAL < 1:
+            raise ValueError("OUTLINE_UPDATE_INTERVAL must be at least 1")
+        if self.CHARACTER_DETECTION_MAX_CONTENT_LENGTH < 100:
+            raise ValueError("CHARACTER_DETECTION_MAX_CONTENT_LENGTH must be at least 100")
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

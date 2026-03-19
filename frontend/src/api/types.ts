@@ -140,6 +140,7 @@ export interface PlotOutline {
   sub_plots: unknown[] | null;
   key_turning_points: unknown[] | null;
   climax_chapter: number | null;
+  version: number;
   created_at: string;
   updated_at: string;
 }
