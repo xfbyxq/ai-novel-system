@@ -3,8 +3,7 @@
 <cite>
 **本文档引用的文件**
 - [agents/agent_manager.py](file://agents/agent_manager.py)
-- [agents/crew_manager.py](file://agents/crew_manager.py)
-- [agents/crew_manager_enhanced_example.py](file://agents/crew_manager_enhanced_example.py)
+- [agents/continuity_integration_module.py](file://agents/continuity_integration_module.py)
 - [agents/specific_agents.py](file://agents/specific_agents.py)
 - [agents/agent_dispatcher.py](file://agents/agent_dispatcher.py)
 - [agents/agent_scheduler.py](file://agents/agent_scheduler.py)
@@ -20,9 +19,12 @@
 - [agents/base/review_result.py](file://agents/base/review_result.py)
 - [agents/outline_iteration_controller.py](file://agents/outline_iteration_controller.py)
 - [agents/outline_quality_evaluator.py](file://agents/outline_quality_evaluator.py)
-- [agents/continuity_integration_module.py](file://agents/continuity_integration_module.py)
 - [agents/enhanced_context_manager.py](file://agents/enhanced_context_manager.py)
 - [agents/theme_guardian.py](file://agents/theme_guardian.py)
+- [agents/continuity_integration.py](file://agents/continuity_integration.py)
+- [agents/continuity_inference.py](file://agents/continuity_inference.py)
+- [agents/continuity_validation.py](file://agents/continuity_validation.py)
+- [agents/continuity_models.py](file://agents/continuity_models.py)
 - [llm/qwen_client.py](file://llm/qwen_client.py)
 - [llm/cost_tracker.py](file://llm/cost_tracker.py)
 - [backend/config.py](file://backend/config.py)
@@ -32,14 +34,12 @@
 
 ## 更新摘要
 **所做更改**
-- 新增多阶段质量评估系统，包括ReviewLoopBase、QualityReport、ReviewResult等核心组件
-- 新增团队协作机制，通过TeamContext实现Agent间的上下文共享和状态追踪
-- 新增章节大纲映射功能，提供章节级任务分解和进度追踪
-- 增强Agent通信和任务管理能力，支持动态迭代策略和成本控制
-- 新增OutlineIterationController和OutlineQualityEvaluator，提供大纲级别的迭代优化和质量评估
-- 新增增强的CrewManager综合优化功能，集成连贯性保障系统
-- 更新架构图以反映新的质量评估、协作机制和连贯性保障功能
-- 新增质量级别分类、问题追踪和进度摘要功能
+- 完全移除 NovelCrewManager 和相关协作机制，包括 CrewAI 风格的任务编排系统
+- 新增 ContinuityIntegrationModule 架构，提供统一的连贯性保障系统集成
+- 更新架构图以反映新的连贯性保障系统，替代原有的 CrewManager 协作机制
+- 移除多阶段质量评估系统中的 CrewManager 相关内容
+- 新增基于 LLM 的约束推断和验证引擎
+- 更新智能体通信协议和消息传递机制，移除 CrewManager 的任务分配功能
 
 ## 目录
 1. [引言](#引言)
@@ -47,12 +47,12 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [多阶段质量评估系统](#多阶段质量评估系统)
-7. [团队协作机制](#团队协作机制)
-8. [章节大纲映射功能](#章节大纲映射功能)
-9. [大纲迭代优化系统](#大纲迭代优化系统)
-10. [增强的CrewManager综合优化](#增强的crewmanager综合优化)
-11. [连贯性保障系统](#连贯性保障系统)
+6. [连贯性保障系统](#连贯性保障系统)
+7. [约束推断引擎](#约束推断引擎)
+8. [验证引擎](#验证引擎)
+9. [数据模型](#数据模型)
+10. [智能体通信协议](#智能体通信协议)
+11. [错误处理策略](#错误处理策略)
 12. [依赖关系分析](#依赖关系分析)
 13. [性能考量](#性能考量)
 14. [故障排查指南](#故障排查指南)
@@ -60,25 +60,21 @@
 16. [附录](#附录)
 
 ## 引言
-本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用增强的多阶段质量评估架构，集成了智能体类型设计、团队协作机制、章节大纲映射、大纲迭代优化和连贯性保障等功能。文档将深入解析：
-- 多阶段质量评估系统的设计与实现
-- 智能体类型设计与职责分工
-- 团队协作机制与上下文共享
-- 章节大纲映射与进度追踪
-- 大纲迭代优化与质量评估
-- 增强的CrewManager综合优化功能
+本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用全新的连贯性保障架构，集成了智能体类型设计、约束推断、验证引擎和统一的连贯性保障模块。文档将深入解析：
 - 连贯性保障系统的设计与实现
-- 任务编排系统（类型、流程、状态跟踪）
+- 智能体类型设计与职责分工
+- 基于 LLM 的约束推断和验证机制
+- 统一的连贯性保障模块集成
 - 智能体通信协议与消息传递机制
 - 错误处理与可观测性
 - 性能监控、负载均衡与扩展性设计
 
 ## 项目结构
-系统采用模块化的分层架构，包含智能体核心、质量评估、团队协作、章节管理、大纲优化和连贯性保障等多个子系统：
+系统采用模块化的分层架构，包含智能体核心、连贯性保障、质量评估、团队协作、章节管理、大纲优化等多个子系统：
 - agents：智能体与通信相关的核心实现
 - agents/base：质量评估和审查循环的基础组件
-- agents/outline_*：大纲级别的质量评估和迭代优化组件
 - agents/continuity_*：连贯性保障相关组件
+- agents/outline_*：大纲级别的质量评估和迭代优化组件
 - llm：大模型客户端与成本追踪
 - backend：后端服务与配置
 - core：通用日志与基础设施
@@ -89,6 +85,12 @@ graph TB
 subgraph "智能体层"
 AC["AgentCommunicator<br/>消息通信"]
 SA["SpecificAgents<br/>市场/策划/创作/编辑/发布"]
+end
+subgraph "连贯性保障系统"
+CIM["ContinuityIntegrationModule<br/>集成模块"]
+CIE["ConstraintInferenceEngine<br/>约束推断引擎"]
+VE["ValidationEngine<br/>验证引擎"]
+CM["ContinuityModels<br/>数据模型"]
 end
 subgraph "质量评估系统"
 RLB["ReviewLoopBase<br/>审查循环基类"]
@@ -110,11 +112,6 @@ COM["ChapterOutlineMapper<br/>大纲映射器"]
 COT["ChapterOutlineTask<br/>章节任务"]
 OVR["OutlineValidationReport<br/>验证报告"]
 end
-subgraph "连贯性保障"
-CIM["ContinuityIntegrationModule<br/>集成模块"]
-ECM["EnhancedContextManager<br/>增强上下文管理器"]
-TG["ThemeGuardian<br/>主题守护者"]
-end
 subgraph "LLM与成本"
 QC["QwenClient<br/>DashScope/OpenAI"]
 CT["CostTracker<br/>Token/成本统计"]
@@ -126,6 +123,9 @@ end
 SA --> AC
 SA --> QC
 SA --> CT
+CIM --> CIE
+CIM --> VE
+CIM --> CM
 RLB --> QR
 RLB --> RR
 RLB --> IE
@@ -136,8 +136,6 @@ TC --> CS
 TC --> TL
 COM --> COT
 COM --> OVR
-CIM --> ECM
-CIM --> TG
 QC --> CFG
 LOG --> SA
 ```
@@ -145,14 +143,15 @@ LOG --> SA
 **图表来源**
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
+- [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
+- [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 - [agents/base/review_loop_base.py:598-800](file://agents/base/review_loop_base.py#L598-L800)
 - [agents/team_context.py:162-591](file://agents/team_context.py#L162-L591)
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
-- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
-- [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
-- [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
 - [backend/config.py:5-59](file://backend/config.py#L5-L59)
@@ -161,14 +160,15 @@ LOG --> SA
 **章节来源**
 - [agents/agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
+- [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
+- [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
+- [agents/continuity_validation.py:1-363](file://agents/continuity_validation.py#L1-L363)
+- [agents/continuity_models.py:1-201](file://agents/continuity_models.py#L1-L201)
 - [agents/base/review_loop_base.py:1-800](file://agents/base/review_loop_base.py#L1-L800)
 - [agents/team_context.py:1-591](file://agents/team_context.py#L1-L591)
 - [agents/chapter_outline_mapper.py:1-1109](file://agents/chapter_outline_mapper.py#L1-L1109)
 - [agents/outline_iteration_controller.py:1-404](file://agents/outline_iteration_controller.py#L1-L404)
 - [agents/outline_quality_evaluator.py:1-440](file://agents/outline_quality_evaluator.py#L1-L440)
-- [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
-- [agents/enhanced_context_manager.py:1-536](file://agents/enhanced_context_manager.py#L1-L536)
-- [agents/theme_guardian.py:1-625](file://agents/theme_guardian.py#L1-L625)
 - [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
 - [llm/cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
 - [backend/config.py:1-59](file://backend/config.py#L1-L59)
@@ -177,6 +177,10 @@ LOG --> SA
 ## 核心组件
 - AgentCommunicator：消息通信中枢，提供注册、发送、接收、广播与历史记录能力。
 - SpecificAgents：五类智能体，分别承担市场分析、内容策划、创作、编辑、发布职责。
+- ContinuityIntegrationModule：连贯性保障集成模块，将所有连贯性保障组件集成到统一接口中。
+- ConstraintInferenceEngine：约束推断引擎，从上一章内容中自动推断读者期待和连贯性约束。
+- ValidationEngine：验证引擎，使用 LLM 验证新章节是否满足连贯性约束。
+- ContinuityModels：连贯性保障系统的数据模型，定义约束、验证报告和章节过渡记录的数据结构。
 - ReviewLoopBase：审查循环基类，提供多阶段质量评估的模板方法模式实现。
 - QualityReport：质量评估报告基类，支持不同领域的质量分析和降级处理。
 - ReviewResult：审查结果基类，支持不同类型的最终输出和迭代历史记录。
@@ -184,7 +188,6 @@ LOG --> SA
 - ChapterOutlineMapper：章节大纲映射器，提供章节级任务分解和进度追踪功能。
 - OutlineIterationController：大纲迭代优化控制器，管理大纲完善过程中的迭代优化。
 - OutlineQualityEvaluator：大纲质量评估器，扩展现有的质量评估维度。
-- ContinuityIntegrationModule：连贯性保障集成模块，整合所有连贯性保障组件。
 - EnhancedContextManager：增强型上下文管理器，采用四层记忆架构确保关键信息不丢失。
 - ThemeGuardian：主题守护者，负责定义小说核心主题并审查内容一致性。
 - QwenClient：DashScope/OpenAI兼容的大模型客户端，支持重试与流式输出。
@@ -194,12 +197,15 @@ LOG --> SA
 **章节来源**
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
+- [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
+- [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 - [agents/base/review_loop_base.py:598-800](file://agents/base/review_loop_base.py#L598-L800)
 - [agents/team_context.py:162-591](file://agents/team_context.py#L162-L591)
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
-- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
 - [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
@@ -208,13 +214,15 @@ LOG --> SA
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
 
 ## 架构总览
-系统采用增强的多阶段质量评估架构，集成了智能体协作、质量控制、进度追踪和连贯性保障：
+系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎和统一的连贯性保障模块：
 - 通过AgentCommunicator实现智能体间的异步消息传递
+- 通过ContinuityIntegrationModule实现统一的连贯性保障接口
+- 通过ConstraintInferenceEngine实现基于 LLM 的约束推断
+- 通过ValidationEngine实现章节过渡的验证机制
 - 通过ReviewLoopBase实现多阶段质量评估循环
 - 通过TeamContext实现团队协作和上下文共享
 - 通过ChapterOutlineMapper实现章节级任务管理和进度追踪
 - 通过OutlineIterationController和OutlineQualityEvaluator实现大纲级别的迭代优化
-- 通过ContinuityIntegrationModule实现连贯性保障系统
 - 通过SpecificAgents实现小说生成的各个阶段
 - 通过QwenClient和CostTracker实现大模型调用与成本追踪
 
@@ -222,16 +230,23 @@ LOG --> SA
 sequenceDiagram
 participant Agent as "SpecificAgents"
 participant Comm as "AgentCommunicator"
+participant CIM as "ContinuityIntegrationModule"
+participant CIE as "ConstraintInferenceEngine"
+participant VE as "ValidationEngine"
 participant RL as "ReviewLoopBase"
 participant TC as "TeamContext"
 participant COM as "ChapterOutlineMapper"
 participant OIC as "OutlineIterationController"
 participant OQE as "OutlineQualityEvaluator"
-participant CIM as "ContinuityIntegrationModule"
-participant ECM as "EnhancedContextManager"
 participant Qwen as "QwenClient"
 participant Tracker as "CostTracker"
 Agent->>Comm : 注册Agent
+Agent->>CIM : 连贯性保障检查
+CIM->>CIE : 推断约束
+CIE-->>CIM : 返回约束列表
+CIM->>VE : 验证章节过渡
+VE-->>CIM : 返回验证报告
+CIM-->>Agent : 返回连贯性检查结果
 Agent->>RL : 执行质量评估循环
 RL->>Qwen : 调用大模型
 Qwen-->>RL : 返回评估结果
@@ -243,10 +258,6 @@ COM-->>Agent : 返回章节任务
 Agent->>OIC : 大纲迭代优化
 OIC->>OQE : 大纲质量评估
 OQE-->>OIC : 返回评估结果
-Agent->>CIM : 连贯性保障检查
-CIM->>ECM : 构建增强上下文
-ECM-->>CIM : 返回上下文
-CIM-->>Agent : 返回连贯性检查结果
 Agent-->>Comm : 发送完成消息
 Comm-->>Agent : 接收后续任务
 ```
@@ -254,13 +265,14 @@ Comm-->>Agent : 接收后续任务
 **图表来源**
 - [agents/specific_agents.py:37-505](file://agents/specific_agents.py#L37-L505)
 - [agents/agent_communicator.py:91-135](file://agents/agent_communicator.py#L91-L135)
+- [agents/continuity_integration_module.py:176-352](file://agents/continuity_integration_module.py#L176-L352)
+- [agents/continuity_inference.py:72-144](file://agents/continuity_inference.py#L72-L144)
+- [agents/continuity_validation.py:86-145](file://agents/continuity_validation.py#L86-L145)
 - [agents/base/review_loop_base.py:659-800](file://agents/base/review_loop_base.py#L659-L800)
 - [agents/team_context.py:443-459](file://agents/team_context.py#L443-L459)
 - [agents/chapter_outline_mapper.py:246-305](file://agents/chapter_outline_mapper.py#L246-L305)
 - [agents/outline_iteration_controller.py:197-290](file://agents/outline_iteration_controller.py#L197-L290)
 - [agents/outline_quality_evaluator.py:105-142](file://agents/outline_quality_evaluator.py#L105-L142)
-- [agents/continuity_integration_module.py:176-249](file://agents/continuity_integration_module.py#L176-L249)
-- [agents/enhanced_context_manager.py:211-279](file://agents/enhanced_context_manager.py#L211-L279)
 - [llm/qwen_client.py:46-161](file://llm/qwen_client.py#L46-L161)
 - [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
 
@@ -302,40 +314,7 @@ BaseAgent <|-- PublishingAgent
 **章节来源**
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
 
-### 任务编排与执行流程（CrewAI风格）
-- 企划阶段：主题分析师→世界观架构师→角色设计师→情节架构师，按顺序串联，每步均调用QwenClient并记录成本。
-- 写作阶段：章节策划师→作家→编辑→连续性审查员，支持传入前几章摘要与角色状态，确保连贯性与质量评分。
-- NovelCrewManager提供JSON提取与错误处理，保障跨Agent数据交换的稳定性。
-- 增强的CrewManager集成连贯性保障系统，提供更全面的质量控制。
-
-```mermaid
-sequenceDiagram
-participant CM as "NovelCrewManager"
-participant CIM as "ContinuityIntegrationModule"
-participant PM as "PromptManager"
-participant Qwen as "QwenClient"
-participant CT as "CostTracker"
-CM->>PM : format(TASK, context...)
-CM->>Qwen : chat(system, prompt)
-Qwen-->>CM : {content, usage}
-CM->>CT : record(agent, prompt_tokens, completion_tokens)
-CM-->>CM : _extract_json_from_response(content)
-CM->>CIM : 连贯性保障检查
-CIM-->>CM : 返回检查结果
-CM-->>Caller : 企划/写作结果
-```
-
-**图表来源**
-- [agents/crew_manager.py:104-480](file://agents/crew_manager.py#L104-L480)
-- [agents/continuity_integration_module.py:251-352](file://agents/continuity_integration_module.py#L251-L352)
-- [llm/qwen_client.py:46-161](file://llm/qwen_client.py#L46-L161)
-- [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
-
-**章节来源**
-- [agents/crew_manager.py:19-480](file://agents/crew_manager.py#L19-L480)
-- [agents/crew_manager_enhanced_example.py:18-424](file://agents/crew_manager_enhanced_example.py#L18-L424)
-
-### Agent通信协议与消息传递机制
+### 智能体通信协议与消息传递机制
 - 注册：Agent通过AgentCommunicator.register_agent注册到消息队列。
 - 发送/接收：send_message与receive_message基于asyncio.Queue实现异步消息传递；支持超时与状态追踪。
 - 广播：broadcast_message向所有已注册Agent广播消息。
@@ -363,14 +342,323 @@ Comm-->>Receiver : processed
 ### 错误处理策略
 - LLM调用：QwenClient在OpenAI与DashScope模式下均实现指数退避重试；异常统一抛出，便于上层捕获。
 - 任务处理：Agent基类在任务处理异常时设置状态为ERROR，并记录日志；调度器在任务完成消息缺失或UUID解析失败时进行保护性处理。
-- Crew阶段：NovelCrewManager对JSON提取失败与异常进行捕获并记录，必要时回退至CrewAI风格执行路径。
+- 连贯性保障：ContinuityIntegrationModule对约束推断和验证失败进行保护性处理，返回默认结果而非中断流程。
 - 大纲优化：OutlineIterationController提供成本控制和迭代终止机制，防止无限循环。
 
 **章节来源**
 - [llm/qwen_client.py:65-161](file://llm/qwen_client.py#L65-L161)
 - [agents/agent_scheduler.py:191-220](file://agents/agent_scheduler.py#L191-L220)
-- [agents/crew_manager.py:37-102](file://agents/crew_manager.py#L37-L102)
+- [agents/continuity_integration_module.py:141-144](file://agents/continuity_integration_module.py#L141-L144)
 - [agents/outline_iteration_controller.py:68-123](file://agents/outline_iteration_controller.py#L68-L123)
+
+## 连贯性保障系统
+
+### ContinuityIntegrationModule架构设计
+ContinuityIntegrationModule将所有连贯性保障组件集成到一个统一的接口中，提供完整的连贯性检查流程。
+
+```mermaid
+classDiagram
+class ContinuityIntegrationResult {
++chapter_number : int
++enhanced_context : Optional[EnhancedContext]
++theme_report : Optional[ThemeConsistencyReport]
++outline_task : Optional[ChapterOutlineTask]
++outline_validation : Optional[OutlineValidationReport]
++character_validations : Dict[str, ConsistencyValidation]
++foreshadowing_report : Optional[ForeshadowingReport]
++prevention_report : Optional[PreventionReport]
++overall_score : float
++passed : bool
++issues : List[Dict[str, Any]]
++suggestions : List[str]
++to_dict() Dict[str, Any]
+}
+class ContinuityIntegrationModule {
++novel_id : str
++novel_data : Dict[str, Any]
++context_manager : EnhancedContextManager
++theme_guardian : ThemeGuardian
++outline_mapper : ChapterOutlineMapper
++character_trackers : Dict[str, CharacterConsistencyTracker]
++foreshadowing_injector : ForeshadowingAutoInjector
++prevention_checker : PreventionContinuityChecker
++prepare_chapter_generation(chapter_number, volume_number, chapter_summaries, chapter_contents, conflicts) Dict[str, Any]
++review_chapter_plan(chapter_plan, chapter_number, previous_chapter) ContinuityIntegrationResult
++_aggregate_issues_and_suggestions(result)
++get_statistics() Dict[str, Any]
+}
+ContinuityIntegrationModule --> ContinuityIntegrationResult
+```
+
+**图表来源**
+- [agents/continuity_integration_module.py:30-483](file://agents/continuity_integration_module.py#L30-L483)
+
+### 增强上下文管理器四层记忆架构
+EnhancedContextManager采用四层记忆架构，确保关键信息不会丢失：
+
+```mermaid
+classDiagram
+class CoreLayer {
++theme : str
++central_question : str
++main_conflict : str
++protagonist_goal : str
++genre : str
++to_prompt() str
+}
+class CriticalElement {
++id : str
++type : str
++content : str
++planted_chapter : int
++importance : int
++urgency : int
++status : str
++related_characters : List[str]
++metadata : Dict[str, Any]
++priority_score() int
++to_prompt() str
+}
+class RecentChapter {
++chapter_number : int
++title : str
++summary : str
++key_events : List[str]
++character_changes : Dict[str, str]
++ending_state : str
++foreshadowings : List[str]
++word_count : int
++to_prompt() str
+}
+class HistoricalIndex {
++volume_number : int
++volume_title : str
++chapter_range : tuple
++summary : str
++key_events : List[Dict[str, Any]]
++milestones : List[str]
++to_prompt() str
+}
+class EnhancedContext {
++core_layer : CoreLayer
++critical_layer : List[CriticalElement]
++recent_layer : List[RecentChapter]
++historical_layer : List[HistoricalIndex]
++current_chapter : int
++total_chapters : int
++created_at : str
++to_prompt() str
++estimate_tokens() int
+}
+EnhancedContext --> CoreLayer
+EnhancedContext --> CriticalElement
+EnhancedContext --> RecentChapter
+EnhancedContext --> HistoricalIndex
+```
+
+**图表来源**
+- [agents/enhanced_context_manager.py:20-536](file://agents/enhanced_context_manager.py#L20-L536)
+
+### 主题守护者主题一致性检查
+ThemeGuardian负责定义小说核心主题并审查内容一致性，提供四个维度的评估：
+
+```mermaid
+classDiagram
+class ThemeDefinition {
++core_theme : str
++central_question : str
++main_conflict : str
++protagonist_goal : str
++sub_themes : List[str]
++theme_statements : List[str]
++to_prompt() str
++from_novel_data(novel_data) ThemeDefinition
++_infer_theme_from_genre(genre, tags) str
+}
+class ThemeConsistencyReport {
++chapter_number : int
++overall_score : float
++passed : bool
++main_plot_advancement : float
++character_motivation_alignment : float
++subplot_relevance : float
++theme_expression : float
++motivation_issues : List[Dict[str, Any]]
++irrelevant_subplots : List[Dict[str, Any]]
++theme_deviations : List[Dict[str, Any]]
++improvement_suggestions : List[str]
++main_plot_analysis : str
++character_analysis : str
++subplot_analysis : str
++to_dict() Dict[str, Any]
+}
+class ThemeGuardian {
++novel_id : str
++theme : ThemeDefinition
++review_history : List[ThemeConsistencyReport]
++review_chapter_plan(chapter_plan, chapter_number) ThemeConsistencyReport
++_calculate_main_plot_progress(chapter_plan, central_question) Dict[str, Any]
++_analyze_character_motivations(chapter_plan, chapter_number) Dict[str, Any]
++_analyze_subplots(chapter_plan) Dict[str, Any]
++_evaluate_theme_expression(chapter_plan) Dict[str, Any]
++_calculate_overall_score(report) float
++_generate_suggestions(report) List[str]
++build_theme_guidance_prompt() str
++get_statistics() Dict[str, Any]
+}
+ThemeGuardian --> ThemeDefinition
+ThemeGuardian --> ThemeConsistencyReport
+```
+
+**图表来源**
+- [agents/theme_guardian.py:19-625](file://agents/theme_guardian.py#L19-L625)
+
+**章节来源**
+- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
+- [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
+- [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
+
+## 约束推断引擎
+
+### ConstraintInferenceEngine架构设计
+ConstraintInferenceEngine从上一章内容中自动推断读者期待和连贯性约束，完全基于 LLM 自适应推断。
+
+```mermaid
+classDiagram
+class ConstraintInferenceEngine {
++client : QwenClient
++infer_constraints(previous_chapter_ending, previous_chapter_full, max_constraints, min_priority) ConstraintList
++_parse_llm_response(content) Dict[str, Any]
++infer_with_context(previous_chapter_full, chapter_number, novel_context) ConstraintList
++get_constraint_statistics(constraints) Dict[str, Any]
+}
+class ContinuityConstraint {
++constraint_type : str
++description : str
++priority : int
++source_text : str
++validation_hint : str
++inferred_at : datetime
++confidence : float
++to_dict() Dict[str, Any]
++from_dict(data) ContinuityConstraint
+}
+ConstraintInferenceEngine --> ContinuityConstraint
+```
+
+**图表来源**
+- [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
+- [agents/continuity_models.py:11-72](file://agents/continuity_models.py#L11-L72)
+
+### 约束推断流程
+系统采用多策略解析 LLM 响应，确保约束推断的稳定性：
+- 直接解析 JSON 格式的响应
+- 提取代码块中的 JSON 内容
+- 提取花括号内的 JSON 结构
+- 提供默认解析策略，确保流程不会因解析失败而中断
+
+**章节来源**
+- [agents/continuity_inference.py:72-144](file://agents/continuity_inference.py#L72-L144)
+- [agents/continuity_inference.py:146-190](file://agents/continuity_inference.py#L146-L190)
+
+## 验证引擎
+
+### ValidationEngine架构设计
+ValidationEngine使用 LLM 验证新章节是否满足连贯性约束，区分"连贯性问题"和"艺术性打破期待"。
+
+```mermaid
+classDiagram
+class ValidationEngine {
++client : QwenClient
++validate(previous_ending, new_chapter_beginning, constraints) ValidationReport
++_format_constraints(constraints) str
++_parse_llm_response(content) Dict[str, Any]
++_create_validation_report(report_data, constraints) ValidationReport
++validate_with_retry(previous_ending, new_chapter_beginning, constraints, max_retries) ValidationReport
++calculate_transition_quality(report) str
+}
+class ValidationReport {
++overall_assessment : str
++satisfied_constraints : List[Dict[str, str]]
++unsatisfied_constraints : List[Dict[str, str]]
++artistic_breaking : List[Dict[str, str]]
++needs_regeneration : bool
++suggestions : List[str]
++critical_issues : List[str]
++quality_score : float
++to_dict() Dict[str, Any]
++from_dict(data) ValidationReport
+}
+ValidationEngine --> ValidationReport
+```
+
+**图表来源**
+- [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
+- [agents/continuity_models.py:74-134](file://agents/continuity_models.py#L74-L134)
+
+### 验证流程与质量评估
+系统提供三种质量等级评估：
+- 优秀：质量评分 ≥ 90
+- 良好：质量评分 80-89
+- 合格：质量评分 70-79
+- 需改进：质量评分 60-69
+- 差：质量评分 < 60
+
+**章节来源**
+- [agents/continuity_validation.py:275-314](file://agents/continuity_validation.py#L275-L314)
+- [agents/continuity_validation.py:315-340](file://agents/continuity_validation.py#L315-L340)
+
+## 数据模型
+
+### ContinuityModels数据结构
+ContinuityModels定义了连贯性保障系统的核心数据结构，包括约束、验证报告和章节过渡记录。
+
+```mermaid
+classDiagram
+class ContinuityConstraint {
++constraint_type : str
++description : str
++priority : int
++source_text : str
++validation_hint : str
++inferred_at : datetime
++confidence : float
++to_dict() Dict[str, Any]
++from_dict(data) ContinuityConstraint
+}
+class ValidationReport {
++overall_assessment : str
++satisfied_constraints : List[Dict[str, str]]
++unsatisfied_constraints : List[Dict[str, str]]
++artistic_breaking : List[Dict[str, str]]
++needs_regeneration : bool
++suggestions : List[str]
++critical_issues : List[str]
++quality_score : float
++to_dict() Dict[str, Any]
++from_dict(data) ValidationReport
+}
+class ChapterTransition {
++novel_id : str
++from_chapter : int
++to_chapter : int
++inferred_constraints : List[ContinuityConstraint]
++validation_report : ValidationReport
++final_decision : str
++modification_notes : str
++created_at : datetime
++to_dict() Dict[str, Any]
++from_dict(data) ChapterTransition
+}
+ContinuityConstraint --> ValidationReport
+ValidationReport --> ChapterTransition
+```
+
+**图表来源**
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
+
+**章节来源**
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 
 ## 多阶段质量评估系统
 
@@ -720,256 +1008,21 @@ OutlineQualityEvaluator --> OutlineQualityScore
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:11-73](file://agents/outline_quality_evaluator.py#L11-L73)
 
-## 增强的CrewManager综合优化
-
-### 综合大纲完善功能
-增强的CrewManager提供了综合的大纲完善功能，支持多轮迭代优化和质量评估：
-
-```mermaid
-classDiagram
-class NovelCrewManager {
-+client : QwenClient
-+cost_tracker : CostTracker
-+pm : PromptManager
-+quality_threshold : float
-+max_review_iterations : int
-+max_fix_iterations : int
-+enable_voting : bool
-+enable_query : bool
-+enable_character_review : bool
-+enable_world_review : bool
-+enable_plot_review : bool
-+enable_outline_refinement : bool
-+review_handler : ReviewLoopHandler
-+voting_manager : VotingManager
-+query_service : AgentQueryService
-+character_review_handler : CharacterReviewHandler
-+world_review_handler : WorldReviewHandler
-+plot_review_handler : PlotReviewHandler
-+context_compressor : ContextCompressor
-+similarity_detector : SimilarityDetector
-+summary_generator : ChapterSummaryGenerator
-+refine_outline_comprehensive(outline, world_setting, characters, options, max_rounds) Dict[str, Any]
-+_analyze_outline_issues(outline, world_setting, characters) Dict[str, Any]
-+_generate_optimization_suggestions(analysis_result, outline, world_setting, characters) List[Dict[str, Any]]
-+_apply_outline_optimizations(outline, suggestions, world_setting, characters) Dict[str, Any]
-+_extract_improvements(original, optimized, suggestions) List[str]
-+_should_stop_refinement(analysis_result, options) bool
-}
-```
-
-**图表来源**
-- [agents/crew_manager.py:38-1592](file://agents/crew_manager.py#L38-L1592)
-
-### 连贯性保障集成示例
-EnhancedCrewManager展示了如何将连贯性保障组件集成到CrewManager中：
-
-```mermaid
-classDiagram
-class EnhancedCrewManager {
-+novel_id : str
-+novel_data : Dict[str, Any]
-+continuity_module : ContinuityIntegrationModule
-+run_writing_phase(chapter_number, volume_number, **kwargs) Dict[str, Any]
-+_prepare_chapter_generation(chapter_number, volume_number, **kwargs) Dict[str, Any]
-+_run_enhanced_planning(chapter_number, prep_result, **kwargs) Dict[str, Any]
-+_build_enhanced_planner_prompt(prep_result, **kwargs) str
-+_call_chapter_planner(prompt) Dict[str, Any]
-+_fix_chapter_plan(original_plan, review_result) Dict[str, Any]
-+_generate_chapter_content(chapter_plan, prep_result, **kwargs) Dict[str, Any]
-+_build_generation_prompt(chapter_plan, prep_result, **kwargs) str
-+_call_writer_agent(prompt) str
-}
-EnhancedCrewManager --> ContinuityIntegrationModule
-```
-
-**图表来源**
-- [agents/crew_manager_enhanced_example.py:18-424](file://agents/crew_manager_enhanced_example.py#L18-L424)
-
-**章节来源**
-- [agents/crew_manager.py:1346-1592](file://agents/crew_manager.py#L1346-L1592)
-- [agents/crew_manager_enhanced_example.py:18-424](file://agents/crew_manager_enhanced_example.py#L18-L424)
-
-## 连贯性保障系统
-
-### ContinuityIntegrationModule架构设计
-ContinuityIntegrationModule将所有连贯性保障组件集成到一个统一的接口中，提供完整的连贯性检查流程。
-
-```mermaid
-classDiagram
-class ContinuityIntegrationResult {
-+chapter_number : int
-+enhanced_context : Optional[EnhancedContext]
-+theme_report : Optional[ThemeConsistencyReport]
-+outline_task : Optional[ChapterOutlineTask]
-+outline_validation : Optional[OutlineValidationReport]
-+character_validations : Dict[str, ConsistencyValidation]
-+foreshadowing_report : Optional[ForeshadowingReport]
-+prevention_report : Optional[PreventionReport]
-+overall_score : float
-+passed : bool
-+issues : List[Dict[str, Any]]
-+suggestions : List[str]
-+to_dict() Dict[str, Any]
-}
-class ContinuityIntegrationModule {
-+novel_id : str
-+novel_data : Dict[str, Any]
-+context_manager : EnhancedContextManager
-+theme_guardian : ThemeGuardian
-+outline_mapper : ChapterOutlineMapper
-+character_trackers : Dict[str, CharacterConsistencyTracker]
-+foreshadowing_injector : ForeshadowingAutoInjector
-+prevention_checker : PreventionContinuityChecker
-+prepare_chapter_generation(chapter_number, volume_number, chapter_summaries, chapter_contents, conflicts) Dict[str, Any]
-+review_chapter_plan(chapter_plan, chapter_number, previous_chapter) ContinuityIntegrationResult
-+_aggregate_issues_and_suggestions(result)
-+get_statistics() Dict[str, Any]
-}
-ContinuityIntegrationModule --> ContinuityIntegrationResult
-```
-
-**图表来源**
-- [agents/continuity_integration_module.py:30-483](file://agents/continuity_integration_module.py#L30-L483)
-
-### EnhancedContextManager四层记忆架构
-EnhancedContextManager采用四层记忆架构，确保关键信息不会丢失：
-
-```mermaid
-classDiagram
-class CoreLayer {
-+theme : str
-+central_question : str
-+main_conflict : str
-+protagonist_goal : str
-+genre : str
-+to_prompt() str
-}
-class CriticalElement {
-+id : str
-+type : str
-+content : str
-+planted_chapter : int
-+importance : int
-+urgency : int
-+status : str
-+related_characters : List[str]
-+metadata : Dict[str, Any]
-+priority_score() int
-+to_prompt() str
-}
-class RecentChapter {
-+chapter_number : int
-+title : str
-+summary : str
-+key_events : List[str]
-+character_changes : Dict[str, str]
-+ending_state : str
-+foreshadowings : List[str]
-+word_count : int
-+to_prompt() str
-}
-class HistoricalIndex {
-+volume_number : int
-+volume_title : str
-+chapter_range : tuple
-+summary : str
-+key_events : List[Dict[str, Any]]
-+milestones : List[str]
-+to_prompt() str
-}
-class EnhancedContext {
-+core_layer : CoreLayer
-+critical_layer : List[CriticalElement]
-+recent_layer : List[RecentChapter]
-+historical_layer : List[HistoricalIndex]
-+current_chapter : int
-+total_chapters : int
-+created_at : str
-+to_prompt() str
-+estimate_tokens() int
-}
-EnhancedContext --> CoreLayer
-EnhancedContext --> CriticalElement
-EnhancedContext --> RecentChapter
-EnhancedContext --> HistoricalIndex
-```
-
-**图表来源**
-- [agents/enhanced_context_manager.py:20-536](file://agents/enhanced_context_manager.py#L20-L536)
-
-### ThemeGuardian主题一致性检查
-ThemeGuardian负责定义小说核心主题并审查内容一致性，提供四个维度的评估：
-
-```mermaid
-classDiagram
-class ThemeDefinition {
-+core_theme : str
-+central_question : str
-+main_conflict : str
-+protagonist_goal : str
-+sub_themes : List[str]
-+theme_statements : List[str]
-+to_prompt() str
-+from_novel_data(novel_data) ThemeDefinition
-+_infer_theme_from_genre(genre, tags) str
-}
-class ThemeConsistencyReport {
-+chapter_number : int
-+overall_score : float
-+passed : bool
-+main_plot_advancement : float
-+character_motivation_alignment : float
-+subplot_relevance : float
-+theme_expression : float
-+motivation_issues : List[Dict[str, Any]]
-+irrelevant_subplots : List[Dict[str, Any]]
-+theme_deviations : List[Dict[str, Any]]
-+improvement_suggestions : List[str]
-+main_plot_analysis : str
-+character_analysis : str
-+subplot_analysis : str
-+to_dict() Dict[str, Any]
-}
-class ThemeGuardian {
-+novel_id : str
-+theme : ThemeDefinition
-+review_history : List[ThemeConsistencyReport]
-+review_chapter_plan(chapter_plan, chapter_number) ThemeConsistencyReport
-+_calculate_main_plot_progress(chapter_plan, central_question) Dict[str, Any]
-+_analyze_character_motivations(chapter_plan, chapter_number) Dict[str, Any]
-+_analyze_subplots(chapter_plan) Dict[str, Any]
-+_evaluate_theme_expression(chapter_plan) Dict[str, Any]
-+_calculate_overall_score(report) float
-+_generate_suggestions(report) List[str]
-+build_theme_guidance_prompt() str
-+get_statistics() Dict[str, Any]
-}
-ThemeGuardian --> ThemeDefinition
-ThemeGuardian --> ThemeConsistencyReport
-```
-
-**图表来源**
-- [agents/theme_guardian.py:19-625](file://agents/theme_guardian.py#L19-L625)
-
-**章节来源**
-- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
-- [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
-- [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
-
 ## 依赖关系分析
 - 组件耦合：
   - SpecificAgents依赖AgentCommunicator与QwenClient/CostTracker/PromptManager。
+  - ContinuityIntegrationModule依赖EnhancedContextManager、ThemeGuardian、ChapterOutlineMapper、CharacterConsistencyTracker、ForeshadowingAutoInjector、PreventionContinuityChecker。
+  - ConstraintInferenceEngine和ValidationEngine依赖ContinuityModels。
   - ReviewLoopBase依赖QualityReport、ReviewResult、IssueTracker等基础组件。
   - TeamContext提供跨Agent的状态共享和协作机制。
   - ChapterOutlineMapper依赖TeamContext进行上下文构建。
   - OutlineIterationController和OutlineQualityEvaluator提供大纲级别的质量控制。
-  - ContinuityIntegrationModule整合所有连贯性保障组件。
 - 外部依赖：
   - DashScope/OpenAI SDK用于大模型推理。
   - Settings提供配置注入，LoggingConfig提供统一日志。
 - 潜在风险：
   - 并发环境下消息队列与任务状态更新需保持原子性，已在关键路径加锁。
+  - 连贯性保障过程中的约束推断和验证需要合理配置阈值。
   - 大纲优化过程中的成本控制和迭代终止机制需要合理配置阈值。
 
 ```mermaid
@@ -977,6 +1030,14 @@ graph LR
 SA["SpecificAgents"] --> AC["AgentCommunicator"]
 SA --> QC["QwenClient"]
 SA --> CT["CostTracker"]
+CIM["ContinuityIntegrationModule"] --> ECM["EnhancedContextManager"]
+CIM --> TG["ThemeGuardian"]
+CIM --> COM["ChapterOutlineMapper"]
+CIM --> CCT["CharacterConsistencyTracker"]
+CIM --> FAI["ForeshadowingAutoInjector"]
+CIM --> PCC["PreventionContinuityChecker"]
+CIE["ConstraintInferenceEngine"] --> CM["ContinuityModels"]
+VE["ValidationEngine"] --> CM
 RLB["ReviewLoopBase"] --> QR["QualityReport"]
 RLB --> RR["ReviewResult"]
 RLB --> IE["IssueTracker"]
@@ -984,25 +1045,24 @@ RLB --> RS["ReviewProgressSummary"]
 TC["TeamContext"] --> AR["AgentReview"]
 TC --> CS["CharacterState"]
 TC --> TL["TimelineEvent"]
-COM["ChapterOutlineMapper"] --> COT["ChapterOutlineTask"]
+COM --> COT["ChapterOutlineTask"]
 COM --> OVR["OutlineValidationReport"]
 OIC["OutlineIterationController"] --> OQE["OutlineQualityEvaluator"]
-CIM["ContinuityIntegrationModule"] --> ECM["EnhancedContextManager"]
-CIM --> TG["ThemeGuardian"]
 QC --> CFG["Settings"]
 LOG --> SA
 ```
 
 **图表来源**
 - [agents/specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
+- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
+- [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
+- [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 - [agents/base/review_loop_base.py:598-800](file://agents/base/review_loop_base.py#L598-L800)
 - [agents/team_context.py:162-591](file://agents/team_context.py#L162-L591)
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
-- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
-- [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
-- [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
 - [agents/agent_communicator.py:72-180](file://agents/agent_communicator.py#L72-L180)
 - [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
@@ -1011,14 +1071,15 @@ LOG --> SA
 
 **章节来源**
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
+- [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
+- [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
+- [agents/continuity_validation.py:1-363](file://agents/continuity_validation.py#L1-L363)
+- [agents/continuity_models.py:1-201](file://agents/continuity_models.py#L1-L201)
 - [agents/base/review_loop_base.py:1-800](file://agents/base/review_loop_base.py#L1-L800)
 - [agents/team_context.py:1-591](file://agents/team_context.py#L1-L591)
 - [agents/chapter_outline_mapper.py:1-1109](file://agents/chapter_outline_mapper.py#L1-L1109)
 - [agents/outline_iteration_controller.py:1-404](file://agents/outline_iteration_controller.py#L1-L404)
 - [agents/outline_quality_evaluator.py:1-440](file://agents/outline_quality_evaluator.py#L1-L440)
-- [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
-- [agents/enhanced_context_manager.py:1-536](file://agents/enhanced_context_manager.py#L1-L536)
-- [agents/theme_guardian.py:1-625](file://agents/theme_guardian.py#L1-L625)
 - [agents/agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
 - [llm/cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
@@ -1033,6 +1094,8 @@ LOG --> SA
 - 上下文管理：TeamContext使用异步锁保护写操作，读操作返回数据快照，避免并发修改问题。
 - 大纲优化控制：OutlineIterationController提供成本限制和迭代次数限制，防止无限循环。
 - 连贯性检查：ContinuityIntegrationModule采用分层检查策略，先进行快速筛选再进行深度分析。
+- 约束推断优化：ConstraintInferenceEngine提供多策略解析，确保约束推断的稳定性。
+- 验证引擎优化：ValidationEngine区分连贯性问题和艺术性打破期待，避免过度严格的标准。
 - 可观测性：统一日志与消息历史，便于定位瓶颈与异常。
 - 扩展性建议：
   - 引入限流与熔断（如令牌桶/滑动窗口），防止LLM调用峰值冲击。
@@ -1048,6 +1111,12 @@ LOG --> SA
 - 成本统计异常
   - 确认CostTracker的record调用是否覆盖所有Agent调用路径。
   - 检查模型定价表与Token统计是否一致。
+- 连贯性保障异常
+  - 检查ContinuityIntegrationModule的组件初始化顺序。
+  - 确认EnhancedContextManager的上下文构建逻辑。
+  - 验证ThemeGuardian的主题定义提取是否正确。
+  - 检查ConstraintInferenceEngine的约束推断是否成功。
+  - 验证ValidationEngine的验证报告是否正常。
 - 质量评估循环异常
   - 检查ReviewLoopBase的配置参数和迭代次数限制。
   - 验证QualityReport的降级处理逻辑。
@@ -1069,40 +1138,42 @@ LOG --> SA
 - [agents/agent_communicator.py:80-135](file://agents/agent_communicator.py#L80-L135)
 - [llm/qwen_client.py:65-161](file://llm/qwen_client.py#L65-L161)
 - [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
+- [agents/continuity_integration_module.py:98-123](file://agents/continuity_integration_module.py#L98-L123)
+- [agents/continuity_inference.py:141-144](file://agents/continuity_inference.py#L141-L144)
+- [agents/continuity_validation.py:138-145](file://agents/continuity_validation.py#L138-L145)
 - [agents/base/review_loop_base.py:659-800](file://agents/base/review_loop_base.py#L659-L800)
 - [agents/team_context.py:232-254](file://agents/team_context.py#L232-L254)
 - [agents/chapter_outline_mapper.py:463-566](file://agents/chapter_outline_mapper.py#L463-L566)
 - [agents/outline_iteration_controller.py:68-123](file://agents/outline_iteration_controller.py#L68-L123)
 - [agents/outline_quality_evaluator.py:143-157](file://agents/outline_quality_evaluator.py#L143-L157)
-- [agents/continuity_integration_module.py:98-123](file://agents/continuity_integration_module.py#L98-L123)
-- [agents/enhanced_context_manager.py:236-279](file://agents/enhanced_context_manager.py#L236-L279)
-- [agents/theme_guardian.py:248-294](file://agents/theme_guardian.py#L248-294)
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
 
 ## 结论
-该系统采用增强的多阶段质量评估架构，集成了智能体协作、质量控制、进度追踪、大纲优化和连贯性保障功能。通过ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、ContinuityIntegrationModule的连贯性保障系统，系统具备了强大的质量保障能力和团队协作能力。新增的增强CrewManager综合优化功能进一步提升了系统的智能化水平。未来可在限流熔断、任务持久化与负载均衡方面进一步增强，以应对更高并发与更复杂业务场景。
+该系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎和统一的连贯性保障模块。通过ContinuityIntegrationModule提供的统一接口、ConstraintInferenceEngine提供的基于 LLM 的约束推断、ValidationEngine提供的章节过渡验证、ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、EnhancedContextManager的四层记忆架构、ThemeGuardian的主题一致性检查，系统具备了强大的连贯性保障能力和团队协作能力。未来可在限流熔断、任务持久化与负载均衡方面进一步增强，以应对更高并发与更复杂业务场景。
 
 ## 附录
 - 启动方式：可通过scripts/start_agents.py启动Agent系统，自动注册并运行五类Agent，支持信号处理与成本统计。
 - 配置项：Settings提供DashScope API Key、模型、数据库、Redis、Celery等配置；LoggingConfig统一日志级别与输出。
+- 连贯性保障：ContinuityIntegrationModule提供统一的连贯性检查和优化接口。
+- 约束推断：ConstraintInferenceEngine支持多策略解析，确保约束推断的稳定性。
+- 验证引擎：ValidationEngine区分连贯性问题和艺术性打破期待，避免过度严格的标准。
 - 质量评估：ReviewLoopBase支持多种质量评估场景，提供统一的迭代控制和结果管理。
 - 团队协作：TeamContext提供线程安全的上下文共享，支持异步和同步操作模式。
 - 章节管理：ChapterOutlineMapper支持张力循环分析和智能任务分配，提供完整的进度追踪功能。
 - 大纲优化：OutlineIterationController和OutlineQualityEvaluator提供全面的大纲质量控制和优化能力。
-- 连贯性保障：ContinuityIntegrationModule整合所有连贯性保障组件，提供统一的检查和优化接口。
 - 增强CrewManager：提供综合的大纲完善功能和连贯性保障集成，提升整体质量控制水平。
 
 **章节来源**
 - [scripts/start_agents.py:37-204](file://scripts/start_agents.py#L37-L204)
 - [backend/config.py:5-59](file://backend/config.py#L5-L59)
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
+- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
+- [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
+- [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)
+- [agents/continuity_models.py:11-201](file://agents/continuity_models.py#L11-L201)
 - [agents/base/review_loop_base.py:598-800](file://agents/base/review_loop_base.py#L598-L800)
 - [agents/team_context.py:162-591](file://agents/team_context.py#L162-L591)
 - [agents/chapter_outline_mapper.py:187-800](file://agents/chapter_outline_mapper.py#L187-L800)
 - [agents/outline_iteration_controller.py:39-404](file://agents/outline_iteration_controller.py#L39-L404)
 - [agents/outline_quality_evaluator.py:93-440](file://agents/outline_quality_evaluator.py#L93-L440)
-- [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/enhanced_context_manager.py:196-536](file://agents/enhanced_context_manager.py#L196-L536)
 - [agents/theme_guardian.py:159-625](file://agents/theme_guardian.py#L159-L625)
-- [agents/crew_manager.py:1346-1592](file://agents/crew_manager.py#L1346-L1592)
-- [agents/crew_manager_enhanced_example.py:18-424](file://agents/crew_manager_enhanced_example.py#L18-L424)

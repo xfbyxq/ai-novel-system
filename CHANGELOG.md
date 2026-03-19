@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.1] - 2026-03-19
+
+### Added
+- **JSON解析鲁棒性增强**：改进 _extract_json_from_response、_find_json_by_brackets 和 _extract_fields_manually 方法的错误处理
+- **代码质量提升**：增强异常处理和输入验证机制
+
+### Fixed
+- **Critical Bug修复**：修复了 LLM 响应解析中的异常传播问题
+- **数据库迁移修复**：解决 Alembic 多头部修订版本问题
+
 ## [1.2.0] - 2026-03-02
 
 ### Added
