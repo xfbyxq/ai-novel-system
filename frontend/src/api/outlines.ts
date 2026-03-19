@@ -117,7 +117,34 @@ export async function enhanceOutlinePreview(
     preserve_user_edits?: boolean;
     update_database?: boolean;
   }
-): Promise<any> {
+): Promise<{
+  original_outline: Record<string, unknown>;
+  enhanced_outline: Record<string, unknown>;
+  quality_comparison: {
+    original_score: number;
+    enhanced_score: number;
+    improvement: number;
+  };
+  improvements_made: string[];
+}> {
   const { data } = await apiClient.post(`/novels/${novelId}/outline/enhance-preview`, options);
+  return data;
+}
+
+export async function aiAssistOutline(
+  novelId: string,
+  request: {
+    field_name: string;
+    current_context?: Record<string, unknown>;
+    additional_hints?: string;
+  }
+): Promise<{
+  field_name: string;
+  suggestion: string;
+  confidence?: number;
+  alternatives?: string[];
+  reasoning?: string;
+}> {
+  const { data } = await apiClient.post(`/novels/${novelId}/outline/ai-assist`, request);
   return data;
 }

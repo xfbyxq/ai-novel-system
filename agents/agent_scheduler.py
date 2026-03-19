@@ -86,12 +86,12 @@ class AgentTask:
             "task_id": str(self.task_id),
             "task_name": self.task_name,
             "task_type": self.task_type,
-            "priority": self.priority.value,
+            "priority": self.priority.value if hasattr(self.priority, 'value') else int(self.priority),
             "dependencies": [str(dep) for dep in self.dependencies],
             "input_data": self.input_data,
             "expected_output": self.expected_output,
             "timeout": self.timeout,
-            "status": self.status.value,
+            "status": self.status.value if hasattr(self.status, 'value') else str(self.status),
             "assigned_agent": self.assigned_agent,
             "start_time": self.start_time,
             "complete_time": self.complete_time,
@@ -170,7 +170,7 @@ class BaseAgent:
                 receiver=message.sender,
                 message_type="status_response",
                 content={
-                    "status": self.status.value,
+                    "status": self.status.value if hasattr(self.status, 'value') else str(self.status),
                     "current_task": str(self.current_task.task_id) if self.current_task else None,
                 }
             )
@@ -350,7 +350,10 @@ class AgentScheduler:
                     executable_tasks.append(task)
 
             # 按优先级排序
-            executable_tasks.sort(key=lambda t: t.priority.value, reverse=True)
+            executable_tasks.sort(
+                key=lambda t: t.priority.value if hasattr(t.priority, 'value') else int(t.priority),
+                reverse=True
+            )
 
             # 获取空闲的Agent
             idle_agents = [
@@ -492,4 +495,4 @@ class AgentScheduler:
                 # 在锁外调用，避免死锁
                 asyncio.create_task(self._schedule_tasks())
 
-            logger.info(f"🎮 任务状态更新: {task_id} -> {status.value}")
+            logger.info(f"🎮 任务状态更新: {task_id} -> {status.value if hasattr(status, 'value') else status}")

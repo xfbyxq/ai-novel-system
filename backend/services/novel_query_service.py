@@ -115,8 +115,8 @@ class NovelQueryService:
             {
                 "id": str(c.id),
                 "name": c.name,
-                "role_type": c.role_type.value if c.role_type else "unknown",
-                "gender": c.gender.value if c.gender else "unknown",
+                "role_type": c.role_type.value if hasattr(c.role_type, 'value') else str(c.role_type or "unknown"),
+                "gender": c.gender.value if hasattr(c.gender, 'value') else str(c.gender or "unknown"),
                 "age": c.age,
                 "appearance": c.appearance,
                 "personality": c.personality,

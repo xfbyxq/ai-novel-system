@@ -337,3 +337,40 @@ class EnhancementPreviewResponse(BaseModel):
     cost_estimate: float = Field(..., description="预估成本（元）")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AIAssistRequest(BaseModel):
+    """AI辅助生成大纲字段请求模型"""
+    field_name: str = Field(
+        ...,
+        description="需要辅助的字段名：structure_type/volumes/main_plot/sub_plots/key_turning_points/climax_chapter"
+    )
+    current_context: Optional[dict] = Field(
+        default=None,
+        description="当前大纲上下文，用于生成更精准的建议"
+    )
+    additional_hints: Optional[str] = Field(
+        default=None,
+        description="额外提示信息，如风格偏好、特殊要求等"
+    )
+
+
+class AIAssistResponse(BaseModel):
+    """AI辅助生成响应模型"""
+    field_name: str = Field(..., description="字段名")
+    suggestion: str = Field(..., description="AI生成的建议内容")
+    confidence: Optional[float] = Field(
+        default=None,
+        description="置信度（0-1）",
+        ge=0.0,
+        le=1.0
+    )
+    alternatives: Optional[list] = Field(
+        default=None,
+        description="备选建议列表"
+    )
+    reasoning: Optional[str] = Field(
+        default=None,
+        description="生成理由说明"
+    )
+    generated_at: datetime = Field(..., description="生成时间")

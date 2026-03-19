@@ -139,7 +139,8 @@ class AgentSystem:
                 if time.time() % 30 < 1:  # 每30秒打印一次状态
                     logger.info(f"📊 Agent系统运行状态 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     for agent in self.agents:
-                        logger.info(f"   - {agent.name}: {agent.status.value}")
+                        status_val = agent.status.value if hasattr(agent.status, 'value') else str(agent.status)
+                        logger.info(f"   - {agent.name}: {status_val}")
                         
         except asyncio.CancelledError:
             logger.info("⚠️  Agent系统被取消")

@@ -578,7 +578,7 @@ class GenerationService:
             for char in novel.characters:
                 characters_list.append({
                     "name": char.name,
-                    "role_type": char.role_type.value if char.role_type else "minor",
+                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
                     "personality": char.personality or "",
                     "background": char.background or "",
                     "abilities": char.abilities or {},
@@ -856,7 +856,7 @@ class GenerationService:
             for char in novel.characters:
                 characters_list.append({
                     "name": char.name,
-                    "role_type": char.role_type.value if char.role_type else "minor",
+                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
                     "personality": char.personality or "",
                     "background": char.background or "",
                     "abilities": char.abilities or {},
@@ -1042,7 +1042,7 @@ class GenerationService:
         for char in novel.characters:
             characters_list.append({
                 "name": char.name,
-                "role_type": char.role_type.value if char.role_type else "minor",
+                "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
                 "personality": char.personality or "",
                 "background": char.background or "",
                 "abilities": char.abilities or {},

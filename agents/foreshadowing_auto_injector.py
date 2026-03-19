@@ -81,7 +81,7 @@ class Foreshadowing:
             "importance": self.importance,
             "category": self.category,
             "related_characters": self.related_characters,
-            "status": self.status.value,
+            "status": self.status.value if hasattr(self.status, 'value') else str(self.status),
             "payoff_content": self.payoff_content,
             "is_overdue": self.is_overdue,
             "urgency_score": self.urgency_score

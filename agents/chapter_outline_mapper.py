@@ -391,7 +391,21 @@ class ChapterOutlineMapper:
             release_ch = end_ch
             
             suppress_chapters = list(range(start_ch, suppress_end + 1))
-            
+
+            # 兼容两种格式：release_event（单数字符串）和 release_events（复数列表）
+            release_event = cycle_data.get("release_event")
+            release_events_raw = cycle_data.get("release_events")
+
+            if isinstance(release_event, str) and release_event:
+                release_events_list = [release_event]
+            elif isinstance(release_events_raw, list):
+                release_events_list = release_events_raw
+            elif isinstance(release_event, list):
+                # 防止 release_event 意外是列表
+                release_events_list = release_event
+            else:
+                release_events_list = []
+
             cycle = TensionCycle(
                 cycle_number=i + 1,
                 start_chapter=start_ch,
@@ -399,7 +413,7 @@ class ChapterOutlineMapper:
                 suppress_chapters=suppress_chapters,
                 release_chapter=release_ch,
                 suppression_events=cycle_data.get("suppress_events", []),
-                release_events=[cycle_data.get("release_event", "")]
+                release_events=release_events_list
             )
             
             cycles.append(cycle)
@@ -510,11 +524,9 @@ class ChapterOutlineMapper:
                 task.mandatory_events = current_cycle.suppression_events[-1:]
                 task.optional_events = current_cycle.release_events[:1]
                 task.emotional_tone = "过渡、铺垫"
-            
-            # 新增：添加张力循环进度信息
-            task.mandatory_events.append(
-                f"张力循环 #{current_cycle.cycle_number} 进度：{cycle_progress:.0%}"
-            )
+
+            # 将张力循环进度信息添加到任务描述，而非强制事件列表
+            task.task_description += f"\n当前处于张力循环 #{current_cycle.cycle_number}，进度 {cycle_progress:.0%}。"
         
         # 5. 添加卷的关键事件
         key_events = volume_outline.get("key_events", [])
@@ -826,27 +838,27 @@ class ChapterOutlineMapper:
             late_suppress = suppress_chapters[2*len(suppress_chapters)//3:]
             
             # 分配高优先级伏笔到早期压制期
-            for fb in high_priority[:len(early_suppress)]:
+            for idx, fb in enumerate(high_priority[:len(early_suppress)]):
                 if early_suppress:
-                    ch_num = early_suppress[len(distribution) % len(early_suppress)]
+                    ch_num = early_suppress[idx % len(early_suppress)]
                     distribution[ch_num].append({
                         **fb,
                         "distribution_reason": "高优先级伏笔，早期压制期埋设"
                     })
-            
+
             # 分配中优先级伏笔到中期压制期
-            for fb in medium_priority[:len(mid_suppress)]:
+            for idx, fb in enumerate(medium_priority[:len(mid_suppress)]):
                 if mid_suppress:
-                    ch_num = mid_suppress[len(distribution) % len(mid_suppress)]
+                    ch_num = mid_suppress[idx % len(mid_suppress)]
                     distribution[ch_num].append({
                         **fb,
                         "distribution_reason": "中优先级伏笔，中期压制期埋设"
                     })
-            
+
             # 分配低优先级伏笔到后期压制期
-            for fb in low_priority[:len(late_suppress)]:
+            for idx, fb in enumerate(low_priority[:len(late_suppress)]):
                 if late_suppress:
-                    ch_num = late_suppress[len(distribution) % len(late_suppress)]
+                    ch_num = late_suppress[idx % len(late_suppress)]
                     distribution[ch_num].append({
                         **fb,
                         "distribution_reason": "低优先级伏笔，后期压制期埋设"

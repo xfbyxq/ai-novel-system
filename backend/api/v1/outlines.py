@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 from backend.dependencies import get_db
 from backend.schemas.outline import (
+    AIAssistRequest,
+    AIAssistResponse,
     ChapterOutlineTaskResponse,
     EnhancementOptions,
     EnhancementPreviewResponse,
@@ -33,6 +35,8 @@ from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.world_setting import WorldSetting
 from core.models.character import Character
+from core.models.chapter import Chapter
+from backend.services.outline_service import OutlineService
 
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
@@ -271,22 +275,67 @@ async def decompose_outline_to_chapters(
             detail="章节范围无效，chapter_start 必须 >= 1 且 chapter_end >= chapter_start"
         )
 
-    # TODO: 调用 AI Agent 分解大纲
-    # 这里应该调用大纲分解服务
-    # 现在返回一个示例响应
-    decomposed_chapters = []
-    for chapter_num in range(request.chapter_start, request.chapter_end + 1):
-        chapter_task = {
-            "chapter_number": chapter_num,
+    # 调用服务层进行大纲分解
+    outline_service = OutlineService(db)
+
+    # 构建大纲数据
+    outline_data = {
+        "volumes": plot_outline.volumes or [],
+        "main_plot": plot_outline.main_plot or {},
+        "sub_plots": plot_outline.sub_plots or [],
+        "key_turning_points": plot_outline.key_turning_points or [],
+        "climax_chapter": plot_outline.climax_chapter,
+    }
+
+    # 执行分解
+    decompose_result = await outline_service.decompose_outline(
+        novel_id,
+        outline_data,
+        config={
             "volume_number": request.volume_number,
-            "outline_task": {
-                "main_goal": f"第{chapter_num}章的主要目标",
-                "key_events": ["事件 1", "事件 2"],
-                "character_development": "角色发展要点"
-            },
-            "decomposition_level": request.decomposition_level
+            "auto_split": True,
         }
-        decomposed_chapters.append(chapter_task)
+    )
+
+    # 持久化到章节表
+    chapter_configs = decompose_result.get("chapter_configs", [])
+    persisted_chapters = []
+
+    for chapter_config in chapter_configs:
+        chapter_num = chapter_config.get("chapter_number")
+        if not chapter_num:
+            continue
+
+        # 查找或创建章节
+        existing_chapter_query = select(Chapter).where(
+            Chapter.novel_id == novel_id,
+            Chapter.chapter_number == chapter_num
+        )
+        existing_result = await db.execute(existing_chapter_query)
+        existing_chapter = existing_result.scalar_one_or_none()
+
+        if existing_chapter:
+            # 更新现有章节
+            existing_chapter.outline_task = chapter_config
+            existing_chapter.volume_number = chapter_config.get("volume_number", request.volume_number)
+            existing_chapter.outline_version = f"v{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            persisted_chapters.append(existing_chapter)
+        else:
+            # 创建新章节
+            new_chapter = Chapter(
+                novel_id=novel_id,
+                chapter_number=chapter_num,
+                volume_number=chapter_config.get("volume_number", request.volume_number),
+                outline_task=chapter_config,
+                outline_version=f"v{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                title=f"第{chapter_num}章",
+                status="pending",
+                word_count=0,
+            )
+            db.add(new_chapter)
+            persisted_chapters.append(new_chapter)
+
+    await db.commit()
 
     return {
         "novel_id": str(novel_id),
@@ -296,7 +345,8 @@ async def decompose_outline_to_chapters(
         },
         "volume_number": request.volume_number,
         "decomposition_level": request.decomposition_level,
-        "chapters": decomposed_chapters,
+        "chapters": chapter_configs,
+        "persisted_count": len(persisted_chapters),
         "decomposed_at": datetime.now()
     }
 
@@ -385,27 +435,126 @@ async def validate_chapter_outline(
             detail=f"小说 {novel_id} 的情节大纲未找到"
         )
 
-    # TODO: 调用 AI Agent 验证大纲
-    # 这里应该调用大纲验证服务
-    # 现在返回一个示例响应
+    # 调用服务层进行验证
+    outline_service = OutlineService(db)
+
+    validation_report = await outline_service.validate_chapter_outline(
+        novel_id,
+        chapter_number,
+        request.chapter_outline or {}
+    )
+
+    # 构建验证结果
     validation_results = {
-        "character_consistency": {"passed": True, "details": "角色设定一致"},
-        "plot_continuity": {"passed": True, "details": "剧情连贯"},
-        "world_setting": {"passed": True, "details": "世界观设定一致"},
-        "timeline": {"passed": True, "details": "时间线正确"}
+        "completion": validation_report.get("completion", {}),
+        "quality_score": validation_report.get("quality_score", 0),
+        "passed": validation_report.get("passed", False),
     }
-    
+
+    # 构建问题列表
     issues = []
-    suggestions = []
-    consistency_score = 0.95
+    missing_events = validation_report.get("completion", {}).get("missing_events", [])
+    for event in missing_events:
+        issues.append({
+            "type": "missing_event",
+            "severity": "warning",
+            "message": f"缺失事件：{event}",
+            "event": event
+        })
 
     return OutlineValidationResponse(
-        is_valid=len(issues) == 0,
+        is_valid=validation_report.get("passed", False),
         validation_results=validation_results,
         issues=issues,
-        suggestions=suggestions,
-        consistency_score=consistency_score,
+        suggestions=validation_report.get("suggestions", []),
+        consistency_score=validation_report.get("quality_score", 0) / 10,
         validated_at=datetime.now()
+    )
+
+
+@router.post("/outline/ai-assist", response_model=AIAssistResponse)
+async def ai_assist_outline_field(
+    novel_id: UUID,
+    request: AIAssistRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    AI辅助生成大纲字段内容。
+
+    根据当前大纲上下文，为指定字段生成AI建议。
+    """
+    # Verify novel exists
+    novel_query = select(Novel).where(Novel.id == novel_id)
+    novel_result = await db.execute(novel_query)
+    novel = novel_result.scalar_one_or_none()
+
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+
+    # Get plot outline for context
+    outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    outline_result = await db.execute(outline_query)
+    plot_outline = outline_result.scalar_one_or_none()
+
+    # Get world setting for context
+    world_query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+    world_result = await db.execute(world_query)
+    world_setting = world_result.scalar_one_or_none()
+
+    # Get characters for context
+    char_query = select(Character).where(Character.novel_id == novel_id)
+    char_result = await db.execute(char_query)
+    characters = char_result.scalars().all()
+
+    # Build context for AI
+    context = request.current_context or {}
+
+    # Add existing outline data to context
+    if plot_outline:
+        context.setdefault("outline", {})
+        context["outline"]["structure_type"] = plot_outline.structure_type
+        context["outline"]["volumes"] = plot_outline.volumes
+        context["outline"]["main_plot"] = plot_outline.main_plot
+        context["outline"]["sub_plots"] = plot_outline.sub_plots
+        context["outline"]["climax_chapter"] = plot_outline.climax_chapter
+
+    if world_setting:
+        context["world_setting"] = {
+            "world_name": world_setting.world_name,
+            "world_type": world_setting.world_type,
+            "power_system": world_setting.power_system,
+        }
+
+    if characters:
+        context["characters"] = [
+            {"name": c.name, "role": c.role, "archetype": c.archetype}
+            for c in characters[:10]  # 限制数量避免上下文过长
+        ]
+
+    # Add novel info
+    context["novel"] = {
+        "title": novel.title,
+        "genre": novel.genre,
+        "target_word_count": novel.target_word_count,
+    }
+
+    # Call outline service to generate suggestion
+    outline_service = OutlineService(db)
+
+    suggestion_result = await outline_service.generate_field_suggestion(
+        novel_id=novel_id,
+        field_name=request.field_name,
+        context=context,
+        hints=request.additional_hints
+    )
+
+    return AIAssistResponse(
+        field_name=request.field_name,
+        suggestion=suggestion_result.get("suggestion", ""),
+        confidence=suggestion_result.get("confidence"),
+        alternatives=suggestion_result.get("alternatives"),
+        reasoning=suggestion_result.get("reasoning"),
+        generated_at=datetime.now()
     )
 
 

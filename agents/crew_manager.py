@@ -822,18 +822,39 @@ class NovelCrewManager:
                 plot_outline, volume_number, chapter_number
             )
 
-            # 获取上一章的详细大纲（用于衔接）
+            # 获取上一章的详细大纲和实际生成内容（用于衔接）
             prev_detailed = self._chapter_detailed_outlines.get(chapter_number - 1)
+            prev_content = self._chapter_contents.get(chapter_number - 1, "")
+            prev_summary = self._chapter_summaries.get(chapter_number - 1, {})
+
             if prev_detailed:
                 prev_outline_text = json.dumps(prev_detailed, ensure_ascii=False, indent=2)
             else:
                 prev_outline_text = "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
+
+            # 构建上一章实际内容摘要
+            if prev_summary:
+                prev_actual_content = f"""
+上一章实际生成内容摘要：
+{prev_summary.get('summary', '无')}
+
+关键事件：
+{chr(10).join('- ' + e for e in prev_summary.get('key_events', [])[:3]) if prev_summary.get('key_events') else '无'}
+
+情感基调：{prev_summary.get('emotional_tone', '未指定')}
+"""
+            elif prev_content:
+                # 如果没有摘要，使用内容的前500字
+                prev_actual_content = f"上一章内容片段：\n{prev_content[:500]}..."
+            else:
+                prev_actual_content = "（无上一章内容，本章为起始章）"
 
             refiner_task = self.pm.format(
                 self.pm.OUTLINE_REFINER_TASK,
                 chapter_plan=json.dumps(chapter_plan, ensure_ascii=False, indent=2),
                 plot_outline_context=plot_outline_context,
                 previous_chapter_detailed_outline=prev_outline_text,
+                previous_chapter_actual_content=prev_actual_content,
                 character_states=character_states or "（初始状态）",
                 chapter_number=chapter_number,
             )

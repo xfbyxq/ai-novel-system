@@ -12,6 +12,7 @@ import {
   Tooltip,
   message,
   Divider,
+  Alert,
 } from 'antd';
 import {
   RobotOutlined,
@@ -21,7 +22,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { PlotOutline } from '@/api/types';
-import { getPlotOutline, updatePlotOutline, enhanceOutlinePreview } from '@/api/outlines';
+import { getPlotOutline, updatePlotOutline, aiAssistOutline } from '@/api/outlines';
 import { createGenerationTask } from '@/api/generation';
 import { useGenerationStore } from '@/stores/useGenerationStore';
 import { useNavigate } from 'react-router-dom';
@@ -62,14 +63,13 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
   const [completeness, setCompleteness] = useState(0);
   
   // 新增：大纲完善任务状态管理
-  const { 
-    currentEnhancementTask, 
-    setCurrentEnhancementTask, 
-    clearCurrentEnhancementTask,
-    hasRunningEnhancementTask 
+  const {
+    setCurrentEnhancementTask,
+    hasRunningEnhancementTask
   } = useGenerationStore();
   const navigate = useNavigate();
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [enhancementTaskId, setEnhancementTaskId] = useState<string | null>(null);
 
 
 
@@ -112,44 +112,44 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
 
   const handleAIAssist = useCallback(async (fieldName: string) => {
     const currentValues = form.getFieldsValue();
-    const context = {
-      fieldName,
-      currentValue: currentValues[fieldName],
-      novelInfo: {
-        title: outline?.novel_id,
-        genre: 'unknown',
-      },
-      otherFields: currentValues,
-    };
 
     message.loading('AI 正在生成建议...', 0);
-    
+
     try {
-      const response = await fetch(`/api/novels/${novelId}/outline/ai-assist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(context),
+      const result = await aiAssistOutline(novelId, {
+        field_name: fieldName,
+        current_context: {
+          current_value: currentValues[fieldName],
+          other_fields: currentValues,
+        },
       });
 
-      if (!response.ok) throw new Error('AI 服务响应失败');
-      
-      const data = await response.json();
-      const suggestion = data.suggestion || data.content || data.text;
-      
-      if (suggestion) {
-        form.setFieldValue(fieldName, suggestion);
+      message.destroy();
+
+      if (result.suggestion) {
+        // 如果建议是 JSON 字符串，尝试解析
+        let suggestionValue = result.suggestion;
+        try {
+          const parsed = JSON.parse(result.suggestion);
+          suggestionValue = parsed;
+        } catch {
+          // 不是 JSON，保持原样
+        }
+
+        form.setFieldValue(fieldName, suggestionValue);
         message.success('AI 建议已填充');
-        
+
         const updatedValues = form.getFieldsValue();
         calculateCompleteness(updatedValues as MainPlot);
       } else {
         message.warning('AI 未返回有效建议');
       }
     } catch (error) {
+      message.destroy();
       console.error('AI assist error:', error);
       message.error('AI 辅助失败，请稍后重试');
     }
-  }, [novelId, form, outline]);
+  }, [novelId, form, calculateCompleteness]);
 
   const handleSaveDraft = useCallback(async () => {
     setSaving(true);
@@ -256,11 +256,14 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
         createdAt: new Date(task.created_at)
       });
 
-      // 显示成功提示
-      message.success('智能完善任务已创建，可在生成历史中查看进度');
-      
-      // 跳转到生成历史Tab
-      navigate(`/novels/${novelId}?tab=generation-history`);
+      // 显示成功提示，提供跳转选项而非强制跳转
+      message.success({
+        content: '智能完善任务已创建',
+        duration: 5,
+      });
+
+      // 设置本地状态以便在当前页面显示进度指示器
+      setEnhancementTaskId(task.id);
 
     } catch (error) {
       console.error('创建完善任务失败:', error);
@@ -268,7 +271,7 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
     } finally {
       setIsCreatingTask(false);
     }
-  }, [novelId, form, outline, hasRunningEnhancementTask, isCreatingTask, setCurrentEnhancementTask, navigate]);
+  }, [novelId, form, outline, hasRunningEnhancementTask, isCreatingTask, setCurrentEnhancementTask, setEnhancementTaskId]);
 
   const getProgressColor = (percent: number) => {
     if (percent < 30) return '#ff4d4f';
@@ -287,6 +290,35 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
 
   return (
     <div>
+      {/* 任务进度提示 */}
+      {enhancementTaskId && (
+        <Alert
+          message="智能完善任务已创建"
+          description={
+            <Space>
+              <span>任务正在进行中，您可以继续编辑大纲。</span>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => navigate(`/novels/${novelId}?tab=generation-history`)}
+              >
+                查看进度
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => setEnhancementTaskId(null)}
+              >
+                关闭提示
+              </Button>
+            </Space>
+          }
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <Card style={{ marginBottom: 16 }}>
         <Row align="middle" gutter={16}>
           <Col flex="auto">

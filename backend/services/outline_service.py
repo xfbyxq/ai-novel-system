@@ -373,10 +373,13 @@ class OutlineService:
             
             # 4. 提取关键事件
             key_events = volume.get("key_events", [])
-            
+
             # 5. 生成章节配置
             volume_chapter_configs = []
-            
+
+            # 获取全局高潮章节号
+            global_climax_chapter = outline_data.get("climax_chapter")
+
             for ch_num in range(start_ch, end_ch + 1):
                 chapter_config = self._generate_chapter_config(
                     chapter_number=ch_num,
@@ -384,7 +387,10 @@ class OutlineService:
                     tension_cycles=tension_cycles,
                     key_events=key_events,
                     volume_summary=volume.get("summary", ""),
-                    auto_split=auto_split
+                    auto_split=auto_split,
+                    end_ch=end_ch,
+                    climax_chapter=global_climax_chapter,
+                    volume_is_climax=volume.get("is_climax", False)
                 )
                 volume_chapter_configs.append(chapter_config)
             
@@ -418,7 +424,10 @@ class OutlineService:
         tension_cycles: List[Dict[str, Any]],
         key_events: List[Dict[str, Any]],
         volume_summary: str,
-        auto_split: bool = True
+        auto_split: bool = True,
+        end_ch: int = 0,
+        climax_chapter: Optional[int] = None,
+        volume_is_climax: bool = False
     ) -> Dict[str, Any]:
         """生成单章配置"""
         # 1. 找到当前章所属的张力循环
@@ -481,11 +490,23 @@ class OutlineService:
         for event in chapter_events:
             config["mandatory_events"].append(event.get("event", ""))
             config["is_milestone"] = True
-        
-        # 6. 检查是否是高潮章
-        if volume_summary and "高潮" in volume_summary:
+
+        # 6. 检查是否是高潮章（优先级递减）
+        # 优先级1：全局高潮章节号精确匹配
+        if climax_chapter is not None and climax_chapter == chapter_number:
             config["is_climax"] = True
-        
+        # 优先级2：卷级别高潮标记
+        elif volume_is_climax:
+            config["is_climax"] = True
+        # 优先级3：张力循环释放期的最后一章
+        elif current_cycle and cycle_position == "release":
+            cycle_chapters = current_cycle.get("chapters", [])
+            if len(cycle_chapters) == 2 and chapter_number == cycle_chapters[1]:
+                config["is_climax"] = True
+        # 优先级4：卷末章且卷摘要包含高潮关键词
+        elif end_ch > 0 and chapter_number == end_ch and volume_summary and "高潮" in volume_summary:
+            config["is_climax"] = True
+
         return config
     
     async def get_chapter_outline_task(
@@ -647,8 +668,177 @@ class OutlineService:
             f"Validation completed: passed={passed}, "
             f"completion_rate={completion_rate:.2f}"
         )
-        
+
         return validation_report
+
+    async def generate_field_suggestion(
+        self,
+        novel_id: UUID,
+        field_name: str,
+        context: Dict[str, Any],
+        hints: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        为大纲字段生成AI建议
+
+        Args:
+            novel_id: 小说 ID
+            field_name: 字段名
+            context: 上下文信息
+            hints: 额外提示
+
+        Returns:
+            包含建议的字典
+        """
+        logger.info(f"Generating AI suggestion for field '{field_name}', novel {novel_id}")
+
+        # 字段特定的生成逻辑
+        field_prompts = {
+            "structure_type": "根据小说类型和目标字数，推荐适合的故事结构类型",
+            "volumes": "根据故事结构和预计章节数，设计卷级划分方案",
+            "main_plot": "根据世界观设定和角色，构思主线剧情框架",
+            "sub_plots": "根据主线剧情和角色关系，设计支线剧情",
+            "key_turning_points": "根据剧情发展，设计关键转折点",
+            "climax_chapter": "根据故事结构，推荐高潮章节位置",
+        }
+
+        prompt_template = field_prompts.get(
+            field_name,
+            f"为大纲的 '{field_name}' 字段生成建议"
+        )
+
+        # 构建上下文描述
+        context_desc = self._build_context_description(context)
+
+        # 生成建议（基于规则的简单实现，可后续接入LLM）
+        suggestion = await self._generate_suggestion_for_field(
+            field_name, context, hints, prompt_template
+        )
+
+        return {
+            "suggestion": suggestion,
+            "confidence": 0.7,
+            "reasoning": f"基于当前小说设定和{prompt_template}",
+            "alternatives": [],
+        }
+
+    def _build_context_description(self, context: Dict[str, Any]) -> str:
+        """构建上下文描述"""
+        parts = []
+
+        if "novel" in context:
+            novel = context["novel"]
+            parts.append(f"小说《{novel.get('title', '未命名')}》")
+            if novel.get("genre"):
+                parts.append(f"类型：{novel['genre']}")
+            if novel.get("target_word_count"):
+                parts.append(f"目标字数：{novel['target_word_count']}")
+
+        if "world_setting" in context:
+            world = context["world_setting"]
+            if world.get("world_name"):
+                parts.append(f"世界观：{world['world_name']}")
+            if world.get("world_type"):
+                parts.append(f"世界类型：{world['world_type']}")
+
+        if "characters" in context:
+            chars = context["characters"]
+            if chars:
+                names = [c.get("name", "") for c in chars[:5] if c.get("name")]
+                if names:
+                    parts.append(f"主要角色：{', '.join(names)}")
+
+        return " | ".join(parts) if parts else "无上下文信息"
+
+    async def _generate_suggestion_for_field(
+        self,
+        field_name: str,
+        context: Dict[str, Any],
+        hints: Optional[str],
+        prompt_template: str
+    ) -> str:
+        """为特定字段生成建议"""
+
+        novel = context.get("novel", {})
+        world = context.get("world_setting", {})
+        outline = context.get("outline", {})
+
+        if field_name == "structure_type":
+            genre = novel.get("genre", "")
+            if genre in ["玄幻", "仙侠", "武侠"]:
+                return "三幕式"
+            elif genre in ["都市", "言情"]:
+                return "三幕式"
+            elif genre in ["悬疑", "推理"]:
+                return "多线叙事"
+            else:
+                return "三幕式"
+
+        elif field_name == "climax_chapter":
+            # 根据目标字数估算章节数，高潮通常在70-80%位置
+            target_words = novel.get("target_word_count", 100000)
+            estimated_chapters = target_words // 3000  # 假设每章3000字
+            climax_chapter = int(estimated_chapters * 0.75)
+            return str(max(climax_chapter, 10))
+
+        elif field_name == "volumes":
+            # 根据目标字数估算卷数
+            target_words = novel.get("target_word_count", 100000)
+            estimated_chapters = target_words // 3000
+            volumes_count = max(1, estimated_chapters // 20)  # 每卷约20章
+
+            volumes = []
+            chapters_per_volume = estimated_chapters // volumes_count
+
+            for i in range(volumes_count):
+                start_ch = i * chapters_per_volume + 1
+                end_ch = (i + 1) * chapters_per_volume if i < volumes_count - 1 else estimated_chapters
+                volumes.append({
+                    "number": i + 1,
+                    "title": f"第{i + 1}卷",
+                    "chapters": [start_ch, end_ch],
+                    "summary": ""
+                })
+
+            return json.dumps(volumes, ensure_ascii=False)
+
+        elif field_name == "main_plot":
+            world_name = world.get("world_name", "这个世界")
+            world_type = world.get("world_type", "奇幻")
+
+            return json.dumps({
+                "setup": f"主角在{world_name}中成长，展现{world_type}世界的独特魅力",
+                "conflict": "主角面临重大挑战，遭遇强敌或困境",
+                "climax": "主角突破自我，战胜最强敌人",
+                "resolution": "故事结局，主角达成目标或开启新篇章"
+            }, ensure_ascii=False)
+
+        elif field_name == "sub_plots":
+            characters = context.get("characters", [])
+            sub_plots = []
+
+            for char in characters[:3]:
+                if char.get("name"):
+                    sub_plots.append({
+                        "name": f"{char['name']}成长线",
+                        "characters": [char["name"]],
+                        "arc": "角色成长与蜕变"
+                    })
+
+            return json.dumps(sub_plots, ensure_ascii=False)
+
+        elif field_name == "key_turning_points":
+            target_words = novel.get("target_word_count", 100000)
+            estimated_chapters = target_words // 3000
+
+            return json.dumps([
+                {"chapter": estimated_chapters // 4, "event": "主角觉醒", "impact": "获得核心能力"},
+                {"chapter": estimated_chapters // 2, "event": "重大挫折", "impact": "实力受损"},
+                {"chapter": int(estimated_chapters * 0.75), "event": "突破瓶颈", "impact": "实力飞跃"},
+            ], ensure_ascii=False)
+
+        else:
+            return f"请根据{prompt_template}填写此字段"
     
     async def get_outline_versions(
         self,
