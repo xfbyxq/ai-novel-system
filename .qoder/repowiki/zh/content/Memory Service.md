@@ -10,14 +10,16 @@
 - [novel.py](file://core/models/novel.py)
 - [qwen_client.py](file://llm/qwen_client.py)
 - [ai_chat.py](file://backend/schemas/ai_chat.py)
+- [reflection_agent.py](file://agents/reflection_agent.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新了架构概览，反映当前保留的持久化存储功能
-- 移除了关于移除持久化存储功能的说明，因为代码中仍保留相关实现
-- 更新了依赖关系分析，包含持久化记忆适配器
+- 更新了架构概览，反映增强的记忆适配器功能
+- 新增了反思机制表的详细分析，包括反思记录表、跨章节模式表和写作经验规则表
+- 更新了依赖关系分析，包含增强的持久化记忆适配器
 - 保持了内存缓存功能的完整描述
+- 新增了反思代理与内存适配器的集成分析
 
 ## 目录
 1. [简介](#简介)
@@ -36,11 +38,11 @@
 
 该服务主要服务于AI聊天功能，通过智能缓存机制显著提升小说信息的访问速度，同时提供完整的版本控制和增量更新能力，确保小说创作过程中的数据一致性。
 
-**更新** 系统当前采用混合架构，在保留内存缓存功能的同时，也集成了持久化存储适配器，为未来的架构简化奠定基础。
+**更新** 系统当前采用混合架构，在保留内存缓存功能的同时，集成了增强的记忆适配器，支持反思机制、跨章节模式分析和写作经验规则管理，为未来的架构简化奠定基础。
 
 ## 项目结构
 
-内存服务在当前架构中采用混合设计，既包含内存缓存也包含持久化存储：
+内存服务在当前架构中采用混合设计，既包含内存缓存也包含增强的持久化存储：
 
 ```mermaid
 graph TB
@@ -54,20 +56,23 @@ end
 subgraph "服务层"
 AI_CHAT_SERVICE[AI聊天服务]
 MEMORY_SERVICE[内存缓存服务]
-PERSISTENT_ADAPTER[持久化记忆适配器]
+PERSISTENT_ADAPTER[增强记忆适配器]
+REFLECTION_AGENT[反思代理]
 end
 subgraph "数据层"
 DB[(数据库)]
 MODELS[ORM模型]
-PERSISTENT_DB[(持久化数据库)]
+PERSISTENT_DB[(增强持久化数据库)]
+REFLECTION_TABLES[反思机制表组]
 end
 FE --> API
 API --> AI_CHAT_SERVICE
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
-AI_CHAT_SERVICE --> DB
-MEMORY_SERVICE --> DB
+AI_CHAT_SERVICE --> REFLECTION_AGENT
+REFLECTION_AGENT --> PERSISTENT_ADAPTER
 PERSISTENT_ADAPTER --> PERSISTENT_DB
+PERSISTENT_DB --> REFLECTION_TABLES
 DB --> MODELS
 ```
 
@@ -75,15 +80,17 @@ DB --> MODELS
 - [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 - [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
+- [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
 
 **章节来源**
 - [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 - [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
+- [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
 
 ## 核心组件
 
-内存服务包含三个核心组件：
+内存服务包含四个核心组件：
 
 ### 1. MemoryCache 内存缓存系统
 - **内存缓存实现**：提供LRU（最近最少使用）淘汰策略
@@ -97,20 +104,27 @@ DB --> MODELS
 - **结构化数据存储**：按层次结构组织小说数据
 - **增量更新支持**：仅在内容发生变化时更新缓存
 
-### 3. NovelMemoryAdapter 持久化记忆适配器
+### 3. NovelMemoryAdapter 增强记忆适配器
 - **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
 - **全文搜索支持**：集成FTS5全文搜索引擎
 - **分层记忆管理**：支持章节摘要、角色状态、伏笔追踪等多维度记忆
 - **线程安全设计**：使用线程本地连接确保并发安全性
+- **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
+
+### 4. 反思机制表组
+- **反思记录表**：短期反思输出，每次审查循环一条记录
+- **跨章节模式表**：长期反思输出，识别反复出现的问题模式
+- **写作经验规则表**：长期反思输出，注入到prompt的写作建议
 
 **章节来源**
 - [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
 - [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
 - [agentmesh_memory_adapter.py:922-1181](file://backend/services/agentmesh_memory_adapter.py#L922-L1181)
+- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
 
 ## 架构概览
 
-内存服务采用混合架构设计，与AI聊天服务紧密集成：
+内存服务采用增强的混合架构设计，与AI聊天服务和反思代理紧密集成：
 
 ```mermaid
 sequenceDiagram
@@ -118,7 +132,8 @@ participant Client as 客户端
 participant API as API层
 participant ChatService as AI聊天服务
 participant MemoryService as 内存缓存服务
-participant PersistentAdapter as 持久化适配器
+participant PersistentAdapter as 增强记忆适配器
+participant ReflectionAgent as 反思代理
 participant Cache as 内存缓存
 participant DB as 数据库
 Client->>API : 请求小说信息
@@ -131,12 +146,17 @@ MemoryService-->>ChatService : 返回小说信息
 else 缓存未命中
 MemoryService->>DB : 查询数据库
 DB-->>MemoryService : 返回数据库数据
-MemoryService->>PersistentAdapter : 初始化持久化记忆
+MemoryService->>PersistentAdapter : 初始化增强记忆
 PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
+PersistentAdapter->>PersistentAdapter : 创建反思机制表组
 MemoryService->>MemoryService : set_novel_memory()
 MemoryService->>Cache : 存储到缓存
 MemoryService-->>ChatService : 返回小说信息
 end
+ChatService->>ReflectionAgent : 触发反思分析
+ReflectionAgent->>PersistentAdapter : 保存反思记录
+ReflectionAgent->>PersistentAdapter : 识别跨章节模式
+ReflectionAgent->>PersistentAdapter : 生成写作经验规则
 ChatService-->>API : 返回响应
 API-->>Client : 返回结果
 ```
@@ -145,6 +165,7 @@ API-->>Client : 返回结果
 - [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
 - [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
 - [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
+- [reflection_agent.py:175-190](file://agents/reflection_agent.py#L175-L190)
 
 ## 详细组件分析
 
@@ -295,9 +316,9 @@ NO_CHANGE --> END
 
 ### NovelMemoryAdapter 类分析
 
-NovelMemoryAdapter 提供了完整的持久化存储解决方案：
+NovelMemoryAdapter 提供了增强的持久化存储解决方案：
 
-#### 数据库表结构设计
+#### 增强的数据库表结构设计
 
 ```mermaid
 erDiagram
@@ -369,10 +390,61 @@ text_hash TEXT
 token_count INTEGER
 created_at TEXT
 }
+REFLECTION_ENTRIES {
+id STRING PK
+novel_id STRING
+loop_type TEXT
+chapter_number INTEGER
+chapter_type TEXT
+total_iterations INTEGER
+initial_score REAL
+final_score REAL
+converged INTEGER
+score_progression TEXT
+dimension_scores_first TEXT
+dimension_scores_final TEXT
+issue_categories TEXT
+recurring_issues TEXT
+resolved_issues TEXT
+unresolved_issues TEXT
+effective_strategies TEXT
+stagnation_detected INTEGER
+created_at TEXT
+}
+CHAPTER_PATTERNS {
+id STRING PK
+novel_id STRING
+pattern_type TEXT
+description TEXT
+confidence REAL
+evidence_chapters TEXT
+affected_dimension TEXT
+occurrence_count INTEGER
+last_seen_chapter INTEGER
+status TEXT
+created_at TEXT
+updated_at TEXT
+}
+WRITING_LESSONS {
+id STRING PK
+novel_id STRING
+lesson_type TEXT
+rule_text TEXT
+reasoning TEXT
+source_pattern_id TEXT
+applicable_chapter_types TEXT
+priority INTEGER
+times_applied INTEGER
+effectiveness_score REAL
+status TEXT
+created_at TEXT
+updated_at TEXT
+}
 ```
 
 **图表来源**
 - [agentmesh_memory_adapter.py:52-167](file://backend/services/agentmesh_memory_adapter.py#L52-L167)
+- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
 
 #### 核心功能特性
 
@@ -380,9 +452,81 @@ created_at TEXT
 2. **全文搜索支持**：集成FTS5全文搜索引擎
 3. **线程安全设计**：使用线程本地连接确保并发安全性
 4. **索引优化**：为常用查询建立索引提升性能
+5. **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
 
 **章节来源**
 - [agentmesh_memory_adapter.py:20-167](file://backend/services/agentmesh_memory_adapter.py#L20-L167)
+- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+
+### 反思机制表组分析
+
+#### 反思记录表（短期反思）
+
+反思记录表用于存储每次审查循环的短期反思输出：
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| id | STRING | 主键标识 |
+| novel_id | STRING | 小说ID |
+| loop_type | TEXT | 审查循环类型（chapter/world/character/plot） |
+| chapter_number | INTEGER | 章节编号 |
+| chapter_type | TEXT | 章节类型（opening/climax/normal等） |
+| total_iterations | INTEGER | 迭代总轮数 |
+| initial_score | REAL | 初始评分 |
+| final_score | REAL | 最终评分 |
+| converged | INTEGER | 是否收敛（0/1） |
+| score_progression | TEXT | 评分序列（JSON数组） |
+| dimension_scores_first | TEXT | 首轮各维度评分（JSON对象） |
+| dimension_scores_final | TEXT | 末轮各维度评分（JSON对象） |
+| issue_categories | TEXT | 问题分类列表（JSON数组） |
+| recurring_issues | TEXT | 反复出现的问题（JSON数组） |
+| resolved_issues | TEXT | 已解决问题（JSON数组） |
+| unresolved_issues | TEXT | 未解决问题（JSON数组） |
+| effective_strategies | TEXT | 有效修订策略（JSON数组） |
+| stagnation_detected | INTEGER | 是否检测到停滞（0/1） |
+| created_at | TEXT | 创建时间 |
+
+#### 跨章节模式表（长期反思）
+
+跨章节模式表用于识别反复出现的问题模式：
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| id | STRING | 主键标识 |
+| novel_id | STRING | 小说ID |
+| pattern_type | TEXT | 模式类型（weakness/strength等） |
+| description | TEXT | 模式描述 |
+| confidence | REAL | 置信度（0-1） |
+| evidence_chapters | TEXT | 证据章节列表（JSON数组） |
+| affected_dimension | TEXT | 受影响维度 |
+| occurrence_count | INTEGER | 出现次数 |
+| last_seen_chapter | INTEGER | 最后出现章节 |
+| status | TEXT | 状态（active/inactive） |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 更新时间 |
+
+#### 写作经验规则表（长期反思）
+
+写作经验规则表用于存储可注入到prompt的写作建议：
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| id | STRING | 主键标识 |
+| novel_id | STRING | 小说ID |
+| lesson_type | TEXT | 规则类型（writer/reviewer等） |
+| rule_text | TEXT | 规则文本 |
+| reasoning | TEXT | 理由说明 |
+| source_pattern_id | TEXT | 源模式ID |
+| applicable_chapter_types | TEXT | 适用章节类型（JSON数组） |
+| priority | INTEGER | 优先级 |
+| times_applied | INTEGER | 应用次数 |
+| effectiveness_score | REAL | 效果评分（0-1） |
+| status | TEXT | 状态（active/inactive） |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 更新时间 |
+
+**章节来源**
+- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
 
 ## 依赖关系分析
 
@@ -404,12 +548,15 @@ pathlib[路径处理]
 end
 subgraph "内部依赖"
 AI_CHAT_SERVICE[AI聊天服务]
+REFLECTION_AGENT[反思代理]
 DATABASE_MODELS[数据库模型]
 MEMORY_SERVICE[内存缓存服务]
-PERSISTENT_ADAPTER[持久化适配器]
+PERSISTENT_ADAPTER[增强适配器]
 end
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
+AI_CHAT_SERVICE --> REFLECTION_AGENT
+REFLECTION_AGENT --> PERSISTENT_ADAPTER
 MEMORY_SERVICE --> DATABASE_MODELS
 PERSISTENT_ADAPTER --> DATABASE_MODELS
 MEMORY_SERVICE --> UUID
@@ -423,16 +570,18 @@ PERSISTENT_ADAPTER --> threading
 - [memory_service.py:1-10](file://backend/services/memory_service.py#L1-L10)
 - [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
 - [agentmesh_memory_adapter.py:1-16](file://backend/services/agentmesh_memory_adapter.py#L1-L16)
+- [reflection_agent.py:1-22](file://agents/reflection_agent.py#L1-L22)
 
-### 与AI聊天服务的集成
+### 与AI聊天服务和反思代理的集成
 
-内存服务与AI聊天服务的集成关系：
+内存服务与AI聊天服务和反思代理的集成关系：
 
 ```mermaid
 sequenceDiagram
 participant ChatService as AI聊天服务
+participant ReflectionAgent as 反思代理
 participant MemoryService as 内存缓存服务
-participant PersistentAdapter as 持久化适配器
+participant PersistentAdapter as 增强适配器
 participant Cache as 内存缓存
 participant DB as 数据库
 ChatService->>MemoryService : get_novel_info(novel_id)
@@ -443,23 +592,30 @@ MemoryService-->>ChatService : 返回小说信息
 else 缓存未命中
 MemoryService->>DB : 查询数据库
 DB-->>MemoryService : 返回数据库数据
-MemoryService->>PersistentAdapter : 初始化持久化记忆
+MemoryService->>PersistentAdapter : 初始化增强记忆
 PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
+PersistentAdapter->>PersistentAdapter : 创建反思机制表组
 MemoryService->>MemoryService : set_novel_memory()
 MemoryService->>Cache : 存储到缓存
 MemoryService-->>ChatService : 返回小说信息
 end
+ChatService->>ReflectionAgent : 触发反思分析
+ReflectionAgent->>PersistentAdapter : 保存反思记录
+ReflectionAgent->>PersistentAdapter : 识别跨章节模式
+ReflectionAgent->>PersistentAdapter : 生成写作经验规则
 ```
 
 **图表来源**
 - [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
 - [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
 - [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
+- [reflection_agent.py:175-190](file://agents/reflection_agent.py#L175-L190)
 
 **章节来源**
 - [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
 - [memory_service.py:407-416](file://backend/services/memory_service.py#L407-L416)
 - [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
+- [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
 
 ## 性能考虑
 
@@ -476,6 +632,7 @@ end
 2. **索引优化**：为常用查询字段建立索引
 3. **线程本地连接**：避免线程安全问题
 4. **全文搜索优化**：使用FTS5进行高效的全文检索
+5. **反思机制索引**：为反思表建立专用索引提升查询性能
 
 ### 数据结构优化
 
@@ -483,6 +640,14 @@ end
 2. **延迟加载**：按需加载章节摘要和角色状态
 3. **内容哈希**：使用哈希值快速比较复杂数据结构
 4. **版本控制**：维护内容版本历史便于追踪变更
+5. **反思数据压缩**：使用JSON序列化存储复杂数据结构
+
+### 反思机制性能考虑
+
+1. **短期反思零LLM开销**：纯Python计算，不调用外部API
+2. **长期反思按需触发**：每N章分析一次，减少LLM调用成本
+3. **反思数据缓存**：活跃的反思记录和经验规则在内存中缓存
+4. **批量操作优化**：反思代理批量处理多个章节的分析结果
 
 ## 故障排除指南
 
@@ -513,10 +678,21 @@ end
 - **原因**：FTS5索引损坏或不支持
 - **解决方案**：重建FTS5索引或降级到LIKE搜索
 
+#### 反思机制表初始化问题
+- **症状**：反思功能无法正常工作
+- **原因**：反思机制表未正确初始化
+- **解决方案**：检查数据库迁移脚本和表结构
+
+#### 反思数据同步问题
+- **症状**：反思记录与实际分析结果不匹配
+- **原因**：反思代理与适配器之间的数据同步问题
+- **解决方案**：检查反思代理的存储调用和适配器的事务处理
+
 **章节来源**
 - [memory_service.py:56-67](file://backend/services/memory_service.py#L56-L67)
 - [memory_service.py:155-158](file://backend/services/memory_service.py#L155-L158)
 - [agentmesh_memory_adapter.py:33-45](file://backend/services/agentmesh_memory_adapter.py#L33-L45)
+- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
 
 ## 结论
 
@@ -526,9 +702,10 @@ end
 2. **深度变化检测**：精确识别小说内容的细微变化
 3. **版本控制系统**：完整追踪内容演进历史
 4. **结构化数据存储**：针对小说创作场景优化的数据组织方式
-5. **持久化存储支持**：提供SQLite数据库的长期数据保存能力
-6. **高性能架构**：与AI聊天服务无缝集成，提供流畅的用户体验
+5. **增强持久化存储**：提供SQLite数据库的长期数据保存能力
+6. **反思机制支持**：集成反思记录、跨章节模式和写作经验规则管理
+7. **高性能架构**：与AI聊天服务和反思代理无缝集成，提供流畅的用户体验
 
-**更新** 系统当前采用混合架构设计，在保留内存缓存功能的同时，集成了持久化存储适配器。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
+**更新** 系统当前采用增强的混合架构设计，在保留内存缓存功能的同时，集成了增强的记忆适配器。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
 
-该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，是系统能够高效运行的关键保障。
+该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，包括反思机制和经验学习，是系统能够高效运行的关键保障。
