@@ -347,7 +347,7 @@ poetry install
 
 ## 🔗 项目信息
 
-- **版本**: v1.3.1
+- **版本**: v1.3.2
 - **作者**: AI Assistant
 - **技术栈**: FastAPI + React + PostgreSQL + Redis
 - **Agent框架**: CrewAI + 自研

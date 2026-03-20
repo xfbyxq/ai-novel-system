@@ -61,7 +61,7 @@ tags_metadata = [
 
 app = FastAPI(
     title="小说生成系统 API",
-    version="1.3.1",
+    version="1.3.2",
     description="""
 ## AI驱动的小说生成系统
 
@@ -110,7 +110,7 @@ async def root():
     """Root endpoint returning basic API information."""
     return {
         "name": "小说生成系统 API",
-        "version": "1.3.1",
+        "version": "1.3.2",
         "status": "running",
         "api_docs": "/docs",
     }
