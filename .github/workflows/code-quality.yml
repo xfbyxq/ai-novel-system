@@ -111,6 +111,53 @@ jobs:
           
           echo "✅ Issues 创建完成"
 
+  # ========== 阶段 2.5: 生成 PR 描述 ==========
+  generate-pr-description:
+    name: 📝 Generate PR Description
+    runs-on: ubuntu-latest
+    needs: [code-review, auto-fix]
+    if: always() && needs.auto-fix.result == 'success'
+    
+    outputs:
+      pr_title: ${{ steps.generate.outputs.title }}
+      pr_body: ${{ steps.generate.outputs.body }}
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate PR Description
+        id: generate
+        run: |
+          echo "📝 生成 PR 描述..."
+          
+          # 运行生成脚本
+          ./scripts/generate-pr-description.sh main PR_DESCRIPTION.md
+          
+          # 提取标题（第一行）
+          pr_title=$(head -1 PR_DESCRIPTION.md | sed 's/^# //')
+          echo "title=$pr_title" >> $GITHUB_OUTPUT
+          
+          # 读取完整内容
+          pr_body=$(cat PR_DESCRIPTION.md)
+          # 使用 GitHub Actions 的多行输出
+          {
+            echo "body<<EOF"
+            echo "$pr_body"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
+          # 上传 PR 描述作为 artifact
+          cp PR_DESCRIPTION.md /tmp/pr-description.md
+      
+      - name: Upload PR Description
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-description
+          path: PR_DESCRIPTION.md
+          retention-days: 7
+
   # ========== 阶段 3: 自动修复 ==========
   auto-fix:
     name: 🔧 Auto Fix
@@ -244,7 +291,7 @@ jobs:
   create-pr:
     name: 🚀 Create PR
     runs-on: ubuntu-latest
-    needs: [code-review, auto-fix, quality-verify]
+    needs: [code-review, auto-fix, quality-verify, generate-pr-description]
     if: |
       always() &&
       needs.quality-verify.result == 'success' &&
@@ -252,6 +299,11 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Download PR Description
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-description
       
       - name: Create Pull Request
         env:
@@ -265,29 +317,11 @@ jobs:
           if [ -n "$existing_pr" ]; then
             echo "ℹ️ 已有开放的 PR #$existing_pr"
           else
-            # 创建新 PR
+            # 创建新 PR（使用 AI 生成的描述）
             score=${{ needs.quality-verify.outputs.composite_score }}
             gh pr create \
               --title "🤖 Auto-Fix: Code Quality Improvements (Score: $score)" \
-              --body "
-## 自动修复报告
-
-**综合评分**: $score / 100
-**修复时间**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-### 修复内容
-- 自动修复高优先级问题
-- 代码质量优化
-- 测试覆盖率提升
-
-### 质量指标
-- 代码审查评分：${{ needs.code-review.outputs.review_score }}
-- Pylint 评分：${{ needs.quality-verify.outputs.pylint_score }}
-- 测试覆盖率：${{ needs.quality-verify.outputs.coverage }}%
-
----
-*此 PR 由 GitHub Actions 自动生成*
-" \
+              --body-file PR_DESCRIPTION.md \
               --base main \
               --label "auto-fix"
             
