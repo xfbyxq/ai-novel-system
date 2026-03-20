@@ -4,6 +4,21 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings
 
 
+def get_version_from_pyproject() -> str:
+    """从 pyproject.toml 动态读取版本号"""
+    import re
+    try:
+        pyproject_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'pyproject.toml')
+        with open(pyproject_path, 'r') as f:
+            content = f.read()
+        match = re.search(r'version\s*=\s*"([^"]+)"', content)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "2.0.0"
+
+
 class Settings(BaseSettings):
     # LLM
     DASHSCOPE_API_KEY: str = ""
@@ -66,6 +81,11 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+
+    @property
+    def APP_VERSION(self) -> str:
+        """动态获取应用版本号"""
+        return get_version_from_pyproject()
 
     # Encryption (用于加密平台账号凭证)
     ENCRYPTION_KEY: str = ""
