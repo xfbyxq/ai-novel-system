@@ -16,6 +16,7 @@ import {
   Spin,
   Empty,
   Input,
+  Select,
 } from 'antd';
 import {
   DragOutlined,
@@ -25,7 +26,7 @@ import {
   DeleteOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import type { PlotOutline } from '@/api/types';
+import type { PlotOutline, VolumeInfo } from '@/api/types';
 import { getPlotOutline, updatePlotOutline } from '@/api/outlines';
 
 interface Volume {
@@ -91,7 +92,7 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
     try {
       const data = await getPlotOutline(novelId);
       
-      const volumes = (data.volumes || []) as any[];
+      const volumes = (data.volumes || []) as VolumeInfo[];
       
       if (volumes.length > 0) {
         const existingDecomposition: ChapterDecomposition = {
@@ -307,8 +308,8 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
         chapters: [vol.chapter_start, vol.chapter_end],
         core_conflict: vol.core_conflict,
         // 将字符串数组转换为对象数组以匹配API要求
-        main_events: vol.main_events ? vol.main_events.map(event => ({
-          chapter: vol.chapter_start, // 默认使用卷起始章节
+        main_events: vol.main_events ? vol.main_events.map((event, idx) => ({
+          chapter: vol.chapter_start + Math.floor((vol.main_events!.length > 0 ? idx / vol.main_events!.length : 0) * (vol.chapter_end - vol.chapter_start + 1)), // 在卷内平均分布
           event,
           impact: "medium" // 默认影响程度
         })) : undefined,
@@ -323,11 +324,17 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
           chapters: [vol.chapter_start, vol.chapter_end]
         })) : undefined,
         // 将字符串数组转换为对象数组
-        foreshadowing: vol.foreshadowing ? vol.foreshadowing.map(f => ({
-          description: f,
-          setup_chapter: vol.chapter_start,
-          payoff_chapter: vol.chapter_end
-        })) : undefined,
+        foreshadowing: vol.foreshadowing ? vol.foreshadowing.map((f, idx) => {
+          // 在卷内按比例分布伏笔设置和回报
+          const positionRatio = vol.foreshadowing!.length > 0 ? idx / (vol.foreshadowing!.length) : 0;
+          const setupChapter = Math.floor(vol.chapter_start + positionRatio * (vol.chapter_end - vol.chapter_start) * 0.6); // 60%前设置
+          const payoffChapter = Math.floor(setupChapter + (1 - positionRatio) * (vol.chapter_end - setupChapter) * 0.4 + 1); // 之后回报
+          return {
+            description: f,
+            setup_chapter: setupChapter,
+            payoff_chapter: Math.min(payoffChapter, vol.chapter_end)
+          };
+        }) : undefined,
         themes: vol.themes,
         word_count_range: vol.word_count_range,
       }));

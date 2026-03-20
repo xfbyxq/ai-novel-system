@@ -29,6 +29,9 @@ from agents.character_review_loop import CharacterReviewHandler
 from agents.world_review_loop import WorldReviewHandler
 from agents.plot_review_loop import PlotReviewHandler
 
+# 反思机制
+from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+
 # 章节连续性增强组件
 from agents.context_compressor import ContextCompressor, CompressedContext
 from agents.similarity_detector import SimilarityDetector
@@ -155,6 +158,9 @@ class NovelCrewManager:
         self._chapter_summaries: dict[int, dict] = {}
         self._chapter_contents: dict[int, str] = {}
         self._chapter_detailed_outlines: dict[int, dict] = {}
+        
+        # 反思代理（初始化为None，需要时通过setup_reflection设置）
+        self.reflection_agent = None
 
     def _extract_json_from_response(self, response: str) -> dict | list:
         """从 LLM 响应中提取 JSON
@@ -1063,9 +1069,16 @@ class NovelCrewManager:
                 previous_key_info=previous_chapters_summary or "（本章为第一章）",
             )
             
+            # 注入反思经验到连续性检查系统提示词
+            continuity_system = self.pm.CONTINUITY_CHECKER_SYSTEM
+            if self.reflection_agent:
+                continuity_lessons = self.reflection_agent.get_lessons_for_continuity()
+                if continuity_lessons:
+                    continuity_system += "\n" + continuity_lessons
+            
             continuity_report = await self._call_agent(
                 agent_name="连续性审查员",
-                system_prompt=self.pm.CONTINUITY_CHECKER_SYSTEM,
+                system_prompt=continuity_system,
                 task_prompt=continuity_task,
                 temperature=0.5,
                 expect_json=True,
@@ -1663,3 +1676,81 @@ class NovelCrewManager:
         few_issues = (structural_issues + character_issues) <= 2
         
         return has_positive_words or few_issues
+    
+    def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
+        """设置反思代理
+        
+        Args:
+            storage: 存储实例（如 NovelMemoryStorage）
+            novel_id: 小说ID
+            config: ReflectionConfig 配置，如果为 None 则使用默认配置
+        """
+        from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+        self.reflection_agent = ReflectionAgent(
+            client=self.client,
+            cost_tracker=self.cost_tracker,
+            novel_id=novel_id,
+            storage=storage,
+            config=config or ReflectionConfig()
+        )
+        return self.reflection_agent
+    
+    def _extract_improvements(
+        self, 
+        original: dict, 
+        optimized: dict, 
+        suggestions: list
+    ) -> list:
+        """提取本次优化的具体改进点"""
+        improvements = []
+        
+        # 基于建议生成改进描述
+        for suggestion in suggestions:
+            if isinstance(suggestion, dict):
+                improvements.append(
+                    f"优化了{suggestion.get('issue_category', '某方面')}："
+                    f"{suggestion.get('specific_issue', '某个问题')} → "
+                    f"{suggestion.get('solution', '已解决')}"
+                )
+        
+        # 如果没有具体建议，生成通用描述
+        if not improvements:
+            improvements.append("对大纲结构进行了综合性优化")
+            
+        return improvements
+    
+    def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
+        """判断是否应该停止完善迭代"""
+        quality_threshold = options.get("quality_threshold", 8.0)
+        
+        # 简单的质量评估逻辑
+        # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断
+        overall_assessment = analysis_result.get("overall_assessment", "").lower()
+        
+        # 如果评估中包含"良好"、"优秀"等正面词汇，或者问题很少
+        positive_indicators = ["良好", "优秀", "完善", "完整"]
+        structural_issues = len(analysis_result.get("structural_issues", []))
+        character_issues = len(analysis_result.get("character_development_issues", []))
+        
+        has_positive_words = any(word in overall_assessment for word in positive_indicators)
+        few_issues = (structural_issues + character_issues) <= 2
+        
+        return has_positive_words or few_issues
+    
+    def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
+        """设置反思代理
+        
+        Args:
+            storage: 存储实例（如 NovelMemoryStorage）
+            novel_id: 小说ID
+            config: ReflectionConfig 配置，如果为 None 则使用默认配置
+        """
+        from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+        self.reflection_agent = ReflectionAgent(
+            client=self.client,
+            cost_tracker=self.cost_tracker,
+            novel_id=novel_id,
+            storage=storage,
+            config=config or ReflectionConfig()
+        )
+        return self.reflection_agent

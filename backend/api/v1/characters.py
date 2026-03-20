@@ -5,7 +5,7 @@ Character CRUD API endpoints.
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db
@@ -45,7 +45,16 @@ async def list_characters(
     result = await db.execute(query)
     characters = result.scalars().all()
 
-    return characters
+    # 按名称去重（保留最早创建的记录），防止数据库中存在历史重复数据
+    seen_names: set[str] = set()
+    unique_characters = []
+    for c in characters:
+        name_lower = c.name.strip().lower()
+        if name_lower not in seen_names:
+            seen_names.add(name_lower)
+            unique_characters.append(c)
+
+    return unique_characters
 
 
 @router.post("", response_model=CharacterResponse, status_code=201)
@@ -66,6 +75,19 @@ async def create_character(
 
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+
+    # 检查同名角色是否已存在（不区分大小写）
+    existing_check = await db.execute(
+        select(Character).where(
+            Character.novel_id == novel_id,
+            func.lower(Character.name) == character_in.name.strip().lower(),
+        )
+    )
+    if existing_check.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"角色「{character_in.name}」在该小说中已存在",
+        )
 
     # Create character
     character = Character(**character_in.model_dump(), novel_id=novel_id)
@@ -98,9 +120,18 @@ async def get_character_relationships(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get all characters
-    query = select(Character).where(Character.novel_id == novel_id)
+    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
     result = await db.execute(query)
-    characters = result.scalars().all()
+    all_characters = result.scalars().all()
+
+    # 按名称去重（保留最早创建的记录），防止重复角色产生孤立节点
+    seen_names: set[str] = set()
+    characters = []
+    for c in all_characters:
+        name_lower = c.name.strip().lower()
+        if name_lower not in seen_names:
+            seen_names.add(name_lower)
+            characters.append(c)
 
     # Create name to ID mapping
     name_to_id = {char.name: str(char.id) for char in characters}

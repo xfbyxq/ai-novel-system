@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func, select
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, func, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
@@ -20,7 +20,7 @@ class CharacterNameVersion(Base):
     changed_at = Column(DateTime(timezone=True), server_default=func.now())
     changed_by = Column(String(100), nullable=False, default="system")
     reason = Column(Text, nullable=True)
-    is_active = Column(default=True)
+    is_active = Column(Boolean, default=True)
 
     character = relationship("Character", back_populates="name_versions")
 

@@ -10,6 +10,8 @@ from core.models.platform_account import PlatformAccount, AccountStatus
 from core.models.publish_task import PublishTask, PublishType, PublishTaskStatus
 from core.models.chapter_publish import ChapterPublish, PublishStatus
 from core.models.ai_chat_session import AIChatSession, AIChatMessage
+from core.models.novel_creation_flow import NovelCreationFlow
+from core.models.agent_activity import AgentActivity
 
 __all__ = [
     "Novel",
@@ -38,4 +40,8 @@ __all__ = [
     # AI Chat models
     "AIChatSession",
     "AIChatMessage",
+    # Novel creation flow
+    "NovelCreationFlow",
+    # Agent activity
+    "AgentActivity",
 ]

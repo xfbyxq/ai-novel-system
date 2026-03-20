@@ -651,6 +651,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         self._issue_tracker: Optional[IssueTracker] = None
         self._progress_summary: Optional[ReviewProgressSummary] = None
         self._quality_level: QualityLevel = QualityLevel.MEDIUM
+        self._reflection_agent = None
     
     # ══════════════════════════════════════════════════════════════════════════
     # 模板方法（核心迭代逻辑）
@@ -818,6 +819,10 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
             f"[{loop_name}] 完成: iterations={result.total_iterations}, "
             f"score={result.final_score:.1f}, converged={result.converged}"
         )
+        
+        # ── 短期反思钩子 ──────────────────────────────────────
+        if hasattr(self, '_run_reflection_hook'):
+            await self._run_reflection_hook(result, context)
         
         return result
     
@@ -1210,6 +1215,12 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         """
         prefix_parts = []
         
+        # 反思经验注入（Writer 建议）
+        if self._reflection_agent:
+            writer_lessons = self._reflection_agent.get_lessons_for_writer()
+            if writer_lessons:
+                prefix_parts.append(writer_lessons)
+        
         # 修订策略
         if self._quality_level:
             strategy = self._build_revision_strategy_text(
@@ -1369,8 +1380,8 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     def _parse_builder_response(self, response_text: str) -> TContent:
         """解析 Builder 响应
         
-        默认实现：提取 JSON。
-        章节审查子类应覆盖此方法以返回纯文本。
+        默认实现: 提取 JSON.
+        章节审查子类应覆盖此方法以返回纯文本.
         
         Args:
             response_text: LLM 响应文本

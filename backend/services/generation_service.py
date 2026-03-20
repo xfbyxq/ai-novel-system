@@ -644,6 +644,12 @@ class GenerationService:
 
             # 初始化Agent调度器
             await self.dispatcher.initialize()
+            
+            # 初始化反思代理（需要 novel_id 和持久化存储）
+            self.dispatcher.crew_manager.setup_reflection(
+                novel_id=str(novel_id),
+                storage=self.persistent_memory.storage,
+            )
 
             # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
             if chapter_number > 1:

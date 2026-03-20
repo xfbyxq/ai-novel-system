@@ -9,7 +9,7 @@ import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
@@ -56,7 +56,7 @@ class CharacterAutoDetector:
             novel_id: 小说 ID
             chapter_number: 章节号
             chapter_content: 章节内容
-            existing_characters: 现有角色列表
+            existing_characters: 现有角色列表（保留参数兼容性，内部会重新查询数据库）
 
         Returns:
             新创建的 Character 列表（可能为空）
@@ -65,7 +65,13 @@ class CharacterAutoDetector:
             if not chapter_content or not chapter_content.strip():
                 return []
 
-            existing_names = [c.name for c in existing_characters]
+            # 关键修复：直接从数据库查询最新角色列表，
+            # 避免因 expire_on_commit=False 导致 ORM 关系缓存过期而产生重复角色
+            db_stmt = select(Character).where(Character.novel_id == novel_id)
+            db_result = await self.db.execute(db_stmt)
+            db_characters = list(db_result.scalars().all())
+
+            existing_names = [c.name for c in db_characters]
 
             # 1. LLM 提取章节中的角色
             extracted = await self._extract_characters_from_content(
@@ -78,8 +84,8 @@ class CharacterAutoDetector:
                 logger.info(f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色")
                 return []
 
-            # 2. 多层去重过滤
-            new_chars = self._filter_new_characters(extracted, existing_characters)
+            # 2. 多层去重过滤（使用数据库最新数据）
+            new_chars = self._filter_new_characters(extracted, db_characters)
 
             if not new_chars:
                 logger.info(
@@ -278,6 +284,18 @@ class CharacterAutoDetector:
             try:
                 name = char_data.get("name", "").strip()
                 if not name:
+                    continue
+
+                # 插入前再次检查数据库，防止竞态条件导致重复创建
+                existing_stmt = select(Character).where(
+                    Character.novel_id == novel_id,
+                    func.lower(Character.name) == name.lower(),
+                )
+                existing_result = await self.db.execute(existing_stmt)
+                if existing_result.scalar_one_or_none():
+                    logger.info(
+                        f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册"
+                    )
                     continue
 
                 # 确定 role_type

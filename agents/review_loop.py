@@ -677,4 +677,12 @@ class ReviewLoopHandler(
         final_content = best_content if best_score > 0 else current_content
         final_report = best_report if best_report else last_report
         self._finalize_result(result, final_content, final_report)
+        
+        # 短期反思钩子
+        if hasattr(self, '_run_reflection_hook'):
+            await self._run_reflection_hook(result, {
+            "chapter_number": chapter_number,
+            "chapter_type": chapter_type or "normal",
+        })
+        
         return result

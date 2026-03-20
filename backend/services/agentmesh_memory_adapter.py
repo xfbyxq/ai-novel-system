@@ -156,6 +156,70 @@ class NovelMemoryStorage:
                 # FTS5 已存在或不支持，忽略
                 pass
 
+            # ── 反思机制表 ──────────────────────────────────────
+
+            # 反思记录表（短期反思输出，每次审查循环一条）
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS reflection_entries (
+                    id TEXT PRIMARY KEY,
+                    novel_id TEXT NOT NULL,
+                    loop_type TEXT NOT NULL,
+                    chapter_number INTEGER NOT NULL,
+                    chapter_type TEXT DEFAULT 'normal',
+                    total_iterations INTEGER DEFAULT 0,
+                    initial_score REAL DEFAULT 0,
+                    final_score REAL DEFAULT 0,
+                    converged INTEGER DEFAULT 0,
+                    score_progression TEXT,
+                    dimension_scores_first TEXT,
+                    dimension_scores_final TEXT,
+                    issue_categories TEXT,
+                    recurring_issues TEXT,
+                    resolved_issues TEXT,
+                    unresolved_issues TEXT,
+                    effective_strategies TEXT,
+                    stagnation_detected INTEGER DEFAULT 0,
+                    created_at TEXT NOT NULL
+                )
+            ''')
+
+            # 跨章节模式表（长期反思输出）
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS chapter_patterns (
+                    id TEXT PRIMARY KEY,
+                    novel_id TEXT NOT NULL,
+                    pattern_type TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    confidence REAL DEFAULT 0.7,
+                    evidence_chapters TEXT,
+                    affected_dimension TEXT,
+                    occurrence_count INTEGER DEFAULT 1,
+                    last_seen_chapter INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            ''')
+
+            # 写作经验规则表（长期反思输出，注入到 prompt）
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS writing_lessons (
+                    id TEXT PRIMARY KEY,
+                    novel_id TEXT NOT NULL,
+                    lesson_type TEXT NOT NULL,
+                    rule_text TEXT NOT NULL,
+                    reasoning TEXT,
+                    source_pattern_id TEXT,
+                    applicable_chapter_types TEXT,
+                    priority INTEGER DEFAULT 1,
+                    times_applied INTEGER DEFAULT 0,
+                    effectiveness_score REAL DEFAULT 0.5,
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            ''')
+
             # 创建索引
             conn.execute('CREATE INDEX IF NOT EXISTS idx_chapter_novel ON chapter_summaries(novel_id)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_chapter_number ON chapter_summaries(chapter_number)')
@@ -164,6 +228,12 @@ class NovelMemoryStorage:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_foreshadowing_status ON foreshadowing(status)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_novel ON memory_chunks(novel_id)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_source ON memory_chunks(source_type, source_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_reflection_novel ON reflection_entries(novel_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_reflection_loop ON reflection_entries(novel_id, loop_type)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patterns_novel ON chapter_patterns(novel_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_patterns_status ON chapter_patterns(novel_id, status)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_lessons_novel ON writing_lessons(novel_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_lessons_type ON writing_lessons(novel_id, lesson_type, status)')
 
             conn.commit()
             logger.info(f"Initialized novel memory storage at {self.db_path}")
@@ -911,6 +981,255 @@ class NovelMemoryStorage:
             'foreshadowing': {row['status']: row['count'] for row in foreshadowing_stats},
             'memory_chunk_count': chunk_count
         }
+
+    # ==================== 反思记录操作 ====================
+
+    def save_reflection_entry(self, novel_id: str, entry: Dict[str, Any]) -> str:
+        """保存一条短期反思记录"""
+        conn = self._get_connection()
+        record_id = str(uuid.uuid4())[:12]
+        now = entry.get("created_at", datetime.now().isoformat())
+
+        conn.execute('''
+            INSERT INTO reflection_entries
+            (id, novel_id, loop_type, chapter_number, chapter_type,
+             total_iterations, initial_score, final_score, converged,
+             score_progression, dimension_scores_first, dimension_scores_final,
+             issue_categories, recurring_issues, resolved_issues,
+             unresolved_issues, effective_strategies, stagnation_detected, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            record_id,
+            novel_id,
+            entry.get("loop_type", "chapter"),
+            entry.get("chapter_number", 0),
+            entry.get("chapter_type", "normal"),
+            entry.get("total_iterations", 0),
+            entry.get("initial_score", 0),
+            entry.get("final_score", 0),
+            1 if entry.get("converged", False) else 0,
+            json.dumps(entry.get("score_progression", []), ensure_ascii=False),
+            json.dumps(entry.get("dimension_scores_first", {}), ensure_ascii=False),
+            json.dumps(entry.get("dimension_scores_final", {}), ensure_ascii=False),
+            json.dumps(entry.get("issue_categories", []), ensure_ascii=False),
+            json.dumps(entry.get("recurring_issues", []), ensure_ascii=False),
+            json.dumps(entry.get("resolved_issues", []), ensure_ascii=False),
+            json.dumps(entry.get("unresolved_issues", []), ensure_ascii=False),
+            json.dumps(entry.get("effective_strategies", []), ensure_ascii=False),
+            1 if entry.get("stagnation_detected", False) else 0,
+            now,
+        ))
+        conn.commit()
+        logger.debug(f"Saved reflection entry for novel {novel_id}, chapter {entry.get('chapter_number')}")
+        return record_id
+
+    def get_reflection_entries(
+        self,
+        novel_id: str,
+        loop_type: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """获取反思记录列表"""
+        conn = self._get_connection()
+
+        if loop_type:
+            rows = conn.execute(
+                '''SELECT * FROM reflection_entries
+                   WHERE novel_id = ? AND loop_type = ?
+                   ORDER BY chapter_number ASC LIMIT ?''',
+                (novel_id, loop_type, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                '''SELECT * FROM reflection_entries
+                   WHERE novel_id = ?
+                   ORDER BY chapter_number ASC LIMIT ?''',
+                (novel_id, limit),
+            ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            # 反序列化 JSON 字段
+            for field_name in (
+                "score_progression", "dimension_scores_first", "dimension_scores_final",
+                "issue_categories", "recurring_issues", "resolved_issues",
+                "unresolved_issues", "effective_strategies",
+            ):
+                val = d.get(field_name)
+                if isinstance(val, str):
+                    try:
+                        d[field_name] = json.loads(val)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            d["converged"] = bool(d.get("converged", 0))
+            d["stagnation_detected"] = bool(d.get("stagnation_detected", 0))
+            results.append(d)
+        return results
+
+    # ==================== 模式 (Pattern) 操作 ====================
+
+    def save_pattern(self, novel_id: str, pattern: Dict[str, Any]) -> str:
+        """保存一条跨章节模式"""
+        conn = self._get_connection()
+        record_id = str(uuid.uuid4())[:12]
+        now = pattern.get("created_at", datetime.now().isoformat())
+
+        conn.execute('''
+            INSERT INTO chapter_patterns
+            (id, novel_id, pattern_type, description, confidence,
+             evidence_chapters, affected_dimension, occurrence_count,
+             last_seen_chapter, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            record_id,
+            novel_id,
+            pattern.get("pattern_type", "weakness"),
+            pattern.get("description", ""),
+            pattern.get("confidence", 0.7),
+            pattern.get("evidence_chapters", "[]"),
+            pattern.get("affected_dimension", ""),
+            pattern.get("occurrence_count", 1),
+            pattern.get("last_seen_chapter", 0),
+            pattern.get("status", "active"),
+            now,
+            pattern.get("updated_at", now),
+        ))
+        conn.commit()
+        logger.debug(f"Saved pattern for novel {novel_id}: {pattern.get('description', '')[:30]}")
+        return record_id
+
+    def get_active_patterns(self, novel_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """获取活跃的模式列表"""
+        conn = self._get_connection()
+        rows = conn.execute(
+            '''SELECT * FROM chapter_patterns
+               WHERE novel_id = ? AND status = 'active'
+               ORDER BY confidence DESC, occurrence_count DESC
+               LIMIT ?''',
+            (novel_id, limit),
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            val = d.get("evidence_chapters")
+            if isinstance(val, str):
+                try:
+                    d["evidence_chapters"] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+
+    # ==================== 经验规则 (Lesson) 操作 ====================
+
+    def save_lesson(self, novel_id: str, lesson: Dict[str, Any]) -> str:
+        """保存一条写作经验规则"""
+        conn = self._get_connection()
+        record_id = str(uuid.uuid4())[:12]
+        now = lesson.get("created_at", datetime.now().isoformat())
+
+        conn.execute('''
+            INSERT INTO writing_lessons
+            (id, novel_id, lesson_type, rule_text, reasoning, source_pattern_id,
+             applicable_chapter_types, priority, times_applied,
+             effectiveness_score, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            record_id,
+            novel_id,
+            lesson.get("lesson_type", "writer"),
+            lesson.get("rule_text", ""),
+            lesson.get("reasoning", ""),
+            lesson.get("source_pattern_id"),
+            lesson.get("applicable_chapter_types", '["normal"]'),
+            lesson.get("priority", 1),
+            lesson.get("times_applied", 0),
+            lesson.get("effectiveness_score", 0.5),
+            lesson.get("status", "active"),
+            now,
+            lesson.get("updated_at", now),
+        ))
+        conn.commit()
+        logger.debug(f"Saved lesson for novel {novel_id}: {lesson.get('rule_text', '')[:30]}")
+        return record_id
+
+    def get_applicable_lessons(
+        self,
+        novel_id: str,
+        lesson_type: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """获取适用的经验规则列表"""
+        conn = self._get_connection()
+
+        if lesson_type:
+            rows = conn.execute(
+                '''SELECT * FROM writing_lessons
+                   WHERE novel_id = ? AND lesson_type = ? AND status = 'active'
+                   ORDER BY priority DESC, effectiveness_score DESC
+                   LIMIT ?''',
+                (novel_id, lesson_type, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                '''SELECT * FROM writing_lessons
+                   WHERE novel_id = ? AND status = 'active'
+                   ORDER BY priority DESC, effectiveness_score DESC
+                   LIMIT ?''',
+                (novel_id, limit),
+            ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            val = d.get("applicable_chapter_types")
+            if isinstance(val, str):
+                try:
+                    d["applicable_chapter_types"] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+
+    def update_lesson_effectiveness(
+        self,
+        novel_id: str,
+        lesson_id: str,
+        times_applied: Optional[int] = None,
+        effectiveness_score: Optional[float] = None,
+        status: Optional[str] = None,
+    ) -> None:
+        """更新经验规则的效果追踪数据"""
+        conn = self._get_connection()
+        now = datetime.now().isoformat()
+
+        updates = []
+        params = []
+
+        if times_applied is not None:
+            updates.append("times_applied = ?")
+            params.append(times_applied)
+        if effectiveness_score is not None:
+            updates.append("effectiveness_score = ?")
+            params.append(effectiveness_score)
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+
+        if not updates:
+            return
+
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.extend([novel_id, lesson_id])
+
+        conn.execute(
+            f"UPDATE writing_lessons SET {', '.join(updates)} WHERE novel_id = ? AND id = ?",
+            params,
+        )
+        conn.commit()
 
     def close(self):
         """关闭数据库连接"""

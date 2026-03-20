@@ -132,6 +132,17 @@ class Settings(BaseSettings):
     OUTLINE_UPDATE_INTERVAL: int = 3            # 每 N 章触发一次偏差评估
     OUTLINE_DEVIATION_THRESHOLD: float = 6.0    # 偏差综合分超过此阈值才执行更新 (0-10)
 
+    # --- 反思机制 (Reflection) ---
+    # 从审查循环历史中提取经验教训，注入到后续写作/审查 prompt 中
+    # 短期反思：纯 Python 统计，零 LLM 开销
+    # 长期反思：每 N 章调用 1 次 LLM 做跨章节模式分析
+    ENABLE_REFLECTION: bool = True               # 反思机制总开关
+    ENABLE_REFLECTION_SHORT_TERM: bool = True    # 短期反思开关（每次审查循环后的统计分析）
+    ENABLE_REFLECTION_LONG_TERM: bool = True     # 长期反思开关（跨章节模式分析，需调用 LLM）
+    REFLECTION_ANALYSIS_INTERVAL: int = 3        # 长期反思触发间隔（每 N 章分析一次）
+    REFLECTION_MIN_CHAPTERS: int = 3             # 启动长期反思所需的最少章节数
+    REFLECTION_LESSON_BUDGET: int = 600          # 注入 prompt 时的字符预算上限
+
     def __init__(self, **values):
         super().__init__(**values)
         # 验证配置值的合理性
