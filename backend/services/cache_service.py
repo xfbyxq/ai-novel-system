@@ -22,10 +22,32 @@ class CacheService:
     - 热点数据缓存
     """
     
+    _instance = None
+    _client = None
+    
+    def __new__(cls):
+        """单例模式：确保全局只有一个 Redis 客户端实例"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        """初始化Redis客户端"""
-        self.client = redis.from_url(settings.REDIS_URL)
-        
+        """初始化 Redis 客户端（仅在首次创建时）"""
+        if not hasattr(self, '_initialized'):
+            self._client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            self._initialized = True
+
+    @property
+    def client(self):
+        """获取 Redis 客户端"""
+        return self._client
+    
+    def close(self):
+        """关闭 Redis 连接（在应用关闭时调用）"""
+        if self._client:
+            self._client.close()
+            self._initialized = False
+    
     async def get(self, key: str) -> Optional[str]:
         """
         获取缓存值

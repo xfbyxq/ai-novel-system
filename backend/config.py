@@ -27,8 +27,16 @@ class Settings(BaseSettings):
 
     # Database
     DB_USER: str = "novel_user"
-    DB_PASSWORD: str = "novel_pass"
+    DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
     DB_NAME: str = "novel_system"
+    
+    def model_post_init(self, __context) -> None:
+        """初始化后验证：确保敏感配置已设置"""
+        if self.DB_PASSWORD is None:
+            raise ValueError(
+                "DB_PASSWORD 未设置！请通过环境变量或 .env 文件配置数据库密码。\n"
+                "示例：export DB_PASSWORD='your_secure_password'"
+            )
 
     @property
     def DB_HOST(self) -> str:
@@ -174,6 +182,13 @@ class Settings(BaseSettings):
             raise ValueError("OUTLINE_UPDATE_INTERVAL must be at least 1")
         if self.CHARACTER_DETECTION_MAX_CONTENT_LENGTH < 100:
             raise ValueError("CHARACTER_DETECTION_MAX_CONTENT_LENGTH must be at least 100")
+        
+        # 生产环境必须配置 API Key
+        if self.APP_ENV == "production" and not self.DASHSCOPE_API_KEY:
+            raise ValueError(
+                "生产环境必须配置 DASHSCOPE_API_KEY！\n"
+                "请通过环境变量设置：export DASHSCOPE_API_KEY='your_api_key'"
+            )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
