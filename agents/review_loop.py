@@ -18,6 +18,7 @@ from agents.base.review_loop_base import (
     QualityLevel,
     ReviewProgressSummary,
 )
+from backend.config import settings
 from agents.team_context import AgentReview, NovelTeamContext
 
 # ── 审查专用提示词 ──────────────────────────────────────────
@@ -95,6 +96,7 @@ class ReviewLoopHandler(
         cost_tracker: CostTracker,
         quality_threshold: float = 7.5,
         max_iterations: int = 3,
+        timeout: float = None,
     ):
         """初始化章节审查处理器.
 
@@ -103,12 +105,17 @@ class ReviewLoopHandler(
             cost_tracker: 成本追踪器
             quality_threshold: 质量阈值（默认 7.5，比其他审查略高）
             max_iterations: 最大迭代次数
+            timeout: 单次迭代超时时间（秒），默认从配置读取
         """
+        if timeout is None:
+            timeout = settings.CHAPTER_REVIEW_TIMEOUT
+            
         super().__init__(
             client=client,
             cost_tracker=cost_tracker,
             quality_threshold=quality_threshold,
             max_iterations=max_iterations,
+            timeout=timeout,
         )
 
     async def execute(

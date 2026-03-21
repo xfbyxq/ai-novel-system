@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    
+    # CORS 配置（安全加固）
+    # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
+    CORS_ALLOWED_ORIGINS: str = ""  # 逗号分隔的允许来源列表，为空则使用默认开发环境配置
 
     @property
     def APP_VERSION(self) -> str:
@@ -181,6 +185,23 @@ class Settings(BaseSettings):
     MAX_PLOT_REVIEW_ITERATIONS: int = 5  # 大纲审查最大迭代（从3增加到5）
     MAX_CHAPTER_REVIEW_ITERATIONS: int = 5  # 章节审查最大迭代（从3增加到5）
     MAX_FIX_ITERATIONS: int = 3  # 连续性修复最大迭代（从2增加到3）
+
+    # --- 超时机制（熔断保护） ---
+    # 单次审查迭代超时时间（秒），防止 LLM 调用卡死导致整个循环挂起
+    # 建议：世界观/大纲/角色审查 120-180 秒，章节审查 60-90 秒
+    WORLD_REVIEW_TIMEOUT: int = 180  # 世界观审查超时
+    CHARACTER_REVIEW_TIMEOUT: int = 120  # 角色审查超时
+    PLOT_REVIEW_TIMEOUT: int = 180  # 大纲审查超时
+    CHAPTER_REVIEW_TIMEOUT: int = 90  # 章节审查超时
+    
+    # --- 重试策略 ---
+    # LLM 调用失败时的重试次数（不含首次尝试）
+    # 建议：2-3 次，过多会导致延迟累积
+    REVIEW_LLM_MAX_RETRIES: int = 2
+    # 重试基础延迟（秒），配合指数退避
+    REVIEW_RETRY_BASE_DELAY: float = 1.0
+    # 重试最大延迟（秒），防止退避时间过长
+    REVIEW_RETRY_MAX_DELAY: float = 10.0
 
     # --- 角色自动检测 ---
     # 每章生成后自动检测内容中的新角色并注册到角色库

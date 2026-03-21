@@ -90,15 +90,20 @@ app = FastAPI(
 )
 
 # Configure CORS middleware
+# 从环境变量读取允许的来源列表，支持生产环境配置
+cors_origins = settings.CORS_ALLOWED_ORIGINS.split(",") if settings.CORS_ALLOWED_ORIGINS else [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],  # 限制为前端开发服务器
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,  # 限制为配置允许的来源
+    allow_credentials=True,  # 支持凭证（cookies、authorization headers）
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # 限制允许的 headers
+    expose_headers=["X-Total-Count", "X-Page-Count"],  # 暴露给浏览器的 headers
+    max_age=600,  # 预检请求结果缓存 10 分钟
 )
 
 # Include API v1 router

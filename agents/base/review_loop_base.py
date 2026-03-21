@@ -15,6 +15,7 @@
 3. 组装并返回最终结果
 """
 
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -661,6 +662,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         quality_threshold: float = 7.0,
         max_iterations: int = 2,
         config: Optional[ReviewLoopConfig] = None,
+        timeout: Optional[float] = None,
     ):
         """初始化审查循环处理器.
 
@@ -670,9 +672,11 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
             quality_threshold: 质量阈值
             max_iterations: 最大迭代次数
             config: 可选的详细配置（覆盖上述参数）
+            timeout: 单次迭代超时时间（秒），None 表示不限制
         """
         self.client = client
         self.cost_tracker = cost_tracker
+        self.timeout = timeout
 
         # 使用配置或默认值
         if config:
@@ -1336,12 +1340,24 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
             if iteration > 1:
                 system_prompt += self._get_enhanced_reviewer_system_suffix()
 
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=system_prompt,
-                temperature=self.config.reviewer_temperature,
-                max_tokens=self.config.reviewer_max_tokens,
-            )
+            # 添加超时保护
+            if self.timeout:
+                response = await asyncio.wait_for(
+                    self.client.chat(
+                        prompt=task_prompt,
+                        system=system_prompt,
+                        temperature=self.config.reviewer_temperature,
+                        max_tokens=self.config.reviewer_max_tokens,
+                    ),
+                    timeout=self.timeout
+                )
+            else:
+                response = await self.client.chat(
+                    prompt=task_prompt,
+                    system=system_prompt,
+                    temperature=self.config.reviewer_temperature,
+                    max_tokens=self.config.reviewer_max_tokens,
+                )
 
             usage = response["usage"]
             self.cost_tracker.record(
@@ -1400,12 +1416,24 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         task_prompt = self._enhance_revision_prompt(task_prompt)
 
         try:
-            response = await self.client.chat(
-                prompt=task_prompt,
-                system=self._get_builder_system_prompt(),
-                temperature=self.config.builder_temperature,
-                max_tokens=self.config.builder_max_tokens,
-            )
+            # 添加超时保护
+            if self.timeout:
+                response = await asyncio.wait_for(
+                    self.client.chat(
+                        prompt=task_prompt,
+                        system=self._get_builder_system_prompt(),
+                        temperature=self.config.builder_temperature,
+                        max_tokens=self.config.builder_max_tokens,
+                    ),
+                    timeout=self.timeout
+                )
+            else:
+                response = await self.client.chat(
+                    prompt=task_prompt,
+                    system=self._get_builder_system_prompt(),
+                    temperature=self.config.builder_temperature,
+                    max_tokens=self.config.builder_max_tokens,
+                )
 
             usage = response["usage"]
             self.cost_tracker.record(
