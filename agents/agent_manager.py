@@ -1,10 +1,9 @@
 """Agent管理器 - 负责初始化和管理所有Agent."""
 
-import asyncio
 from typing import Dict, Optional
 
 from agents.agent_communicator import AgentCommunicator
-from agents.agent_scheduler import AgentScheduler, BaseAgent
+from agents.agent_scheduler import AgentScheduler
 from agents.specific_agents import (
     MarketAnalysisAgent,
     ContentPlanningAgent,

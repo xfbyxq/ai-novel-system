@@ -9,7 +9,6 @@ Create Date: 2026-02-23 07:15:40.473518
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "40555b81bb5d"
@@ -28,4 +27,3 @@ def downgrade() -> None:
     """Downgrade schema."""
     # PostgreSQL 不支持直接删除枚举值，需要重建类型
     # 此处留空，实际上不建议回滚此迁移
-    pass

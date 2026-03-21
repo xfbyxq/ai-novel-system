@@ -7,14 +7,8 @@ CrewManager 连贯性保障集成示例.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from agents.continuity_integration_module import ContinuityIntegrationModule
-from agents.enhanced_context_manager import EnhancedContextManager
-from agents.theme_guardian import ThemeGuardian
-from agents.chapter_outline_mapper import ChapterOutlineMapper
-from agents.character_consistency_tracker import CharacterConsistencyTracker
-from agents.foreshadowing_auto_injector import ForeshadowingAutoInjector
-from agents.prevention_continuity_checker import PreventionContinuityChecker
 from tests.continuity_system_test import ContinuityIntegrationResult
 
 logger = logging.getLogger(__name__)

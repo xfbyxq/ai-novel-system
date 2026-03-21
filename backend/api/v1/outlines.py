@@ -22,7 +22,6 @@ from backend.schemas.outline import (
     EnhancementPreviewResponse,
     OutlineDecomposeRequest,
     OutlineGenerateRequest,
-    OutlineQualityReport,
     OutlineValidationRequest,
     OutlineValidationResponse,
     OutlineVersionInfo,

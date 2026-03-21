@@ -3,7 +3,7 @@
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from core.logging_config import logger
 from llm.cost_tracker import CostTracker

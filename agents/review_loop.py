@@ -11,7 +11,6 @@ from agents.base import (
     BaseReviewLoopHandler,
     ChapterQualityReport,
     JsonExtractor,
-    ReviewLoopConfig,
     ReviewLoopResult,
 )
 from agents.base.review_loop_base import (
@@ -19,7 +18,6 @@ from agents.base.review_loop_base import (
     QualityLevel,
     ReviewProgressSummary,
 )
-from agents.iteration_controller import IterationController
 from agents.team_context import AgentReview, NovelTeamContext
 
 # ── 审查专用提示词 ──────────────────────────────────────────
@@ -583,7 +581,7 @@ class ReviewLoopHandler(
                         score = sum(float(v) for v in dim.values()) / len(dim)
                     except (ValueError, TypeError):
                         pass
-            suggestions = review_data.get("revision_suggestions", [])
+            review_data.get("revision_suggestions", [])
             edited_content = review_data.get("edited_content", "")
 
             # 如果 Editor 返回了润色后的内容，进行质量验证

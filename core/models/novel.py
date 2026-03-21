@@ -3,17 +3,14 @@
 import enum
 
 from sqlalchemy import (
-    Boolean,
     Column,
     DateTime,
-    Float,
-    ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -24,6 +21,7 @@ import uuid
 
 class NovelStatus(str, enum.Enum):
     """NovelStatus 类."""
+
     planning = "planning"
     writing = "writing"
     completed = "completed"
@@ -32,6 +30,7 @@ class NovelStatus(str, enum.Enum):
 
 class NovelLengthType(str, enum.Enum):
     """NovelLengthType 类."""
+
     short = "short"  # 短文
     medium = "medium"  # 中篇小说
     long = "long"  # 长篇小说
@@ -39,6 +38,7 @@ class NovelLengthType(str, enum.Enum):
 
 class Novel(Base):
     """Novel 类."""
+
     __tablename__ = "novels"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

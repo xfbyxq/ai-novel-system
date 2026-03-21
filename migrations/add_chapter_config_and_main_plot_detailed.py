@@ -17,8 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text
-from core.database import engine, get_db
-from sqlalchemy.ext.asyncio import create_async_engine
+from core.database import engine
 
 
 async def migrate():
@@ -30,7 +29,7 @@ async def migrate():
         print("1. 为 novels 表添加 chapter_config 字段...")
         try:
             await conn.execute(text("""
-                ALTER TABLE novels 
+                ALTER TABLE novels
                 ADD COLUMN IF NOT EXISTS chapter_config JSONB DEFAULT '{"total_chapters": 6, "min_chapters": 3, "max_chapters": 12, "flexible": true}'
             """))
             print("   ✅ novels.chapter_config 添加成功")
@@ -41,7 +40,7 @@ async def migrate():
         print("2. 为 plot_outlines 表添加 main_plot_detailed 字段...")
         try:
             await conn.execute(text("""
-                ALTER TABLE plot_outlines 
+                ALTER TABLE plot_outlines
                 ADD COLUMN IF NOT EXISTS main_plot_detailed JSONB DEFAULT '{}'
             """))
             print("   ✅ plot_outlines.main_plot_detailed 添加成功")
@@ -63,7 +62,7 @@ async def rollback():
         print("1. 删除 novels.chapter_config 字段...")
         try:
             await conn.execute(text("""
-                ALTER TABLE novels 
+                ALTER TABLE novels
                 DROP COLUMN IF EXISTS chapter_config
             """))
             print("   ✅ novels.chapter_config 已删除")
@@ -74,7 +73,7 @@ async def rollback():
         print("2. 删除 plot_outlines.main_plot_detailed 字段...")
         try:
             await conn.execute(text("""
-                ALTER TABLE plot_outlines 
+                ALTER TABLE plot_outlines
                 DROP COLUMN IF EXISTS main_plot_detailed
             """))
             print("   ✅ plot_outlines.main_plot_detailed 已删除")
@@ -91,8 +90,8 @@ async def check_migration_status():
     async with engine.begin() as conn:
         # 检查 novels.chapter_config
         result = await conn.execute(text("""
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
+            SELECT column_name, data_type
+            FROM information_schema.columns
             WHERE table_name = 'novels' AND column_name = 'chapter_config'
         """))
         row = result.fetchone()
@@ -103,8 +102,8 @@ async def check_migration_status():
 
         # 检查 plot_outlines.main_plot_detailed
         result = await conn.execute(text("""
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
+            SELECT column_name, data_type
+            FROM information_schema.columns
             WHERE table_name = 'plot_outlines' AND column_name = 'main_plot_detailed'
         """))
         row = result.fetchone()

@@ -1,7 +1,6 @@
 """Agent间通信机制."""
 
 import asyncio
-import json
 import time
 from enum import Enum
 from typing import Dict, Any, List, Optional

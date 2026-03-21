@@ -13,6 +13,7 @@ from core.database import Base
 
 class ChapterStatus(str, enum.Enum):
     """ChapterStatus 类."""
+
     draft = "draft"
     reviewing = "reviewing"
     published = "published"
@@ -20,6 +21,7 @@ class ChapterStatus(str, enum.Enum):
 
 class Chapter(Base):
     """Chapter 类."""
+
     __tablename__ = "chapters"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

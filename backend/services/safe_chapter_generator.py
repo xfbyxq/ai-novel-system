@@ -8,9 +8,8 @@
 4. 准确的错误日志和状态追踪
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -19,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.logging_config import logger
 from core.models.novel import Novel
 from core.models.chapter import Chapter, ChapterStatus
-from core.models.generation_task import GenerationTask, TaskType, TaskStatus
 
 
 class ChapterGenerationFailure(Exception):

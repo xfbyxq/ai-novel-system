@@ -15,8 +15,7 @@ PreventionContinuityChecker - 预防式连贯性检查器.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 from core.logging_config import logger
 

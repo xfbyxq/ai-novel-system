@@ -9,7 +9,7 @@
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager
@@ -30,10 +30,9 @@ from agents.world_review_loop import WorldReviewHandler
 from agents.plot_review_loop import PlotReviewHandler
 
 # 反思机制
-from agents.reflection_agent import ReflectionAgent, ReflectionConfig
 
 # 章节连续性增强组件
-from agents.context_compressor import ContextCompressor, CompressedContext
+from agents.context_compressor import ContextCompressor
 from agents.similarity_detector import SimilarityDetector
 from agents.chapter_summary_generator import ChapterSummaryGenerator
 
@@ -1476,7 +1475,7 @@ class NovelCrewManager:
                 "以下是你之前提出的设定疑问的回答，请据此完善内容：\n"
                 + "\n".join(answers)
             )
-            clean_draft = AgentQueryService.remove_query_tags(draft)
+            AgentQueryService.remove_query_tags(draft)
 
             rewrite_task = self.pm.format(
                 self.pm.WRITER_WITH_QUERY_TASK,
@@ -1730,7 +1729,7 @@ class NovelCrewManager:
 
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
         """判断是否应该停止完善迭代."""
-        quality_threshold = options.get("quality_threshold", 8.0)
+        options.get("quality_threshold", 8.0)
 
         # 简单的质量评估逻辑
         # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断
@@ -1790,7 +1789,7 @@ class NovelCrewManager:
 
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
         """判断是否应该停止完善迭代."""
-        quality_threshold = options.get("quality_threshold", 8.0)
+        options.get("quality_threshold", 8.0)
 
         # 简单的质量评估逻辑
         # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断

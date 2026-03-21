@@ -48,7 +48,7 @@ async def _execute_planning(novel_id: str, task_id: str):
 
         service = GenerationService(session)
         try:
-            result = await service.run_planning(novel_id, task_id)
+            await service.run_planning(novel_id, task_id)
             return {"status": "completed", "novel_id": novel_id, "task_id": task_id}
         except Exception as e:
             logger.error(f"Planning task failed: {e}")

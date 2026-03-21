@@ -26,6 +26,7 @@ def get_version_from_pyproject() -> str:
 
 class Settings(BaseSettings):
     """Settings 类."""
+
     # LLM
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen-plus"

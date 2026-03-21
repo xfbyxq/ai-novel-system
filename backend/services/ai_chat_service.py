@@ -1529,7 +1529,7 @@ class AiChatService:
             logger.info(f"会话 {session_id} 需要澄清: {user_message[:50]}...")
             return clarification_message
 
-        messages = session.get_messages_for_api()
+        session.get_messages_for_api()
         system_prompt = self._get_system_prompt(session.scene)
 
         # 如果是小说相关场景，添加小说信息到提示词
@@ -1773,7 +1773,7 @@ class AiChatService:
             yield clarification_message
             return
 
-        messages = session.get_messages_for_api()
+        session.get_messages_for_api()
         system_prompt = self._get_system_prompt(session.scene)
 
         # 如果是小说相关场景，添加小说信息到提示词

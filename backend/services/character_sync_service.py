@@ -8,7 +8,7 @@
 4. 自动修复功能
 """
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
 

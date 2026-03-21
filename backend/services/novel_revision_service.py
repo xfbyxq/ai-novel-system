@@ -1,6 +1,6 @@
 """novel_revision_service 模块."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import sys
 from pathlib import Path
 

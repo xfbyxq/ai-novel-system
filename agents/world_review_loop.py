@@ -8,17 +8,13 @@
 - 力量体系完整性
 """
 
-import json
 from typing import Any, Dict, List, Optional
 
-from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
 from agents.base import (
     BaseReviewLoopHandler,
-    JsonExtractor,
-    ReviewLoopConfig,
     WorldQualityReport,
     WorldReviewResult,
 )

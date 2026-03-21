@@ -1,5 +1,6 @@
 """exceptions 模块."""
 
+
 class NovelSystemError(Exception):
     """Base exception for novel system."""
 
@@ -20,10 +21,6 @@ class NotFoundError(NovelSystemError):
 class GenerationError(NovelSystemError):
     """Error during novel generation."""
 
-    pass
-
 
 class LLMError(NovelSystemError):
     """Error communicating with LLM API."""
-
-    pass

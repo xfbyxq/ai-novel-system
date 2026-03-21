@@ -4,7 +4,6 @@ API 认证中间件.
 提供基于 API Key 的请求认证，保护 API 端点免受未授权访问。
 """
 
-from fastapi import Request
 from backend.dependencies import verify_api_key
 
 # 全局认证实例

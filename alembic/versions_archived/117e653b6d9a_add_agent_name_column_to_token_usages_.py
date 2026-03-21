@@ -23,8 +23,8 @@ def upgrade() -> None:
     # 检查列是否存在，避免重复添加
     conn = op.get_bind()
     result = conn.execute(sa.text("""
-        SELECT column_name 
-        FROM information_schema.columns 
+        SELECT column_name
+        FROM information_schema.columns
         WHERE table_name = 'token_usages' AND column_name = 'agent_name'
     """))
 

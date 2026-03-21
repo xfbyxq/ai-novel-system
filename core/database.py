@@ -8,7 +8,6 @@ from backend.config import settings
 
 class Base(DeclarativeBase):
     """Base 类."""
-    pass
 
 
 engine = create_async_engine(

@@ -256,7 +256,7 @@ class NovelTeamContext:
         """
         try:
             # 检查是否在事件循环中
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # 如果在事件循环中，应该使用异步方法
             logger.warning(
                 "_acquire_lock_sync called from async context, use async methods instead"

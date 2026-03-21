@@ -11,8 +11,7 @@ ChapterOutlineMapper - 章节大纲映射器.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 
@@ -321,7 +320,7 @@ class ChapterOutlineMapper:
         for char_name, state in character_states.items():
             # 检查角色是否在当前章节有发展需求
             pending_events = state.get("pending_events", [])
-            current_location = state.get("current_location", "")
+            state.get("current_location", "")
             emotional_state = state.get("emotional_state", "")
 
             # 如果有待处理事件，添加到章节任务
@@ -985,7 +984,7 @@ class ChapterOutlineMapper:
         self, volume_number: int, current_chapter: int
     ) -> Dict[str, Any]:
         """获取大纲进度."""
-        cycles = self.tension_cycles.get(volume_number, [])
+        self.tension_cycles.get(volume_number, [])
 
         completed_tasks = sum(
             1 for ch, task in self.chapter_tasks.items() if ch <= current_chapter

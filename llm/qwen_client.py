@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator
 
 import dashscope
 from dashscope import Generation

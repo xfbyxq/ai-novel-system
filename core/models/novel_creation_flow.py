@@ -1,8 +1,7 @@
 """novel_creation_flow 模块."""
 
-from sqlalchemy import Column, String, Text, ForeignKey, Boolean, DateTime
+from sqlalchemy import Column, String, ForeignKey, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
 import uuid

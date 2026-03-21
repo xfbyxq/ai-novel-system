@@ -1,6 +1,6 @@
 """Agent 活动 API 路由 - 查看 Agent 详细活动记录."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query

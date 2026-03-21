@@ -10,10 +10,9 @@ CharacterConsistencyTracker - 角色一致性追踪器.
 解决根本原因 3：角色行为约束不足
 """
 
-import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 

@@ -15,7 +15,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.logging_config import logger
-from core.models.chapter import Chapter
 from core.models.plot_outline import PlotOutline
 from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager

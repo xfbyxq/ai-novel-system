@@ -28,7 +28,7 @@ from llm.qwen_client import QwenClient
 
 from .agentmesh_memory_adapter import get_novel_memory_adapter
 from .memory_service import get_novel_memory_service
-from .agent_activity_recorder import AgentActivityRecorder, get_agent_activity_recorder
+from .agent_activity_recorder import get_agent_activity_recorder
 
 
 class GenerationService:
@@ -946,7 +946,6 @@ class GenerationService:
         try:
             total_chapters = to_chapter - from_chapter + 1
             completed_chapters = 0
-            failed_chapters = []
             all_results = []
 
             logger.info(

@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from playwright.sync_api import Page, Browser, BrowserContext
+from playwright.sync_api import Page, Browser
 from dotenv import load_dotenv
 
 # 加载环境变量

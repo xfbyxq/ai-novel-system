@@ -1,6 +1,5 @@
 """小说详情页面对象."""
 
-from typing import Optional
 from .base_page import BasePage
 
 

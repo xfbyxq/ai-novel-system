@@ -346,7 +346,7 @@ class OutlineService:
 
         config = config or {}
         auto_split = config.get("auto_split", True)
-        flexible = config.get("flexible", True)
+        config.get("flexible", True)
 
         # 1. 从大纲中提取卷信息
         volumes = outline_data.get("volumes", [])
@@ -367,7 +367,7 @@ class OutlineService:
                 continue
 
             start_ch, end_ch = chapters_range
-            total_chapters = end_ch - start_ch + 1
+            end_ch - start_ch + 1
 
             # 3. 解析张力循环
             tension_cycles = volume.get("tension_cycles", [])
@@ -445,8 +445,8 @@ class OutlineService:
             if start_ch <= chapter_number <= end_ch:
                 current_cycle = cycle
                 # 判断在循环中的位置
-                suppress_events = cycle.get("suppress_events", [])
-                release_event = cycle.get("release_event", "")
+                cycle.get("suppress_events", [])
+                cycle.get("release_event", "")
 
                 # 简化：前 70% 为压制期，最后为释放期
                 cycle_length = end_ch - start_ch + 1
@@ -716,7 +716,7 @@ class OutlineService:
         )
 
         # 构建上下文描述
-        context_desc = self._build_context_description(context)
+        self._build_context_description(context)
 
         # 生成建议（基于规则的简单实现，可后续接入LLM）
         suggestion = await self._generate_suggestion_for_field(
@@ -769,7 +769,7 @@ class OutlineService:
 
         novel = context.get("novel", {})
         world = context.get("world_setting", {})
-        outline = context.get("outline", {})
+        context.get("outline", {})
 
         if field_name == "structure_type":
             genre = novel.get("genre", "")

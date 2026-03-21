@@ -1,5 +1,4 @@
 """自动化服务单元测试."""
-import pytest
 from backend.services.automation_service import AutomationService
 
 
