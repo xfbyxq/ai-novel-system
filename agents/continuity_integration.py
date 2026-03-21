@@ -300,7 +300,7 @@ class ContinuityAssuranceIntegration:
             f"决策：{transition.final_decision}"
         )
 
-        # TODO: 实现持久化存储
+        # FIXME: 实现持久化存储 - 跟踪于 GitHub Issue #22
         # 可以保存到数据库的 chapter_transitions 表
         # 或者保存到 JSON 文件
 

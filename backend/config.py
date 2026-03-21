@@ -1,4 +1,20 @@
-"""config 模块."""
+"""
+配置模块 - 管理系统配置和验证.
+
+本模块提供 Settings 类，用于加载、验证和访问系统配置。
+支持开发环境和生产环境的自动检测，包括数据库、Redis、LLM 等配置。
+
+配置优先级:
+    1. 环境变量（最高优先级）
+    2. .env 文件
+    3. 默认值（最低优先级）
+
+Example:
+    >>> from backend.config import get_settings
+    >>> settings = get_settings()
+    >>> print(settings.DATABASE_URL)
+    'postgresql+asyncpg://...'
+"""
 
 import os
 from functools import lru_cache
@@ -7,7 +23,12 @@ from pydantic_settings import BaseSettings
 
 
 def get_version_from_pyproject() -> str:
-    """从 pyproject.toml 动态读取版本号."""
+    """
+    从 pyproject.toml 动态读取版本号.
+    
+    Returns:
+        str: 版本号字符串，如果读取失败则返回 "2.0.0"
+    """
     import re
 
     try:
@@ -25,7 +46,29 @@ def get_version_from_pyproject() -> str:
 
 
 class Settings(BaseSettings):
-    """Settings 类."""
+    """
+    系统配置类.
+    
+    管理所有系统配置项，包括 LLM、数据库、Redis、应用设置等。
+    支持自动环境检测（Docker/本地）和配置验证。
+    
+    Attributes:
+        DASHSCOPE_API_KEY: 通义千问 API 密钥
+        DASHSCOPE_MODEL: LLM 模型名称
+        DB_USER: 数据库用户名
+        DB_PASSWORD: 数据库密码
+        DB_NAME: 数据库名称
+        APP_ENV: 应用环境（development/production）
+        APP_DEBUG: 调试模式开关
+        ENABLE_WORLD_REVIEW: 世界观审查开关
+        ENABLE_CHARACTER_REVIEW: 角色审查开关
+        ENABLE_CHAPTER_REVIEW: 章节审查开关
+    
+    Note:
+        - 敏感配置（如密码）必须通过环境变量设置
+        - 生产环境会自动启用更严格的验证
+        - 配置项修改后需要重启应用
+    """
 
     # LLM
     DASHSCOPE_API_KEY: str = ""
@@ -261,6 +304,98 @@ class Settings(BaseSettings):
                 "生产环境必须配置 DASHSCOPE_API_KEY！\n"
                 "请通过环境变量设置：export DASHSCOPE_API_KEY='your_api_key'"
             )
+        
+        # 验证质量阈值范围 (1-10)
+        self._validate_threshold("WORLD_QUALITY_THRESHOLD", self.WORLD_QUALITY_THRESHOLD)
+        self._validate_threshold("CHARACTER_QUALITY_THRESHOLD", self.CHARACTER_QUALITY_THRESHOLD)
+        self._validate_threshold("PLOT_QUALITY_THRESHOLD", self.PLOT_QUALITY_THRESHOLD)
+        self._validate_threshold("CHAPTER_QUALITY_THRESHOLD", self.CHAPTER_QUALITY_THRESHOLD)
+        
+        # 验证迭代次数 (>0)
+        self._validate_positive_int("MAX_WORLD_REVIEW_ITERATIONS", self.MAX_WORLD_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_CHARACTER_REVIEW_ITERATIONS", self.MAX_CHARACTER_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_PLOT_REVIEW_ITERATIONS", self.MAX_PLOT_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_FIX_ITERATIONS", self.MAX_FIX_ITERATIONS)
+        
+        # 验证超时时间 (>0)
+        self._validate_positive_int("WORLD_REVIEW_TIMEOUT", self.WORLD_REVIEW_TIMEOUT)
+        self._validate_positive_int("CHARACTER_REVIEW_TIMEOUT", self.CHARACTER_REVIEW_TIMEOUT)
+        self._validate_positive_int("PLOT_REVIEW_TIMEOUT", self.PLOT_REVIEW_TIMEOUT)
+        self._validate_positive_int("CHAPTER_REVIEW_TIMEOUT", self.CHAPTER_REVIEW_TIMEOUT)
+        
+        # 验证重试策略
+        self._validate_non_negative_int("REVIEW_LLM_MAX_RETRIES", self.REVIEW_LLM_MAX_RETRIES)
+        if self.REVIEW_RETRY_BASE_DELAY <= 0:
+            raise ValueError("REVIEW_RETRY_BASE_DELAY must be positive")
+        if self.REVIEW_RETRY_MAX_DELAY <= 0:
+            raise ValueError("REVIEW_RETRY_MAX_DELAY must be positive")
+        if self.REVIEW_RETRY_MAX_DELAY < self.REVIEW_RETRY_BASE_DELAY:
+            raise ValueError("REVIEW_RETRY_MAX_DELAY must be >= REVIEW_RETRY_BASE_DELAY")
+        
+        # 验证反思机制配置
+        if self.REFLECTION_ANALYSIS_INTERVAL < 1:
+            raise ValueError("REFLECTION_ANALYSIS_INTERVAL must be at least 1")
+        if self.REFLECTION_MIN_CHAPTERS < 1:
+            raise ValueError("REFLECTION_MIN_CHAPTERS must be at least 1")
+        if self.REFLECTION_LESSON_BUDGET < 100:
+            raise ValueError("REFLECTION_LESSON_BUDGET must be at least 100")
+        
+        # 验证爬虫配置
+        if self.CRAWLER_REQUEST_DELAY <= 0:
+            raise ValueError("CRAWLER_REQUEST_DELAY must be positive")
+        if self.CRAWLER_MAX_RETRIES < 0:
+            raise ValueError("CRAWLER_MAX_RETRIES must be non-negative")
+        if self.CRAWLER_TIMEOUT <= 0:
+            raise ValueError("CRAWLER_TIMEOUT must be positive")
+        
+        # 生产环境验证加密密钥
+        if self.APP_ENV == "production" and not self.ENCRYPTION_KEY:
+            raise ValueError(
+                "生产环境必须配置 ENCRYPTION_KEY！\n"
+                "请通过环境变量设置：export ENCRYPTION_KEY='your_32_char_key'"
+            )
+        
+        # 验证配置依赖关系
+        self._validate_config_dependencies()
+    
+    def _validate_threshold(self, name: str, value: float):
+        """验证质量阈值在有效范围内 (1-10)."""
+        if value < 1 or value > 10:
+            raise ValueError(f"{name} must be between 1 and 10, got {value}")
+    
+    def _validate_positive_int(self, name: str, value: int):
+        """验证正整数配置."""
+        if value < 1:
+            raise ValueError(f"{name} must be at least 1, got {value}")
+    
+    def _validate_non_negative_int(self, name: str, value: int):
+        """验证非负整数配置."""
+        if value < 0:
+            raise ValueError(f"{name} must be non-negative, got {value}")
+    
+    def _validate_config_dependencies(self):
+        """验证配置项之间的依赖关系."""
+        # 如果启用章节审查，必须配置有效的阈值
+        if self.ENABLE_CHAPTER_REVIEW and (
+            self.CHAPTER_QUALITY_THRESHOLD < 1 or self.CHAPTER_QUALITY_THRESHOLD > 10
+        ):
+            raise ValueError(
+                "ENABLE_CHAPTER_REVIEW=True 时，CHAPTER_QUALITY_THRESHOLD 必须在 1-10 之间"
+            )
+        
+        # 如果启用大纲动态更新，OUTLINE_UPDATE_INTERVAL 必须合理
+        if self.ENABLE_DYNAMIC_OUTLINE_UPDATE and self.OUTLINE_UPDATE_INTERVAL > 10:
+            raise ValueError(
+                "ENABLE_DYNAMIC_OUTLINE_UPDATE=True 时，OUTLINE_UPDATE_INTERVAL 建议不超过 10"
+            )
+        
+        # 如果启用反思机制，相关配置必须合理
+        if self.ENABLE_REFLECTION:
+            if not self.ENABLE_REFLECTION_SHORT_TERM and not self.ENABLE_REFLECTION_LONG_TERM:
+                raise ValueError(
+                    "ENABLE_REFLECTION=True 时，至少需要启用 ENABLE_REFLECTION_SHORT_TERM 或 ENABLE_REFLECTION_LONG_TERM 之一"
+                )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

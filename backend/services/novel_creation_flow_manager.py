@@ -1009,7 +1009,7 @@ class NovelCreationFlowManager:
                         context.selected_novel_id, context.revision_details
                     )
                 elif context.revision_target == "character":
-                    # TODO: 需要从对话中提取 character_id
+                    # FIXME: 需要从对话中提取 character_id - 跟踪于 GitHub Issue #27
                     result = {"error": "角色修改功能待完善"}
                 elif context.revision_target == "plot":
                     result = await revision_service.update_plot_outline(

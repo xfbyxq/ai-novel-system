@@ -286,7 +286,7 @@ class CharacterDataSyncService:
                 )
 
             # 查找可能的名字变体（简单实现）
-            # TODO: 使用更智能的 NLP 方法
+            # 未来优化：使用更智能的 NLP 方法识别名字变体
             if "苏叶" in character_name and "苏晚" in content:
                 name_variants.add("苏晚")
             if "苏晚" in character_name and "苏叶" in content:

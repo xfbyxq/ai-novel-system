@@ -334,7 +334,6 @@ class ContinuityFixerPipeline:
 
             current_content = fix_result["fixed_content"]
 
-            # TODO: 可以在这里重新运行连续性检查，验证修复效果
             # 目前简化实现，修复一次后直接返回
             break
 
