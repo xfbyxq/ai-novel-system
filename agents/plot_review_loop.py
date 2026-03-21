@@ -8,10 +8,8 @@
 - 伏笔设计（合理的铺垫和回收）
 """
 
-import json
 from typing import Any, Dict, List, Optional
 
-from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
@@ -20,7 +18,6 @@ from agents.base import (
     JsonExtractor,
     PlotQualityReport,
     PlotReviewResult,
-    ReviewLoopConfig,
 )
 
 # ── 大纲审查专用提示词 ──────────────────────────────────────────

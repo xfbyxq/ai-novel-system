@@ -1,11 +1,10 @@
 """大纲迭代优化控制器 - 管理大纲完善过程中的迭代优化."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
-from agents.iteration_controller import IterationController, IterationRecord
 
 
 @dataclass

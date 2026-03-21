@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from playwright.sync_api import Page, Browser, BrowserContext
+from playwright.sync_api import Page, Browser
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -127,7 +127,7 @@ def authenticated_page(page: Page):
     Returns:
         Page: 已认证的页面实例
     """
-    # TODO: 实现具体的认证逻辑
+    # FIXME: 实现具体的认证逻辑 - 跟踪于 GitHub Issue #21
     # 例如：使用预设账户登录或设置认证cookie
     return page
 

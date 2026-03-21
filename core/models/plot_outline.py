@@ -12,6 +12,7 @@ from core.database import Base
 
 class PlotOutline(Base):
     """PlotOutline 类."""
+
     __tablename__ = "plot_outlines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

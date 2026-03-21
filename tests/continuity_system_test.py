@@ -25,7 +25,6 @@ from agents import (
     ContinuityConstraint,
 )
 from llm.qwen_client import QwenClient
-from core.logging_config import logger
 
 
 async def test_constraint_inference():
@@ -42,10 +41,10 @@ async def test_constraint_inference():
     门缓缓打开，一股冷风扑面而来。林默深吸一口气，迈步走了进去.
     房间里很暗，只有窗外透进的微弱月光。他看到桌子上的那封信，
     静静地躺在那里，仿佛已经等待了一个世纪。
-    
+
     他伸出手，指尖触碰到信封的瞬间，手机突然震动起来。
     屏幕上显示的是一个陌生号码。林默犹豫了一下，还是接通了。
-    
+
     "你终于来了。"对方的声音低沉而沙哑，"东西拿到了吗？"
     """
 
@@ -271,16 +270,16 @@ async def main():
 
     try:
         # 测试 1: 约束推断
-        constraints = await test_constraint_inference()
+        await test_constraint_inference()
 
         # 测试 2: 上下文携带
-        enhanced_prompt = await test_context_propagation()
+        await test_context_propagation()
 
         # 测试 3: 验证引擎
-        reports = await test_validation()
+        await test_validation()
 
         # 测试 4: 完整集成
-        result = await test_full_integration()
+        await test_full_integration()
 
         # 总结
         print("\n" + "=" * 60)

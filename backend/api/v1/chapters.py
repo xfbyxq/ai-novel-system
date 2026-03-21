@@ -1,5 +1,5 @@
 """
-Chapter CRUD API endpoints.
+Chapter CRUD API endpoints with concurrency control (Issue #7).
 """
 
 from typing import Optional
@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,13 @@ from backend.schemas.outline import (
     ChapterListResponse,
     ChapterResponse,
     ChapterUpdate,
+)
+from backend.utils.concurrency import (
+    ConcurrentOperationError,
+    DistributedLock,
+    acquire_chapter_lock,
+    database_transaction,
+    get_redis_client,
 )
 from core.models.chapter import Chapter
 from core.models.novel import Novel
@@ -118,54 +126,83 @@ async def update_chapter(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新章节内容.
+    更新章节内容（带并发控制）.
 
     仅更新请求体中提供的字段。如果更新 content 字段，word_count 会自动重新计算，
     同时会同步更新小说的总字数统计。
+    
+    **并发控制**: 使用分布式锁防止多用户同时更新同一章节。
     """
-    # 查询小说
-    novel_query = select(Novel).where(Novel.id == novel_id)
-    novel_result = await db.execute(novel_query)
-    novel = novel_result.scalar_one_or_none()
+    # 获取 Redis 客户端用于分布式锁
+    redis_client: Optional[Redis] = None
+    chapter_lock: Optional[DistributedLock] = None
+    
+    try:
+        # 尝试获取分布式锁（如果 Redis 可用）
+        try:
+            redis_client = await get_redis_client()
+            chapter_lock = await acquire_chapter_lock(
+                redis_client, str(novel_id), chapter_number, timeout=30
+            )
+        except Exception:
+            # Redis 不可用时降级到数据库事务
+            redis_client = None
 
-    if not novel:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+        # 查询小说
+        novel_query = select(Novel).where(Novel.id == novel_id)
+        novel_result = await db.execute(novel_query)
+        novel = novel_result.scalar_one_or_none()
 
-    # 查询章节
-    query = select(Chapter).where(
-        Chapter.novel_id == novel_id,
-        Chapter.chapter_number == chapter_number,
-    )
-    result = await db.execute(query)
-    chapter = result.scalar_one_or_none()
+        if not novel:
+            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
-    if not chapter:
-        raise HTTPException(
-            status_code=404, detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+        # 查询章节
+        query = select(Chapter).where(
+            Chapter.novel_id == novel_id,
+            Chapter.chapter_number == chapter_number,
         )
+        result = await db.execute(query)
+        chapter = result.scalar_one_or_none()
 
-    # 记录更新前的字数
-    old_word_count = chapter.word_count or 0
+        if not chapter:
+            raise HTTPException(
+                status_code=404, detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+            )
 
-    # Update only provided fields
-    update_data = chapter_in.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(chapter, field, value)
+        # 记录更新前的字数
+        old_word_count = chapter.word_count or 0
 
-    # Update word count if content changed
-    new_word_count = old_word_count
-    if "content" in update_data and chapter.content:
-        new_word_count = len(chapter.content)
-        chapter.word_count = new_word_count
+        # Update only provided fields
+        update_data = chapter_in.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(chapter, field, value)
 
-    # 同步更新小说总字数
-    if "content" in update_data:
-        word_count_diff = new_word_count - old_word_count
-        novel.word_count = max(0, (novel.word_count or 0) + word_count_diff)
+        # Update word count if content changed
+        new_word_count = old_word_count
+        if "content" in update_data and chapter.content:
+            new_word_count = len(chapter.content)
+            chapter.word_count = new_word_count
 
-    await db.commit()
-    await db.refresh(chapter)
-    return chapter
+        # 同步更新小说总字数
+        if "content" in update_data:
+            word_count_diff = new_word_count - old_word_count
+            novel.word_count = max(0, (novel.word_count or 0) + word_count_diff)
+
+        await db.commit()
+        await db.refresh(chapter)
+        return chapter
+
+    except ConcurrentOperationError as e:
+        raise HTTPException(
+            status_code=409,  # Conflict
+            detail=str(e)
+        )
+    finally:
+        # 释放分布式锁
+        if chapter_lock:
+            await chapter_lock.release()
+        if redis_client:
+            await redis_client.close()
 
 
 @router.delete("/{chapter_number}", status_code=204)

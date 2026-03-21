@@ -1,8 +1,6 @@
 """基础页面对象模型."""
 
-from typing import Optional, Union
 from playwright.sync_api import Page, Locator, TimeoutError
-import time
 
 
 class BasePage:

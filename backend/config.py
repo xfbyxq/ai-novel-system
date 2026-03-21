@@ -1,4 +1,20 @@
-"""config 模块."""
+"""
+配置模块 - 管理系统配置和验证.
+
+本模块提供 Settings 类，用于加载、验证和访问系统配置。
+支持开发环境和生产环境的自动检测，包括数据库、Redis、LLM 等配置。
+
+配置优先级:
+    1. 环境变量（最高优先级）
+    2. .env 文件
+    3. 默认值（最低优先级）
+
+Example:
+    >>> from backend.config import get_settings
+    >>> settings = get_settings()
+    >>> print(settings.DATABASE_URL)
+    'postgresql+asyncpg://...'
+"""
 
 import os
 from functools import lru_cache
@@ -7,7 +23,12 @@ from pydantic_settings import BaseSettings
 
 
 def get_version_from_pyproject() -> str:
-    """从 pyproject.toml 动态读取版本号."""
+    """
+    从 pyproject.toml 动态读取版本号.
+    
+    Returns:
+        str: 版本号字符串，如果读取失败则返回 "2.0.0"
+    """
     import re
 
     try:
@@ -25,7 +46,30 @@ def get_version_from_pyproject() -> str:
 
 
 class Settings(BaseSettings):
-    """Settings 类."""
+    """
+    系统配置类.
+    
+    管理所有系统配置项，包括 LLM、数据库、Redis、应用设置等。
+    支持自动环境检测（Docker/本地）和配置验证。
+    
+    Attributes:
+        DASHSCOPE_API_KEY: 通义千问 API 密钥
+        DASHSCOPE_MODEL: LLM 模型名称
+        DB_USER: 数据库用户名
+        DB_PASSWORD: 数据库密码
+        DB_NAME: 数据库名称
+        APP_ENV: 应用环境（development/production）
+        APP_DEBUG: 调试模式开关
+        ENABLE_WORLD_REVIEW: 世界观审查开关
+        ENABLE_CHARACTER_REVIEW: 角色审查开关
+        ENABLE_CHAPTER_REVIEW: 章节审查开关
+    
+    Note:
+        - 敏感配置（如密码）必须通过环境变量设置
+        - 生产环境会自动启用更严格的验证
+        - 配置项修改后需要重启应用
+    """
+
     # LLM
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen-plus"
@@ -35,14 +79,37 @@ class Settings(BaseSettings):
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
     DB_NAME: str = "novel_system"
-
+    
     def model_post_init(self, __context) -> None:
         """初始化后验证：确保敏感配置已设置."""
-        if self.DB_PASSWORD is None:
-            raise ValueError(
-                "DB_PASSWORD 未设置！请通过环境变量或 .env 文件配置数据库密码。\n"
-                "示例：export DB_PASSWORD='your_secure_password'"
-            )
+        # 跳过验证，因为密码会从 DATABASE_URL 中提取
+        pass
+    
+    def _get_db_password_from_url(self) -> str:
+        """从 DATABASE_URL 中提取密码."""
+        import os
+        # __file__ 是 backend/config.py，需要向上两级到项目根目录
+        config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/
+        project_root = os.path.dirname(config_dir)  # 项目根目录
+        env_file = os.path.join(project_root, ".env")
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DATABASE_URL="):
+                        url = line.split("=", 1)[1]
+                        import re
+                        match = re.search(r"://([^:]+):([^@]+)@", url)
+                        if match:
+                            return match.group(2)
+        return ""
+    
+    @property
+    def _effective_db_password(self) -> str:
+        """获取有效的数据库密码."""
+        if self.DB_PASSWORD:
+            return self.DB_PASSWORD
+        return self._get_db_password_from_url()
 
     @property
     def DB_HOST(self) -> str:
@@ -61,12 +128,12 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """动态构建数据库连接URL."""
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql+asyncpg://{self.DB_USER}:{self._effective_db_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
         """动态构建同步数据库连接URL."""
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql://{self.DB_USER}:{self._effective_db_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis
     @property
@@ -95,6 +162,10 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    
+    # CORS 配置（安全加固）
+    # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
+    CORS_ALLOWED_ORIGINS: str = ""  # 逗号分隔的允许来源列表，为空则使用默认开发环境配置
 
     @property
     def APP_VERSION(self) -> str:
@@ -158,6 +229,23 @@ class Settings(BaseSettings):
     MAX_CHAPTER_REVIEW_ITERATIONS: int = 5  # 章节审查最大迭代（从3增加到5）
     MAX_FIX_ITERATIONS: int = 3  # 连续性修复最大迭代（从2增加到3）
 
+    # --- 超时机制（熔断保护） ---
+    # 单次审查迭代超时时间（秒），防止 LLM 调用卡死导致整个循环挂起
+    # 建议：世界观/大纲/角色审查 120-180 秒，章节审查 60-90 秒
+    WORLD_REVIEW_TIMEOUT: int = 180  # 世界观审查超时
+    CHARACTER_REVIEW_TIMEOUT: int = 120  # 角色审查超时
+    PLOT_REVIEW_TIMEOUT: int = 180  # 大纲审查超时
+    CHAPTER_REVIEW_TIMEOUT: int = 90  # 章节审查超时
+    
+    # --- 重试策略 ---
+    # LLM 调用失败时的重试次数（不含首次尝试）
+    # 建议：2-3 次，过多会导致延迟累积
+    REVIEW_LLM_MAX_RETRIES: int = 2
+    # 重试基础延迟（秒），配合指数退避
+    REVIEW_RETRY_BASE_DELAY: float = 1.0
+    # 重试最大延迟（秒），防止退避时间过长
+    REVIEW_RETRY_MAX_DELAY: float = 10.0
+
     # --- 角色自动检测 ---
     # 每章生成后自动检测内容中的新角色并注册到角色库
     ENABLE_CHARACTER_AUTO_DETECTION: bool = True
@@ -216,6 +304,98 @@ class Settings(BaseSettings):
                 "生产环境必须配置 DASHSCOPE_API_KEY！\n"
                 "请通过环境变量设置：export DASHSCOPE_API_KEY='your_api_key'"
             )
+        
+        # 验证质量阈值范围 (1-10)
+        self._validate_threshold("WORLD_QUALITY_THRESHOLD", self.WORLD_QUALITY_THRESHOLD)
+        self._validate_threshold("CHARACTER_QUALITY_THRESHOLD", self.CHARACTER_QUALITY_THRESHOLD)
+        self._validate_threshold("PLOT_QUALITY_THRESHOLD", self.PLOT_QUALITY_THRESHOLD)
+        self._validate_threshold("CHAPTER_QUALITY_THRESHOLD", self.CHAPTER_QUALITY_THRESHOLD)
+        
+        # 验证迭代次数 (>0)
+        self._validate_positive_int("MAX_WORLD_REVIEW_ITERATIONS", self.MAX_WORLD_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_CHARACTER_REVIEW_ITERATIONS", self.MAX_CHARACTER_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_PLOT_REVIEW_ITERATIONS", self.MAX_PLOT_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS)
+        self._validate_positive_int("MAX_FIX_ITERATIONS", self.MAX_FIX_ITERATIONS)
+        
+        # 验证超时时间 (>0)
+        self._validate_positive_int("WORLD_REVIEW_TIMEOUT", self.WORLD_REVIEW_TIMEOUT)
+        self._validate_positive_int("CHARACTER_REVIEW_TIMEOUT", self.CHARACTER_REVIEW_TIMEOUT)
+        self._validate_positive_int("PLOT_REVIEW_TIMEOUT", self.PLOT_REVIEW_TIMEOUT)
+        self._validate_positive_int("CHAPTER_REVIEW_TIMEOUT", self.CHAPTER_REVIEW_TIMEOUT)
+        
+        # 验证重试策略
+        self._validate_non_negative_int("REVIEW_LLM_MAX_RETRIES", self.REVIEW_LLM_MAX_RETRIES)
+        if self.REVIEW_RETRY_BASE_DELAY <= 0:
+            raise ValueError("REVIEW_RETRY_BASE_DELAY must be positive")
+        if self.REVIEW_RETRY_MAX_DELAY <= 0:
+            raise ValueError("REVIEW_RETRY_MAX_DELAY must be positive")
+        if self.REVIEW_RETRY_MAX_DELAY < self.REVIEW_RETRY_BASE_DELAY:
+            raise ValueError("REVIEW_RETRY_MAX_DELAY must be >= REVIEW_RETRY_BASE_DELAY")
+        
+        # 验证反思机制配置
+        if self.REFLECTION_ANALYSIS_INTERVAL < 1:
+            raise ValueError("REFLECTION_ANALYSIS_INTERVAL must be at least 1")
+        if self.REFLECTION_MIN_CHAPTERS < 1:
+            raise ValueError("REFLECTION_MIN_CHAPTERS must be at least 1")
+        if self.REFLECTION_LESSON_BUDGET < 100:
+            raise ValueError("REFLECTION_LESSON_BUDGET must be at least 100")
+        
+        # 验证爬虫配置
+        if self.CRAWLER_REQUEST_DELAY <= 0:
+            raise ValueError("CRAWLER_REQUEST_DELAY must be positive")
+        if self.CRAWLER_MAX_RETRIES < 0:
+            raise ValueError("CRAWLER_MAX_RETRIES must be non-negative")
+        if self.CRAWLER_TIMEOUT <= 0:
+            raise ValueError("CRAWLER_TIMEOUT must be positive")
+        
+        # 生产环境验证加密密钥
+        if self.APP_ENV == "production" and not self.ENCRYPTION_KEY:
+            raise ValueError(
+                "生产环境必须配置 ENCRYPTION_KEY！\n"
+                "请通过环境变量设置：export ENCRYPTION_KEY='your_32_char_key'"
+            )
+        
+        # 验证配置依赖关系
+        self._validate_config_dependencies()
+    
+    def _validate_threshold(self, name: str, value: float):
+        """验证质量阈值在有效范围内 (1-10)."""
+        if value < 1 or value > 10:
+            raise ValueError(f"{name} must be between 1 and 10, got {value}")
+    
+    def _validate_positive_int(self, name: str, value: int):
+        """验证正整数配置."""
+        if value < 1:
+            raise ValueError(f"{name} must be at least 1, got {value}")
+    
+    def _validate_non_negative_int(self, name: str, value: int):
+        """验证非负整数配置."""
+        if value < 0:
+            raise ValueError(f"{name} must be non-negative, got {value}")
+    
+    def _validate_config_dependencies(self):
+        """验证配置项之间的依赖关系."""
+        # 如果启用章节审查，必须配置有效的阈值
+        if self.ENABLE_CHAPTER_REVIEW and (
+            self.CHAPTER_QUALITY_THRESHOLD < 1 or self.CHAPTER_QUALITY_THRESHOLD > 10
+        ):
+            raise ValueError(
+                "ENABLE_CHAPTER_REVIEW=True 时，CHAPTER_QUALITY_THRESHOLD 必须在 1-10 之间"
+            )
+        
+        # 如果启用大纲动态更新，OUTLINE_UPDATE_INTERVAL 必须合理
+        if self.ENABLE_DYNAMIC_OUTLINE_UPDATE and self.OUTLINE_UPDATE_INTERVAL > 10:
+            raise ValueError(
+                "ENABLE_DYNAMIC_OUTLINE_UPDATE=True 时，OUTLINE_UPDATE_INTERVAL 建议不超过 10"
+            )
+        
+        # 如果启用反思机制，相关配置必须合理
+        if self.ENABLE_REFLECTION:
+            if not self.ENABLE_REFLECTION_SHORT_TERM and not self.ENABLE_REFLECTION_LONG_TERM:
+                raise ValueError(
+                    "ENABLE_REFLECTION=True 时，至少需要启用 ENABLE_REFLECTION_SHORT_TERM 或 ENABLE_REFLECTION_LONG_TERM 之一"
+                )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

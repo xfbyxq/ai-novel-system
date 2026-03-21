@@ -11,8 +11,7 @@ ThemeGuardian - 主题守护者.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from core.logging_config import logger
 
@@ -473,7 +472,7 @@ class ThemeGuardian:
 
         # 检查章节摘要/主题
         chapter_theme = chapter_plan.get("theme", "")
-        chapter_summary = chapter_plan.get("summary", "")
+        chapter_plan.get("summary", "")
 
         if chapter_theme:
             # 检查章节主题是否与核心主题一致

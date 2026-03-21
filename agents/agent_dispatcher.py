@@ -1,7 +1,7 @@
 """Agent调度器 - 负责在不同Agent实现之间进行调度."""
 
 import asyncio
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any
 from uuid import UUID, uuid4
 
 from agents.agent_manager import get_agent_manager
@@ -222,7 +222,7 @@ class AgentDispatcher:
                 logger.error("❌ 内容策划任务失败")
                 return await self._run_planning_with_crew_manager(novel_id, **kwargs)
 
-            content_planning = content_task_result.result or {}
+            content_task_result.result or {}
 
             # 当前调度器实现还不完善，降级到 CrewManager
             logger.warning(
@@ -472,7 +472,7 @@ class AgentDispatcher:
 
             # 提取参数
             novel_data = kwargs.get("novel_data")
-            previous_chapters_summary = kwargs.get("previous_chapters_summary", "")
+            kwargs.get("previous_chapters_summary", "")
 
             # 构建写作任务
             writing_task = AgentTask(

@@ -1,7 +1,7 @@
 """枚举工具函数，提供安全的枚举值访问."""
 
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any
 
 
 def safe_enum_value(enum_obj: Any, default: Any = None) -> Any:

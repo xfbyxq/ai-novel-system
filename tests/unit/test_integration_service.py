@@ -1,5 +1,4 @@
 """集成服务单元测试."""
-import pytest
 from backend.services.integration_service import IntegrationService
 
 

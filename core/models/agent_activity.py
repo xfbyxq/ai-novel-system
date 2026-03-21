@@ -1,8 +1,7 @@
 """Agent 活动日志模型 - 记录每个 Agent 的详细活动."""
 
 import uuid
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from sqlalchemy import (
     Column,
@@ -15,7 +14,6 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from core.database import Base

@@ -1,6 +1,5 @@
 """Agent 活动记录器 - 用于记录和管理 Agent 的详细活动."""
 
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 

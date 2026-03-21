@@ -7,7 +7,7 @@ Redis缓存服务.
 
 import json
 import redis
-from typing import Optional, Any
+from typing import Optional
 from backend.config import settings
 
 
@@ -80,7 +80,7 @@ class CacheService:
         try:
             self.client.setex(key, ttl, value)
             return True
-        except Exception as e:
+        except Exception:
             # 缓存写入失败不影响主流程
             return False
 
@@ -97,7 +97,7 @@ class CacheService:
         try:
             self.client.delete(key)
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     async def exists(self, key: str) -> bool:

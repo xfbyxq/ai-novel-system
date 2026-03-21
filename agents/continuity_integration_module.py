@@ -13,9 +13,7 @@ ContinuityIntegrationModule - 连贯性保障集成模块.
 6. PreventionContinuityChecker - 预防式连贯性检查器
 """
 
-import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger

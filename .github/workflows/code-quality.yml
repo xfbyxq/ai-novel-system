@@ -2,7 +2,7 @@ name: Code Quality Automation
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, v2.0.0-release]
   pull_request:
     branches: [main]
   schedule:

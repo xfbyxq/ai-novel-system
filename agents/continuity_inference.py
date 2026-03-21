@@ -6,7 +6,7 @@
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from core.logging_config import logger
 from llm.qwen_client import QwenClient

@@ -7,9 +7,8 @@
 """
 
 import re
-from collections import Counter
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from core.logging_config import logger
 

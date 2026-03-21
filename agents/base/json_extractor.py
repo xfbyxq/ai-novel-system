@@ -8,7 +8,7 @@
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
 

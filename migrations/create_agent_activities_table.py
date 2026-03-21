@@ -62,7 +62,7 @@ async def migrate():
         try:
             # novel_id 索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_novel_id 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_novel_id
                 ON agent_activities(novel_id)
             """))
             print("   ✅ idx_agent_activities_novel_id 索引创建成功")
@@ -72,7 +72,7 @@ async def migrate():
         try:
             # task_id 索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_task_id 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_task_id
                 ON agent_activities(task_id)
             """))
             print("   ✅ idx_agent_activities_task_id 索引创建成功")
@@ -82,7 +82,7 @@ async def migrate():
         try:
             # agent_name 索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_agent_name 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_agent_name
                 ON agent_activities(agent_name)
             """))
             print("   ✅ idx_agent_activities_agent_name 索引创建成功")
@@ -92,7 +92,7 @@ async def migrate():
         try:
             # activity_type 索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_activity_type 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_activity_type
                 ON agent_activities(activity_type)
             """))
             print("   ✅ idx_agent_activities_activity_type 索引创建成功")
@@ -102,7 +102,7 @@ async def migrate():
         try:
             # 复合索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_novel_task 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_novel_task
                 ON agent_activities(novel_id, task_id)
             """))
             print("   ✅ idx_agent_activities_novel_task 复合索引创建成功")
@@ -112,7 +112,7 @@ async def migrate():
         try:
             # created_at 索引
             await conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_agent_activities_created 
+                CREATE INDEX IF NOT EXISTS idx_agent_activities_created
                 ON agent_activities(created_at)
             """))
             print("   ✅ idx_agent_activities_created 索引创建成功")
@@ -123,7 +123,7 @@ async def migrate():
         print("3. 更新 generation_tasks 表注释...")
         try:
             await conn.execute(text("""
-                COMMENT ON COLUMN generation_tasks.agent_logs IS 
+                COMMENT ON COLUMN generation_tasks.agent_logs IS
                 'Agent 日志摘要（详细日志请查看 agent_activities 表）'
             """))
             print("   ✅ generation_tasks.agent_logs 注释更新成功")
@@ -169,9 +169,9 @@ async def check_migration_status():
     async with engine.begin() as conn:
         # 检查 agent_activities 表
         result = await conn.execute(text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
               AND table_name = 'agent_activities'
         """))
         row = result.fetchone()
@@ -189,8 +189,8 @@ async def check_migration_status():
 
         # 检查索引
         result = await conn.execute(text("""
-            SELECT indexname 
-            FROM pg_indexes 
+            SELECT indexname
+            FROM pg_indexes
             WHERE tablename = 'agent_activities'
         """))
         indexes = [row[0] for row in result.fetchall()]

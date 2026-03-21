@@ -10,7 +10,6 @@ EnhancedContextManager - 增强型上下文管理器.
 解决根本原因 1：上下文信息丢失严重
 """
 
-import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional

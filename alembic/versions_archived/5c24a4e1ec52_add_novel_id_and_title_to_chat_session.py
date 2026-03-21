@@ -38,9 +38,9 @@ def upgrade() -> None:
     # 从现有的 context 字段中提取 novel_id 更新到新字段
     # 使用原始 SQL 因为需要处理 JSON 字段
     op.execute("""
-        UPDATE ai_chat_sessions 
+        UPDATE ai_chat_sessions
         SET novel_id = (context->>'novel_id')::uuid
-        WHERE context->>'novel_id' IS NOT NULL 
+        WHERE context->>'novel_id' IS NOT NULL
         AND context->>'novel_id' != ''
         AND context->>'novel_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     """)

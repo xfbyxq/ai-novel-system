@@ -1,11 +1,12 @@
 """
-Novel CRUD API endpoints.
+Novel CRUD API endpoints with concurrency control (Issue #7).
 """
 
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,13 @@ from backend.schemas.novel import (
     NovelListResponse,
     NovelResponse,
     NovelUpdate,
+)
+from backend.utils.concurrency import (
+    ConcurrentOperationError,
+    DistributedLock,
+    acquire_novel_lock,
+    database_transaction,
+    get_redis_client,
 )
 from core.models.novel import Novel
 
@@ -120,46 +128,74 @@ async def update_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说信息.
+    更新小说信息（带并发控制）.
 
     仅更新请求体中提供的字段，未提供的字段保持不变。
-    当状态改为"企划中"(planning)时，会自动重置所有统计信息（字数、章节数、Token成本等）。
+    当状态改为"企划中"(planning) 时，会自动重置所有统计信息（字数、章节数、Token 成本等）。
+    
+    **并发控制**: 使用分布式锁防止多用户同时更新同一小说。
     """
     from core.models.novel import NovelStatus
     from decimal import Decimal
 
-    query = select(Novel).where(Novel.id == novel_id)
-    result = await db.execute(query)
-    novel = result.scalar_one_or_none()
+    redis_client: Optional[Redis] = None
+    novel_lock: Optional[DistributedLock] = None
 
-    if not novel:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+    try:
+        # 尝试获取分布式锁（如果 Redis 可用）
+        try:
+            redis_client = await get_redis_client()
+            novel_lock = await acquire_novel_lock(
+                redis_client, str(novel_id), timeout=30
+            )
+        except Exception:
+            # Redis 不可用时降级到数据库事务
+            redis_client = None
 
-    # Update only provided fields
-    update_data = novel_in.model_dump(exclude_unset=True)
+        query = select(Novel).where(Novel.id == novel_id)
+        result = await db.execute(query)
+        novel = result.scalar_one_or_none()
 
-    # 检查是否将状态改为 planning（企划中）
-    is_reset_to_planning = (
-        update_data.get("status") == NovelStatus.planning.value
-        and novel.status != NovelStatus.planning
-    )
+        if not novel:
+            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
-    for field, value in update_data.items():
-        setattr(novel, field, value)
+        # Update only provided fields
+        update_data = novel_in.model_dump(exclude_unset=True)
 
-    # 如果重置为企划中状态，清空所有统计信息
-    if is_reset_to_planning:
-        novel.word_count = 0
-        novel.chapter_count = 0
-        novel.token_cost = Decimal("0")
-        novel.estimated_revenue = Decimal("0")
-        novel.actual_revenue = Decimal("0")
-        # 可选：同时删除所有章节数据
-        # 注意：这里通过 cascade="all, delete-orphan" 关联会自动删除
+        # 检查是否将状态改为 planning（企划中）
+        is_reset_to_planning = (
+            update_data.get("status") == NovelStatus.planning.value
+            and novel.status != NovelStatus.planning
+        )
 
-    await db.commit()
-    await db.refresh(novel)
-    return novel
+        for field, value in update_data.items():
+            setattr(novel, field, value)
+
+        # 如果重置为企划中状态，清空所有统计信息
+        if is_reset_to_planning:
+            novel.word_count = 0
+            novel.chapter_count = 0
+            novel.token_cost = Decimal("0")
+            novel.estimated_revenue = Decimal("0")
+            novel.actual_revenue = Decimal("0")
+            # 可选：同时删除所有章节数据
+            # 注意：这里通过 cascade="all, delete-orphan" 关联会自动删除
+
+        await db.commit()
+        await db.refresh(novel)
+        return novel
+
+    except ConcurrentOperationError as e:
+        raise HTTPException(
+            status_code=409,  # Conflict
+            detail=str(e)
+        )
+    finally:
+        # 释放分布式锁
+        if novel_lock:
+            await novel_lock.release()
+        if redis_client:
+            await redis_client.close()
 
 
 @router.delete("/{novel_id}", status_code=204)

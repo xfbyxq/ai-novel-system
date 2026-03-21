@@ -227,7 +227,7 @@ class BaseAgent:
             try:
                 from uuid import UUID
 
-                task_id_uuid = UUID(task_id)
+                UUID(task_id)
                 await self.communicator.send_message(
                     Message(
                         sender=self.name,

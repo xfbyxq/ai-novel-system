@@ -22,7 +22,6 @@ from backend.schemas.outline import (
     EnhancementPreviewResponse,
     OutlineDecomposeRequest,
     OutlineGenerateRequest,
-    OutlineQualityReport,
     OutlineValidationRequest,
     OutlineValidationResponse,
     OutlineVersionInfo,
@@ -224,7 +223,7 @@ async def generate_complete_outline(
             detail=f"小说 {novel_id} 已存在大纲，请先删除或更新现有大纲",
         )
 
-    # TODO: 调用 AI Agent 生成大纲
+    # FIXME: 调用 AI Agent 生成大纲 - 跟踪于 GitHub Issue #23
     # 这里应该调用大纲生成服务
     # 现在创建一个空的大纲记录
     plot_outline = PlotOutline(
@@ -591,7 +590,7 @@ async def get_outline_versions(
     if not plot_outline:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
-    # TODO: 从版本历史表中获取版本信息
+    # FIXME: 从版本历史表中获取版本信息 - 跟踪于 GitHub Issue #24
     # 目前返回一个示例版本列表
     # 实际实现需要创建 PlotOutlineVersion 模型来存储版本历史
     versions = [
@@ -649,7 +648,7 @@ async def update_plot_outline_with_version(
         for field, value in update_data.items():
             setattr(plot_outline, field, value)
 
-    # TODO: 创建版本历史记录
+    # FIXME: 创建版本历史记录 - 跟踪于 GitHub Issue #25
     # if create_version and plot_outline.id:
     #     version_record = PlotOutlineVersion(
     #         plot_outline_id=plot_outline.id,
@@ -831,7 +830,7 @@ async def apply_outline_enhancement(
             plot_outline.key_turning_points = enhanced_outline["key_turning_points"]
 
         # 创建新版本
-        # TODO: 实现版本控制功能
+        # FIXME: 实现版本控制功能 - 跟踪于 GitHub Issue #26
         # await create_outline_version(db, novel_id, outline_id, "应用 AI 优化结果")
 
         await db.commit()

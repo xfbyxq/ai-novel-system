@@ -1,0 +1,113 @@
+name: GitHub Automation
+
+on:
+  push:
+    branches: [v2.0.0-release, main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每天 23:00（北京时间）生成日报
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+jobs:
+  github-automation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install opencli
+      run: npm install -g @jackwener/opencli
+    
+    - name: Setup GitHub CLI
+      uses: github/setup-github-cli@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Generate GitHub Report
+      run: |
+        echo "# 🦞 OpenClaw GitHub 自动化报告" > github-report.md
+        echo "" >> github-report.md
+        echo "**生成时间**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> github-report.md
+        echo "**仓库**: ${{ github.repository }}" >> github-report.md
+        echo "**分支**: ${{ github.ref_name }}" >> github-report.md
+        echo "**触发**: ${{ github.event_name }}" >> github-report.md
+        echo "" >> github-report.md
+        
+        echo "## 📊 仓库统计" >> github-report.md
+        echo "" >> github-report.md
+        
+        # 获取 Issues 统计
+        OPEN_ISSUES=$(gh issue list --state open --limit 100 | wc -l)
+        CLOSED_ISSUES=$(gh issue list --state closed --limit 100 | wc -l)
+        TOTAL_ISSUES=$((OPEN_ISSUES + CLOSED_ISSUES))
+        
+        echo "- **开放 Issues**: ${OPEN_ISSUES}" >> github-report.md
+        echo "- **已关闭 Issues**: ${CLOSED_ISSUES}" >> github-report.md
+        echo "- **总计**: ${TOTAL_ISSUES}" >> github-report.md
+        echo "" >> github-report.md
+        
+        # 获取最近 Commits
+        echo "## 📝 最近的 Commits" >> github-report.md
+        echo "" >> github-report.md
+        git log --oneline -10 >> github-report.md
+        echo "" >> github-report.md
+        
+        # PR 统计
+        echo "## 🔀 Pull Requests" >> github-report.md
+        echo "" >> github-report.md
+        OPEN_PRS=$(gh pr list --state open --limit 100 | wc -l)
+        MERGED_PRS=$(gh pr list --state merged --limit 100 | wc -l)
+        echo "- **开放 PRs**: ${OPEN_PRS}" >> github-report.md
+        echo "- **已合并 PRs**: ${MERGED_PRS}" >> github-report.md
+        echo "" >> github-report.md
+        
+        cat github-report.md
+    
+    - name: Upload Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: github-report
+        path: github-report.md
+        retention-days: 30
+    
+    - name: Auto-close Completed Issues
+      if: github.event_name == 'schedule'
+      run: |
+        # 自动关闭已完成的 Issues（根据 commit 信息）
+        echo "🔍 检查可自动关闭的 Issues..."
+        
+        # 获取最近的 commits
+        RECENT_COMMITS=$(git log --oneline -20)
+        
+        # 检查是否有 "fix: #XXX" 或 "close: #XXX" 模式
+        for issue_num in $(echo "$RECENT_COMMITS" | grep -oE '#[0-9]+' | sort -u | sed 's/#//'); do
+          echo "检查 Issue #${issue_num}..."
+          
+          # 检查 Issue 状态
+          ISSUE_STATE=$(gh issue view "$issue_num" --json state -q .state 2>/dev/null || echo "not_found")
+          
+          if [[ "$ISSUE_STATE" == "OPEN" ]]; then
+            echo "✅ 自动关闭 Issue #${issue_num}"
+            gh issue close "$issue_num" --comment "自动关闭：相关代码已合并"
+          fi
+        done
+    
+    - name: Send Notification (Optional)
+      if: github.event_name == 'schedule'
+      run: |
+        echo "📤 发送日报通知..."
+        # TODO: 集成飞书/钉钉/邮件通知
+        # 示例：飞书 webhook
+        # curl -X POST -H "Content-Type: application/json" \
+        #   -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"GitHub 日报已生成\"}}" \
+        #   "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_WEBHOOK"

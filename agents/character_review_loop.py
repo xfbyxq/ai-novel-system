@@ -7,10 +7,8 @@
 - 关系网络的复杂性
 """
 
-import json
 from typing import Any, Dict, List, Optional
 
-from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
@@ -19,7 +17,6 @@ from agents.base import (
     CharacterQualityReport,
     CharacterReviewResult,
     JsonExtractor,
-    ReviewLoopConfig,
 )
 
 # ── 角色审查专用提示词 ──────────────────────────────────────────

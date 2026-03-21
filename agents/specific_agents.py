@@ -1,10 +1,10 @@
 """具体的Agent实现."""
 
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 from agents.agent_communicator import AgentCommunicator
-from agents.agent_scheduler import BaseAgent, AgentTask, TaskStatus
+from agents.agent_scheduler import BaseAgent
 from llm.qwen_client import QwenClient
 from llm.prompt_manager import PromptManager
 from llm.cost_tracker import CostTracker
@@ -262,7 +262,7 @@ class WritingAgent(BaseAgent):
             chapter_number = input_data.get("chapter_number", 1)
             world_setting = input_data.get("world_setting", {})
             characters = input_data.get("characters", [])
-            plot_outline = input_data.get("plot_outline", {})
+            input_data.get("plot_outline", {})
 
             # 构建创作提示词
             writing_task = self.pm.format(
@@ -476,7 +476,7 @@ class PublishingAgent(BaseAgent):
             novel_data = input_data.get("novel_data", {})
             chapter_data = input_data.get("chapter_data", {})
             platform = input_data.get("platform", "qidian")
-            account_id = input_data.get("account_id")
+            input_data.get("account_id")
 
             # 模拟发布过程
             # 实际实现中，这里应该调用发布服务

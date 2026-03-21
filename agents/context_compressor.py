@@ -9,7 +9,6 @@
 - 核心记忆 (Core): 世界观 + 角色卡 + 主线（始终携带）
 """
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
