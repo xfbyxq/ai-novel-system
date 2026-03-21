@@ -817,7 +817,8 @@ async def apply_outline_enhancement(
             plot_outline.key_turning_points = enhanced_outline['key_turning_points']
 
         # 创建新版本
-        await create_outline_version(db, novel_id, outline_id, "应用AI优化结果")
+        # TODO: 实现版本控制功能
+        # await create_outline_version(db, novel_id, outline_id, "应用 AI 优化结果")
 
         await db.commit()
 
