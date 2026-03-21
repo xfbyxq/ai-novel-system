@@ -124,7 +124,7 @@ async def health_check():
         "service": "novel-generation-system",
         "dependencies": {}
     }
-    
+
     # 检查数据库
     try:
         from core.database import engine
@@ -134,7 +134,7 @@ async def health_check():
     except Exception as e:
         health["status"] = "unhealthy"
         health["dependencies"]["postgres"] = f"error: {str(e)}"
-    
+
     # 检查Redis
     try:
         import redis
@@ -144,5 +144,5 @@ async def health_check():
     except Exception as e:
         health["status"] = "unhealthy"
         health["dependencies"]["redis"] = f"error: {str(e)}"
-    
+
     return health

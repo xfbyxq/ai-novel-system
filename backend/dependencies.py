@@ -27,36 +27,36 @@ async def verify_api_key(
 ) -> str:
     """
     Verify API Key for protected endpoints.
-    
+
     Usage:
         @app.get("/protected")
         async def protected_endpoint(api_key: str = Depends(verify_api_key)):
             pass
-    
+
     Returns:
         The validated API key string
-        
+
     Raises:
         HTTPException: If authentication fails
     """
     # Development mode: skip auth if no API key configured (for local testing)
     if settings.APP_ENV == "development" and not settings.DASHSCOPE_API_KEY:
         return "dev-mode"
-    
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="缺少认证凭据",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if credentials.credentials != settings.DASHSCOPE_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的 API Key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return credentials.credentials
 
 

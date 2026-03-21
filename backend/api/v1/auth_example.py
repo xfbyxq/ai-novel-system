@@ -17,7 +17,7 @@ router = APIRouter()
 async def public_endpoint():
     """
     公开端点 - 无需认证
-    
+
     适用于：健康检查、公开文档、登录注册等
     """
     return {"message": "这是公开端点，无需认证"}
@@ -32,11 +32,11 @@ async def protected_endpoint(
 ):
     """
     受保护端点 - 需要 API Key 认证
-    
+
     使用方法：
     1. 在请求头中添加：Authorization: Bearer <your_api_key>
     2. 或使用 Swagger UI 的 Authorize 按钮配置 API Key
-    
+
     适用于：
     - 小说管理（创建、更新、删除）
     - 章节生成
@@ -58,7 +58,7 @@ async def bulk_operation(
 ):
     """
     批量操作端点 - 需要认证
-    
+
     示例：批量生成章节、批量发布等
     """
     return {"status": "authenticated", "operation": "bulk"}

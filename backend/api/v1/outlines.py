@@ -193,10 +193,10 @@ async def update_plot_outline(
 
     await db.commit()
     await db.refresh(plot_outline)
-    
+
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
-    
+
     return plot_outline
 
 
@@ -241,14 +241,14 @@ async def generate_complete_outline(
         sub_plots=[],
         key_turning_points=[],
     )
-    
+
     db.add(plot_outline)
     await db.commit()
     await db.refresh(plot_outline)
-    
+
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
-    
+
     return plot_outline
 
 
@@ -386,7 +386,7 @@ async def get_chapter_outline_task(
 
     # Import Chapter model here to avoid circular imports
     from core.models.chapter import Chapter
-    
+
     # Check if chapter exists
     chapter_query = select(Chapter).where(
         Chapter.novel_id == novel_id,
@@ -403,7 +403,7 @@ async def get_chapter_outline_task(
 
     # Return chapter outline task
     outline_task = chapter.outline_task or {}
-    
+
     return ChapterOutlineTaskResponse(
         chapter_number=chapter.chapter_number,
         volume_number=chapter.volume_number,
@@ -676,10 +676,10 @@ async def update_plot_outline_with_version(
 
     await db.commit()
     await db.refresh(plot_outline)
-    
+
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
-    
+
     return plot_outline
 @router.post("/outline/enhance-preview", response_model=EnhancementPreviewResponse)
 async def enhance_outline_preview(
@@ -691,13 +691,13 @@ async def enhance_outline_preview(
     """预览大纲智能完善结果（不修改数据库）"""
     try:
         logger.info(f"开始大纲完善预览: novel_id={novel_id}")
-        
+
         # 获取小说信息
         novel_result = await db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
         if not novel:
             raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
-        
+
         # 获取大纲
         outline_result = await db.execute(
             select(PlotOutline).where(PlotOutline.novel_id == novel_id)
@@ -705,27 +705,27 @@ async def enhance_outline_preview(
         plot_outline = outline_result.scalar_one_or_none()
         if not plot_outline:
             raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
-        
+
         # 获取世界观设定
         world_result = await db.execute(
             select(WorldSetting).where(WorldSetting.novel_id == novel_id)
         )
         world_setting = world_result.scalar_one_or_none()
-        
+
         # 获取角色信息
         characters_result = await db.execute(
             select(Character).where(Character.novel_id == novel_id)
         )
         characters = characters_result.scalars().all()
-        
+
         # 初始化Agent管理器
         from backend.dependencies.agents import get_crew_manager, get_outline_evaluator
         crew_manager = get_crew_manager()
         evaluator = get_outline_evaluator()
-        
+
         # 转换模型为字典
         initial_outline = model_to_dict(plot_outline)
-        
+
         # 执行大纲完善
         start_time = time.time()
         enhancement_result = await crew_manager.refine_outline_comprehensive(
@@ -735,38 +735,38 @@ async def enhance_outline_preview(
             options=options.dict(),
             max_rounds=options.max_iterations
         )
-        
+
         # 评估质量对比
         original_quality = await evaluator.evaluate_outline_comprehensively(
             outline=model_to_dict(plot_outline),
             world_setting=model_to_dict(world_setting) if world_setting else {},
             characters=[model_to_dict(char) for char in characters] if characters else []
         )
-        
+
         enhanced_quality = await evaluator.evaluate_outline_comprehensively(
             outline=enhancement_result["enhancement_result"]["enhanced_outline"],
             world_setting=model_to_dict(world_setting) if world_setting else {},
             characters=[model_to_dict(char) for char in characters] if characters else []
         )
-        
+
         processing_time = time.time() - start_time
         cost_estimate = 0.0
-        
+
         # 修复原始和增强大纲中的卷数据格式
         fixed_original_outline = initial_outline.copy() if initial_outline else {}
         if 'volumes' in fixed_original_outline and fixed_original_outline['volumes']:
             fixed_original_outline['volumes'] = [
-                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)} 
+                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)}
                 for idx, vol in enumerate(fixed_original_outline['volumes'])
             ]
-        
+
         fixed_enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"].copy()
         if 'volumes' in fixed_enhanced_outline and fixed_enhanced_outline['volumes']:
             fixed_enhanced_outline['volumes'] = [
-                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)} 
+                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)}
                 for idx, vol in enumerate(fixed_enhanced_outline['volumes'])
             ]
-        
+
         return EnhancementPreviewResponse(
             original_outline=fixed_original_outline,
             enhanced_outline=fixed_enhanced_outline,
@@ -783,7 +783,7 @@ async def enhance_outline_preview(
             processing_time=processing_time,
             cost_estimate=cost_estimate
         )
-        
+
     except Exception as e:
         logger.error(f"大纲完善预览失败：{e}")
         raise HTTPException(status_code=500, detail=f"完善失败：{str(e)}")
@@ -804,10 +804,10 @@ async def apply_outline_enhancement(
             select(PlotOutline).where(PlotOutline.id == outline_id, PlotOutline.novel_id == novel_id)
         )
         plot_outline = plot_outline.scalar_one_or_none()
-        
+
         if not plot_outline:
             raise HTTPException(status_code=404, detail=f"大纲 {outline_id} 未找到")
-        
+
         # 更新大纲内容
         if 'main_plot' in enhanced_outline:
             plot_outline.main_plot = enhanced_outline['main_plot']
@@ -815,14 +815,14 @@ async def apply_outline_enhancement(
             plot_outline.sub_plots = enhanced_outline['sub_plots']
         if 'key_turning_points' in enhanced_outline:
             plot_outline.key_turning_points = enhanced_outline['key_turning_points']
-        
+
         # 创建新版本
         await create_outline_version(db, novel_id, outline_id, "应用AI优化结果")
-        
+
         await db.commit()
-        
+
         return {"message": "优化结果已应用", "outline_id": str(outline_id)}
-        
+
     except Exception as e:
         await db.rollback()
         logger.error(f"应用大纲优化失败：{e}")
@@ -852,7 +852,7 @@ def model_to_dict(model_instance):
     """将SQLAlchemy模型实例转换为字典"""
     if model_instance is None:
         return {}
-    
+
     # 获取模型的所有列属性
     result = {}
     for column in model_instance.__table__.columns:
@@ -864,7 +864,7 @@ def model_to_dict(model_instance):
         elif hasattr(value, 'isoformat'):
             value = value.isoformat()
         result[column.name] = value
-    
+
     return result
 
 

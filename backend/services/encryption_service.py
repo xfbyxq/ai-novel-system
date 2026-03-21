@@ -26,10 +26,10 @@ class EncryptionService:
 
     def encrypt(self, data: str) -> str:
         """加密字符串数据
-        
+
         Args:
             data: 要加密的字符串
-            
+
         Returns:
             加密后的 base64 编码字符串
         """
@@ -38,10 +38,10 @@ class EncryptionService:
 
     def decrypt(self, encrypted_data: str) -> str:
         """解密数据
-        
+
         Args:
             encrypted_data: 加密后的 base64 编码字符串
-            
+
         Returns:
             解密后的原始字符串
         """
@@ -50,10 +50,10 @@ class EncryptionService:
 
     def encrypt_dict(self, data: dict[str, Any]) -> str:
         """加密字典数据（转为 JSON 后加密）
-        
+
         Args:
             data: 要加密的字典
-            
+
         Returns:
             加密后的 base64 编码字符串
         """
@@ -62,10 +62,10 @@ class EncryptionService:
 
     def decrypt_dict(self, encrypted_data: str) -> dict[str, Any]:
         """解密为字典数据
-        
+
         Args:
             encrypted_data: 加密后的 base64 编码字符串
-            
+
         Returns:
             解密后的字典
         """

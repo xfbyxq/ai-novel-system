@@ -33,10 +33,10 @@ class DataDeduplicationService:
 
     def calculate_item_hash(self, item: Dict[str, Any]) -> str:
         """计算数据项的哈希值
-        
+
         Args:
             item: 数据项
-            
+
         Returns:
             哈希值
         """
@@ -51,12 +51,12 @@ class DataDeduplicationService:
 
     async def is_duplicate(self, platform: str, data_type: str, item: Dict[str, Any]) -> bool:
         """检查数据项是否重复
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
             item: 数据项
-            
+
         Returns:
             是否重复
         """
@@ -74,7 +74,7 @@ class DataDeduplicationService:
 
     async def mark_processed(self, platform: str, data_type: str, item: Dict[str, Any], expiration: int = 86400):
         """标记数据项为已处理
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
@@ -93,12 +93,12 @@ class DataDeduplicationService:
 
     async def batch_check_duplicates(self, platform: str, data_type: str, items: List[Dict[str, Any]]) -> List[bool]:
         """批量检查数据项是否重复
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
             items: 数据项列表
-            
+
         Returns:
             重复标记列表
         """
@@ -115,7 +115,7 @@ class DataDeduplicationService:
 
     async def batch_mark_processed(self, platform: str, data_type: str, items: List[Dict[str, Any]], expiration: int = 86400):
         """批量标记数据项为已处理
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
@@ -137,11 +137,11 @@ class DataDeduplicationService:
 
     async def get_last_crawl_time(self, platform: str, data_type: str) -> Optional[datetime]:
         """获取上次爬取时间
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
-            
+
         Returns:
             上次爬取时间
         """
@@ -158,7 +158,7 @@ class DataDeduplicationService:
 
     async def update_last_crawl_time(self, platform: str, data_type: str):
         """更新上次爬取时间
-        
+
         Args:
             platform: 平台
             data_type: 数据类型
@@ -172,7 +172,7 @@ class DataDeduplicationService:
 
     async def cleanup_old_records(self, days: int = 7):
         """清理旧记录
-        
+
         Args:
             days: 保留天数
         """
@@ -218,7 +218,7 @@ class DataDeduplicationService:
 
     async def get_statistics(self) -> Dict[str, Any]:
         """获取去重统计信息
-        
+
         Returns:
             统计信息
         """

@@ -11,28 +11,28 @@ from agents.outline_quality_evaluator import OutlineQualityEvaluator
 
 class AgentDependencies:
     """Agent依赖管理器"""
-    
+
     def __init__(self):
         self._qwen_client: Optional[QwenClient] = None
         self._cost_tracker: Optional[CostTracker] = None
         self._crew_manager: Optional[NovelCrewManager] = None
         self._outline_refiner: Optional[OutlineRefiner] = None
         self._outline_evaluator: Optional[OutlineQualityEvaluator] = None
-    
+
     @property
     def qwen_client(self) -> QwenClient:
         """获取Qwen客户端实例"""
         if self._qwen_client is None:
             self._qwen_client = QwenClient()
         return self._qwen_client
-    
+
     @property
     def cost_tracker(self) -> CostTracker:
         """获取成本跟踪器实例"""
         if self._cost_tracker is None:
             self._cost_tracker = CostTracker()
         return self._cost_tracker
-    
+
     @property
     def crew_manager(self) -> NovelCrewManager:
         """获取Crew管理器实例"""
@@ -42,7 +42,7 @@ class AgentDependencies:
                 cost_tracker=self.cost_tracker
             )
         return self._crew_manager
-    
+
     @property
     def outline_refiner(self) -> OutlineRefiner:
         """获取大纲细化器实例"""
@@ -52,7 +52,7 @@ class AgentDependencies:
                 cost_tracker=self.cost_tracker
             )
         return self._outline_refiner
-    
+
     @property
     def outline_evaluator(self) -> OutlineQualityEvaluator:
         """获取大纲质量评估器实例"""
@@ -62,7 +62,7 @@ class AgentDependencies:
                 cost_tracker=self.cost_tracker
             )
         return self._outline_evaluator
-    
+
     def reset(self):
         """重置所有依赖实例"""
         self._qwen_client = None

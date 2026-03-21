@@ -142,7 +142,7 @@ class NovelMemoryStorage:
             # FTS5 全文索引（用于关键词搜索）
             try:
                 conn.execute('''
-                    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts 
+                    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
                     USING fts5(
                         text,
                         novel_id UNINDEXED,
@@ -298,9 +298,9 @@ class NovelMemoryStorage:
             # 插入
             record_id = str(uuid.uuid4())[:12]
             conn.execute('''
-                INSERT INTO chapter_summaries 
-                (id, novel_id, chapter_number, key_events, character_changes, 
-                 plot_progress, foreshadowing, ending_state, full_content_hash, 
+                INSERT INTO chapter_summaries
+                (id, novel_id, chapter_number, key_events, character_changes,
+                 plot_progress, foreshadowing, ending_state, full_content_hash,
                  word_count, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
@@ -360,7 +360,7 @@ class NovelMemoryStorage:
 
         if end_chapter:
             query = '''
-                SELECT * FROM chapter_summaries 
+                SELECT * FROM chapter_summaries
                 WHERE novel_id = ? AND chapter_number >= ? AND chapter_number <= ?
                 ORDER BY chapter_number DESC
                 LIMIT ?
@@ -368,7 +368,7 @@ class NovelMemoryStorage:
             rows = conn.execute(query, (novel_id, start_chapter, end_chapter, limit)).fetchall()
         else:
             query = '''
-                SELECT * FROM chapter_summaries 
+                SELECT * FROM chapter_summaries
                 WHERE novel_id = ? AND chapter_number >= ?
                 ORDER BY chapter_number DESC
                 LIMIT ?
@@ -386,7 +386,7 @@ class NovelMemoryStorage:
         """获取最近 N 章摘要（用于上下文构建）"""
         conn = self._get_connection()
         query = '''
-            SELECT * FROM chapter_summaries 
+            SELECT * FROM chapter_summaries
             WHERE novel_id = ? AND chapter_number < ?
             ORDER BY chapter_number DESC
             LIMIT ?
@@ -685,7 +685,7 @@ class NovelMemoryStorage:
         chunk_id = str(uuid.uuid4())[:12]
         conn.execute('''
             INSERT INTO memory_chunks
-            (id, novel_id, source_type, source_id, chapter_number, text, text_hash, 
+            (id, novel_id, source_type, source_id, chapter_number, text, text_hash,
              token_count, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
@@ -745,7 +745,7 @@ class NovelMemoryStorage:
                     SELECT m.*, bm25(memory_fts) as rank
                     FROM memory_fts f
                     JOIN memory_chunks m ON f.rowid = m.rowid
-                    WHERE memory_fts MATCH ? 
+                    WHERE memory_fts MATCH ?
                       AND m.novel_id = ?
                       AND m.source_type IN ({placeholders})
                     ORDER BY rank

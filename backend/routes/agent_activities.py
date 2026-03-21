@@ -24,17 +24,17 @@ async def get_agent_activities(
 ) -> Dict[str, Any]:
     """
     查询 Agent 活动记录
-    
+
     支持多种查询条件：
     - task_id: 查询特定任务的所有 Agent 活动
     - novel_id: 查询特定小说的所有 Agent 活动
     - agent_name: 查询特定 Agent 的活动
     - activity_type: 查询特定类型的活动
-    
+
     返回按创建时间倒序排列的活动记录
     """
     query = select(AgentActivity)
-    
+
     # 应用过滤条件
     if task_id:
         try:
@@ -42,26 +42,26 @@ async def get_agent_activities(
             query = query.where(AgentActivity.task_id == task_uuid)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的 task_id 格式")
-    
+
     if novel_id:
         try:
             novel_uuid = UUID(novel_id)
             query = query.where(AgentActivity.novel_id == novel_uuid)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的 novel_id 格式")
-    
+
     if agent_name:
         query = query.where(AgentActivity.agent_name == agent_name)
-    
+
     if activity_type:
         query = query.where(AgentActivity.activity_type == activity_type)
-    
+
     # 按创建时间倒序排序
     query = query.order_by(AgentActivity.created_at.desc()).limit(limit)
-    
+
     result = await db.execute(query)
     activities = result.scalars().all()
-    
+
     return {
         "count": len(activities),
         "activities": [activity.to_dict() for activity in activities],
@@ -78,15 +78,15 @@ async def get_agent_activity_detail(
         activity_uuid = UUID(activity_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的活动 ID 格式")
-    
+
     result = await db.execute(
         select(AgentActivity).where(AgentActivity.id == activity_uuid)
     )
     activity = result.scalar_one_or_none()
-    
+
     if not activity:
         raise HTTPException(status_code=404, detail="活动记录不存在")
-    
+
     return activity.to_dict()
 
 
@@ -100,12 +100,12 @@ async def get_task_activity_summary(
         task_uuid = UUID(task_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的 task_id 格式")
-    
+
     result = await db.execute(
         select(AgentActivity).where(AgentActivity.task_id == task_uuid)
     )
     activities = result.scalars().all()
-    
+
     if not activities:
         return {
             "task_id": task_id,
@@ -114,14 +114,14 @@ async def get_task_activity_summary(
             "total_cost": 0,
             "agent_statistics": {},
         }
-    
+
     # 计算统计信息
     total_tokens = sum(a.total_tokens for a in activities)
     total_cost = sum(float(a.cost) for a in activities)
-    
+
     agent_stats = {}
     activity_types = set()
-    
+
     for activity in activities:
         # Agent 统计
         if activity.agent_name not in agent_stats:
@@ -133,10 +133,10 @@ async def get_task_activity_summary(
         agent_stats[activity.agent_name]["count"] += 1
         agent_stats[activity.agent_name]["tokens"] += activity.total_tokens
         agent_stats[activity.agent_name]["cost"] += float(activity.cost)
-        
+
         # 活动类型统计
         activity_types.add(activity.activity_type)
-    
+
     return {
         "task_id": task_id,
         "total_activities": len(activities),
@@ -159,7 +159,7 @@ async def get_novel_activity_timeline(
         novel_uuid = UUID(novel_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的 novel_id 格式")
-    
+
     result = await db.execute(
         select(AgentActivity)
         .where(AgentActivity.novel_id == novel_uuid)
@@ -167,7 +167,7 @@ async def get_novel_activity_timeline(
         .limit(limit)
     )
     activities = result.scalars().all()
-    
+
     # 按阶段分组
     phases = {}
     for activity in activities:
@@ -175,7 +175,7 @@ async def get_novel_activity_timeline(
         if phase not in phases:
             phases[phase] = []
         phases[phase].append(activity.to_dict())
-    
+
     return {
         "novel_id": novel_id,
         "total_activities": len(activities),
@@ -191,17 +191,17 @@ async def get_agent_statistics(
 ) -> Dict[str, Any]:
     """获取特定 Agent 的统计信息"""
     query = select(AgentActivity).where(AgentActivity.agent_name == agent_name)
-    
+
     if novel_id:
         try:
             novel_uuid = UUID(novel_id)
             query = query.where(AgentActivity.novel_id == novel_uuid)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的 novel_id 格式")
-    
+
     result = await db.execute(query)
     activities = result.scalars().all()
-    
+
     if not activities:
         return {
             "agent_name": agent_name,
@@ -210,17 +210,17 @@ async def get_agent_statistics(
             "total_cost": 0,
             "activity_types": [],
         }
-    
+
     # 计算统计
     total_tokens = sum(a.total_tokens for a in activities)
     total_cost = sum(float(a.cost) for a in activities)
-    
+
     activity_type_counts = {}
     for activity in activities:
         activity_type_counts[activity.activity_type] = (
             activity_type_counts.get(activity.activity_type, 0) + 1
         )
-    
+
     return {
         "agent_name": agent_name,
         "total_activities": len(activities),

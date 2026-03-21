@@ -29,11 +29,11 @@ class IntegrationService:
         novel_id: Optional[UUID] = None,
     ) -> Dict[str, Any]:
         """运行端到端的自动化小说创作和发布工作流
-        
+
         Args:
             config: 工作流配置
             novel_id: 小说ID，如果为None则创建新小说
-            
+
         Returns:
             工作流执行结果
         """
@@ -115,11 +115,11 @@ class IntegrationService:
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
         """运行多平台发布
-        
+
         Args:
             novel_id: 小说ID
             config: 发布配置
-            
+
         Returns:
             发布结果
         """
@@ -298,11 +298,11 @@ class IntegrationService:
         offset: int = 0,
     ) -> Dict[str, Any]:
         """获取工作流历史记录
-        
+
         Args:
             limit: 限制数量
             offset: 偏移量
-            
+
         Returns:
             工作流历史记录
         """
@@ -318,10 +318,10 @@ class IntegrationService:
         workflow_id: str,
     ) -> Dict[str, Any]:
         """获取工作流详情
-        
+
         Args:
             workflow_id: 工作流ID
-            
+
         Returns:
             工作流详情
         """

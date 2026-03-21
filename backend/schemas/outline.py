@@ -76,52 +76,52 @@ class VolumeInfo(BaseModel):
     title: str = Field(..., description="卷标题")
     summary: Optional[str] = Field(default=None, description="卷概要")
     chapters: list[int] = Field(default_factory=list, description="章节范围 [start, end]")
-    
+
     # 核心冲突
     core_conflict: Optional[str] = Field(default=None, description="本卷核心矛盾")
-    
+
     # 主线事件
     main_events: Optional[list] = Field(
         default_factory=list,
         description="主线事件列表，每项格式：{chapter, event, impact}"
     )
-    
+
     # 关键转折点
     key_turning_points: Optional[list] = Field(
         default_factory=list,
         description="关键转折点列表，每项格式：{chapter, event, significance}"
     )
-    
+
     # 张力循环
     tension_cycles: Optional[list] = Field(
         default_factory=list,
         description="张力循环列表，每项格式：{chapters, suppress_events, release_event, tension_level}"
     )
-    
+
     # 情感弧线
     emotional_arc: Optional[str] = Field(default=None, description="情感变化曲线描述")
-    
+
     # 角色发展弧线
     character_arcs: Optional[list] = Field(
         default_factory=list,
         description="角色发展弧线列表，每项格式：{character_id, arc_description, key_moments}"
     )
-    
+
     # 支线情节
     side_plots: Optional[list] = Field(
         default_factory=list,
         description="支线情节列表，每项格式：{name, description, chapters}"
     )
-    
+
     # 伏笔分配
     foreshadowing: Optional[list] = Field(
         default_factory=list,
         description="伏笔分配列表，每项格式：{description, setup_chapter, payoff_chapter}"
     )
-    
+
     # 主题
     themes: Optional[list] = Field(default_factory=list, description="本卷主题列表")
-    
+
     # 字数范围
     word_count_range: Optional[list[int]] = Field(default=None, description="字数范围 [min, max]")
 

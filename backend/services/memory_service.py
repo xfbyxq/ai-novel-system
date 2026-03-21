@@ -276,10 +276,10 @@ class NovelMemoryService:
 
     def _ensure_novel_memory(self, novel_id: str) -> Dict[str, Any]:
         """确保小说在缓存中存在，不存在则创建最小化条目
-        
+
         Args:
             novel_id: 小说ID
-            
+
         Returns:
             小说的缓存数据
         """
@@ -301,7 +301,7 @@ class NovelMemoryService:
 
     def update_chapter_summary(self, novel_id: str, chapter_number: int, summary: Dict[str, Any]) -> None:
         """更新单个章节的结构化摘要
-        
+
         Args:
             novel_id: 小说ID
             chapter_number: 章节号
@@ -318,11 +318,11 @@ class NovelMemoryService:
 
     def get_chapter_summaries(self, novel_id: str, max_chapters: int = 20) -> Dict[str, Dict]:
         """获取章节摘要
-        
+
         Args:
             novel_id: 小说ID
             max_chapters: 最大返回章节数（默认20）
-            
+
         Returns:
             章节摘要字典，键为章节号字符串
         """
@@ -341,11 +341,11 @@ class NovelMemoryService:
 
     def get_chapter_summary(self, novel_id: str, chapter_number: int) -> Optional[Dict[str, Any]]:
         """获取单个章节的摘要
-        
+
         Args:
             novel_id: 小说ID
             chapter_number: 章节号
-            
+
         Returns:
             章节摘要或None
         """
@@ -356,11 +356,11 @@ class NovelMemoryService:
 
     def update_character_state(self, novel_id: str, character_name: str, state: Dict[str, Any]) -> None:
         """更新角色状态
-        
+
         Args:
             novel_id: 小说ID
             character_name: 角色名称
-            state: 角色状态，包含 last_appearance_chapter, current_location, cultivation_level, 
+            state: 角色状态，包含 last_appearance_chapter, current_location, cultivation_level,
                    emotional_state, relationships, status, pending_events 等
         """
         cache_key = f"novel:{novel_id}"
@@ -378,10 +378,10 @@ class NovelMemoryService:
 
     def get_character_states(self, novel_id: str) -> Dict[str, Dict]:
         """获取所有角色状态
-        
+
         Args:
             novel_id: 小说ID
-            
+
         Returns:
             角色状态字典，键为角色名称
         """
@@ -392,11 +392,11 @@ class NovelMemoryService:
 
     def get_character_state(self, novel_id: str, character_name: str) -> Optional[Dict[str, Any]]:
         """获取单个角色的状态
-        
+
         Args:
             novel_id: 小说ID
             character_name: 角色名称
-            
+
         Returns:
             角色状态或None
         """

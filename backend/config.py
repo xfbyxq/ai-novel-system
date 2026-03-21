@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
     DB_NAME: str = "novel_system"
-    
+
     def model_post_init(self, __context) -> None:
         """初始化后验证：确保敏感配置已设置"""
         if self.DB_PASSWORD is None:
@@ -102,7 +102,11 @@ class Settings(BaseSettings):
     CRAWLER_REQUEST_DELAY: float = 1.5  # 请求间隔(秒)
     CRAWLER_MAX_RETRIES: int = 3
     CRAWLER_TIMEOUT: int = 30
-    CRAWLER_USER_AGENT: str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    CRAWLER_USER_AGENT: str = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
 
     # Agent Review Settings (审查循环配置)
     # ============================================================
@@ -182,7 +186,7 @@ class Settings(BaseSettings):
             raise ValueError("OUTLINE_UPDATE_INTERVAL must be at least 1")
         if self.CHARACTER_DETECTION_MAX_CONTENT_LENGTH < 100:
             raise ValueError("CHARACTER_DETECTION_MAX_CONTENT_LENGTH must be at least 100")
-        
+
         # 生产环境必须配置 API Key
         if self.APP_ENV == "production" and not self.DASHSCOPE_API_KEY:
             raise ValueError(

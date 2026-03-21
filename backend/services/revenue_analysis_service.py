@@ -29,11 +29,11 @@ class RevenueAnalysisService:
         days: int = 30,
     ) -> Dict[str, Any]:
         """分析小说的性能数据
-        
+
         Args:
             novel_id: 小说ID
             days: 分析天数
-            
+
         Returns:
             小说性能分析结果
         """
@@ -154,11 +154,11 @@ class RevenueAnalysisService:
         days: int = 30,
     ) -> Dict[str, Any]:
         """分析平台的性能数据
-        
+
         Args:
             platform: 平台名称
             days: 分析天数
-            
+
         Returns:
             平台性能分析结果
         """
@@ -227,11 +227,11 @@ class RevenueAnalysisService:
         days: int = 30,
     ) -> Dict[str, Any]:
         """生成小说的收益预测
-        
+
         Args:
             novel_id: 小说ID
             days: 预测天数
-            
+
         Returns:
             收益预测结果
         """
@@ -272,10 +272,10 @@ class RevenueAnalysisService:
         novel_id: UUID,
     ) -> Dict[str, Any]:
         """获取内容优化建议
-        
+
         Args:
             novel_id: 小说ID
-            
+
         Returns:
             内容优化建议
         """
@@ -316,10 +316,10 @@ class RevenueAnalysisService:
         analysis: Dict[str, Any],
     ) -> List[str]:
         """生成优化建议
-        
+
         Args:
             analysis: 分析结果
-            
+
         Returns:
             优化建议列表
         """
@@ -354,10 +354,10 @@ class RevenueAnalysisService:
         analysis: Dict[str, Any],
     ) -> List[str]:
         """生成平台优化建议
-        
+
         Args:
             analysis: 平台分析结果
-            
+
         Returns:
             平台优化建议列表
         """
@@ -387,10 +387,10 @@ class RevenueAnalysisService:
         forecast: Dict[str, Any],
     ) -> List[str]:
         """生成收益优化建议
-        
+
         Args:
             forecast: 收益预测
-            
+
         Returns:
             收益优化建议列表
         """
@@ -417,10 +417,10 @@ class RevenueAnalysisService:
         analysis: Dict[str, Any],
     ) -> List[str]:
         """生成内容优化建议
-        
+
         Args:
             analysis: 内容分析结果
-            
+
         Returns:
             内容优化建议列表
         """

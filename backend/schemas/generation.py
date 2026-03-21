@@ -11,7 +11,11 @@ class GenerationTaskCreate(BaseModel):
     novel_id: UUID = Field(..., description="所属小说ID")
     task_type: str = Field(
         ...,
-        description="任务类型：planning(企划阶段，生成世界观/角色/大纲)、writing(单章写作)、batch_writing(批量章节写作)、outline_refinement(大纲完善)"
+        description=(
+            "任务类型：planning(企划阶段，生成世界观/角色/大纲)、"
+            "writing(单章写作)、batch_writing(批量章节写作)、"
+            "outline_refinement(大纲完善)"
+        )
     )
     phase: Optional[str] = Field(
         default=None,

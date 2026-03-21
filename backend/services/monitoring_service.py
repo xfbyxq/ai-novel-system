@@ -69,7 +69,7 @@ class MonitoringService:
 
     async def get_agent_statuses(self) -> List[Dict[str, Any]]:
         """获取Agent状态
-        
+
         Returns:
             Agent状态列表
         """
@@ -79,10 +79,10 @@ class MonitoringService:
 
     async def get_agent_history(self, agent_id: str) -> List[Dict[str, Any]]:
         """获取Agent历史任务
-        
+
         Args:
             agent_id: Agent ID
-            
+
         Returns:
             Agent历史任务列表
         """
@@ -116,7 +116,7 @@ class MonitoringService:
 
     async def get_system_status(self) -> Dict[str, Any]:
         """获取系统状态
-        
+
         Returns:
             系统状态信息
         """
@@ -179,10 +179,10 @@ class MonitoringService:
         days: int = 7,
     ) -> Dict[str, Any]:
         """获取性能指标
-        
+
         Args:
             days: 分析天数
-            
+
         Returns:
             性能指标分析
         """
@@ -264,10 +264,10 @@ class MonitoringService:
         days: int = 7,
     ) -> Dict[str, Any]:
         """获取错误分析
-        
+
         Args:
             days: 分析天数
-            
+
         Returns:
             错误分析结果
         """
@@ -345,7 +345,7 @@ class MonitoringService:
 
     async def get_auto_optimization_suggestions(self) -> Dict[str, Any]:
         """获取自动调优建议
-        
+
         Returns:
             自动调优建议
         """
@@ -375,7 +375,7 @@ class MonitoringService:
 
     async def get_system_health_check(self) -> Dict[str, Any]:
         """获取系统健康检查
-        
+
         Returns:
             系统健康检查结果
         """
@@ -407,7 +407,7 @@ class MonitoringService:
 
     async def _check_database_status(self) -> Dict[str, Any]:
         """检查数据库状态
-        
+
         Returns:
             数据库状态
         """
@@ -427,7 +427,7 @@ class MonitoringService:
 
     async def _get_task_status(self) -> Dict[str, Any]:
         """获取任务状态
-        
+
         Returns:
             任务状态统计
         """
@@ -490,13 +490,13 @@ class MonitoringService:
         db_status: Dict[str, Any],
     ) -> Dict[str, Any]:
         """评估系统健康状态
-        
+
         Args:
             cpu_percent: CPU使用率
             memory_percent: 内存使用率
             disk_percent: 磁盘使用率
             db_status: 数据库状态
-            
+
         Returns:
             系统健康评估
         """
@@ -559,10 +559,10 @@ class MonitoringService:
         system_status: Dict[str, Any],
     ) -> List[str]:
         """生成系统调优建议
-        
+
         Args:
             system_status: 系统状态
-            
+
         Returns:
             系统调优建议
         """
@@ -591,10 +591,10 @@ class MonitoringService:
         performance_metrics: Dict[str, Any],
     ) -> List[str]:
         """生成性能调优建议
-        
+
         Args:
             performance_metrics: 性能指标
-            
+
         Returns:
             性能调优建议
         """
@@ -628,10 +628,10 @@ class MonitoringService:
         error_analysis: Dict[str, Any],
     ) -> List[str]:
         """生成错误调优建议
-        
+
         Args:
             error_analysis: 错误分析
-            
+
         Returns:
             错误调优建议
         """
@@ -661,12 +661,12 @@ class MonitoringService:
         error_analysis: Dict[str, Any],
     ) -> List[str]:
         """优先级排序建议
-        
+
         Args:
             system_status: 系统状态
             performance_metrics: 性能指标
             error_analysis: 错误分析
-            
+
         Returns:
             优先级排序的建议
         """
@@ -698,7 +698,7 @@ class MonitoringService:
 
     def _record_metrics(self, system_status: Dict[str, Any]):
         """记录指标历史
-        
+
         Args:
             system_status: 系统状态
         """
@@ -720,11 +720,11 @@ class MonitoringService:
 
     def _calculate_success_rate(self, success_count: int, total_count: int) -> float:
         """计算成功率
-        
+
         Args:
             success_count: 成功数量
             total_count: 总数量
-            
+
         Returns:
             成功率
         """
@@ -739,12 +739,12 @@ class MonitoringService:
         failed_crawler_tasks: List,
     ) -> List[Dict[str, Any]]:
         """分析错误模式
-        
+
         Args:
             failed_generation_tasks: 失败的生成任务
             failed_publish_tasks: 失败的发布任务
             failed_crawler_tasks: 失败的爬虫任务
-            
+
         Returns:
             错误模式分析
         """

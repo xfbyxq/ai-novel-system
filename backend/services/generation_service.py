@@ -38,7 +38,7 @@ class GenerationService:
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
-        
+
         # 初始化 Agent 活动记录器
         self.activity_recorder = get_agent_activity_recorder(db)
 
@@ -232,10 +232,10 @@ class GenerationService:
                     "sub_plots": [],
                     "key_turning_points": [],
                 }
-            
+
             # 保存主线剧情详细字段（如果存在）
             main_plot_detailed = plot_data.get("main_plot_detailed", {})
-            
+
             plot_outline = PlotOutline(
                 novel_id=novel_id,
                 structure_type=plot_data.get("structure_type", "three_act"),
@@ -290,7 +290,7 @@ class GenerationService:
             await self.db.commit()
 
             logger.info(f"企划阶段完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
-            
+
             # 记录企划阶段的 Agent 活动摘要
             await self._record_planning_activities(
                 novel_id=novel_id,
@@ -298,7 +298,7 @@ class GenerationService:
                 planning_result=planning_result,
                 cost_summary=cost_summary
             )
-            
+
             return planning_result
 
         except Exception as e:
@@ -320,7 +320,7 @@ class GenerationService:
         from core.models.world_setting import WorldSetting
         from core.models.character import Character
         from sqlalchemy import select
-        
+
         # 加载小说和相关数据
         result = await self.db.execute(
             select(Novel).where(Novel.id == novel_id)
@@ -371,7 +371,7 @@ class GenerationService:
                 select(WorldSetting).where(WorldSetting.novel_id == novel_id)
             )
             world_setting = world_result.scalar_one_or_none()
-            
+
             # 获取角色列表
             characters_result = await self.db.execute(
                 select(Character).where(Character.novel_id == novel_id)
@@ -388,7 +388,7 @@ class GenerationService:
                 "key_turning_points": outline.key_turning_points or [],
                 "climax_chapter": outline.climax_chapter
             }
-            
+
             # 确保outline_data是字典类型
             if not isinstance(outline_data, dict):
                 logger.error(f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}")
@@ -434,7 +434,7 @@ class GenerationService:
 
             # 执行大纲完善
             self.cost_tracker.reset()
-            
+
             # 使用crew_manager执行完善
             crew_manager = NovelCrewManager(self.client, self.cost_tracker)
             enhancement_result = await crew_manager.refine_outline_comprehensive(
@@ -444,11 +444,11 @@ class GenerationService:
                 options=options,
                 max_rounds=options.get("max_iterations", 3)
             )
-            
+
             # 调试：检查返回数据格式
             logger.info(f"enhancement_result类型: {type(enhancement_result)}")
             logger.info(f"enhancement_result内容: {enhancement_result}")
-            
+
             if "enhancement_result" in enhancement_result:
                 enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
                 logger.info(f"enhanced_outline类型: {type(enhanced_outline)}")
@@ -504,7 +504,7 @@ class GenerationService:
             await self.db.commit()
 
             logger.info(f"大纲完善任务完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
-            
+
             return task_output
 
         except Exception as e:
@@ -644,7 +644,7 @@ class GenerationService:
 
             # 初始化Agent调度器
             await self.dispatcher.initialize()
-            
+
             # 初始化反思代理（需要 novel_id 和持久化存储）
             self.dispatcher.crew_manager.setup_reflection(
                 novel_id=str(novel_id),
@@ -679,7 +679,7 @@ class GenerationService:
             final_content = writing_result.get("final_content", "")
             word_count = len(final_content)
             chapter_plan = writing_result.get("chapter_plan", {})
-            
+
             # 构建章节标题：确保包含章节号
             raw_title = chapter_plan.get("title", "")
             if raw_title:
@@ -1340,19 +1340,19 @@ class GenerationService:
 
     def _cleanup_expired_counters(self, max_inactive_hours: int = 24):
         """清理长期未活跃的小说计数器，防止内存泄漏
-        
+
         Args:
             max_inactive_hours: 最大非活跃小时数，默认24小时
         """
         from datetime import timedelta
-        
+
         cutoff_time = datetime.now() - timedelta(hours=max_inactive_hours)
         expired_novels = []
-        
+
         for novel_id, last_active in self._last_active_time.items():
             if last_active < cutoff_time:
                 expired_novels.append(novel_id)
-        
+
         # 删除过期的小说计数器和活跃时间记录
         for novel_id in expired_novels:
             self._chapter_write_counter.pop(novel_id, None)
@@ -1361,14 +1361,14 @@ class GenerationService:
 
     def _build_previous_context(self, novel_id: UUID, novel: Novel, chapter_number: int) -> str:
         """构建结构化的前置章节上下文
-        
+
         优先使用记忆系统中的结构化摘要，回退到智能截取。
-        
+
         Args:
             novel_id: 小说ID
             novel: Novel对象（包含已加载的chapters）
             chapter_number: 当前章节号
-            
+
         Returns:
             前置章节上下文字符串
         """
@@ -1418,12 +1418,12 @@ class GenerationService:
 
     def _extract_chapter_summary(self, content: str, chapter_plan: dict, chapter_number: int) -> dict:
         """从章节内容提取结构化摘要
-        
+
         Args:
             content: 章节完整内容
             chapter_plan: 章节大纲（包含plot_points, foreshadowing等）
             chapter_number: 章节号
-            
+
         Returns:
             结构化摘要字典
         """
@@ -1460,10 +1460,10 @@ class GenerationService:
 
     def _format_character_states(self, states_dict: dict) -> str:
         """将角色状态字典格式化为提示词字符串
-        
+
         Args:
             states_dict: 角色状态字典 {角色名: 状态信息}
-            
+
         Returns:
             格式化的角色状态字符串
         """
@@ -1491,13 +1491,13 @@ class GenerationService:
 
     def _extract_character_mentions(self, content: str) -> str:
         """提取角色变化描述
-        
+
         简化实现：返回内容中可能的角色状态变化关键词。
         后续可增强为 LLM 提取或更复杂的规则匹配。
-        
+
         Args:
             content: 章节内容
-            
+
         Returns:
             角色变化描述字符串
         """
@@ -1539,14 +1539,14 @@ class GenerationService:
         novel_data: dict
     ) -> NovelTeamContext:
         """获取或创建小说的 TeamContext
-        
+
         TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享。
-        
+
         Args:
             novel_id: 小说ID
             novel_title: 小说标题
             novel_data: 小说数据字典
-            
+
         Returns:
             NovelTeamContext 实例
         """
@@ -1568,9 +1568,9 @@ class GenerationService:
         planning_result: dict
     ):
         """初始化小说的持久化长期记忆
-        
+
         在企划阶段完成后调用，保存世界观、角色、大纲等核心设定。
-        
+
         Args:
             novel_id: 小说ID
             planning_result: 企划结果
@@ -1605,14 +1605,14 @@ class GenerationService:
         chapter_number: int
     ) -> str:
         """构建增强的前置章节上下文
-        
+
         优先使用持久化记忆系统，回退到内存缓存和数据库。
-        
+
         Args:
             novel_id: 小说ID
             novel: Novel对象
             chapter_number: 当前章节号
-            
+
         Returns:
             前置章节上下文字符串
         """
@@ -1633,7 +1633,7 @@ class GenerationService:
 
         # 2. 回退到原有的内存缓存实现
         return self._build_previous_context(novel_id, novel, chapter_number)
-    
+
     async def _record_planning_activities(
         self,
         novel_id: UUID,
@@ -1642,7 +1642,7 @@ class GenerationService:
         cost_summary: dict
     ):
         """记录企划阶段的 Agent 活动摘要
-        
+
         Args:
             novel_id: 小说 ID
             task_id: 任务 ID
@@ -1663,7 +1663,7 @@ class GenerationService:
                     total_tokens=cost_summary.get("total_tokens", 0),
                     cost=cost_summary.get("total_cost", 0),
                 )
-            
+
             # 记录世界观构建活动
             if "world_setting" in planning_result:
                 await self.activity_recorder.record_planning_activity(
@@ -1675,7 +1675,7 @@ class GenerationService:
                     input_data={"topic_analysis": planning_result.get("topic_analysis")},
                     output_data=planning_result.get("world_setting", {}),
                 )
-            
+
             # 记录角色设计活动
             if "characters" in planning_result:
                 await self.activity_recorder.record_planning_activity(
@@ -1687,7 +1687,7 @@ class GenerationService:
                     input_data={"world_setting": planning_result.get("world_setting")},
                     output_data={"characters_count": len(planning_result.get("characters", []))},
                 )
-            
+
             # 记录情节架构活动
             if "plot_outline" in planning_result:
                 await self.activity_recorder.record_planning_activity(
@@ -1705,7 +1705,7 @@ class GenerationService:
                         "volumes_count": len(planning_result.get("plot_outline", {}).get("volumes", []))
                     },
                 )
-            
+
             logger.info(f"✅ 企划阶段 Agent 活动记录完成")
         except Exception as e:
             logger.error(f"记录企划阶段 Agent 活动失败：{e}")

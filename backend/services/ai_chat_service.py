@@ -210,13 +210,13 @@ class AiChatService:
 
     async def get_novel_info(self, novel_id: str, chapter_start: int = 1, chapter_end: int = 10, force_db: bool = False) -> dict:
         """获取小说的完整信息，包括世界观、角色、大纲和章节
-        
+
         Args:
             novel_id: 小说ID
             chapter_start: 开始章节（默认1）
             chapter_end: 结束章节（默认10）
             force_db: 强制从数据库加载，忽略记忆缓存（默认False）
-        
+
         Returns:
             小说信息字典，包含一个额外的'has_changes'字段表示内容是否有变化
         """
@@ -481,7 +481,7 @@ class AiChatService:
 
     async def get_sessions(self, scene: Optional[str] = None, novel_id: Optional[str] = None) -> list[dict]:
         """获取会话列表
-        
+
         Args:
             scene: 场景过滤
             novel_id: 小说ID过滤，用于按小说隔离会话
@@ -879,12 +879,12 @@ class AiChatService:
 
     def _safe_get(self, data: dict, path: str, default: Any = "") -> Any:
         """安全访问嵌套字典字段
-        
+
         Args:
             data: 字典数据
             path: 点分隔的路径，如 'world_setting.content'
             default: 默认值
-            
+
         Returns:
             字段值或默认值
         """
@@ -903,14 +903,14 @@ class AiChatService:
 
     def _merge_analysis(self, existing: dict, new: dict) -> dict:
         """增量合并分析结果
-        
+
         strengths/weaknesses/suggestions 追加不重复项，
         genre_specific 替换为新值。
-        
+
         Args:
             existing: 现有分析结果
             new: 新的分析结果
-            
+
         Returns:
             合并后的分析结果
         """
@@ -997,11 +997,11 @@ class AiChatService:
 
     def _get_persistent_memory_context(self, novel_id: str, current_chapter: int = 0) -> str:
         """从持久化记忆获取增强上下文信息
-        
+
         Args:
             novel_id: 小说ID
             current_chapter: 当前章节号（用于获取相关章节摘要）
-            
+
         Returns:
             格式化的上下文信息字符串
         """
@@ -1066,7 +1066,7 @@ class AiChatService:
 
     def _initialize_persistent_memory_for_novel(self, novel_id: str, novel_info: dict) -> None:
         """为小说初始化持久化记忆
-        
+
         Args:
             novel_id: 小说ID
             novel_info: 小说信息字典
@@ -1803,12 +1803,12 @@ class AiChatService:
         revision_type: str
     ) -> List[Dict[str, Any]]:
         """从AI响应中提取结构化的修订建议
-        
+
         Args:
             ai_response: AI的回复文本
             novel_info: 小说信息
             revision_type: 修订类型 (world_setting, character, outline, chapter, general)
-        
+
         Returns:
             结构化建议列表
         """
@@ -1897,11 +1897,11 @@ AI修订建议内容：
         suggestion: Dict[str, Any]
     ) -> Dict[str, Any]:
         """将单个修订建议应用到数据库
-        
+
         Args:
             novel_id: 小说ID
             suggestion: 结构化建议
-        
+
         Returns:
             应用结果
         """
@@ -2139,11 +2139,11 @@ AI修订建议内容：
         suggestions: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """批量应用修订建议到数据库
-        
+
         Args:
             novel_id: 小说ID
             suggestions: 建议列表
-        
+
         Returns:
             批量应用结果
         """
@@ -2174,10 +2174,10 @@ AI修订建议内容：
 
     async def get_novel_characters(self, novel_id: str) -> List[Dict[str, Any]]:
         """获取小说的所有角色
-        
+
         Args:
             novel_id: 小说ID
-        
+
         Returns:
             角色列表
         """
@@ -2206,10 +2206,10 @@ AI修订建议内容：
 
     async def get_novel_chapters(self, novel_id: str) -> List[Dict[str, Any]]:
         """获取小说的所有章节
-        
+
         Args:
             novel_id: 小说ID
-        
+
         Returns:
             章节列表
         """
@@ -2240,17 +2240,17 @@ AI修订建议内容：
 
     async def start_novel_dialogue_flow(self, session_id: str, scene: str = "create") -> str:
         """启动小说对话流程（创建/查询/修改）
-        
+
         Args:
             session_id: 会话 ID
             scene: 场景类型 (create/query/revise)
-        
+
         Returns:
             欢迎消息
         """
         from backend.services.novel_creation_flow_manager import NovelCreationFlowManager
         from backend.schemas.novel_creation_flow import NovelDialogueScene
-        
+
         # 映射场景字符串到枚举
         scene_mapping = {
             "create": NovelDialogueScene.CREATE,
@@ -2260,13 +2260,13 @@ AI修订建议内容：
             "novel_query": NovelDialogueScene.QUERY,
             "novel_revision": NovelDialogueScene.REVISE
         }
-        
+
         flow_scene = scene_mapping.get(scene, NovelDialogueScene.CREATE)
-        
+
         # 初始化流程
         flow_manager = NovelCreationFlowManager(self.db, self.client)
         await flow_manager.initialize_flow(session_id, flow_scene)
-        
+
         # 根据场景返回不同的欢迎消息
         if flow_scene == NovelDialogueScene.CREATE:
             return """您好！我是您的小说创作助手📚
@@ -2280,7 +2280,7 @@ AI修订建议内容：
 让我们开始吧！请告诉我：您想创作什么类型的小说呢？
 
 比如：玄幻、科幻、言情、都市、历史、悬疑等"""
-        
+
         elif flow_scene == NovelDialogueScene.QUERY:
             return """您好！我是您的小说查询助手📖
 
@@ -2292,7 +2292,7 @@ AI修订建议内容：
 - 📄 章节列表和内容
 
 请告诉我您想查询哪部小说？您可以提供小说 ID、名称或关键词。"""
-        
+
         elif flow_scene == NovelDialogueScene.REVISE:
             return """您好！我是您的小说修订助手✏️
 
@@ -2303,31 +2303,31 @@ AI修订建议内容：
 - 📝 修改小说基本信息
 
 请告诉我您想修改哪部小说？"""
-        
+
         else:
             return "您好！我是您的小说创作助手，请问有什么可以帮助您的？"
 
     async def process_novel_dialogue_message(self, session_id: str, user_message: str) -> str:
         """处理小说对话流程中的消息
-        
+
         Args:
             session_id: 会话 ID
             user_message: 用户消息
-        
+
         Returns:
             AI 回复消息
         """
         from backend.services.novel_creation_flow_manager import NovelCreationFlowManager
-        
+
         flow_manager = NovelCreationFlowManager(self.db, self.client)
         response = await flow_manager.process_message(session_id, user_message)
-        
+
         # 保存对话历史到 AI 会话
         session = self.get_session(session_id)
         if session:
             session.add_user_message(user_message)
             session.add_assistant_message(response.message)
-            
+
             # 更新会话上下文
             session.context["flow_state"] = {
                 "current_step": response.next_step.value,
@@ -2336,9 +2336,9 @@ AI修订建议内容：
                 "genre": response.context.genre,
                 "revision_target": response.context.revision_target
             }
-            
+
             # 异步保存会话
             import asyncio
             asyncio.create_task(self.save_session(session))
-        
+
         return response.message

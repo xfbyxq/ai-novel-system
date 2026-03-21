@@ -197,7 +197,7 @@ async def cancel_generation_task(
 
     # 获取状态字符串值
     status_value = task.status.value if hasattr(task.status, 'value') else task.status
-    
+
     if status_value in (TaskStatus.completed.value, TaskStatus.failed.value, TaskStatus.cancelled.value):
         raise HTTPException(status_code=400, detail=f"任务已处于终态: {status_value}")
 

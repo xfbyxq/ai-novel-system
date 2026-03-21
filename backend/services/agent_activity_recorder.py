@@ -14,7 +14,7 @@ from core.models.agent_activity import AgentActivity
 class AgentActivityRecorder:
     """
     Agent 活动记录器
-    
+
     用于记录 Agent 执行过程中的详细活动，包括：
     - 输入输出数据
     - Token 使用统计
@@ -23,10 +23,10 @@ class AgentActivityRecorder:
     - 投票详情
     - 查询处理
     """
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
-    
+
     async def record_activity(
         self,
         novel_id: UUID,
@@ -51,7 +51,7 @@ class AgentActivityRecorder:
     ) -> AgentActivity:
         """
         记录 Agent 活动
-        
+
         Args:
             novel_id: 小说 ID
             task_id: 任务 ID
@@ -72,7 +72,7 @@ class AgentActivityRecorder:
             status: 状态（success/failed/retry）
             error_message: 错误信息
             retry_count: 重试次数
-        
+
         Returns:
             AgentActivity 实例
         """
@@ -97,18 +97,18 @@ class AgentActivityRecorder:
             error_message=error_message,
             retry_count=retry_count,
         )
-        
+
         self.db.add(activity)
         await self.db.commit()
         await self.db.refresh(activity)
-        
+
         logger.debug(
             f"[AgentActivity] {agent_name}/{activity_type} recorded, "
             f"tokens={total_tokens}, cost={cost:.6f}"
         )
-        
+
         return activity
-    
+
     async def record_planning_activity(
         self,
         novel_id: UUID,
@@ -132,7 +132,7 @@ class AgentActivityRecorder:
             output_data=output_data,
             **kwargs
         )
-    
+
     async def record_writing_activity(
         self,
         novel_id: UUID,
@@ -149,7 +149,7 @@ class AgentActivityRecorder:
         """记录写作阶段的 Agent 活动"""
         metadata = kwargs.pop("metadata", {})
         metadata["chapter_number"] = chapter_number
-        
+
         return await self.record_activity(
             novel_id=novel_id,
             task_id=task_id,
@@ -163,7 +163,7 @@ class AgentActivityRecorder:
             metadata=metadata,
             **kwargs
         )
-    
+
     async def record_review_activity(
         self,
         novel_id: UUID,
@@ -185,7 +185,7 @@ class AgentActivityRecorder:
             "iteration": iteration,
             "suggestions": suggestions or [],
         })
-        
+
         return await self.record_activity(
             novel_id=novel_id,
             task_id=task_id,
@@ -198,7 +198,7 @@ class AgentActivityRecorder:
             metadata=metadata,
             **kwargs
         )
-    
+
     async def record_voting_activity(
         self,
         novel_id: UUID,
@@ -219,7 +219,7 @@ class AgentActivityRecorder:
             "voting_reasoning": reasoning,
             "confidence": confidence,
         })
-        
+
         return await self.record_activity(
             novel_id=novel_id,
             task_id=task_id,
@@ -231,7 +231,7 @@ class AgentActivityRecorder:
             metadata=metadata,
             **kwargs
         )
-    
+
     async def get_activities_by_task(
         self,
         task_id: UUID,
@@ -245,7 +245,7 @@ class AgentActivityRecorder:
             .limit(limit)
         )
         return list(result.scalars().all())
-    
+
     async def get_activities_by_novel(
         self,
         novel_id: UUID,
@@ -259,7 +259,7 @@ class AgentActivityRecorder:
             .limit(limit)
         )
         return list(result.scalars().all())
-    
+
     async def get_activities_by_agent(
         self,
         agent_name: str,
@@ -268,27 +268,27 @@ class AgentActivityRecorder:
     ) -> List[AgentActivity]:
         """获取指定 Agent 的活动记录"""
         query = select(AgentActivity).where(AgentActivity.agent_name == agent_name)
-        
+
         if novel_id:
             query = query.where(AgentActivity.novel_id == novel_id)
-        
+
         query = query.order_by(AgentActivity.created_at.desc()).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
-    
+
     async def get_activity_summary(
         self,
         task_id: UUID
     ) -> Dict[str, Any]:
         """获取任务的活动摘要"""
         activities = await self.get_activities_by_task(task_id)
-        
+
         if not activities:
             return {"total_activities": 0}
-        
+
         total_tokens = sum(a.total_tokens for a in activities)
         total_cost = sum(float(a.cost) for a in activities)
-        
+
         agent_stats = {}
         for activity in activities:
             if activity.agent_name not in agent_stats:
@@ -300,7 +300,7 @@ class AgentActivityRecorder:
             agent_stats[activity.agent_name]["count"] += 1
             agent_stats[activity.agent_name]["tokens"] += activity.total_tokens
             agent_stats[activity.agent_name]["cost"] += float(activity.cost)
-        
+
         return {
             "total_activities": len(activities),
             "total_tokens": total_tokens,

@@ -319,7 +319,7 @@ async def cancel_publish_task(
 
     # 获取状态值（支持String列和Enum）
     task_status_value = task.status.value if hasattr(task.status, 'value') else task.status
-    
+
     terminal_statuses = (
         PublishTaskStatus.completed.value if hasattr(PublishTaskStatus.completed, 'value') else PublishTaskStatus.completed,
         PublishTaskStatus.failed.value if hasattr(PublishTaskStatus.failed, 'value') else PublishTaskStatus.failed,

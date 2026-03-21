@@ -80,11 +80,11 @@ class AutomationService:
         config: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         """运行自动化小说创建流程
-        
+
         Args:
             novel_id: 小说ID，如果为None则创建新小说
             config: 配置参数
-            
+
         Returns:
             执行结果
         """
@@ -416,10 +416,10 @@ class AutomationService:
         batch_config: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """运行批量自动化任务
-        
+
         Args:
             batch_config: 批量配置列表
-            
+
         Returns:
             批量执行结果
         """

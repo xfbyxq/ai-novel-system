@@ -16,7 +16,7 @@ class CreationFlowStep(str, Enum):
     # 通用步骤
     INITIAL = "initial"  # 初始问候
     SCENE_SELECTION = "scene_selection"  # 场景选择（创建/查询/修改）
-    
+
     # 创建流程
     GENRE_CONFIRMATION = "genre_confirmation"  # 确认小说类型
     WORLD_SETTING_DETAIL = "world_setting_detail"  # 世界观详情
@@ -24,17 +24,17 @@ class CreationFlowStep(str, Enum):
     SYNOPSIS_EXTRACTION = "synopsis_extraction"  # 提炼简介
     SYNOPSIS_REFINEMENT = "synopsis_refinement"  # 简介优化
     FINAL_CONFIRMATION = "final_confirmation"  # 最终确认
-    
+
     # 查询流程
     NOVEL_SELECTION = "novel_selection"  # 选择小说
     CONTENT_QUERY = "content_query"  # 内容查询
     QUERY_RESULT_DISPLAY = "query_result_display"  # 查询结果展示
-    
+
     # 修改流程
     REVISION_TARGET_SELECTION = "revision_target_selection"  # 选择修改目标
     REVISION_DETAIL_COLLECTION = "revision_detail_collection"  # 收集修改详情
     REVISION_CONFIRMATION = "revision_confirmation"  # 修改确认
-    
+
     COMPLETED = "completed"  # 完成
 
 
@@ -60,10 +60,10 @@ class NovelCreationContext(BaseModel):
     """小说创建对话上下文"""
     # 对话场景
     scene: NovelDialogueScene = Field(default=NovelDialogueScene.CREATE)
-    
+
     # 流程步骤
     current_step: CreationFlowStep = Field(default=CreationFlowStep.INITIAL)
-    
+
     # 创建相关字段
     genre: Optional[str] = Field(None, description="小说类型")
     genre_confirmed: bool = Field(default=False, description="类型是否已确认")
@@ -75,17 +75,17 @@ class NovelCreationContext(BaseModel):
     tags: list[str] = Field(default_factory=list, description="标签列表")
     target_platform: str = Field(default="番茄小说", description="目标平台")
     length_type: str = Field(default="medium", description="篇幅类型")
-    
+
     # 查询相关字段
     selected_novel_id: Optional[str] = Field(None, description="选择的小说 ID")
     query_target: Optional[str] = Field(None, description="查询目标 (world_setting/character/plot/chapter)")
     query_result: Optional[dict] = Field(None, description="查询结果")
-    
+
     # 修改相关字段
     revision_target: Optional[str] = Field(None, description="修改目标")
     revision_details: Optional[dict] = Field(None, description="修改详情")
     revision_confirmed: bool = Field(default=False, description="修改是否已确认")
-    
+
     class Config:
         use_enum_values = True
 
