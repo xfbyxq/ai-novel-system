@@ -141,7 +141,9 @@ class CharacterDataSyncService:
             synced = sum(1 for r in sync_results if r["status"] == "success")
             failed = total - synced
 
-            logger.info(f"✅ 角色数据同步完成：总计 {total}, 成功 {synced}, 失败 {failed}")
+            logger.info(
+                f"✅ 角色数据同步完成：总计 {total}, 成功 {synced}, 失败 {failed}"
+            )
 
             return {
                 "status": "completed",

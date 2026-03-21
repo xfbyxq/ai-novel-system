@@ -48,8 +48,7 @@ class NovelMemoryStorage:
             conn = self._get_connection()
 
             # 章节摘要表
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS chapter_summaries (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -65,12 +64,10 @@ class NovelMemoryStorage:
                     updated_at TEXT NOT NULL,
                     UNIQUE(novel_id, chapter_number)
                 )
-            """
-            )
+            """)
 
             # 角色状态表
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS character_states (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -87,12 +84,10 @@ class NovelMemoryStorage:
                     updated_at TEXT NOT NULL,
                     UNIQUE(novel_id, character_name)
                 )
-            """
-            )
+            """)
 
             # 小说元数据表（长期记忆）
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS novel_metadata (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT UNIQUE NOT NULL,
@@ -106,12 +101,10 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # 伏笔追踪表
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS foreshadowing (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -127,12 +120,10 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # 记忆块表（用于语义搜索）
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_chunks (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -144,13 +135,11 @@ class NovelMemoryStorage:
                     token_count INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # FTS5 全文索引（用于关键词搜索）
             try:
-                conn.execute(
-                    """
+                conn.execute("""
                     CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
                     USING fts5(
                         text,
@@ -160,8 +149,7 @@ class NovelMemoryStorage:
                         content='memory_chunks',
                         content_rowid='rowid'
                     )
-                """
-                )
+                """)
             except sqlite3.OperationalError:
                 # FTS5 已存在或不支持，忽略
                 pass
@@ -169,8 +157,7 @@ class NovelMemoryStorage:
             # ── 反思机制表 ──────────────────────────────────────
 
             # 反思记录表（短期反思输出，每次审查循环一条）
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS reflection_entries (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -192,12 +179,10 @@ class NovelMemoryStorage:
                     stagnation_detected INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # 跨章节模式表（长期反思输出）
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS chapter_patterns (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -212,12 +197,10 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # 写作经验规则表（长期反思输出，注入到 prompt）
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS writing_lessons (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -233,8 +216,7 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """
-            )
+            """)
 
             # 创建索引
             conn.execute(
@@ -1427,7 +1409,9 @@ class NovelMemoryAdapter:
                 if state.get("status") and state["status"] != "active":
                     state_text += f"\n- 状态：{state['status']}"
                 if state.get("pending_events"):
-                    state_text += f"\n- 待处理事件：{'；'.join(state['pending_events'])}"
+                    state_text += (
+                        f"\n- 待处理事件：{'；'.join(state['pending_events'])}"
+                    )
                 parts.append(state_text)
 
         return "\n".join(parts) if parts else ""

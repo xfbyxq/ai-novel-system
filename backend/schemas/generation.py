@@ -31,8 +31,12 @@ class GenerationTaskCreate(BaseModel):
         - batch_writing: 无需在此指定，使用 from_chapter/to_chapter 字段""",
     )
     # 批量写作专用字段
-    from_chapter: Optional[int] = Field(default=None, description="批量写作起始章节号（含）")
-    to_chapter: Optional[int] = Field(default=None, description="批量写作结束章节号（含）")
+    from_chapter: Optional[int] = Field(
+        default=None, description="批量写作起始章节号（含）"
+    )
+    to_chapter: Optional[int] = Field(
+        default=None, description="批量写作结束章节号（含）"
+    )
     volume_number: Optional[int] = Field(default=1, description="卷号，默认为1")
 
 
@@ -49,7 +53,9 @@ class GenerationTaskResponse(BaseModel):
     )
     input_data: Optional[dict] = Field(default=None, description="输入数据")
     output_data: Optional[dict] = Field(default=None, description="输出数据/生成结果")
-    error_message: Optional[str] = Field(default=None, description="错误信息（仅失败时有值）")
+    error_message: Optional[str] = Field(
+        default=None, description="错误信息（仅失败时有值）"
+    )
     token_usage: int = Field(default=0, description="Token消耗量")
     cost: Optional[float] = Field(default=None, description="成本（元）")
     started_at: Optional[datetime] = Field(default=None, description="任务开始执行时间")

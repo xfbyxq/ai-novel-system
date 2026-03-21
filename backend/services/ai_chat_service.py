@@ -772,7 +772,9 @@ class AiChatService:
             return self._analyze_revision_intent(user_message)
         elif scene == SCENE_NOVEL_CREATION:
             # 分析创作意图
-            if any(keyword in user_message for keyword in ["世界观", "世界设定", "背景"]):
+            if any(
+                keyword in user_message for keyword in ["世界观", "世界设定", "背景"]
+            ):
                 return "world_creation"
             elif any(keyword in user_message for keyword in ["角色", "人物", "主角"]):
                 return "character_creation"
@@ -925,7 +927,9 @@ class AiChatService:
 
         if scene == SCENE_NOVEL_REVISION:
             if intent == "world_setting":
-                questions.append("你希望在世界观设定中重点改进哪个方面？（如修炼体系、地理环境、势力划分等）")
+                questions.append(
+                    "你希望在世界观设定中重点改进哪个方面？（如修炼体系、地理环境、势力划分等）"
+                )
                 questions.append("你对当前世界观设定有什么具体的不满意之处？")
             elif intent == "character":
                 questions.append("你希望重点改进哪个角色？")
@@ -1102,13 +1106,21 @@ class AiChatService:
         # 基于小说类型的分析
         genre = novel_info.get("genre", "")
         if genre == "玄幻":
-            analysis["genre_specific"].append("作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写")
+            analysis["genre_specific"].append(
+                "作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写"
+            )
         elif genre == "都市":
-            analysis["genre_specific"].append("作为都市小说，建议加强人物关系和现实感的描写")
+            analysis["genre_specific"].append(
+                "作为都市小说，建议加强人物关系和现实感的描写"
+            )
         elif genre == "仙侠":
-            analysis["genre_specific"].append("作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定")
+            analysis["genre_specific"].append(
+                "作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定"
+            )
         elif genre == "历史":
-            analysis["genre_specific"].append("作为历史小说，建议加强历史细节的准确性和时代背景的描写")
+            analysis["genre_specific"].append(
+                "作为历史小说，建议加强历史细节的准确性和时代背景的描写"
+            )
 
         return analysis
 
@@ -1150,7 +1162,9 @@ class AiChatService:
             )
             if character_states:
                 context_parts.append("\n## 主要角色当前状态")
-                for name, state in list(character_states.items())[:5]:  # 只取5个主要角色
+                for name, state in list(character_states.items())[
+                    :5
+                ]:  # 只取5个主要角色
                     location = state.get("current_location", "未知")
                     level = state.get("cultivation_level", "")
                     emotional = state.get("emotional_state", "")
@@ -1322,7 +1336,9 @@ class AiChatService:
                             key_points.append(f"世界类型: {world_data['world_type']}")
                         if "power_system" in world_data:
                             power_system = world_data["power_system"]
-                            key_points.append(f"修炼体系: {power_system.get('name', '未知')}")
+                            key_points.append(
+                                f"修炼体系: {power_system.get('name', '未知')}"
+                            )
                             if "levels" in power_system:
                                 levels = power_system["levels"][:3]  # 只取前3个境界
                                 for level in levels:
@@ -1559,9 +1575,9 @@ class AiChatService:
                         stored_novel_id, chapter_start, chapter_end, force_db=True
                     )
                     session.context["novel_info"] = novel_info
-                    session.context[
-                        "novel_version"
-                    ] = self.memory_service.get_novel_version(stored_novel_id)
+                    session.context["novel_version"] = (
+                        self.memory_service.get_novel_version(stored_novel_id)
+                    )
                     logger.info(f"小说 {stored_novel_id} 信息已重新加载")
 
             if novel_info and "error" not in novel_info:
@@ -1685,7 +1701,9 @@ class AiChatService:
             user_intent, session.scene, session.context.get("novel_info")
         )
         if follow_up_questions:
-            assistant_message += f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+            assistant_message += (
+                f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+            )
 
         session.add_assistant_message(assistant_message)
 
@@ -1886,7 +1904,9 @@ class AiChatService:
                 user_intent, session.scene, session.context.get("novel_info")
             )
             if follow_up_questions:
-                follow_up_text = f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+                follow_up_text = (
+                    f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
+                )
                 full_response += follow_up_text
                 yield follow_up_text
 
@@ -2240,7 +2260,9 @@ AI修订建议内容：
                             suggested_value = items
                         else:
                             # 无法解析为结构化数据，拒绝更新
-                            logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
+                            logger.warning(
+                                f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}"
+                            )
                             return {
                                 "success": False,
                                 "error": f"字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。",
@@ -2262,7 +2284,9 @@ AI修订建议内容：
                         suggested_value = items
                     else:
                         # 无法解析为结构化数据，拒绝更新
-                        logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
+                        logger.warning(
+                            f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}"
+                        )
                         return {
                             "success": False,
                             "error": f"字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。",
@@ -2320,7 +2344,9 @@ AI修订建议内容：
                         target_id.startswith("new_") or len(target_id) < 32
                     ):
                         # 这是创建新角色的建议，跳过
-                        logger.warning(f"跳过创建新角色的建议: {target_name}, 需要手动创建角色")
+                        logger.warning(
+                            f"跳过创建新角色的建议: {target_name}, 需要手动创建角色"
+                        )
                         return {
                             "success": False,
                             "error": f"请先创建角色: {target_name}，然后再应用修订建议",
@@ -2473,7 +2499,9 @@ AI修订建议内容：
             # 增加版本号
             current_version = self.memory_service.get_novel_version(novel_id)
             self.memory_service.version_map[novel_id] = current_version + 1
-            logger.info(f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}")
+            logger.info(
+                f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}"
+            )
 
         return results
 

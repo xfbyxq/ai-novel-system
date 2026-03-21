@@ -99,7 +99,9 @@ class GenerationService:
         )
         existing_task = existing_result.scalar_one_or_none()
         if existing_task:
-            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
+            raise ValueError(
+                f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})"
+            )
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -354,7 +356,9 @@ class GenerationService:
         existing_tasks = existing_result.scalars().all()
         if existing_tasks:
             existing_task = existing_tasks[0]  # 取最新的一条
-            raise ValueError(f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})")
+            raise ValueError(
+                f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})"
+            )
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -405,7 +409,9 @@ class GenerationService:
                 logger.error(
                     f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}"
                 )
-                raise ValueError(f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}")
+                raise ValueError(
+                    f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}"
+                )
 
             world_data = (
                 {
@@ -943,7 +949,8 @@ class GenerationService:
             all_results = []
 
             logger.info(
-                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，" f"共 {total_chapters} 章"
+                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，"
+                f"共 {total_chapters} 章"
             )
 
             # 初始化Agent调度器
@@ -1039,7 +1046,8 @@ class GenerationService:
                     # 连续失败超过阈值，中断批量生成
                     if continuous_failures >= max_continuous_failures:
                         logger.error(
-                            f"⚠️ 连续{max_continuous_failures}章生成失败，" f"中止批量生成以防止上下文断裂"
+                            f"⚠️ 连续{max_continuous_failures}章生成失败，"
+                            f"中止批量生成以防止上下文断裂"
                         )
                         batch_interrupted = True
                         # 记录剩余未生成的章节
@@ -1089,7 +1097,9 @@ class GenerationService:
                 task.completed_at = datetime.now(timezone.utc)
 
                 # 构建摘要信息
-                summary = f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
+                summary = (
+                    f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
+                )
                 if batch_interrupted:
                     summary += f"，因连续失败中断（跳过 {skipped_chapters} 章）"
 
@@ -1106,7 +1116,9 @@ class GenerationService:
 
                 # 构建错误信息
                 if batch_interrupted:
-                    task.error_message = f"连续{max_continuous_failures}章生成失败，批量任务已中断"
+                    task.error_message = (
+                        f"连续{max_continuous_failures}章生成失败，批量任务已中断"
+                    )
                 elif failed_chapters_list > 0:
                     task.error_message = f"{failed_chapters_list} 章生成失败"
                 else:
@@ -1351,7 +1363,9 @@ class GenerationService:
     ) -> None:
         """尝试执行大纲动态更新（不阻塞章节写作流程）."""
         try:
-            logger.info(f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}")
+            logger.info(
+                f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}"
+            )
 
             # 加载最近 N 章的摘要
             interval = settings.OUTLINE_UPDATE_INTERVAL
@@ -1444,7 +1458,8 @@ class GenerationService:
                 await self.db.commit()
             else:
                 logger.info(
-                    f"[DynamicOutline] 跳过更新: " f"{update_result.get('reason', '未知原因')}"
+                    f"[DynamicOutline] 跳过更新: "
+                    f"{update_result.get('reason', '未知原因')}"
                 )
 
         except Exception as e:
@@ -1501,7 +1516,9 @@ class GenerationService:
                 if ch_num_str in summaries:
                     # 使用结构化摘要
                     summary = summaries[ch_num_str]
-                    previous_context += f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
+                    previous_context += (
+                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
+                    )
 
                     key_events = summary.get("key_events", [])
                     if key_events:
@@ -1574,7 +1591,9 @@ class GenerationService:
         return {
             "chapter_number": chapter_number,
             "title": chapter_plan.get("title", f"第{chapter_number}章"),
-            "key_events": chapter_plan.get("plot_points", [])[:5],  # 主要事件（最多5个）
+            "key_events": chapter_plan.get("plot_points", [])[
+                :5
+            ],  # 主要事件（最多5个）
             "character_changes": self._extract_character_mentions(content),  # 角色变化
             "plot_progress": plot_progress,  # 情节摘要
             "foreshadowing": chapter_plan.get("foreshadowing", []),  # 伏笔

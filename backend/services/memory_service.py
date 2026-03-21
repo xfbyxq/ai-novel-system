@@ -227,7 +227,9 @@ class NovelMemoryService:
                 "plot_outline": novel_data.get("plot_outline"),
             },
             "chapters": novel_data.get("chapters", []),
-            "chapter_summaries": novel_data.get("chapter_summaries", {}),  # 结构化章节摘要
+            "chapter_summaries": novel_data.get(
+                "chapter_summaries", {}
+            ),  # 结构化章节摘要
             "character_states": novel_data.get("character_states", {}),  # 角色状态追踪
             "analysis": novel_data.get("analysis", {}),
             "metadata": {

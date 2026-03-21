@@ -18,7 +18,9 @@ class PlatformAccountCreate(BaseModel):
         default="qidian",
         description="平台名称：qidian(起点中文网)、jjwxc(晋江文学城)、hongxiu(红袖添香)、zongheng(纵横文学)、17k(17K小说网)、fanqie(番茄小说)",
     )
-    account_name: str = Field(..., description="账号名称/昵称，用于标识", max_length=100)
+    account_name: str = Field(
+        ..., description="账号名称/昵称，用于标识", max_length=100
+    )
     username: str = Field(..., description="平台登录用户名", max_length=100)
     password: str = Field(..., description="平台登录密码（系统会加密存储）")
     extra_credentials: Optional[dict] = Field(
@@ -77,8 +79,12 @@ class PublishTaskCreate(BaseModel):
     )
     config: Optional[dict] = Field(default=None, description="发布配置，如章节范围等")
     # 批量发布专用字段
-    from_chapter: Optional[int] = Field(default=None, description="批量发布起始章节号（含）")
-    to_chapter: Optional[int] = Field(default=None, description="批量发布结束章节号（含）")
+    from_chapter: Optional[int] = Field(
+        default=None, description="批量发布起始章节号（含）"
+    )
+    to_chapter: Optional[int] = Field(
+        default=None, description="批量发布结束章节号（含）"
+    )
 
 
 class PublishTaskResponse(BaseModel):
@@ -97,7 +103,9 @@ class PublishTaskResponse(BaseModel):
         default=None, description="进度信息，如 {current: 5, total: 10}"
     )
     result_summary: Optional[dict] = Field(default=None, description="结果摘要")
-    error_message: Optional[str] = Field(default=None, description="错误信息（仅失败时有值）")
+    error_message: Optional[str] = Field(
+        default=None, description="错误信息（仅失败时有值）"
+    )
     platform_book_id: Optional[str] = Field(default=None, description="平台上的书籍ID")
     started_at: Optional[datetime] = Field(default=None, description="任务开始时间")
     completed_at: Optional[datetime] = Field(default=None, description="任务完成时间")
@@ -126,8 +134,12 @@ class ChapterPublishResponse(BaseModel):
     publish_task_id: UUID = Field(..., description="所属发布任务ID")
     chapter_id: UUID = Field(..., description="章节ID")
     chapter_number: int = Field(..., description="章节序号")
-    status: str = Field(..., description="发布状态：pending/publishing/published/failed")
-    platform_chapter_id: Optional[str] = Field(default=None, description="平台上的章节ID")
+    status: str = Field(
+        ..., description="发布状态：pending/publishing/published/failed"
+    )
+    platform_chapter_id: Optional[str] = Field(
+        default=None, description="平台上的章节ID"
+    )
     error_message: Optional[str] = Field(default=None, description="错误信息")
     published_at: Optional[datetime] = Field(default=None, description="发布成功时间")
     created_at: datetime = Field(..., description="记录创建时间")
@@ -152,7 +164,9 @@ class PublishPreviewRequest(BaseModel):
 
     novel_id: UUID = Field(..., description="小说ID")
     from_chapter: Optional[int] = Field(default=1, description="预览起始章节号")
-    to_chapter: Optional[int] = Field(default=None, description="预览结束章节号（不指定则到最后一章）")
+    to_chapter: Optional[int] = Field(
+        default=None, description="预览结束章节号（不指定则到最后一章）"
+    )
 
 
 class ChapterPreviewItem(BaseModel):

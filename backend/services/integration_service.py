@@ -217,7 +217,9 @@ class IntegrationService:
                         continue
 
                     platform_book_id = create_book_task.platform_book_id
-                    logger.info(f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}")
+                    logger.info(
+                        f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}"
+                    )
 
                 # 发布章节
                 from core.models.chapter import Chapter

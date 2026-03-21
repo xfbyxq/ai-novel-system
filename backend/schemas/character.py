@@ -21,7 +21,9 @@ class CharacterCreate(BaseModel):
     appearance: Optional[str] = Field(default=None, description="外貌描述")
     personality: Optional[str] = Field(default=None, description="性格描述")
     background: Optional[str] = Field(default=None, description="背景故事")
-    goals: Optional[str] = Field(default=None, description="目标动机，如追求、愿望、驱动力等")
+    goals: Optional[str] = Field(
+        default=None, description="目标动机，如追求、愿望、驱动力等"
+    )
     abilities: Optional[dict] = Field(
         default=None,
         description="能力属性，格式: {能力名: 等级或描述}，如 {'剑术': 'S级', '内力': '深厚'}",
@@ -38,14 +40,18 @@ class CharacterUpdate(BaseModel):
     """更新角色的请求模型（仅更新提供的字段）."""
 
     name: Optional[str] = Field(default=None, description="角色名称")
-    role_type: Optional[str] = Field(default=None, description="角色类型：主角、配角、反派等")
+    role_type: Optional[str] = Field(
+        default=None, description="角色类型：主角、配角、反派等"
+    )
     gender: Optional[str] = Field(default=None, description="性别")
     age: Optional[int] = Field(default=None, description="年龄")
     appearance: Optional[str] = Field(default=None, description="外貌描述")
     personality: Optional[str] = Field(default=None, description="性格描述")
     background: Optional[str] = Field(default=None, description="背景故事")
     goals: Optional[str] = Field(default=None, description="目标动机")
-    abilities: Optional[dict] = Field(default=None, description="能力属性，格式: {能力名: 等级或描述}")
+    abilities: Optional[dict] = Field(
+        default=None, description="能力属性，格式: {能力名: 等级或描述}"
+    )
     relationships: Optional[dict] = Field(
         default=None, description="人物关系，格式: {关系人名字: 关系类型}"
     )
@@ -120,4 +126,6 @@ class CharacterRelationshipResponse(BaseModel):
     """角色关系图响应模型（图论格式，用于前端可视化）."""
 
     nodes: list[CharacterNode] = Field(..., description="角色节点列表")
-    edges: list[CharacterEdge] = Field(..., description="关系边列表（有向边，从source指向target）")
+    edges: list[CharacterEdge] = Field(
+        ..., description="关系边列表（有向边，从source指向target）"
+    )

@@ -158,7 +158,9 @@ class Settings(BaseSettings):
     # --- 角色自动检测 ---
     # 每章生成后自动检测内容中的新角色并注册到角色库
     ENABLE_CHARACTER_AUTO_DETECTION: bool = True
-    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.6  # 置信度阈值，低于此值的角色不注册
+    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = (
+        0.6  # 置信度阈值，低于此值的角色不注册
+    )
     CHARACTER_DETECTION_MAX_CONTENT_LENGTH: int = 6000  # 传入 LLM 的内容最大字符数
 
     # --- 大纲动态更新 ---
@@ -172,8 +174,12 @@ class Settings(BaseSettings):
     # 短期反思：纯 Python 统计，零 LLM 开销
     # 长期反思：每 N 章调用 1 次 LLM 做跨章节模式分析
     ENABLE_REFLECTION: bool = True  # 反思机制总开关
-    ENABLE_REFLECTION_SHORT_TERM: bool = True  # 短期反思开关（每次审查循环后的统计分析）
-    ENABLE_REFLECTION_LONG_TERM: bool = True  # 长期反思开关（跨章节模式分析，需调用 LLM）
+    ENABLE_REFLECTION_SHORT_TERM: bool = (
+        True  # 短期反思开关（每次审查循环后的统计分析）
+    )
+    ENABLE_REFLECTION_LONG_TERM: bool = (
+        True  # 长期反思开关（跨章节模式分析，需调用 LLM）
+    )
     REFLECTION_ANALYSIS_INTERVAL: int = 3  # 长期反思触发间隔（每 N 章分析一次）
     REFLECTION_MIN_CHAPTERS: int = 3  # 启动长期反思所需的最少章节数
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限

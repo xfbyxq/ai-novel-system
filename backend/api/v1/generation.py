@@ -71,7 +71,9 @@ async def create_generation_task(
                 status_code=400, detail="批量写作必须指定 from_chapter 和 to_chapter"
             )
         if task_in.from_chapter > task_in.to_chapter:
-            raise HTTPException(status_code=400, detail="from_chapter 不能大于 to_chapter")
+            raise HTTPException(
+                status_code=400, detail="from_chapter 不能大于 to_chapter"
+            )
 
     # 创建任务记录
     input_data = task_in.input_data or {}

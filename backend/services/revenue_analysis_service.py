@@ -237,9 +237,9 @@ class RevenueAnalysisService:
             )
 
         # 生成优化建议
-        analysis[
-            "optimization_suggestions"
-        ] = self._generate_platform_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = (
+            self._generate_platform_optimization_suggestions(analysis)
+        )
 
         return analysis
 
@@ -343,9 +343,9 @@ class RevenueAnalysisService:
         }
 
         # 生成内容优化建议
-        analysis[
-            "optimization_suggestions"
-        ] = self._generate_content_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = (
+            self._generate_content_optimization_suggestions(analysis)
+        )
 
         return analysis
 
@@ -410,19 +410,27 @@ class RevenueAnalysisService:
         # 基于任务成功率的建议
         task_success_rate = analysis.get("task_success_rate", 0)
         if task_success_rate < 80:
-            suggestions.append(f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限")
+            suggestions.append(
+                f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限"
+            )
 
         # 基于发布成功率的建议
         publish_success_rate = analysis.get("publish_success_rate", 0)
         if publish_success_rate < 80:
-            suggestions.append(f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机")
+            suggestions.append(
+                f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机"
+            )
 
         # 基于账号数量的建议
         total_accounts = analysis.get("total_accounts", 0)
         if total_accounts == 0:
-            suggestions.append(f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能")
+            suggestions.append(
+                f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能"
+            )
         elif total_accounts < 2:
-            suggestions.append(f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性")
+            suggestions.append(
+                f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性"
+            )
 
         return suggestions
 
@@ -475,7 +483,9 @@ class RevenueAnalysisService:
         if avg_chapter_length < 1500:
             suggestions.append("章节长度偏短，建议增加每章内容以提供更丰富的阅读体验")
         elif avg_chapter_length > 4000:
-            suggestions.append("章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率")
+            suggestions.append(
+                "章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率"
+            )
 
         # 基于类型的建议
         genre = analysis.get("genre", "")

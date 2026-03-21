@@ -351,7 +351,9 @@ async def cancel_publish_task(
         ),
     )
     if task_status_value in terminal_statuses:
-        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task_status_value}")
+        raise HTTPException(
+            status_code=400, detail=f"任务已处于终态: {task_status_value}"
+        )
 
     task.status = (
         PublishTaskStatus.cancelled.value

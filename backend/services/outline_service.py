@@ -284,7 +284,9 @@ class OutlineService:
 
         if existing_outline:
             # 更新现有大纲
-            existing_outline.structure_type = outline_data.get("structure_type", "三幕式")
+            existing_outline.structure_type = outline_data.get(
+                "structure_type", "三幕式"
+            )
             existing_outline.volumes = outline_data.get("volumes", [])
             existing_outline.main_plot = outline_data.get("main_plot", {})
             existing_outline.sub_plots = outline_data.get("sub_plots", [])
@@ -708,7 +710,9 @@ class OutlineService:
             "climax_chapter": "根据故事结构，推荐高潮章节位置",
         }
 
-        prompt_template = field_prompts.get(field_name, f"为大纲的 '{field_name}' 字段生成建议")
+        prompt_template = field_prompts.get(
+            field_name, f"为大纲的 '{field_name}' 字段生成建议"
+        )
 
         # 构建上下文描述
         context_desc = self._build_context_description(context)

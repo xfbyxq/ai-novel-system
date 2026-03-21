@@ -1060,9 +1060,7 @@ class NovelCreationFlowManager:
         if not context.revision_details:
             return "暂无修改内容"
 
-        preview = (
-            f"**修改目标**: {self._get_target_display_name(context.revision_target)}\n\n"
-        )
+        preview = f"**修改目标**: {self._get_target_display_name(context.revision_target)}\n\n"
 
         for field, value in context.revision_details.items():
             # 字段名映射

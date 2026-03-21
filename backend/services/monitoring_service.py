@@ -684,7 +684,9 @@ class MonitoringService:
         estimated_cost = token_usage.get("estimated_cost", 0)
 
         if estimated_cost > 100:
-            suggestions.append("Token使用成本较高，建议优化提示词和生成参数以减少Token消耗")
+            suggestions.append(
+                "Token使用成本较高，建议优化提示词和生成参数以减少Token消耗"
+            )
 
         # 分析任务成功率
         generation_tasks = performance_metrics.get("generation_tasks", {})
@@ -773,7 +775,10 @@ class MonitoringService:
 
         # 优先处理严重问题
         for suggestion in unique_suggestions:
-            if any(keyword in suggestion for keyword in ["异常", "过高", "失败率", "错误较多"]):
+            if any(
+                keyword in suggestion
+                for keyword in ["异常", "过高", "失败率", "错误较多"]
+            ):
                 priority_suggestions.append(suggestion)
 
         # 然后处理一般建议

@@ -69,7 +69,9 @@ async def get_world_setting(
     world_setting = result.scalar_one_or_none()
 
     if not world_setting:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到")
+        raise HTTPException(
+            status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到"
+        )
 
     return world_setting
 
@@ -689,7 +691,9 @@ async def enhance_outline_preview(
         )
         plot_outline = outline_result.scalar_one_or_none()
         if not plot_outline:
-            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
+            raise HTTPException(
+                status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到"
+            )
 
         # 获取世界观设定
         world_result = await db.execute(

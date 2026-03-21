@@ -146,7 +146,9 @@ class SafeChapterGenerator:
             BatchGenerationInterrupted: 批量生成被中断
         """
         total_chapters = to_chapter - from_chapter + 1
-        logger.info(f"🚀 开始批量生成章节：第{from_chapter}-{to_chapter}章，共 {total_chapters} 章")
+        logger.info(
+            f"🚀 开始批量生成章节：第{from_chapter}-{to_chapter}章，共 {total_chapters} 章"
+        )
 
         results = []
         continuous_failures = 0

@@ -81,14 +81,18 @@ class CharacterAutoDetector:
             )
 
             if not extracted:
-                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色")
+                logger.info(
+                    f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色"
+                )
                 return []
 
             # 2. 多层去重过滤（使用数据库最新数据）
             new_chars = self._filter_new_characters(extracted, db_characters)
 
             if not new_chars:
-                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章提取到角色均已存在，无需注册")
+                logger.info(
+                    f"[CharacterAutoDetector] 第{chapter_number}章提取到角色均已存在，无需注册"
+                )
                 return []
 
             # 3. 注册新角色到数据库
@@ -105,7 +109,9 @@ class CharacterAutoDetector:
             return registered
 
         except Exception as e:
-            logger.warning(f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}")
+            logger.warning(
+                f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}"
+            )
             return []
 
     async def _extract_characters_from_content(
@@ -240,7 +246,8 @@ class CharacterAutoDetector:
                 if variant_norm in existing_names_normalized:
                     variant_match = True
                     logger.debug(
-                        f"[CharacterAutoDetector] 角色「{name}」的别名" f"「{variant}」匹配已有角色，跳过"
+                        f"[CharacterAutoDetector] 角色「{name}」的别名"
+                        f"「{variant}」匹配已有角色，跳过"
                     )
                     break
                 # 别名也做子串检查
@@ -300,7 +307,9 @@ class CharacterAutoDetector:
                 )
                 existing_result = await self.db.execute(existing_stmt)
                 if existing_result.scalar_one_or_none():
-                    logger.info(f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册")
+                    logger.info(
+                        f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册"
+                    )
                     continue
 
                 # 确定 role_type
@@ -454,6 +463,7 @@ class CharacterAutoDetector:
                         pass
 
         logger.warning(
-            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。" f"文本片段：{text[:100]}..."
+            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。"
+            f"文本片段：{text[:100]}..."
         )
         return []
