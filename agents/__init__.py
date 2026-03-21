@@ -1,4 +1,4 @@
-"""CrewAI 风格的小说生成 Agent 系统"""
+"""CrewAI 风格的小说生成 Agent 系统."""
 
 from agents.crew_manager import NovelCrewManager
 from agents.continuity_models import (

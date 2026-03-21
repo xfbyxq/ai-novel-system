@@ -1,4 +1,4 @@
-"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要
+"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要.
 
 替代简单的文本截断，生成包含关键事件、角色变化、情节推进等维度的摘要。
 """
@@ -13,9 +13,10 @@ from llm.qwen_client import QwenClient
 
 
 class ChapterSummaryGenerator:
-    """使用 LLM 生成高质量的章节摘要"""
+    """使用 LLM 生成高质量的章节摘要."""
 
     def __init__(self, client: QwenClient, cost_tracker: CostTracker):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.pm = PromptManager
@@ -26,7 +27,7 @@ class ChapterSummaryGenerator:
         chapter_content: str,
         chapter_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """使用 LLM 生成结构化章节摘要
+        """使用 LLM 生成结构化章节摘要.
 
         Args:
             chapter_number: 章节号
@@ -65,7 +66,7 @@ class ChapterSummaryGenerator:
 
             # 提取 JSON（已增强容错性）
             summary = self._extract_json(response["content"])
-            
+
             # 检查是否返回了空摘要（解析失败的标志）
             if not summary.get("key_events") and not summary.get("plot_progress"):
                 logger.warning(
@@ -109,7 +110,7 @@ class ChapterSummaryGenerator:
         content: str,
         chapter_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """回退方案：从原文截取摘要"""
+        """回退方案：从原文截取摘要."""
         plot_progress = content[:200] if content else ""
         last_period = plot_progress.rfind("。")
         if last_period > 100:
@@ -125,61 +126,64 @@ class ChapterSummaryGenerator:
             "key_events": key_events,
             "character_changes": "",
             "plot_progress": plot_progress,
-            "foreshadowing": chapter_plan.get("foreshadowing", []) if chapter_plan else [],
+            "foreshadowing": (
+                chapter_plan.get("foreshadowing", []) if chapter_plan else []
+            ),
             "ending_state": ending_state,
             "new_information": "",
         }
 
     @staticmethod
     def _extract_ending(content: str, length: int = 100) -> str:
-        """从内容中提取结尾部分"""
+        """从内容中提取结尾部分."""
         if not content:
             return ""
         ending = content[-length:]
         first_period = ending.find("。")
         if 0 < first_period < 50:
-            ending = ending[first_period + 1:]
+            ending = ending[first_period + 1 :]
         return ending.strip()
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON
-        
+        """从 LLM 响应中提取 JSON.
+
         使用多层策略：
         1. 直接解析完整文本
         2. 提取 markdown 代码块中的 JSON
         3. 提取花括号内的 JSON 片段
         4. 尝试修复不完整的 JSON（添加缺失的闭合括号）
         5. 返回空字典作为最后手段
-        
+
         Args:
             text: LLM 响应的原始文本
-            
+
         Returns:
             解析后的字典，如全部失败则返回空字典
         """
         text = text.strip()
-        
+
         # 策略 1: 直接解析完整文本
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
-        
+
         # 策略 2: 提取 markdown 代码块中的 JSON
         import re
+
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
         if match:
             try:
                 return json.loads(match.group(1).strip())
             except json.JSONDecodeError:
                 pass
-        
+
         # 策略 3: 提取花括号内的 JSON 片段
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
-            json_str = text[start:end + 1]
+            json_str = text[start : end + 1]
             try:
                 return json.loads(json_str)
             except json.JSONDecodeError:
@@ -188,7 +192,7 @@ class ChapterSummaryGenerator:
                 open_braces = json_str.count("{")
                 close_braces = json_str.count("}")
                 missing_braces = open_braces - close_braces
-                
+
                 if missing_braces > 0:
                     try:
                         # 添加缺失的闭合括号
@@ -204,12 +208,10 @@ class ChapterSummaryGenerator:
                                 return json.loads(truncated)
                         except json.JSONDecodeError:
                             pass
-                
+
                 # 策略 5: 记录警告并返回空字典
-                logger.warning(
-                    f"JSON 解析失败，返回空摘要。文本片段：{text[:100]}..."
-                )
-        
+                logger.warning(f"JSON 解析失败，返回空摘要。文本片段：{text[:100]}...")
+
         # 全部失败，返回空字典
         return {
             "key_events": [],

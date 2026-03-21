@@ -28,7 +28,7 @@ async def list_characters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定小说的所有角色。
+    获取指定小说的所有角色.
 
     返回角色列表，按创建时间正序排列（先创建的角色在前）。
     """
@@ -41,7 +41,11 @@ async def list_characters(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get characters
-    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
+    query = (
+        select(Character)
+        .where(Character.novel_id == novel_id)
+        .order_by(Character.created_at)
+    )
     result = await db.execute(query)
     characters = result.scalars().all()
 
@@ -64,7 +68,7 @@ async def create_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    为指定小说创建新角色。
+    为指定小说创建新角色.
 
     创建角色后可在 relationships 字段中指定与其他角色的关系。
     """
@@ -103,7 +107,7 @@ async def get_character_relationships(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色关系图数据（图论格式）。
+    获取角色关系图数据（图论格式）.
 
     返回用于前端可视化的关系图数据结构：
     - **nodes**: 角色节点列表，每个节点包含 id、name、role_type 等信息
@@ -120,7 +124,11 @@ async def get_character_relationships(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get all characters
-    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
+    query = (
+        select(Character)
+        .where(Character.novel_id == novel_id)
+        .order_by(Character.created_at)
+    )
     result = await db.execute(query)
     all_characters = result.scalars().all()
 
@@ -156,11 +164,13 @@ async def get_character_relationships(
                 # Convert target name to UUID (strip whitespace)
                 target_id = name_to_id.get(target_name.strip())
                 if target_id:  # Only add edge if target character exists
-                    edges.append({
-                        "source": str(char.id),
-                        "target": target_id,
-                        "label": relationship_type,
-                    })
+                    edges.append(
+                        {
+                            "source": str(char.id),
+                            "target": target_id,
+                            "label": relationship_type,
+                        }
+                    )
 
     return CharacterRelationshipResponse(nodes=nodes, edges=edges)
 
@@ -172,7 +182,7 @@ async def get_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色详情。
+    获取角色详情.
 
     返回指定角色的完整信息。
     """
@@ -197,7 +207,7 @@ async def update_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新角色信息。
+    更新角色信息.
 
     仅更新请求体中提供的字段，未提供的字段保持不变。
     """
@@ -228,7 +238,7 @@ async def delete_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除角色。
+    删除角色.
 
     删除后，其他角色的 relationships 中对此角色的引用不会自动更新。
     """
@@ -253,8 +263,8 @@ async def get_character_name_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色名字版本历史。
-    
+    获取角色名字版本历史.
+
     返回角色名字的变更历史记录，包括每次变更的时间、操作人和原因。
     """
     query = select(Character).where(
@@ -263,13 +273,13 @@ async def get_character_name_versions(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     version_service = CharacterNameVersionService(db)
     versions = await version_service.get_version_history(character_id)
-    
+
     return [
         {
             "id": str(version.id),
@@ -291,8 +301,8 @@ async def create_character_name_version(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建角色名字版本记录。
-    
+    创建角色名字版本记录.
+
     记录角色名字的变更，包括旧名字、新名字、变更人和原因。
     """
     query = select(Character).where(
@@ -301,18 +311,18 @@ async def create_character_name_version(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     old_name = version_data.get("old_name", character.name)
     new_name = version_data.get("new_name")
     changed_by = version_data.get("changed_by", "system")
     reason = version_data.get("reason")
-    
+
     if not new_name:
         raise HTTPException(status_code=400, detail="new_name 是必填字段")
-    
+
     version_service = CharacterNameVersionService(db)
     version = await version_service.create_version_record(
         character_id=character_id,
@@ -321,7 +331,7 @@ async def create_character_name_version(
         changed_by=changed_by,
         reason=reason,
     )
-    
+
     return {
         "id": str(version.id),
         "old_name": version.old_name,
@@ -341,8 +351,8 @@ async def compare_character_name_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    对比两个名字版本的差异。
-    
+    对比两个名字版本的差异.
+
     返回两个版本之间的差异信息。
     """
     query = select(Character).where(
@@ -351,13 +361,13 @@ async def compare_character_name_versions(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     version_service = CharacterNameVersionService(db)
     comparison = await version_service.compare_versions(version_id_1, version_id_2)
-    
+
     return comparison
 
 
@@ -369,8 +379,8 @@ async def revert_character_name_version(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    回溯到指定的名字版本。
-    
+    回溯到指定的名字版本.
+
     将角色名字恢复到历史版本，并创建新的版本记录。
     """
     query = select(Character).where(
@@ -379,26 +389,28 @@ async def revert_character_name_version(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     target_version_id = version_data.get("target_version_id")
     reverted_by = version_data.get("reverted_by", "system")
-    
+
     if not target_version_id:
         raise HTTPException(status_code=400, detail="target_version_id 是必填字段")
-    
+
     version_service = CharacterNameVersionService(db)
     reverted_version = await version_service.revert_to_version(
         character_id=character_id,
         target_version_id=UUID(target_version_id),
         reverted_by=reverted_by,
     )
-    
+
     if not reverted_version:
-        raise HTTPException(status_code=404, detail=f"目标版本 {target_version_id} 未找到")
-    
+        raise HTTPException(
+            status_code=404, detail=f"目标版本 {target_version_id} 未找到"
+        )
+
     return {
         "id": str(reverted_version.id),
         "old_name": reverted_version.old_name,
@@ -418,8 +430,8 @@ async def validate_character_name_change(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    验证角色名字变更是否合理。
-    
+    验证角色名字变更是否合理.
+
     检查新名字是否与历史版本冲突，并提供警告信息。
     """
     query = select(Character).where(
@@ -428,11 +440,11 @@ async def validate_character_name_change(
     )
     result = await db.execute(query)
     character = result.scalar_one_or_none()
-    
+
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
-    
+
     version_service = CharacterNameVersionService(db)
     validation = await version_service.validate_name_change(character_id, new_name)
-    
+
     return validation

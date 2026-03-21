@@ -1,3 +1,5 @@
+"""generation_task 模块."""
+
 import enum
 import uuid
 
@@ -10,6 +12,7 @@ from core.database import Base
 
 
 class TaskType(str, enum.Enum):
+    """TaskType 类."""
     planning = "planning"
     writing = "writing"
     editing = "editing"
@@ -18,6 +21,7 @@ class TaskType(str, enum.Enum):
 
 
 class TaskStatus(str, enum.Enum):
+    """TaskStatus 类."""
     pending = "pending"
     running = "running"
     completed = "completed"
@@ -26,10 +30,13 @@ class TaskStatus(str, enum.Enum):
 
 
 class GenerationTask(Base):
+    """GenerationTask 类."""
     __tablename__ = "generation_tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    novel_id = Column(UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
+    novel_id = Column(
+        UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False
+    )
     task_type = Column(String(50), nullable=False)
     status = Column(String(50), default="pending")
     phase = Column(String(50), nullable=True)
@@ -44,4 +51,6 @@ class GenerationTask(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     novel = relationship("Novel", back_populates="generation_tasks")
-    token_usages = relationship("TokenUsage", back_populates="task", cascade="all, delete-orphan")
+    token_usages = relationship(
+        "TokenUsage", back_populates="task", cascade="all, delete-orphan"
+    )

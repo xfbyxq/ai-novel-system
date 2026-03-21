@@ -1,4 +1,5 @@
-"""发布服务 - 负责管理发布任务和平台账号"""
+"""发布服务 - 负责管理发布任务和平台账号."""
+
 import asyncio
 import logging
 from datetime import datetime
@@ -19,9 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 class PublishingService:
-    """发布服务"""
+    """发布服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.encryption = EncryptionService()
 
@@ -37,7 +39,7 @@ class PublishingService:
         password: str,
         extra_credentials: Optional[dict] = None,
     ) -> PlatformAccount:
-        """创建平台账号"""
+        """创建平台账号."""
         # 加密凭证
         credentials = {
             "username": username,
@@ -70,7 +72,7 @@ class PublishingService:
         extra_credentials: Optional[dict] = None,
         status: Optional[str] = None,
     ) -> Optional[PlatformAccount]:
-        """更新平台账号"""
+        """更新平台账号."""
         result = await self.db.execute(
             select(PlatformAccount).where(PlatformAccount.id == account_id)
         )
@@ -83,7 +85,9 @@ class PublishingService:
 
         if password or extra_credentials:
             # 解密现有凭证
-            current_credentials = self.encryption.decrypt_dict(account.encrypted_credentials)
+            current_credentials = self.encryption.decrypt_dict(
+                account.encrypted_credentials
+            )
 
             if password:
                 current_credentials["password"] = password
@@ -91,7 +95,9 @@ class PublishingService:
                 current_credentials.update(extra_credentials)
 
             # 重新加密
-            account.encrypted_credentials = self.encryption.encrypt_dict(current_credentials)
+            account.encrypted_credentials = self.encryption.encrypt_dict(
+                current_credentials
+            )
 
         if status:
             account.status = AccountStatus(status)
@@ -101,7 +107,7 @@ class PublishingService:
         return account
 
     async def get_account_credentials(self, account_id: UUID) -> Optional[dict]:
-        """获取解密后的账号凭证"""
+        """获取解密后的账号凭证."""
         result = await self.db.execute(
             select(PlatformAccount).where(PlatformAccount.id == account_id)
         )
@@ -112,7 +118,7 @@ class PublishingService:
         return self.encryption.decrypt_dict(account.encrypted_credentials)
 
     async def verify_account(self, account_id: UUID) -> bool:
-        """验证账号是否可用"""
+        """验证账号是否可用."""
         credentials = await self.get_account_credentials(account_id)
         if not credentials:
             return False
@@ -142,7 +148,7 @@ class PublishingService:
     # ============================================================
 
     async def run_publish_task(self, task_id: UUID) -> None:
-        """执行发布任务（后台运行）"""
+        """执行发布任务（后台运行）."""
         # 获取任务
         result = await self.db.execute(
             select(PublishTask).where(PublishTask.id == task_id)
@@ -207,19 +213,15 @@ class PublishingService:
             task.completed_at = datetime.now()
             await self.db.commit()
 
-
-
     async def get_publish_preview(
         self,
         novel_id: UUID,
         from_chapter: int = 1,
         to_chapter: Optional[int] = None,
     ) -> dict:
-        """获取发布预览"""
+        """获取发布预览."""
         # 获取小说
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
         if not novel:
             return {"error": "小说不存在"}
@@ -256,14 +258,22 @@ class PublishingService:
                 unpublished_count += 1
 
             pub_record = published_chapters.get(chapter.id)
-            chapter_previews.append({
-                "chapter_number": chapter.chapter_number,
-                "title": chapter.title or f"第{chapter.chapter_number}章",
-                "word_count": chapter.word_count,
-                "status": chapter.status.value if hasattr(chapter.status, 'value') else str(chapter.status),
-                "is_published": is_published,
-                "published_at": pub_record.published_at.isoformat() if pub_record else None,
-            })
+            chapter_previews.append(
+                {
+                    "chapter_number": chapter.chapter_number,
+                    "title": chapter.title or f"第{chapter.chapter_number}章",
+                    "word_count": chapter.word_count,
+                    "status": (
+                        chapter.status.value
+                        if hasattr(chapter.status, "value")
+                        else str(chapter.status)
+                    ),
+                    "is_published": is_published,
+                    "published_at": (
+                        pub_record.published_at.isoformat() if pub_record else None
+                    ),
+                }
+            )
 
         return {
             "novel_id": str(novel_id),

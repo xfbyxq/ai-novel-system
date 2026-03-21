@@ -1,4 +1,4 @@
-"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件
+"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件.
 
 支持基于章节类型的动态迭代策略。
 """
@@ -13,7 +13,8 @@ from core.logging_config import logger
 
 
 class ChapterType(str, Enum):
-    """章节类型枚举"""
+    """章节类型枚举."""
+
     CLIMAX = "climax"  # 高潮章节：战斗、揭秘、重大转折
     TRANSITION = "transition"  # 过渡章节：日常、铺垫、信息传递
     SETUP = "setup"  # 铺垫章节：世界观构建、角色引入
@@ -24,7 +25,8 @@ class ChapterType(str, Enum):
 
 @dataclass
 class IterationStrategy:
-    """迭代策略配置"""
+    """迭代策略配置."""
+
     max_iterations: int = 3
     quality_threshold: float = 7.5
     cost_weight: float = 0.5  # 成本敏感度 (0.0-1.0)
@@ -32,7 +34,7 @@ class IterationStrategy:
 
 @dataclass
 class IterationRecord:
-    """单轮迭代记录"""
+    """单轮迭代记录."""
 
     iteration: int
     score: float
@@ -61,13 +63,13 @@ class IterationRecord:
 
 
 class IterationController:
-    """控制反馈循环的迭代次数和退出条件
+    """控制反馈循环的迭代次数和退出条件.
 
     支持三种退出条件：
     1. 质量达标（score >= threshold）
     2. 达到最大迭代次数
     3. 成本超限
-    
+
     支持基于章节类型的动态策略：
     - climax: 5 次迭代，8.5 分阈值（质量优先）
     - transition: 2 次迭代，7.0 分阈值（效率优先）
@@ -81,32 +83,24 @@ class IterationController:
         ChapterType.CLIMAX: IterationStrategy(
             max_iterations=5,
             quality_threshold=8.5,
-            cost_weight=0.3  # 低成本敏感度，质量优先
+            cost_weight=0.3,  # 低成本敏感度，质量优先
         ),
         ChapterType.CHARACTER: IterationStrategy(
-            max_iterations=4,
-            quality_threshold=8.0,
-            cost_weight=0.4
+            max_iterations=4, quality_threshold=8.0, cost_weight=0.4
         ),
         ChapterType.SETUP: IterationStrategy(
-            max_iterations=4,
-            quality_threshold=8.0,
-            cost_weight=0.5
+            max_iterations=4, quality_threshold=8.0, cost_weight=0.5
         ),
         ChapterType.WORLD_BUILDING: IterationStrategy(
-            max_iterations=3,
-            quality_threshold=7.5,
-            cost_weight=0.6
+            max_iterations=3, quality_threshold=7.5, cost_weight=0.6
         ),
         ChapterType.TRANSITION: IterationStrategy(
             max_iterations=2,
             quality_threshold=7.0,
-            cost_weight=0.8  # 高成本敏感度，效率优先
+            cost_weight=0.8,  # 高成本敏感度，效率优先
         ),
         ChapterType.NORMAL: IterationStrategy(
-            max_iterations=3,
-            quality_threshold=7.5,
-            cost_weight=0.5
+            max_iterations=3, quality_threshold=7.5, cost_weight=0.5
         ),
     }
 
@@ -116,7 +110,7 @@ class IterationController:
         custom_strategy: Optional[IterationStrategy] = None,
         cost_limit: Optional[float] = None,
     ):
-        """初始化迭代控制器
+        """初始化迭代控制器.
 
         Args:
             chapter_type: 章节类型
@@ -149,7 +143,7 @@ class IterationController:
         iteration: Optional[int] = None,
         cost_delta: float = 0.0,
     ) -> bool:
-        """判断是否需要继续迭代
+        """判断是否需要继续迭代.
 
         Args:
             score: 当前迭代的质量分数
@@ -199,7 +193,7 @@ class IterationController:
         cost_delta: float = 0.0,
         details: Optional[Dict[str, Any]] = None,
     ) -> IterationRecord:
-        """记录一轮迭代"""
+        """记录一轮迭代."""
         self.current_iteration += 1
         self.cumulative_cost += cost_delta
         record = IterationRecord(
@@ -215,7 +209,7 @@ class IterationController:
         return record
 
     def get_summary(self) -> Dict[str, Any]:
-        """获取迭代摘要"""
+        """获取迭代摘要."""
         scores = [r.score for r in self.history if r.score > 0]
         return {
             "total_iterations": self.current_iteration,
@@ -228,7 +222,7 @@ class IterationController:
         }
 
     def reset(self):
-        """重置控制器（用于下一章）"""
+        """重置控制器（用于下一章）."""
         self.history.clear()
         self.current_iteration = 0
         self.cumulative_cost = 0.0
@@ -239,7 +233,7 @@ class IterationController:
         chapter_title: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> ChapterType:
-        """基于内容自动识别章节类型
+        """基于内容自动识别章节类型.
 
         使用轻量级 LLM 调用识别章节类型，避免额外成本。
 

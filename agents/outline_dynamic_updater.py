@@ -1,4 +1,4 @@
-"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲
+"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲.
 
 每 N 章触发一次偏差评估，分析实际内容与大纲的偏差，
 自动更新未来章节的大纲（已写章节不受影响）。
@@ -24,19 +24,19 @@ from llm.qwen_client import QwenClient
 
 @dataclass
 class DeviationReport:
-    """偏差分析报告"""
+    """偏差分析报告."""
 
-    character_deviation: float = 0.0    # 角色偏差分 (0-10)
-    plot_deviation: float = 0.0         # 情节偏差分 (0-10)
-    pacing_deviation: float = 0.0       # 节奏偏差分 (0-10)
+    character_deviation: float = 0.0  # 角色偏差分 (0-10)
+    plot_deviation: float = 0.0  # 情节偏差分 (0-10)
+    pacing_deviation: float = 0.0  # 节奏偏差分 (0-10)
     foreshadowing_deviation: float = 0.0  # 伏笔偏差分 (0-10)
-    overall_deviation: float = 0.0      # 加权平均
+    overall_deviation: float = 0.0  # 加权平均
     details: Dict[str, Any] = field(default_factory=dict)
     major_deviations: List[str] = field(default_factory=list)
     needs_update: bool = False
 
     def compute_overall(self) -> float:
-        """计算加权平均偏差分"""
+        """计算加权平均偏差分."""
         self.overall_deviation = (
             self.character_deviation * 0.30
             + self.plot_deviation * 0.35
@@ -48,7 +48,7 @@ class DeviationReport:
 
 @dataclass
 class OutlineUpdatePlan:
-    """大纲更新计划"""
+    """大纲更新计划."""
 
     updated_volumes: Optional[List[Dict]] = None
     updated_sub_plots: Optional[List[Dict]] = None
@@ -60,7 +60,7 @@ class OutlineUpdatePlan:
 
 
 class OutlineDynamicUpdater:
-    """大纲动态更新器
+    """大纲动态更新器.
 
     核心功能：
     1. 分析最近 N 章内容与大纲的偏差
@@ -74,6 +74,7 @@ class OutlineDynamicUpdater:
         cost_tracker: CostTracker,
         deviation_threshold: float = 6.0,
     ):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.deviation_threshold = deviation_threshold
@@ -89,7 +90,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用
+        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用.
 
         Args:
             db: 数据库会话
@@ -166,7 +167,11 @@ class OutlineDynamicUpdater:
             novel_id=novel_id,
             update_plan=update_plan,
             current_chapter=current_chapter,
-            deviation_report=deviation.details if hasattr(deviation, 'details') else deviation.__dict__,
+            deviation_report=(
+                deviation.details
+                if hasattr(deviation, "details")
+                else deviation.__dict__
+            ),
         )
 
         logger.info(
@@ -200,7 +205,7 @@ class OutlineDynamicUpdater:
         outline_data: Dict[str, Any],
         current_chapter: int,
     ) -> DeviationReport:
-        """分析最近章节内容与大纲的偏差
+        """分析最近章节内容与大纲的偏差.
 
         Args:
             recent_chapters: 最近 N 章的摘要
@@ -272,7 +277,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> OutlineUpdatePlan:
-        """生成大纲更新方案
+        """生成大纲更新方案.
 
         核心约束：仅修改 current_chapter 之后的章节。
 
@@ -365,7 +370,7 @@ class OutlineDynamicUpdater:
         current_chapter: int,
         deviation_report: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """将更新方案应用到数据库
+        """将更新方案应用到数据库.
 
         Args:
             db: 数据库会话
@@ -433,12 +438,12 @@ class OutlineDynamicUpdater:
 
             # 记录更新历史
             history = plot_outline.update_history or []
-            
+
             # 从偏差报告中获取偏差分数
             deviation_score = 0
             if deviation_report and isinstance(deviation_report, dict):
                 deviation_score = deviation_report.get("overall", 0)
-            
+
             history.append(
                 {
                     "version": plot_outline.version,
@@ -481,7 +486,7 @@ class OutlineDynamicUpdater:
         recent_chapters: List[Dict[str, Any]],
         current_chapter: int,
     ) -> str:
-        """提取大纲中与最近章节对应的计划信息"""
+        """提取大纲中与最近章节对应的计划信息."""
         parts = []
 
         # 从 volumes 中提取相关卷的信息
@@ -495,14 +500,18 @@ class OutlineDynamicUpdater:
             if isinstance(ch_range, list) and len(ch_range) >= 2:
                 vol_start, vol_end = ch_range[0], ch_range[1]
                 if vol_start <= max_ch and vol_end >= min_ch:
-                    parts.append(f"### 第{vol.get('number', vol.get('volume_num', '?'))}卷: {vol.get('title', '')}")
+                    parts.append(
+                        f"### 第{vol.get('number', vol.get('volume_num', '?'))}卷: {vol.get('title', '')}"
+                    )
                     parts.append(f"概要: {vol.get('summary', '')}")
                     key_events = vol.get("key_events", [])
                     if key_events:
                         parts.append("关键事件:")
                         for evt in key_events:
                             if isinstance(evt, dict):
-                                parts.append(f"  - 第{evt.get('chapter', '?')}章: {evt.get('event', '')}")
+                                parts.append(
+                                    f"  - 第{evt.get('chapter', '?')}章: {evt.get('event', '')}"
+                                )
                             else:
                                 parts.append(f"  - {evt}")
                     tension_cycles = vol.get("tension_cycles", [])
@@ -519,9 +528,9 @@ class OutlineDynamicUpdater:
         # 添加关键转折点
         turning_points = outline_data.get("key_turning_points", [])
         relevant_tp = [
-            tp for tp in turning_points
-            if isinstance(tp, dict)
-            and min_ch <= tp.get("chapter", 0) <= max_ch + 10
+            tp
+            for tp in turning_points
+            if isinstance(tp, dict) and min_ch <= tp.get("chapter", 0) <= max_ch + 10
         ]
         if relevant_tp:
             parts.append("### 关键转折点")
@@ -533,10 +542,8 @@ class OutlineDynamicUpdater:
 
         return "\n".join(parts) if parts else "（大纲中未找到对应章节的详细计划）"
 
-    def _format_recent_chapters(
-        self, recent_chapters: List[Dict[str, Any]]
-    ) -> str:
-        """格式化最近章节的摘要信息"""
+    def _format_recent_chapters(self, recent_chapters: List[Dict[str, Any]]) -> str:
+        """格式化最近章节的摘要信息."""
         parts = []
         for ch in recent_chapters:
             ch_num = ch.get("chapter_number", "?")
@@ -568,7 +575,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _summarize_world_setting(world_setting: Dict[str, Any]) -> str:
-        """精简世界观信息"""
+        """精简世界观信息."""
         if not world_setting:
             return "（无世界观设定）"
         parts = []
@@ -586,7 +593,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _summarize_characters(characters: List[Dict[str, Any]]) -> str:
-        """精简角色信息"""
+        """精简角色信息."""
         if not characters:
             return "（无角色信息）"
         parts = []
@@ -602,7 +609,7 @@ class OutlineDynamicUpdater:
         updated: List[Dict],
         current_chapter: int,
     ) -> List[Dict]:
-        """合并卷大纲：保留已写卷数据，替换未写卷数据"""
+        """合并卷大纲：保留已写卷数据，替换未写卷数据."""
         existing_by_num = {}
         for vol in existing:
             num = vol.get("number", vol.get("volume_num"))
@@ -616,14 +623,18 @@ class OutlineDynamicUpdater:
                 updated_by_num[num] = vol
 
         result = []
-        all_nums = sorted(set(list(existing_by_num.keys()) + list(updated_by_num.keys())))
+        all_nums = sorted(
+            set(list(existing_by_num.keys()) + list(updated_by_num.keys()))
+        )
 
         for num in all_nums:
             existing_vol = existing_by_num.get(num)
             updated_vol = updated_by_num.get(num)
 
             if existing_vol:
-                ch_range = existing_vol.get("chapters", existing_vol.get("chapters_range", [0, 0]))
+                ch_range = existing_vol.get(
+                    "chapters", existing_vol.get("chapters_range", [0, 0])
+                )
                 if isinstance(ch_range, list) and len(ch_range) >= 2:
                     vol_end = ch_range[1]
                     if vol_end <= current_chapter:
@@ -645,15 +656,17 @@ class OutlineDynamicUpdater:
         updated: List[Dict],
         current_chapter: int,
     ) -> List[Dict]:
-        """合并转折点：保留已发生的，替换未发生的"""
+        """合并转折点：保留已发生的，替换未发生的."""
         # 保留已发生的转折点
         frozen = [
-            tp for tp in existing
+            tp
+            for tp in existing
             if isinstance(tp, dict) and tp.get("chapter", 0) <= current_chapter
         ]
         # 使用更新后的未来转折点
         future_updated = [
-            tp for tp in updated
+            tp
+            for tp in updated
             if isinstance(tp, dict) and tp.get("chapter", 0) > current_chapter
         ]
         return frozen + future_updated
@@ -664,7 +677,7 @@ class OutlineDynamicUpdater:
         outline_data: Dict[str, Any],
         current_chapter: int,
     ) -> Tuple[int, int]:
-        """计算受影响的章节范围"""
+        """计算受影响的章节范围."""
         min_ch = current_chapter + 1
         max_ch = current_chapter + 1
 
@@ -684,14 +697,17 @@ class OutlineDynamicUpdater:
                         max_ch = max(max_ch, ch)
 
         # 从高潮章节提取范围
-        if plan.updated_climax_chapter and plan.updated_climax_chapter > current_chapter:
+        if (
+            plan.updated_climax_chapter
+            and plan.updated_climax_chapter > current_chapter
+        ):
             max_ch = max(max_ch, plan.updated_climax_chapter)
 
         return (min_ch, max_ch)
 
     @staticmethod
     def _extract_json_object(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON 对象
+        """从 LLM 响应中提取 JSON 对象.
 
         多层策略，兼容各种 LLM 输出格式。
         """
@@ -719,7 +735,7 @@ class OutlineDynamicUpdater:
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
-            json_str = text[start: end + 1]
+            json_str = text[start : end + 1]
             try:
                 result = json.loads(json_str)
                 if isinstance(result, dict):
@@ -738,7 +754,6 @@ class OutlineDynamicUpdater:
                         pass
 
         logger.warning(
-            f"[OutlineDynamicUpdater] JSON 对象解析失败。"
-            f"文本片段：{text[:100]}..."
+            f"[OutlineDynamicUpdater] JSON 对象解析失败。" f"文本片段：{text[:100]}..."
         )
         return {}

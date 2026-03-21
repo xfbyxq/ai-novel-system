@@ -1,4 +1,4 @@
-"""清理数据库中的重复角色数据
+"""清理数据库中的重复角色数据.
 
 功能：
 1. 查找所有 (novel_id, lower(name)) 重复的角色记录
@@ -33,7 +33,7 @@ from core.models.chapter import Chapter
 
 
 async def find_duplicates(db: AsyncSession) -> dict[str, list[Character]]:
-    """查找所有重复角色，按 (novel_id, lower(name)) 分组。
+    """查找所有重复角色，按 (novel_id, lower(name)) 分组.
 
     Returns:
         字典：key 为 "novel_id::name_lower"，value 为按 created_at 排序的角色列表
@@ -53,10 +53,8 @@ async def find_duplicates(db: AsyncSession) -> dict[str, list[Character]]:
     return {k: v for k, v in groups.items() if len(v) > 1}
 
 
-async def merge_relationships(
-    primary: Character, duplicates: list[Character]
-) -> bool:
-    """将重复角色的 relationships 合并到主记录。
+async def merge_relationships(primary: Character, duplicates: list[Character]) -> bool:
+    """将重复角色的 relationships 合并到主记录.
 
     Returns:
         是否有合并发生
@@ -80,7 +78,7 @@ async def update_chapter_references(
     primary_id: UUID,
     duplicate_ids: list[UUID],
 ) -> int:
-    """更新 chapters.characters_appeared 中对重复角色 ID 的引用。
+    """更新 chapters.characters_appeared 中对重复角色 ID 的引用.
 
     Returns:
         更新的章节数量
@@ -127,23 +125,27 @@ async def update_chapter_references(
 
 
 async def cleanup(apply: bool = False) -> None:
-    """执行数据清理。"""
+    """执行数据清理."""
     engine = create_async_engine(
         settings.DATABASE_URL.split("?")[0],
         echo=False,
         connect_args={"ssl": False},
     )
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with session_factory() as db:
         # 先检查 characters 表是否存在
         try:
-            check_result = await db.execute(text(
-                "SELECT EXISTS ("
-                "  SELECT FROM information_schema.tables "
-                "  WHERE table_schema = 'public' AND table_name = 'characters'"
-                ")"
-            ))
+            check_result = await db.execute(
+                text(
+                    "SELECT EXISTS ("
+                    "  SELECT FROM information_schema.tables "
+                    "  WHERE table_schema = 'public' AND table_name = 'characters'"
+                    ")"
+                )
+            )
             table_exists = check_result.scalar()
         except Exception:
             table_exists = False
@@ -166,7 +168,9 @@ async def cleanup(apply: bool = False) -> None:
         print(f"\n{'='*60}")
         print(f"角色去重清理报告")
         print(f"{'='*60}")
-        print(f"发现 {len(duplicates)} 组重复角色，共 {total_duplicates} 条待删除记录\n")
+        print(
+            f"发现 {len(duplicates)} 组重复角色，共 {total_duplicates} 条待删除记录\n"
+        )
 
         for key, chars in duplicates.items():
             novel_id_str, name_lower = key.split("::", 1)
@@ -227,6 +231,7 @@ async def cleanup(apply: bool = False) -> None:
 
 
 def main():
+    """main 函数."""
     parser = argparse.ArgumentParser(description="清理数据库中的重复角色数据")
     parser.add_argument(
         "--apply",

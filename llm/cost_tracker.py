@@ -1,4 +1,4 @@
-"""Token 使用量和成本追踪"""
+"""Token 使用量和成本追踪."""
 
 import logging
 from decimal import Decimal
@@ -14,9 +14,10 @@ PRICING = {
 
 
 class CostTracker:
-    """追踪 LLM API 调用的 token 使用量和成本。"""
+    """追踪 LLM API 调用的 token 使用量和成本."""
 
     def __init__(self, model: str = "qwen-plus"):
+        """初始化方法."""
         self.model = model
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -33,7 +34,7 @@ class CostTracker:
         chapter_number: int = 0,
         cost_category: str = "base",
     ) -> dict:
-        """记录一次 API 调用的 token 使用量并计算成本。
+        """记录一次 API 调用的 token 使用量并计算成本.
 
         Args:
             agent_name: Agent 名称
@@ -72,7 +73,11 @@ class CostTracker:
                     "query": Decimal("0"),
                     "vote": Decimal("0"),
                 }
-            category_key = cost_category if cost_category in self.chapter_costs[chapter_number] else "base"
+            category_key = (
+                cost_category
+                if cost_category in self.chapter_costs[chapter_number]
+                else "base"
+            )
             self.chapter_costs[chapter_number][category_key] += cost
 
         logger.info(
@@ -82,12 +87,12 @@ class CostTracker:
         return record
 
     def get_chapter_cost(self, chapter_number: int) -> float:
-        """获取某章的总成本（元）"""
+        """获取某章的总成本（元）."""
         costs = self.chapter_costs.get(chapter_number, {})
         return float(sum(costs.values()))
 
     def check_chapter_limit(self, chapter_number: int, limit: float) -> bool:
-        """检查某章成本是否超限
+        """检查某章成本是否超限.
 
         Returns:
             True 表示未超限，False 表示已超限
@@ -95,7 +100,7 @@ class CostTracker:
         return self.get_chapter_cost(chapter_number) < limit
 
     def get_summary(self) -> dict:
-        """获取成本汇总。"""
+        """获取成本汇总."""
         chapter_breakdown = {}
         for ch, costs in self.chapter_costs.items():
             chapter_breakdown[ch] = {k: float(v) for k, v in costs.items()}
@@ -112,6 +117,7 @@ class CostTracker:
         }
 
     def reset(self):
+        """reset 方法."""
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_cost = Decimal("0")

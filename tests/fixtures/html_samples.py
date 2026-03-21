@@ -1,4 +1,4 @@
-"""Mock HTML 样本数据，用于单元测试解析方法。"""
+"""Mock HTML 样本数据，用于单元测试解析方法."""
 
 # 模拟起点排行榜页面 HTML
 # 注意：只使用 .book-mid-info 选择器，避免与 .rank-list li 重复匹配

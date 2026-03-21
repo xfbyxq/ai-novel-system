@@ -30,7 +30,7 @@ async def list_novels(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说列表（分页）。
+    获取小说列表（分页）.
 
     返回所有小说的分页列表，按创建时间倒序排列。
 
@@ -73,7 +73,7 @@ async def create_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建新小说。
+    创建新小说.
 
     创建一个新的小说项目，初始状态为 `planning`（企划中）。
     创建后可执行企划任务生成世界观、角色、大纲等内容。
@@ -91,7 +91,7 @@ async def get_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说详情。
+    获取小说详情.
 
     返回小说的完整信息，包括关联的世界观设定、角色列表、章节列表等。
     """
@@ -120,7 +120,7 @@ async def update_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说信息。
+    更新小说信息.
 
     仅更新请求体中提供的字段，未提供的字段保持不变。
     当状态改为"企划中"(planning)时，会自动重置所有统计信息（字数、章节数、Token成本等）。
@@ -168,7 +168,7 @@ async def delete_novel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除小说。
+    删除小说.
 
     **警告**：此操作会级联删除小说的所有关联数据，包括：
     - 世界观设定

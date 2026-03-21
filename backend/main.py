@@ -63,7 +63,7 @@ app = FastAPI(
     title="小说生成系统 API",
     version=settings.APP_VERSION,
     description="""
-## AI驱动的小说生成系统
+## AI驱动的小说生成系统.
 
 本系统提供完整的AI小说创作能力，包括：
 
@@ -92,7 +92,10 @@ app = FastAPI(
 # Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # 限制为前端开发服务器
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],  # 限制为前端开发服务器
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -122,27 +125,29 @@ async def health_check():
     health = {
         "status": "healthy",
         "service": "novel-generation-system",
-        "dependencies": {}
+        "dependencies": {},
     }
-    
+
     # 检查数据库
     try:
         from core.database import engine
+
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         health["dependencies"]["postgres"] = "healthy"
     except Exception as e:
         health["status"] = "unhealthy"
         health["dependencies"]["postgres"] = f"error: {str(e)}"
-    
+
     # 检查Redis
     try:
         import redis
+
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
         health["dependencies"]["redis"] = "healthy"
     except Exception as e:
         health["status"] = "unhealthy"
         health["dependencies"]["redis"] = f"error: {str(e)}"
-    
+
     return health

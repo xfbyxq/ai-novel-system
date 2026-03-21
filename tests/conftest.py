@@ -1,4 +1,5 @@
-"""全局测试 fixtures"""
+"""全局测试 fixtures."""
+
 import asyncio
 import os
 import random
@@ -10,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from backend.config import settings
 from core.database import Base
 
-
 # ---------------------------------------------------------------------------
 # 数据库 fixtures（集成测试用）
 # ---------------------------------------------------------------------------
@@ -20,7 +20,7 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", settings.DATABASE_URL)
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """创建 session 级别的 event loop，解决 asyncpg 事件循环问题"""
+    """创建 session 级别的 event loop，解决 asyncpg 事件循环问题."""
     policy = asyncio.get_event_loop_policy()
     loop = policy.new_event_loop()
     yield loop
@@ -29,7 +29,7 @@ def event_loop():
 
 @pytest.fixture(scope="function")
 async def db_engine():
-    """为每个测试函数创建独立的数据库引擎"""
+    """为每个测试函数创建独立的数据库引擎."""
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -41,7 +41,7 @@ async def db_engine():
 
 @pytest.fixture
 async def db_session(db_engine):
-    """提供隔离的异步数据库 session，测试结束后回滚"""
+    """提供隔离的异步数据库 session，测试结束后回滚."""
     async with db_engine.connect() as conn:
         trans = await conn.begin()
         session = AsyncSession(bind=conn, expire_on_commit=False)
@@ -54,7 +54,7 @@ async def db_session(db_engine):
 
 @pytest.fixture
 async def test_client(db_session):
-    """FastAPI 异步测试客户端，覆盖 get_db 依赖"""
+    """FastAPI 异步测试客户端，覆盖 get_db 依赖."""
     from backend.dependencies import get_db
     from backend.main import app
 
@@ -76,8 +76,9 @@ async def test_client(db_session):
 # 真实 HTTP 客户端（场景测试用）
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 async def real_http_client():
-    """真实 HTTP 客户端，用于实际爬取测试"""
+    """真实 HTTP 客户端，用于实际爬取测试."""
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
         yield client

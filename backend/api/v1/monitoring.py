@@ -1,4 +1,4 @@
-"""监控API"""
+"""监控API."""
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ async def get_system_status(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取系统状态。
+    获取系统状态.
 
     返回系统运行状态概览，包括服务健康度、资源使用情况等。
     """
@@ -32,7 +32,7 @@ async def get_performance_metrics(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取性能指标。
+    获取性能指标.
 
     返回指定时间范围内的性能数据，包括响应时间、吞吐量、错误率等。
     """
@@ -50,7 +50,7 @@ async def get_error_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取错误分析。
+    获取错误分析.
 
     返回指定时间范围内的错误统计和分类，帮助定位问题。
     """
@@ -67,7 +67,7 @@ async def get_auto_optimization_suggestions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取自动调优建议。
+    获取自动调优建议.
 
     基于历史数据分析，返回系统优化建议。
     """
@@ -84,7 +84,7 @@ async def get_system_health_check(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取系统健康检查。
+    获取系统健康检查.
 
     检查各组件（数据库、Redis、外部服务等）的健康状态。
     """
@@ -101,7 +101,7 @@ async def get_agent_status(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取Agent运行状态。
+    获取Agent运行状态.
 
     返回所有AI Agent的当前状态，包括运行中的任务、资源占用等。
     """
@@ -119,7 +119,7 @@ async def get_agent_history(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取Agent历史任务。
+    获取Agent历史任务.
 
     返回指定Agent的历史执行记录。
     """

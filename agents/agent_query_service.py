@@ -1,4 +1,4 @@
-"""Agent 请求-应答协商服务 - 写作过程中 Agent 间的设定确认"""
+"""Agent 请求-应答协商服务 - 写作过程中 Agent 间的设定确认."""
 
 import json
 from typing import Any, Dict, Optional
@@ -7,8 +7,7 @@ from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-
-QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询请求。
+QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询请求.
 
 查询问题：
 {question}
@@ -21,7 +20,7 @@ QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询
 
 
 class AgentQueryService:
-    """Agent 间请求-应答协商服务
+    """Agent 间请求-应答协商服务.
 
     在 CrewManager 串行流程中模拟 Agent 间的查询交互：
     Writer 遇到设定疑问时，可通过标记触发查询，
@@ -30,12 +29,16 @@ class AgentQueryService:
 
     # 支持的查询目标及其角色描述
     ROLE_MAP = {
-        "world": ("世界观架构师", "你精通小说世界观体系，包括力量体系、地理、势力和历史设定。"),
+        "world": (
+            "世界观架构师",
+            "你精通小说世界观体系，包括力量体系、地理、势力和历史设定。",
+        ),
         "character": ("角色设计师", "你精通角色设定，包括性格、背景、能力和人物关系。"),
         "plot": ("情节架构师", "你精通情节规划，包括主线支线、伏笔和转折设计。"),
     }
 
     def __init__(self, client: QwenClient, cost_tracker: CostTracker):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
 
@@ -47,7 +50,7 @@ class AgentQueryService:
         knowledge_base: str,
         chapter_number: int = 0,
     ) -> str:
-        """发起一次跨 Agent 查询
+        """发起一次跨 Agent 查询.
 
         Args:
             requester: 发起查询的 Agent 名称（如 "作家"）
@@ -98,7 +101,7 @@ class AgentQueryService:
 
     @staticmethod
     def parse_query_tags(text: str) -> list[dict[str, str]]:
-        """从文本中解析 [QUERY:type]question[/QUERY] 标记
+        """从文本中解析 [QUERY:type]question[/QUERY] 标记.
 
         Returns:
             列表，每项包含 {"type": "world/character/plot", "question": "问题内容"}
@@ -115,7 +118,7 @@ class AgentQueryService:
 
     @staticmethod
     def remove_query_tags(text: str) -> str:
-        """移除文本中的 [QUERY] 标记"""
+        """移除文本中的 [QUERY] 标记."""
         import re
 
         return re.sub(r"\[QUERY:\w+\].*?\[/QUERY\]", "", text, flags=re.DOTALL).strip()

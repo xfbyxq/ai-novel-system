@@ -1,4 +1,5 @@
-"""收益分析API"""
+"""收益分析API."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -16,7 +17,7 @@ async def analyze_novel_performance(
     days: int = Query(30, description="分析天数"),
     db: AsyncSession = Depends(get_db),
 ):
-    """分析小说的性能数据"""
+    """分析小说的性能数据."""
     service = RevenueAnalysisService(db)
     result = await service.analyze_novel_performance(
         novel_id=novel_id,
@@ -34,7 +35,7 @@ async def analyze_platform_performance(
     days: int = Query(30, description="分析天数"),
     db: AsyncSession = Depends(get_db),
 ):
-    """分析平台的性能数据"""
+    """分析平台的性能数据."""
     service = RevenueAnalysisService(db)
     result = await service.analyze_platform_performance(
         platform=platform,
@@ -52,7 +53,7 @@ async def generate_revenue_forecast(
     days: int = Query(30, description="预测天数"),
     db: AsyncSession = Depends(get_db),
 ):
-    """生成小说的收益预测"""
+    """生成小说的收益预测."""
     service = RevenueAnalysisService(db)
     result = await service.generate_revenue_forecast(
         novel_id=novel_id,
@@ -69,7 +70,7 @@ async def get_content_optimization_suggestions(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取内容优化建议"""
+    """获取内容优化建议."""
     service = RevenueAnalysisService(db)
     result = await service.get_content_optimization_suggestions(
         novel_id=novel_id,

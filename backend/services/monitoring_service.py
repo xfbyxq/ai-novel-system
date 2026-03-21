@@ -1,4 +1,5 @@
-"""监控服务 - 负责系统监控和自动调优"""
+"""监控服务 - 负责系统监控和自动调优."""
+
 import logging
 import time
 from datetime import datetime, timedelta
@@ -20,7 +21,7 @@ AGENTS = [
         "status": "idle",
         "last_activity": "2026-02-24T07:00:00",
         "current_task": None,
-        "error_message": None
+        "error_message": None,
     },
     {
         "agent_id": "content_planner",
@@ -28,7 +29,7 @@ AGENTS = [
         "status": "idle",
         "last_activity": "2026-02-24T07:00:00",
         "current_task": None,
-        "error_message": None
+        "error_message": None,
     },
     {
         "agent_id": "writer",
@@ -36,7 +37,7 @@ AGENTS = [
         "status": "idle",
         "last_activity": "2026-02-24T07:00:00",
         "current_task": None,
-        "error_message": None
+        "error_message": None,
     },
     {
         "agent_id": "editor",
@@ -44,7 +45,7 @@ AGENTS = [
         "status": "idle",
         "last_activity": "2026-02-24T07:00:00",
         "current_task": None,
-        "error_message": None
+        "error_message": None,
     },
     {
         "agent_id": "publisher",
@@ -52,24 +53,25 @@ AGENTS = [
         "status": "idle",
         "last_activity": "2026-02-24T07:00:00",
         "current_task": None,
-        "error_message": None
-    }
+        "error_message": None,
+    },
 ]
 
 logger = logging.getLogger(__name__)
 
 
 class MonitoringService:
-    """监控服务"""
+    """监控服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.start_time = time.time()
         self.metrics_history = []
 
     async def get_agent_statuses(self) -> List[Dict[str, Any]]:
-        """获取Agent状态
-        
+        """获取Agent状态.
+
         Returns:
             Agent状态列表
         """
@@ -78,11 +80,11 @@ class MonitoringService:
         return AGENTS
 
     async def get_agent_history(self, agent_id: str) -> List[Dict[str, Any]]:
-        """获取Agent历史任务
-        
+        """获取Agent历史任务.
+
         Args:
             agent_id: Agent ID
-            
+
         Returns:
             Agent历史任务列表
         """
@@ -102,28 +104,38 @@ class MonitoringService:
 
             task = {
                 "task_id": f"task_{random.randint(1000, 9999)}",
-                "agent_name": next((a["agent_name"] for a in AGENTS if a["agent_id"] == agent_id), "未知Agent"),
+                "agent_name": next(
+                    (a["agent_name"] for a in AGENTS if a["agent_id"] == agent_id),
+                    "未知Agent",
+                ),
                 "task_type": random.choice(task_types),
                 "status": random.choice(statuses),
                 "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat() if random.choice([True, False]) else None,
+                "end_time": (
+                    end_time.isoformat() if random.choice([True, False]) else None
+                ),
                 "duration": duration if random.choice([True, False]) else None,
-                "error_message": "模拟错误信息" if random.choice([True, False]) and random.choice(statuses) == "failed" else None,
+                "error_message": (
+                    "模拟错误信息"
+                    if random.choice([True, False])
+                    and random.choice(statuses) == "failed"
+                    else None
+                ),
             }
             history.append(task)
 
         return history
 
     async def get_system_status(self) -> Dict[str, Any]:
-        """获取系统状态
-        
+        """获取系统状态.
+
         Returns:
             系统状态信息
         """
         # 获取系统资源使用情况
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
         network = psutil.net_io_counters()
 
         # 获取系统启动时间
@@ -166,7 +178,9 @@ class MonitoringService:
             "database": db_status,
             "tasks": task_status,
             "agents": agent_statuses,
-            "health": self._assess_system_health(cpu_percent, memory.percent, disk.percent, db_status),
+            "health": self._assess_system_health(
+                cpu_percent, memory.percent, disk.percent, db_status
+            ),
         }
 
         # 记录指标历史
@@ -178,11 +192,11 @@ class MonitoringService:
         self,
         days: int = 7,
     ) -> Dict[str, Any]:
-        """获取性能指标
-        
+        """获取性能指标.
+
         Args:
             days: 分析天数
-            
+
         Returns:
             性能指标分析
         """
@@ -205,8 +219,12 @@ class MonitoringService:
         generation_tasks_result = await self.db.execute(
             select(
                 func.count(GenerationTask.id),
-                func.sum(case((GenerationTask.status == TaskStatus.completed, 1), else_=0)),
-                func.sum(case((GenerationTask.status == TaskStatus.failed, 1), else_=0)),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.completed, 1), else_=0)
+                ),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.failed, 1), else_=0)
+                ),
             ).where(
                 GenerationTask.created_at >= cutoff_date,
             )
@@ -217,8 +235,14 @@ class MonitoringService:
         publish_tasks_result = await self.db.execute(
             select(
                 func.count(PublishTask.id),
-                func.sum(case((PublishTask.status == PublishTaskStatus.completed, 1), else_=0)),
-                func.sum(case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)),
+                func.sum(
+                    case(
+                        (PublishTask.status == PublishTaskStatus.completed, 1), else_=0
+                    )
+                ),
+                func.sum(
+                    case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)
+                ),
             ).where(
                 PublishTask.created_at >= cutoff_date,
             )
@@ -241,19 +265,25 @@ class MonitoringService:
                 "total": int(generation_stats[0] or 0),
                 "completed": int(generation_stats[1] or 0),
                 "failed": int(generation_stats[2] or 0),
-                "success_rate": self._calculate_success_rate(generation_stats[1], generation_stats[0]),
+                "success_rate": self._calculate_success_rate(
+                    generation_stats[1], generation_stats[0]
+                ),
             },
             "publish_tasks": {
                 "total": int(publish_stats[0] or 0),
                 "completed": int(publish_stats[1] or 0),
                 "failed": int(publish_stats[2] or 0),
-                "success_rate": self._calculate_success_rate(publish_stats[1], publish_stats[0]),
+                "success_rate": self._calculate_success_rate(
+                    publish_stats[1], publish_stats[0]
+                ),
             },
             "crawler_tasks": {
                 "total": int(crawler_stats[0] or 0),
                 "completed": int(crawler_stats[1] or 0),
                 "failed": int(crawler_stats[2] or 0),
-                "success_rate": self._calculate_success_rate(crawler_stats[1], crawler_stats[0]),
+                "success_rate": self._calculate_success_rate(
+                    crawler_stats[1], crawler_stats[0]
+                ),
             },
         }
 
@@ -263,11 +293,11 @@ class MonitoringService:
         self,
         days: int = 7,
     ) -> Dict[str, Any]:
-        """获取错误分析
-        
+        """获取错误分析.
+
         Args:
             days: 分析天数
-            
+
         Returns:
             错误分析结果
         """
@@ -275,21 +305,25 @@ class MonitoringService:
 
         # 获取失败的生成任务
         failed_generation_result = await self.db.execute(
-            select(GenerationTask).where(
+            select(GenerationTask)
+            .where(
                 GenerationTask.status == TaskStatus.failed,
                 GenerationTask.created_at >= cutoff_date,
                 GenerationTask.error_message.isnot(None),
-            ).order_by(GenerationTask.created_at.desc())
+            )
+            .order_by(GenerationTask.created_at.desc())
         )
         failed_generation_tasks = failed_generation_result.scalars().all()
 
         # 获取失败的发布任务
         failed_publish_result = await self.db.execute(
-            select(PublishTask).where(
+            select(PublishTask)
+            .where(
                 PublishTask.status == PublishTaskStatus.failed,
                 PublishTask.created_at >= cutoff_date,
                 PublishTask.error_message.isnot(None),
-            ).order_by(PublishTask.created_at.desc())
+            )
+            .order_by(PublishTask.created_at.desc())
         )
         failed_publish_tasks = failed_publish_result.scalars().all()
 
@@ -299,7 +333,9 @@ class MonitoringService:
         # 分析错误类型
         error_analysis = {
             "analysis_period": f"最近{days}天",
-            "total_errors": len(failed_generation_tasks) + len(failed_publish_tasks) + len(failed_crawler_tasks),
+            "total_errors": len(failed_generation_tasks)
+            + len(failed_publish_tasks)
+            + len(failed_crawler_tasks),
             "error_distribution": {
                 "generation": len(failed_generation_tasks),
                 "publish": len(failed_publish_tasks),
@@ -311,28 +347,46 @@ class MonitoringService:
 
         # 收集最近的错误
         for task in failed_generation_tasks[:5]:
-            error_analysis["recent_errors"].append({
-                "type": "generation",
-                "task_id": str(task.id),
-                "created_at": task.created_at.isoformat(),
-                "error_message": task.error_message[:200] + "..." if len(task.error_message) > 200 else task.error_message,
-            })
+            error_analysis["recent_errors"].append(
+                {
+                    "type": "generation",
+                    "task_id": str(task.id),
+                    "created_at": task.created_at.isoformat(),
+                    "error_message": (
+                        task.error_message[:200] + "..."
+                        if len(task.error_message) > 200
+                        else task.error_message
+                    ),
+                }
+            )
 
         for task in failed_publish_tasks[:5]:
-            error_analysis["recent_errors"].append({
-                "type": "publish",
-                "task_id": str(task.id),
-                "created_at": task.created_at.isoformat(),
-                "error_message": task.error_message[:200] + "..." if len(task.error_message) > 200 else task.error_message,
-            })
+            error_analysis["recent_errors"].append(
+                {
+                    "type": "publish",
+                    "task_id": str(task.id),
+                    "created_at": task.created_at.isoformat(),
+                    "error_message": (
+                        task.error_message[:200] + "..."
+                        if len(task.error_message) > 200
+                        else task.error_message
+                    ),
+                }
+            )
 
         for task in failed_crawler_tasks[:5]:
-            error_analysis["recent_errors"].append({
-                "type": "crawler",
-                "task_id": str(task.id),
-                "created_at": task.created_at.isoformat(),
-                "error_message": task.error_message[:200] + "..." if len(task.error_message) > 200 else task.error_message,
-            })
+            error_analysis["recent_errors"].append(
+                {
+                    "type": "crawler",
+                    "task_id": str(task.id),
+                    "created_at": task.created_at.isoformat(),
+                    "error_message": (
+                        task.error_message[:200] + "..."
+                        if len(task.error_message) > 200
+                        else task.error_message
+                    ),
+                }
+            )
 
         # 生成错误模式分析
         error_analysis["error_patterns"] = self._analyze_error_patterns(
@@ -344,8 +398,8 @@ class MonitoringService:
         return error_analysis
 
     async def get_auto_optimization_suggestions(self) -> Dict[str, Any]:
-        """获取自动调优建议
-        
+        """获取自动调优建议.
+
         Returns:
             自动调优建议
         """
@@ -361,9 +415,15 @@ class MonitoringService:
         # 生成调优建议
         suggestions = {
             "timestamp": datetime.now().isoformat(),
-            "system_suggestions": self._generate_system_optimization_suggestions(system_status),
-            "performance_suggestions": self._generate_performance_optimization_suggestions(performance_metrics),
-            "error_suggestions": self._generate_error_optimization_suggestions(error_analysis),
+            "system_suggestions": self._generate_system_optimization_suggestions(
+                system_status
+            ),
+            "performance_suggestions": self._generate_performance_optimization_suggestions(
+                performance_metrics
+            ),
+            "error_suggestions": self._generate_error_optimization_suggestions(
+                error_analysis
+            ),
             "priority_suggestions": self._prioritize_suggestions(
                 system_status,
                 performance_metrics,
@@ -374,8 +434,8 @@ class MonitoringService:
         return suggestions
 
     async def get_system_health_check(self) -> Dict[str, Any]:
-        """获取系统健康检查
-        
+        """获取系统健康检查.
+
         Returns:
             系统健康检查结果
         """
@@ -400,14 +460,16 @@ class MonitoringService:
                 "performance": performance_metrics,
                 "errors": error_analysis,
             },
-            "recommendations": system_status.get("health", {}).get("recommendations", []),
+            "recommendations": system_status.get("health", {}).get(
+                "recommendations", []
+            ),
         }
 
         return health_check
 
     async def _check_database_status(self) -> Dict[str, Any]:
-        """检查数据库状态
-        
+        """检查数据库状态.
+
         Returns:
             数据库状态
         """
@@ -426,8 +488,8 @@ class MonitoringService:
             }
 
     async def _get_task_status(self) -> Dict[str, Any]:
-        """获取任务状态
-        
+        """获取任务状态.
+
         Returns:
             任务状态统计
         """
@@ -435,10 +497,18 @@ class MonitoringService:
         generation_result = await self.db.execute(
             select(
                 func.count(GenerationTask.id),
-                func.sum(case((GenerationTask.status == TaskStatus.pending, 1), else_=0)),
-                func.sum(case((GenerationTask.status == TaskStatus.running, 1), else_=0)),
-                func.sum(case((GenerationTask.status == TaskStatus.completed, 1), else_=0)),
-                func.sum(case((GenerationTask.status == TaskStatus.failed, 1), else_=0)),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.pending, 1), else_=0)
+                ),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.running, 1), else_=0)
+                ),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.completed, 1), else_=0)
+                ),
+                func.sum(
+                    case((GenerationTask.status == TaskStatus.failed, 1), else_=0)
+                ),
             )
         )
         gen_stats = generation_result.first()
@@ -447,10 +517,20 @@ class MonitoringService:
         publish_result = await self.db.execute(
             select(
                 func.count(PublishTask.id),
-                func.sum(case((PublishTask.status == PublishTaskStatus.pending, 1), else_=0)),
-                func.sum(case((PublishTask.status == PublishTaskStatus.running, 1), else_=0)),
-                func.sum(case((PublishTask.status == PublishTaskStatus.completed, 1), else_=0)),
-                func.sum(case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)),
+                func.sum(
+                    case((PublishTask.status == PublishTaskStatus.pending, 1), else_=0)
+                ),
+                func.sum(
+                    case((PublishTask.status == PublishTaskStatus.running, 1), else_=0)
+                ),
+                func.sum(
+                    case(
+                        (PublishTask.status == PublishTaskStatus.completed, 1), else_=0
+                    )
+                ),
+                func.sum(
+                    case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)
+                ),
             )
         )
         pub_stats = publish_result.first()
@@ -489,14 +569,14 @@ class MonitoringService:
         disk_percent: float,
         db_status: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """评估系统健康状态
-        
+        """评估系统健康状态.
+
         Args:
             cpu_percent: CPU使用率
             memory_percent: 内存使用率
             disk_percent: 磁盘使用率
             db_status: 数据库状态
-            
+
         Returns:
             系统健康评估
         """
@@ -558,11 +638,11 @@ class MonitoringService:
         self,
         system_status: Dict[str, Any],
     ) -> List[str]:
-        """生成系统调优建议
-        
+        """生成系统调优建议.
+
         Args:
             system_status: 系统状态
-            
+
         Returns:
             系统调优建议
         """
@@ -590,11 +670,11 @@ class MonitoringService:
         self,
         performance_metrics: Dict[str, Any],
     ) -> List[str]:
-        """生成性能调优建议
-        
+        """生成性能调优建议.
+
         Args:
             performance_metrics: 性能指标
-            
+
         Returns:
             性能调优建议
         """
@@ -605,7 +685,9 @@ class MonitoringService:
         estimated_cost = token_usage.get("estimated_cost", 0)
 
         if estimated_cost > 100:
-            suggestions.append("Token使用成本较高，建议优化提示词和生成参数以减少Token消耗")
+            suggestions.append(
+                "Token使用成本较高，建议优化提示词和生成参数以减少Token消耗"
+            )
 
         # 分析任务成功率
         generation_tasks = performance_metrics.get("generation_tasks", {})
@@ -627,11 +709,11 @@ class MonitoringService:
         self,
         error_analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成错误调优建议
-        
+        """生成错误调优建议.
+
         Args:
             error_analysis: 错误分析
-            
+
         Returns:
             错误调优建议
         """
@@ -660,23 +742,31 @@ class MonitoringService:
         performance_metrics: Dict[str, Any],
         error_analysis: Dict[str, Any],
     ) -> List[str]:
-        """优先级排序建议
-        
+        """优先级排序建议.
+
         Args:
             system_status: 系统状态
             performance_metrics: 性能指标
             error_analysis: 错误分析
-            
+
         Returns:
             优先级排序的建议
         """
         # 收集所有建议
         all_suggestions = []
 
-        all_suggestions.extend(system_status.get("health", {}).get("recommendations", []))
-        all_suggestions.extend(self._generate_system_optimization_suggestions(system_status))
-        all_suggestions.extend(self._generate_performance_optimization_suggestions(performance_metrics))
-        all_suggestions.extend(self._generate_error_optimization_suggestions(error_analysis))
+        all_suggestions.extend(
+            system_status.get("health", {}).get("recommendations", [])
+        )
+        all_suggestions.extend(
+            self._generate_system_optimization_suggestions(system_status)
+        )
+        all_suggestions.extend(
+            self._generate_performance_optimization_suggestions(performance_metrics)
+        )
+        all_suggestions.extend(
+            self._generate_error_optimization_suggestions(error_analysis)
+        )
 
         # 去重
         unique_suggestions = list(set(all_suggestions))
@@ -686,7 +776,10 @@ class MonitoringService:
 
         # 优先处理严重问题
         for suggestion in unique_suggestions:
-            if any(keyword in suggestion for keyword in ["异常", "过高", "失败率", "错误较多"]):
+            if any(
+                keyword in suggestion
+                for keyword in ["异常", "过高", "失败率", "错误较多"]
+            ):
                 priority_suggestions.append(suggestion)
 
         # 然后处理一般建议
@@ -697,8 +790,8 @@ class MonitoringService:
         return priority_suggestions[:10]  # 限制建议数量
 
     def _record_metrics(self, system_status: Dict[str, Any]):
-        """记录指标历史
-        
+        """记录指标历史.
+
         Args:
             system_status: 系统状态
         """
@@ -710,8 +803,12 @@ class MonitoringService:
         metrics = {
             "timestamp": system_status.get("timestamp"),
             "cpu_percent": system_status.get("system", {}).get("cpu_percent", 0),
-            "memory_percent": system_status.get("system", {}).get("memory", {}).get("percent", 0),
-            "disk_percent": system_status.get("system", {}).get("disk", {}).get("percent", 0),
+            "memory_percent": system_status.get("system", {})
+            .get("memory", {})
+            .get("percent", 0),
+            "disk_percent": system_status.get("system", {})
+            .get("disk", {})
+            .get("percent", 0),
             "health_score": system_status.get("health", {}).get("score", 0),
             "health_status": system_status.get("health", {}).get("status", "unknown"),
         }
@@ -719,12 +816,12 @@ class MonitoringService:
         self.metrics_history.append(metrics)
 
     def _calculate_success_rate(self, success_count: int, total_count: int) -> float:
-        """计算成功率
-        
+        """计算成功率.
+
         Args:
             success_count: 成功数量
             total_count: 总数量
-            
+
         Returns:
             成功率
         """
@@ -738,20 +835,22 @@ class MonitoringService:
         failed_publish_tasks: List,
         failed_crawler_tasks: List,
     ) -> List[Dict[str, Any]]:
-        """分析错误模式
-        
+        """分析错误模式.
+
         Args:
             failed_generation_tasks: 失败的生成任务
             failed_publish_tasks: 失败的发布任务
             failed_crawler_tasks: 失败的爬虫任务
-            
+
         Returns:
             错误模式分析
         """
         patterns = []
 
         # 分析生成错误模式
-        generation_errors = [t.error_message for t in failed_generation_tasks if t.error_message]
+        generation_errors = [
+            t.error_message for t in failed_generation_tasks if t.error_message
+        ]
         if generation_errors:
             error_counts = {}
             for error in generation_errors:
@@ -760,44 +859,60 @@ class MonitoringService:
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
             # 提取频率最高的错误模式
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
+                :3
+            ]
             for error_pattern, count in top_errors:
-                patterns.append({
-                    "type": "generation",
-                    "pattern": error_pattern,
-                    "count": count,
-                })
+                patterns.append(
+                    {
+                        "type": "generation",
+                        "pattern": error_pattern,
+                        "count": count,
+                    }
+                )
 
         # 分析发布错误模式
-        publish_errors = [t.error_message for t in failed_publish_tasks if t.error_message]
+        publish_errors = [
+            t.error_message for t in failed_publish_tasks if t.error_message
+        ]
         if publish_errors:
             error_counts = {}
             for error in publish_errors:
                 error_key = error[:100]
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
+                :3
+            ]
             for error_pattern, count in top_errors:
-                patterns.append({
-                    "type": "publish",
-                    "pattern": error_pattern,
-                    "count": count,
-                })
+                patterns.append(
+                    {
+                        "type": "publish",
+                        "pattern": error_pattern,
+                        "count": count,
+                    }
+                )
 
         # 分析爬虫错误模式
-        crawler_errors = [t.error_message for t in failed_crawler_tasks if t.error_message]
+        crawler_errors = [
+            t.error_message for t in failed_crawler_tasks if t.error_message
+        ]
         if crawler_errors:
             error_counts = {}
             for error in crawler_errors:
                 error_key = error[:100]
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
+                :3
+            ]
             for error_pattern, count in top_errors:
-                patterns.append({
-                    "type": "crawler",
-                    "pattern": error_pattern,
-                    "count": count,
-                })
+                patterns.append(
+                    {
+                        "type": "crawler",
+                        "pattern": error_pattern,
+                        "count": count,
+                    }
+                )
 
         return patterns

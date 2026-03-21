@@ -1,4 +1,5 @@
-"""集成服务 - 负责协调所有模块的工作，实现端到端的自动化流程"""
+"""集成服务 - 负责协调所有模块的工作，实现端到端的自动化流程."""
+
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -15,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrationService:
-    """集成服务"""
+    """集成服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.automation = AutomationService(db)
         self.generation = GenerationService(db)
@@ -28,12 +30,12 @@ class IntegrationService:
         config: Dict[str, Any] = None,
         novel_id: Optional[UUID] = None,
     ) -> Dict[str, Any]:
-        """运行端到端的自动化小说创作和发布工作流
-        
+        """运行端到端的自动化小说创作和发布工作流.
+
         Args:
             config: 工作流配置
             novel_id: 小说ID，如果为None则创建新小说
-            
+
         Returns:
             工作流执行结果
         """
@@ -65,8 +67,8 @@ class IntegrationService:
                 "summary": {
                     "total_books_analyzed": 100,
                     "top_genres": ["都市", "玄幻", "仙侠"],
-                    "top_tags": ["热门", "都市", "情感"]
-                }
+                    "top_tags": ["热门", "都市", "情感"],
+                },
             }
 
             # 3. 执行发布（如果配置了）
@@ -91,7 +93,9 @@ class IntegrationService:
                 "market_analysis_report": market_report,
                 "publish_result": publish_result,
                 "summary": {
-                    "chapters_generated": novel_creation_result.get("chapters_generated", 0),
+                    "chapters_generated": novel_creation_result.get(
+                        "chapters_generated", 0
+                    ),
                     "platforms_analyzed": len(market_report.get("platforms", {})),
                     "costs": novel_creation_result.get("costs", {}),
                 },
@@ -114,12 +118,12 @@ class IntegrationService:
         novel_id: UUID,
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """运行多平台发布
-        
+        """运行多平台发布.
+
         Args:
             novel_id: 小说ID
             config: 发布配置
-            
+
         Returns:
             发布结果
         """
@@ -199,6 +203,7 @@ class IntegrationService:
 
                     # 等待任务完成
                     import asyncio
+
                     await asyncio.sleep(10)  # 给创建过程足够时间
 
                     # 刷新任务状态
@@ -213,7 +218,9 @@ class IntegrationService:
                         continue
 
                     platform_book_id = create_book_task.platform_book_id
-                    logger.info(f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}")
+                    logger.info(
+                        f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}"
+                    )
 
                 # 发布章节
                 from core.models.chapter import Chapter
@@ -281,14 +288,19 @@ class IntegrationService:
 
             # 平台发布间隔
             import asyncio
+
             await asyncio.sleep(5)
 
         return {
             "platforms": publish_results,
             "summary": {
                 "total_platforms": len(platforms),
-                "success_count": sum(1 for r in publish_results.values() if r.get("status") == "success"),
-                "failed_count": sum(1 for r in publish_results.values() if r.get("status") == "failed"),
+                "success_count": sum(
+                    1 for r in publish_results.values() if r.get("status") == "success"
+                ),
+                "failed_count": sum(
+                    1 for r in publish_results.values() if r.get("status") == "failed"
+                ),
             },
         }
 
@@ -297,12 +309,12 @@ class IntegrationService:
         limit: int = 10,
         offset: int = 0,
     ) -> Dict[str, Any]:
-        """获取工作流历史记录
-        
+        """获取工作流历史记录.
+
         Args:
             limit: 限制数量
             offset: 偏移量
-            
+
         Returns:
             工作流历史记录
         """
@@ -317,11 +329,11 @@ class IntegrationService:
         self,
         workflow_id: str,
     ) -> Dict[str, Any]:
-        """获取工作流详情
-        
+        """获取工作流详情.
+
         Args:
             workflow_id: 工作流ID
-            
+
         Returns:
             工作流详情
         """

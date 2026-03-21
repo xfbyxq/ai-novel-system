@@ -1,8 +1,8 @@
-"""提示词模板管理"""
+"""提示词模板管理."""
 
 
 class PromptManager:
-    """集中管理所有 Agent 的提示词模板。"""
+    """集中管理所有 Agent 的提示词模板."""
 
     # ============================================================
     # 市场分析和内容策划提示词
@@ -917,7 +917,7 @@ class PromptManager:
 
     @classmethod
     def format(cls, template: str, **kwargs) -> str:
-        """格式化提示词模板，缺失的变量保留原样。"""
+        """格式化提示词模板，缺失的变量保留原样."""
         for key, value in kwargs.items():
             template = template.replace(f"{{{key}}}", str(value))
         return template

@@ -1,3 +1,5 @@
+"""models 包模块."""
+
 from core.models.novel import Novel, NovelStatus
 from core.models.world_setting import WorldSetting
 from core.models.character import Character, RoleType, Gender, CharacterStatus

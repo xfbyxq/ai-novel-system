@@ -1,4 +1,4 @@
-"""内容相似度检测器 - 检测章节之间的内容重复
+"""内容相似度检测器 - 检测章节之间的内容重复.
 
 使用多种轻量级文本相似度算法（无需外部依赖）：
 1. N-gram 重叠检测
@@ -16,7 +16,7 @@ from core.logging_config import logger
 
 @dataclass
 class SimilarityReport:
-    """相似度检测报告"""
+    """相似度检测报告."""
 
     is_duplicate: bool = False  # 是否判定为重复
     overall_similarity: float = 0.0  # 总体相似度 (0-1)
@@ -39,9 +39,9 @@ class SimilarityReport:
 
 
 class SimilarityDetector:
-    """章节内容相似度检测器
+    """章节内容相似度检测器.
 
-    用于检测新生成的章节是否与前几章存在严重内容重复。
+    用于检测新生成的章节是否与前几章存在严重内容重复.
     """
 
     # 判定阈值
@@ -68,7 +68,7 @@ class SimilarityDetector:
         previous_chapters: Dict[int, str],
         current_chapter: int = 0,
     ) -> SimilarityReport:
-        """检测新内容与前几章的相似度
+        """检测新内容与前几章的相似度.
 
         Args:
             new_content: 新生成的章节内容
@@ -110,7 +110,7 @@ class SimilarityDetector:
         return best_report
 
     def _compare_two_texts(self, text_a: str, text_b: str) -> SimilarityReport:
-        """比较两段文本的相似度"""
+        """比较两段文本的相似度."""
         report = SimilarityReport()
 
         # 1. N-gram 相似度
@@ -134,7 +134,7 @@ class SimilarityDetector:
         return report
 
     def _ngram_similarity(self, text_a: str, text_b: str) -> float:
-        """计算 N-gram 相似度 (Jaccard)"""
+        """计算 N-gram 相似度 (Jaccard)."""
         ngrams_a = self._extract_ngrams(text_a)
         ngrams_b = self._extract_ngrams(text_b)
 
@@ -147,21 +147,19 @@ class SimilarityDetector:
         return intersection / union if union > 0 else 0.0
 
     def _extract_ngrams(self, text: str) -> set:
-        """提取文本的 N-gram 集合"""
+        """提取文本的 N-gram 集合."""
         # 清理文本：去除标点、空白
         clean = re.sub(r"[^\u4e00-\u9fff\w]", "", text)
         if len(clean) < self.NGRAM_SIZE:
             return set()
 
         return {
-            clean[i: i + self.NGRAM_SIZE]
+            clean[i : i + self.NGRAM_SIZE]
             for i in range(len(clean) - self.NGRAM_SIZE + 1)
         }
 
-    def _sentence_overlap(
-        self, text_a: str, text_b: str
-    ) -> Tuple[float, List[str]]:
-        """检测句子级别的重叠"""
+    def _sentence_overlap(self, text_a: str, text_b: str) -> Tuple[float, List[str]]:
+        """检测句子级别的重叠."""
         sentences_a = self._split_sentences(text_a)
         sentences_b = self._split_sentences(text_b)
 
@@ -170,9 +168,7 @@ class SimilarityDetector:
 
         # 构建 B 的句子集合（去除短句）
         set_b = set(
-            s.strip()
-            for s in sentences_b
-            if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
+            s.strip() for s in sentences_b if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
         )
 
         duplicates = []
@@ -184,20 +180,18 @@ class SimilarityDetector:
                 duplicates.append(s)
 
         total_valid = sum(
-            1
-            for s in sentences_a
-            if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
+            1 for s in sentences_a if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
         )
 
         overlap_ratio = len(duplicates) / total_valid if total_valid > 0 else 0.0
         return overlap_ratio, duplicates
 
     def _split_sentences(self, text: str) -> List[str]:
-        """按中文标点分句"""
+        """按中文标点分句."""
         return re.split(r"[。！？；\n]+", text)
 
     def _structure_similarity(self, text_a: str, text_b: str) -> float:
-        """检测结构相似度（段落长度模式）"""
+        """检测结构相似度（段落长度模式）."""
         paras_a = [p.strip() for p in text_a.split("\n") if p.strip()]
         paras_b = [p.strip() for p in text_b.split("\n") if p.strip()]
 
@@ -221,7 +215,7 @@ class SimilarityDetector:
         return matches / min_len
 
     def _normalize_lengths(self, paragraphs: List[str]) -> List[str]:
-        """将段落长度归一化为分类标签"""
+        """将段落长度归一化为分类标签."""
         labels = []
         for p in paragraphs:
             length = len(p)

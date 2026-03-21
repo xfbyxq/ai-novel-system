@@ -1,3 +1,5 @@
+"""novel 模块."""
+
 import enum
 
 from sqlalchemy import (
@@ -21,6 +23,7 @@ import uuid
 
 
 class NovelStatus(str, enum.Enum):
+    """NovelStatus 类."""
     planning = "planning"
     writing = "writing"
     completed = "completed"
@@ -28,12 +31,14 @@ class NovelStatus(str, enum.Enum):
 
 
 class NovelLengthType(str, enum.Enum):
+    """NovelLengthType 类."""
     short = "short"  # 短文
     medium = "medium"  # 中篇小说
     long = "long"  # 长篇小说
 
 
 class Novel(Base):
+    """Novel 类."""
     __tablename__ = "novels"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -51,7 +56,7 @@ class Novel(Base):
     estimated_revenue = Column(Numeric(10, 2), default=0)
     actual_revenue = Column(Numeric(10, 2), default=0)
     token_cost = Column(Numeric(10, 4), default=0)
-    
+
     # 章节配置 - 支持灵活的章节结构
     chapter_config = Column(
         JSONB,
@@ -59,18 +64,41 @@ class Novel(Base):
             "total_chapters": 6,
             "min_chapters": 3,
             "max_chapters": 12,
-            "flexible": True
-        }
+            "flexible": True,
+        },
     )
-    
+
     metadata_ = Column("metadata", JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
-    world_setting = relationship("WorldSetting", back_populates="novel", uselist=False, cascade="all, delete-orphan")
-    characters = relationship("Character", back_populates="novel", cascade="all, delete-orphan")
-    plot_outline = relationship("PlotOutline", back_populates="novel", uselist=False, cascade="all, delete-orphan")
-    chapters = relationship("Chapter", back_populates="novel", cascade="all, delete-orphan", order_by="Chapter.chapter_number")
-    generation_tasks = relationship("GenerationTask", back_populates="novel", cascade="all, delete-orphan")
-    publish_tasks = relationship("PublishTask", back_populates="novel", cascade="all, delete-orphan")
+    world_setting = relationship(
+        "WorldSetting",
+        back_populates="novel",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    characters = relationship(
+        "Character", back_populates="novel", cascade="all, delete-orphan"
+    )
+    plot_outline = relationship(
+        "PlotOutline",
+        back_populates="novel",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    chapters = relationship(
+        "Chapter",
+        back_populates="novel",
+        cascade="all, delete-orphan",
+        order_by="Chapter.chapter_number",
+    )
+    generation_tasks = relationship(
+        "GenerationTask", back_populates="novel", cascade="all, delete-orphan"
+    )
+    publish_tasks = relationship(
+        "PublishTask", back_populates="novel", cascade="all, delete-orphan"
+    )

@@ -1,4 +1,4 @@
-"""反思代理 (Reflection Agent)
+"""反思代理 (Reflection Agent).
 
 独立的反思模块，从审查循环的迭代历史中提取经验教训，
 分为短期反思（纯 Python 规则/统计，零 LLM 开销）和长期反思（跨章节模式分析，1 次 LLM 调用）。
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ReflectionConfig:
-    """反思机制配置"""
+    """反思机制配置."""
 
     # 短期反思开关
     enable_short_term: bool = True
@@ -57,7 +57,7 @@ class ReflectionConfig:
 
 @dataclass
 class ReflectionInput:
-    """反思输入数据（从审查循环结果中提取）"""
+    """反思输入数据（从审查循环结果中提取）."""
 
     # 审查循环类型: "chapter", "world", "character", "plot"
     loop_type: str
@@ -95,7 +95,7 @@ class ReflectionInput:
 
 @dataclass
 class ReflectionEntry:
-    """单条反思记录（短期反思输出）"""
+    """单条反思记录（短期反思输出）."""
 
     novel_id: str
     loop_type: str
@@ -145,7 +145,7 @@ class ReflectionEntry:
 
 
 class ReflectionAgent:
-    """反思代理
+    """反思代理.
 
     职责：
     1. 短期反思 (reflect_on_loop): 每次审查循环结束后，零 LLM 开销地提取统计特征
@@ -162,6 +162,7 @@ class ReflectionAgent:
         storage,  # NovelMemoryStorage 实例
         config: Optional[ReflectionConfig] = None,
     ):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.novel_id = novel_id
@@ -172,8 +173,10 @@ class ReflectionAgent:
     # 短期反思：纯 Python 规则/统计，零 LLM 开销
     # ══════════════════════════════════════════════════════════════════════
 
-    async def reflect_on_loop(self, input_data: ReflectionInput) -> Optional[ReflectionEntry]:
-        """短期反思：从单次审查循环中提取统计特征
+    async def reflect_on_loop(
+        self, input_data: ReflectionInput
+    ) -> Optional[ReflectionEntry]:
+        """短期反思：从单次审查循环中提取统计特征.
 
         纯 Python 计算，不调用 LLM。提取以下信息：
         - 评分提升趋势
@@ -247,7 +250,7 @@ class ReflectionAgent:
     # ── 短期反思内部方法 ──────────────────────────────────────
 
     def _detect_stagnation(self, scores: List[float]) -> bool:
-        """检测评分是否出现停滞
+        """检测评分是否出现停滞.
 
         规则：连续 2 轮改善 < 0.3 分
         """
@@ -266,7 +269,7 @@ class ReflectionAgent:
         return False
 
     def _extract_issue_categories(self, input_data: ReflectionInput) -> List[str]:
-        """从问题列表中提取问题分类（area 字段）"""
+        """从问题列表中提取问题分类（area 字段）."""
         categories = set()
         for issue_list in [
             input_data.recurring_issues,
@@ -281,7 +284,7 @@ class ReflectionAgent:
     def _identify_effective_strategies(
         self, input_data: ReflectionInput, scores: List[float]
     ) -> List[str]:
-        """识别有效的修订策略
+        """识别有效的修订策略.
 
         通过分析维度分数变化识别哪些方面改善最大。
         """
@@ -321,7 +324,7 @@ class ReflectionAgent:
     # ══════════════════════════════════════════════════════════════════════
 
     async def analyze_cross_chapter_patterns(self, current_chapter: int) -> bool:
-        """长期反思：跨章节模式分析
+        """长期反思：跨章节模式分析.
 
         每 N 章触发一次（由 config.analysis_interval 控制）。
         聚合近期的 reflection_entries，调用 1 次 LLM 识别写作模式，
@@ -398,7 +401,7 @@ class ReflectionAgent:
         return True
 
     def _build_analysis_summary(self, entries: List[Dict[str, Any]]) -> str:
-        """将历史反思记录聚合为 LLM 分析所需的文本摘要"""
+        """将历史反思记录聚合为 LLM 分析所需的文本摘要."""
         lines = ["## 最近章节审查循环统计\n"]
 
         for entry in entries[-10:]:  # 最多取最近 10 条
@@ -438,9 +441,7 @@ class ReflectionAgent:
             if categories:
                 line += f", 问题类别: {', '.join(categories[:5])}"
             if recurring:
-                recurring_descs = [
-                    r.get("description", "")[:30] for r in recurring[:3]
-                ]
+                recurring_descs = [r.get("description", "")[:30] for r in recurring[:3]]
                 line += f", 反复问题: {'; '.join(recurring_descs)}"
             if unresolved:
                 unresolved_descs = [
@@ -500,24 +501,22 @@ class ReflectionAgent:
         existing_patterns: List[Dict[str, Any]],
         existing_lessons: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """调用 LLM 进行跨章节模式分析"""
+        """调用 LLM 进行跨章节模式分析."""
 
         existing_patterns_text = ""
         if existing_patterns:
             pattern_descs = [
                 p.get("description", "")[:50] for p in existing_patterns[:5]
             ]
-            existing_patterns_text = (
-                f"\n已有模式（避免重复）：\n"
-                + "\n".join(f"- {d}" for d in pattern_descs)
+            existing_patterns_text = f"\n已有模式（避免重复）：\n" + "\n".join(
+                f"- {d}" for d in pattern_descs
             )
 
         existing_lessons_text = ""
         if existing_lessons:
             lesson_descs = [l.get("rule_text", "")[:50] for l in existing_lessons[:5]]
-            existing_lessons_text = (
-                f"\n已有规则（避免重复）：\n"
-                + "\n".join(f"- {d}" for d in lesson_descs)
+            existing_lessons_text = f"\n已有规则（避免重复）：\n" + "\n".join(
+                f"- {d}" for d in lesson_descs
             )
 
         system_prompt = (
@@ -525,7 +524,7 @@ class ReflectionAgent:
             "识别写作中反复出现的问题模式，并生成简洁、可操作的写作建议。"
         )
 
-        task_prompt = f"""请分析以下多章节审查循环的统计数据，识别模式并生成建议。
+        task_prompt = f"""请分析以下多章节审查循环的统计数据，识别模式并生成建议.
 
 {analysis_input}
 {existing_patterns_text}
@@ -587,7 +586,7 @@ class ReflectionAgent:
     def _save_analysis_results(
         self, result: Dict[str, Any], current_chapter: int
     ) -> None:
-        """将分析结果持久化到 SQLite"""
+        """将分析结果持久化到 SQLite."""
         now = datetime.now().isoformat()
 
         # 保存 patterns
@@ -604,9 +603,7 @@ class ReflectionAgent:
                         "evidence_chapters": json.dumps(
                             [current_chapter], ensure_ascii=False
                         ),
-                        "affected_dimension": pattern.get(
-                            "affected_dimension", ""
-                        ),
+                        "affected_dimension": pattern.get("affected_dimension", ""),
                         "occurrence_count": 1,
                         "last_seen_chapter": current_chapter,
                         "status": "active",
@@ -650,10 +647,8 @@ class ReflectionAgent:
             except Exception as e:
                 logger.error(f"[ReflectionAgent] 保存 lesson 失败: {e}")
 
-    def _evict_lowest_priority_lesson(
-        self, lessons: List[Dict[str, Any]]
-    ) -> None:
-        """淘汰最低优先级或效果最差的 lesson"""
+    def _evict_lowest_priority_lesson(self, lessons: List[Dict[str, Any]]) -> None:
+        """淘汰最低优先级或效果最差的 lesson."""
         if not lessons:
             return
 
@@ -683,7 +678,7 @@ class ReflectionAgent:
     # ══════════════════════════════════════════════════════════════════════
 
     def get_lessons_for_writer(self, chapter_type: str = "normal") -> str:
-        """获取给 Writer 的经验建议
+        """获取给 Writer 的经验建议.
 
         Args:
             chapter_type: 章节类型，用于筛选适用的 lessons
@@ -694,15 +689,15 @@ class ReflectionAgent:
         return self._format_lessons("writer", chapter_type)
 
     def get_lessons_for_reviewer(self, chapter_type: str = "normal") -> str:
-        """获取给 Reviewer 的经验建议"""
+        """获取给 Reviewer 的经验建议."""
         return self._format_lessons("reviewer", chapter_type)
 
     def get_lessons_for_continuity(self, chapter_type: str = "normal") -> str:
-        """获取给 Continuity Checker 的经验建议"""
+        """获取给 Continuity Checker 的经验建议."""
         return self._format_lessons("continuity", chapter_type)
 
     def _format_lessons(self, lesson_type: str, chapter_type: str) -> str:
-        """格式化指定类型的 lessons 为 prompt 文本
+        """格式化指定类型的 lessons 为 prompt 文本.
 
         遵循字符预算限制，返回 top N 条 lessons。
         """
@@ -756,7 +751,7 @@ class ReflectionAgent:
     # ══════════════════════════════════════════════════════════════════════
 
     def get_loop_history_summary(self, loop_type: str = "chapter") -> str:
-        """获取循环历史的简要摘要（用于调试/日志）"""
+        """获取循环历史的简要摘要（用于调试/日志）."""
         try:
             entries = self.storage.get_reflection_entries(
                 self.novel_id, loop_type=loop_type
@@ -770,9 +765,7 @@ class ReflectionAgent:
         total = len(entries)
         converged = sum(1 for e in entries if e.get("converged", False))
         avg_final = (
-            sum(e.get("final_score", 0) for e in entries) / total
-            if total > 0
-            else 0
+            sum(e.get("final_score", 0) for e in entries) / total if total > 0 else 0
         )
 
         return (
@@ -786,7 +779,7 @@ class ReflectionAgent:
         chapter_number: int,
         was_effective: bool,
     ) -> None:
-        """记录 lesson 的实际应用效果
+        """记录 lesson 的实际应用效果.
 
         根据应用后的审查循环结果，更新 lesson 的 effectiveness_score。
         如果连续无效，自动将其标记为 deprecated。

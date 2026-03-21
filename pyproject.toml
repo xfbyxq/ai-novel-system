@@ -51,6 +51,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+[tool.pydocstyle]
+convention = "pep257"
+add-ignore = ["D204", "D211", "D212", "D213", "D403"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -1,4 +1,5 @@
-"""收益分析服务 - 负责分析收益数据并提供优化建议"""
+"""收益分析服务 - 负责分析收益数据并提供优化建议."""
+
 import logging
 from datetime import date, timedelta
 from typing import Any, Dict, List
@@ -18,9 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class RevenueAnalysisService:
-    """收益分析服务"""
+    """收益分析服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def analyze_novel_performance(
@@ -28,21 +30,19 @@ class RevenueAnalysisService:
         novel_id: UUID,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """分析小说的性能数据
-        
+        """分析小说的性能数据.
+
         Args:
             novel_id: 小说ID
             days: 分析天数
-            
+
         Returns:
             小说性能分析结果
         """
         cutoff_date = date.today() - timedelta(days=days)
 
         # 获取小说信息
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
 
         if not novel:
@@ -52,10 +52,12 @@ class RevenueAnalysisService:
 
         # 获取章节信息
         chapters_result = await self.db.execute(
-            select(Chapter).where(
+            select(Chapter)
+            .where(
                 Chapter.novel_id == novel_id,
                 Chapter.created_at >= cutoff_date,
-            ).order_by(Chapter.chapter_number)
+            )
+            .order_by(Chapter.chapter_number)
         )
         chapters = chapters_result.scalars().all()
 
@@ -95,8 +97,16 @@ class RevenueAnalysisService:
             "total_word_count": sum(c.word_count for c in chapters),
             "publishing_statistics": {
                 "total_publish_attempts": len(publish_tasks),
-                "successful_publishes": len([p for p in chapter_publishes if p.status == PublishStatus.published]),
-                "failed_publishes": len([p for p in chapter_publishes if p.status == PublishStatus.failed]),
+                "successful_publishes": len(
+                    [
+                        p
+                        for p in chapter_publishes
+                        if p.status == PublishStatus.published
+                    ]
+                ),
+                "failed_publishes": len(
+                    [p for p in chapter_publishes if p.status == PublishStatus.failed]
+                ),
                 "platform_distribution": {},
             },
             "cost_analysis": {
@@ -116,18 +126,23 @@ class RevenueAnalysisService:
         for task in publish_tasks:
             platform = task.platform
             analysis["publishing_statistics"]["platform_distribution"][platform] = (
-                analysis["publishing_statistics"]["platform_distribution"].get(platform, 0) + 1
+                analysis["publishing_statistics"]["platform_distribution"].get(
+                    platform, 0
+                )
+                + 1
             )
 
         # 计算性能指标
         if chapters:
-            analysis["performance_metrics"]["average_chapter_length"] = (
-                analysis["total_word_count"] / len(chapters)
-            )
+            analysis["performance_metrics"]["average_chapter_length"] = analysis[
+                "total_word_count"
+            ] / len(chapters)
 
         total_publishes = len(chapter_publishes)
         if total_publishes:
-            successful_publishes = len([p for p in chapter_publishes if p.status == PublishStatus.published])
+            successful_publishes = len(
+                [p for p in chapter_publishes if p.status == PublishStatus.published]
+            )
             analysis["performance_metrics"]["publishing_success_rate"] = (
                 successful_publishes / total_publishes * 100
             )
@@ -139,12 +154,12 @@ class RevenueAnalysisService:
             )
 
         if len(chapters):
-            analysis["cost_analysis"]["cost_per_chapter"] = (
-                total_cost / len(chapters)
-            )
+            analysis["cost_analysis"]["cost_per_chapter"] = total_cost / len(chapters)
 
         # 生成优化建议
-        analysis["optimization_suggestions"] = self._generate_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = self._generate_optimization_suggestions(
+            analysis
+        )
 
         return analysis
 
@@ -153,12 +168,12 @@ class RevenueAnalysisService:
         platform: str,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """分析平台的性能数据
-        
+        """分析平台的性能数据.
+
         Args:
             platform: 平台名称
             days: 分析天数
-            
+
         Returns:
             平台性能分析结果
         """
@@ -195,11 +210,17 @@ class RevenueAnalysisService:
             "analysis_period": f"最近{days}天",
             "total_accounts": len(accounts),
             "total_publish_tasks": len(publish_tasks),
-            "successful_tasks": len([t for t in publish_tasks if t.status == "completed"]),
+            "successful_tasks": len(
+                [t for t in publish_tasks if t.status == "completed"]
+            ),
             "failed_tasks": len([t for t in publish_tasks if t.status == "failed"]),
             "total_chapter_publishes": len(chapter_publishes),
-            "successful_chapter_publishes": len([p for p in chapter_publishes if p.status == PublishStatus.published]),
-            "failed_chapter_publishes": len([p for p in chapter_publishes if p.status == PublishStatus.failed]),
+            "successful_chapter_publishes": len(
+                [p for p in chapter_publishes if p.status == PublishStatus.published]
+            ),
+            "failed_chapter_publishes": len(
+                [p for p in chapter_publishes if p.status == PublishStatus.failed]
+            ),
             "publish_success_rate": 0,
             "task_success_rate": 0,
             "optimization_suggestions": [],
@@ -217,7 +238,9 @@ class RevenueAnalysisService:
             )
 
         # 生成优化建议
-        analysis["optimization_suggestions"] = self._generate_platform_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = (
+            self._generate_platform_optimization_suggestions(analysis)
+        )
 
         return analysis
 
@@ -226,12 +249,12 @@ class RevenueAnalysisService:
         novel_id: UUID,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """生成小说的收益预测
-        
+        """生成小说的收益预测.
+
         Args:
             novel_id: 小说ID
             days: 预测天数
-            
+
         Returns:
             收益预测结果
         """
@@ -249,13 +272,25 @@ class RevenueAnalysisService:
             "historical_data": {
                 "total_chapters": performance_data.get("total_chapters"),
                 "total_word_count": performance_data.get("total_word_count"),
-                "total_cost": performance_data.get("cost_analysis", {}).get("total_cost"),
-                "publishing_success_rate": performance_data.get("performance_metrics", {}).get("publishing_success_rate"),
+                "total_cost": performance_data.get("cost_analysis", {}).get(
+                    "total_cost"
+                ),
+                "publishing_success_rate": performance_data.get(
+                    "performance_metrics", {}
+                ).get("publishing_success_rate"),
             },
             "forecast": {
-                "expected_chapters": int(performance_data.get("total_chapters", 0) * days / 60),
-                "expected_word_count": int(performance_data.get("total_word_count", 0) * days / 60),
-                "expected_cost": float(performance_data.get("cost_analysis", {}).get("total_cost", 0)) * days / 60,
+                "expected_chapters": int(
+                    performance_data.get("total_chapters", 0) * days / 60
+                ),
+                "expected_word_count": int(
+                    performance_data.get("total_word_count", 0) * days / 60
+                ),
+                "expected_cost": float(
+                    performance_data.get("cost_analysis", {}).get("total_cost", 0)
+                )
+                * days
+                / 60,
                 "expected_revenue": 0,  # 这里需要根据实际情况实现
                 "expected_roi": 0,  # 这里需要根据实际情况实现
             },
@@ -263,7 +298,9 @@ class RevenueAnalysisService:
         }
 
         # 生成优化建议
-        forecast["optimization_tips"] = self._generate_revenue_optimization_tips(forecast)
+        forecast["optimization_tips"] = self._generate_revenue_optimization_tips(
+            forecast
+        )
 
         return forecast
 
@@ -271,18 +308,16 @@ class RevenueAnalysisService:
         self,
         novel_id: UUID,
     ) -> Dict[str, Any]:
-        """获取内容优化建议
-        
+        """获取内容优化建议.
+
         Args:
             novel_id: 小说ID
-            
+
         Returns:
             内容优化建议
         """
         # 获取小说信息
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
 
         if not novel:
@@ -302,12 +337,16 @@ class RevenueAnalysisService:
             "novel_title": novel.title,
             "genre": novel.genre,
             "total_chapters": len(chapters),
-            "average_chapter_length": sum(c.word_count for c in chapters) / len(chapters) if chapters else 0,
+            "average_chapter_length": (
+                sum(c.word_count for c in chapters) / len(chapters) if chapters else 0
+            ),
             "optimization_suggestions": [],
         }
 
         # 生成内容优化建议
-        analysis["optimization_suggestions"] = self._generate_content_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = (
+            self._generate_content_optimization_suggestions(analysis)
+        )
 
         return analysis
 
@@ -315,28 +354,34 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成优化建议
-        
+        """生成优化建议.
+
         Args:
             analysis: 分析结果
-            
+
         Returns:
             优化建议列表
         """
         suggestions = []
 
         # 基于发布成功率的建议
-        publish_success_rate = analysis.get("performance_metrics", {}).get("publishing_success_rate", 0)
+        publish_success_rate = analysis.get("performance_metrics", {}).get(
+            "publishing_success_rate", 0
+        )
         if publish_success_rate < 80:
             suggestions.append("发布成功率较低，建议检查平台账号状态和网络连接")
 
         # 基于成本效率的建议
-        cost_efficiency = analysis.get("performance_metrics", {}).get("cost_efficiency", 0)
+        cost_efficiency = analysis.get("performance_metrics", {}).get(
+            "cost_efficiency", 0
+        )
         if cost_efficiency < 1000:
             suggestions.append("成本效率较低，建议优化提示词和生成参数以减少Token使用")
 
         # 基于章节长度的建议
-        avg_chapter_length = analysis.get("performance_metrics", {}).get("average_chapter_length", 0)
+        avg_chapter_length = analysis.get("performance_metrics", {}).get(
+            "average_chapter_length", 0
+        )
         if avg_chapter_length < 1000:
             suggestions.append("章节长度偏短，建议增加每章内容以提高读者体验")
         elif avg_chapter_length > 5000:
@@ -353,11 +398,11 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成平台优化建议
-        
+        """生成平台优化建议.
+
         Args:
             analysis: 平台分析结果
-            
+
         Returns:
             平台优化建议列表
         """
@@ -366,19 +411,27 @@ class RevenueAnalysisService:
         # 基于任务成功率的建议
         task_success_rate = analysis.get("task_success_rate", 0)
         if task_success_rate < 80:
-            suggestions.append(f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限")
+            suggestions.append(
+                f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限"
+            )
 
         # 基于发布成功率的建议
         publish_success_rate = analysis.get("publish_success_rate", 0)
         if publish_success_rate < 80:
-            suggestions.append(f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机")
+            suggestions.append(
+                f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机"
+            )
 
         # 基于账号数量的建议
         total_accounts = analysis.get("total_accounts", 0)
         if total_accounts == 0:
-            suggestions.append(f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能")
+            suggestions.append(
+                f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能"
+            )
         elif total_accounts < 2:
-            suggestions.append(f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性")
+            suggestions.append(
+                f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性"
+            )
 
         return suggestions
 
@@ -386,11 +439,11 @@ class RevenueAnalysisService:
         self,
         forecast: Dict[str, Any],
     ) -> List[str]:
-        """生成收益优化建议
-        
+        """生成收益优化建议.
+
         Args:
             forecast: 收益预测
-            
+
         Returns:
             收益优化建议列表
         """
@@ -416,11 +469,11 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成内容优化建议
-        
+        """生成内容优化建议.
+
         Args:
             analysis: 内容分析结果
-            
+
         Returns:
             内容优化建议列表
         """
@@ -431,7 +484,9 @@ class RevenueAnalysisService:
         if avg_chapter_length < 1500:
             suggestions.append("章节长度偏短，建议增加每章内容以提供更丰富的阅读体验")
         elif avg_chapter_length > 4000:
-            suggestions.append("章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率")
+            suggestions.append(
+                "章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率"
+            )
 
         # 基于类型的建议
         genre = analysis.get("genre", "")

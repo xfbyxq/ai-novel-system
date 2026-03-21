@@ -1,4 +1,4 @@
-"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题
+"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题.
 
 采用热/温/冷/核心四层记忆架构，将上下文保持在恒定 ~8K tokens。
 
@@ -18,8 +18,8 @@ from core.logging_config import logger
 
 @dataclass
 class CompressedContext:
-    """压缩后的上下文结构（增强版）
-    
+    """压缩后的上下文结构（增强版）.
+
     新增关键信息提取层：
     - 伏笔追踪：识别和保留未回收的伏笔
     - 角色发展轨迹：追踪角色状态变化
@@ -32,17 +32,19 @@ class CompressedContext:
     warm_memory: str = ""  # 温记忆：前 3-10 章关键事件
     cold_memory: str = ""  # 冷记忆：卷级摘要
     previous_ending: str = ""  # 前章结尾 500 字
-    
+
     # 新增：增强记忆层
     foreshadowing: List[Dict[str, Any]] = field(default_factory=list)  # 伏笔列表
     character_arcs: List[Dict[str, Any]] = field(default_factory=list)  # 角色发展轨迹
     key_events: List[Dict[str, Any]] = field(default_factory=list)  # 关键事件
-    unresolved_conflicts: List[Dict[str, Any]] = field(default_factory=list)  # 未解决冲突
-    
+    unresolved_conflicts: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # 未解决冲突
+
     total_tokens_estimate: int = 0
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = []
 
         if self.core_memory:
@@ -79,7 +81,7 @@ class CompressedContext:
         return "\n\n".join(parts)
 
     def _format_foreshadowing(self, foreshadowing: List[Dict[str, Any]]) -> str:
-        """格式化伏笔信息"""
+        """格式化伏笔信息."""
         lines = []
         for item in foreshadowing[:10]:  # 最多显示 10 个
             chapter = item.get("chapter", "?")
@@ -89,7 +91,7 @@ class CompressedContext:
         return "\n".join(lines)
 
     def _format_character_arcs(self, arcs: List[Dict[str, Any]]) -> str:
-        """格式化角色发展信息"""
+        """格式化角色发展信息."""
         lines = []
         for arc in arcs[:8]:  # 最多显示 8 个角色
             name = arc.get("name", "未知")
@@ -99,7 +101,7 @@ class CompressedContext:
         return "\n".join(lines)
 
     def _format_conflicts(self, conflicts: List[Dict[str, Any]]) -> str:
-        """格式化冲突信息"""
+        """格式化冲突信息."""
         lines = []
         for conflict in conflicts[:5]:  # 最多显示 5 个
             desc = conflict.get("description", "")[:50]
@@ -109,7 +111,7 @@ class CompressedContext:
 
 
 class ContextCompressor:
-    """分层上下文压缩器
+    """分层上下文压缩器.
 
     确保无论小说写到第几章，上下文大小保持在 ~8K tokens。
     """
@@ -131,6 +133,7 @@ class ContextCompressor:
         warm_chapters: int = 8,
         max_events_per_chapter: int = 3,
     ):
+        """初始化方法."""
         self.HOT_CHAPTERS = hot_chapters
         self.WARM_CHAPTERS = warm_chapters
         self.MAX_EVENTS_PER_CHAPTER = max_events_per_chapter
@@ -145,7 +148,7 @@ class ContextCompressor:
         plot_outline: Any,
         volume_summaries: Optional[Dict[int, str]] = None,
     ) -> CompressedContext:
-        """压缩上下文
+        """压缩上下文.
 
         Args:
             chapter_number: 当前要写的章节号
@@ -172,14 +175,10 @@ class ContextCompressor:
         )
 
         # 2. 热记忆：前 2 章完整摘要
-        ctx.hot_memory = self._build_hot_memory(
-            chapter_number, chapter_summaries
-        )
+        ctx.hot_memory = self._build_hot_memory(chapter_number, chapter_summaries)
 
         # 3. 温记忆：前 3-10 章关键事件
-        ctx.warm_memory = self._build_warm_memory(
-            chapter_number, chapter_summaries
-        )
+        ctx.warm_memory = self._build_warm_memory(chapter_number, chapter_summaries)
 
         # 4. 冷记忆：更早章节的卷级摘要
         ctx.cold_memory = self._build_cold_memory(
@@ -212,36 +211,38 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         chapter_contents: Dict[int, str],
     ) -> List[Dict[str, Any]]:
-        """提取伏笔信息
-        
+        """提取伏笔信息.
+
         Args:
             chapter_number: 当前章节号
             chapter_summaries: 章节摘要
             chapter_contents: 章节内容
-            
+
         Returns:
             伏笔列表，每个伏笔包含：chapter, content, type, status, importance
         """
         foreshadowing_list = []
-        
+
         # 简单实现：从章节摘要中提取标记为伏笔的内容
         # 实际使用时可以集成 LLM 识别
         for ch in range(1, chapter_number):
             if ch not in chapter_summaries:
                 continue
-            
+
             summary = chapter_summaries[ch]
-            
+
             # 检查是否有伏笔标记
             if "foreshadowing" in summary:
-                foreshadowing_list.append({
-                    "chapter": ch,
-                    "content": summary.get("foreshadowing", ""),
-                    "type": summary.get("foreshadowing_type", "plot"),
-                    "status": "unresolved",
-                    "importance": summary.get("importance", 3)
-                })
-        
+                foreshadowing_list.append(
+                    {
+                        "chapter": ch,
+                        "content": summary.get("foreshadowing", ""),
+                        "type": summary.get("foreshadowing_type", "plot"),
+                        "status": "unresolved",
+                        "importance": summary.get("importance", 3),
+                    }
+                )
+
         return foreshadowing_list
 
     def _track_character_changes(
@@ -250,53 +251,58 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         characters: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """追踪角色发展轨迹
-        
+        """追踪角色发展轨迹.
+
         Args:
             chapter_number: 当前章节号
             chapter_summaries: 章节摘要
             characters: 角色列表
-            
+
         Returns:
             角色发展列表，每个角色包含：name, chapter_range, recent_changes, current_state
         """
         character_arcs = []
-        
+
         # 构建角色名称到角色的映射
         char_map = {char.get("name", ""): char for char in characters}
-        
+
         # 追踪每个角色的变化
         for char_name, char_data in char_map.items():
             if not char_name:
                 continue
-            
+
             recent_changes = []
             chapters_appeared = []
-            
+
             # 扫描最近 10 章
             for ch in range(max(1, chapter_number - 10), chapter_number):
                 if ch not in chapter_summaries:
                     continue
-                
+
                 summary = chapter_summaries[ch]
                 key_events = summary.get("key_events", [])
-                
+
                 # 检查角色是否出现在关键事件中
                 for event in key_events:
                     if char_name in str(event):
                         chapters_appeared.append(ch)
                         if "change" in str(event).lower() or "发展" in str(event):
                             recent_changes.append(str(event)[:100])
-            
+
             # 只添加有变化的角色
             if recent_changes or len(chapters_appeared) > 0:
-                character_arcs.append({
-                    "name": char_name,
-                    "chapter_range": [min(chapters_appeared) if chapters_appeared else 1, chapter_number - 1],
-                    "recent_changes": recent_changes[:3],  # 最多 3 个变化
-                    "current_state": char_data.get("current_status", "未知")
-                })
-        
+                character_arcs.append(
+                    {
+                        "name": char_name,
+                        "chapter_range": [
+                            min(chapters_appeared) if chapters_appeared else 1,
+                            chapter_number - 1,
+                        ],
+                        "recent_changes": recent_changes[:3],  # 最多 3 个变化
+                        "current_state": char_data.get("current_status", "未知"),
+                    }
+                )
+
         return character_arcs
 
     def _extract_key_events(
@@ -304,42 +310,46 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """提取关键事件
-        
+        """提取关键事件.
+
         Args:
             chapter_number: 当前章节号
             chapter_summaries: 章节摘要
-            
+
         Returns:
             关键事件列表，每个事件包含：chapter, description, importance, type
         """
         key_events = []
-        
+
         # 扫描最近 10 章
         for ch in range(max(1, chapter_number - 10), chapter_number):
             if ch not in chapter_summaries:
                 continue
-            
+
             summary = chapter_summaries[ch]
             events = summary.get("key_events", [])
-            
+
             for event in events:
                 if isinstance(event, dict):
-                    key_events.append({
-                        "chapter": ch,
-                        "description": event.get("description", str(event))[:100],
-                        "importance": event.get("importance", 3),
-                        "type": event.get("type", "plot")
-                    })
+                    key_events.append(
+                        {
+                            "chapter": ch,
+                            "description": event.get("description", str(event))[:100],
+                            "importance": event.get("importance", 3),
+                            "type": event.get("type", "plot"),
+                        }
+                    )
                 else:
                     # 字符串事件
-                    key_events.append({
-                        "chapter": ch,
-                        "description": str(event)[:100],
-                        "importance": 3,
-                        "type": "plot"
-                    })
-        
+                    key_events.append(
+                        {
+                            "chapter": ch,
+                            "description": str(event)[:100],
+                            "importance": 3,
+                            "type": "plot",
+                        }
+                    )
+
         # 按重要性排序，取前 10 个
         key_events.sort(key=lambda x: x.get("importance", 3), reverse=True)
         return key_events[:10]
@@ -350,37 +360,39 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         plot_outline: Any,
     ) -> List[Dict[str, Any]]:
-        """识别未解决的冲突
-        
+        """识别未解决的冲突.
+
         Args:
             chapter_number: 当前章节号
             chapter_summaries: 章节摘要
             plot_outline: 情节大纲
-            
+
         Returns:
             未解决冲突列表，每个冲突包含：description, related_characters, priority, since_chapter
         """
         conflicts = []
-        
+
         # 从章节摘要中识别未解决的冲突
         for ch in range(max(1, chapter_number - 10), chapter_number):
             if ch not in chapter_summaries:
                 continue
-            
+
             summary = chapter_summaries[ch]
-            
+
             # 检查是否有冲突标记
             if "conflicts" in summary:
                 for conflict in summary.get("conflicts", []):
                     if isinstance(conflict, dict):
-                        conflicts.append({
-                            "description": conflict.get("description", "")[:100],
-                            "related_characters": conflict.get("characters", []),
-                            "priority": conflict.get("priority", "medium"),
-                            "since_chapter": ch,
-                            "status": "unresolved"
-                        })
-        
+                        conflicts.append(
+                            {
+                                "description": conflict.get("description", "")[:100],
+                                "related_characters": conflict.get("characters", []),
+                                "priority": conflict.get("priority", "medium"),
+                                "since_chapter": ch,
+                                "status": "unresolved",
+                            }
+                        )
+
         return conflicts
 
     def _build_core_memory(
@@ -389,7 +401,7 @@ class ContextCompressor:
         characters: List[Dict[str, Any]],
         plot_outline: Any,
     ) -> str:
-        """构建核心记忆：世界观 + 主要角色 + 主线"""
+        """构建核心记忆：世界观 + 主要角色 + 主线."""
         parts = []
 
         # 世界观精简
@@ -418,7 +430,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建热记忆：前 2 章完整摘要"""
+        """构建热记忆：前 2 章完整摘要."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         parts = []
 
@@ -437,7 +449,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建温记忆：前 3-10 章关键事件"""
+        """构建温记忆：前 3-10 章关键事件."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         warm_start = max(1, hot_start - self.WARM_CHAPTERS)
         warm_end = hot_start
@@ -458,7 +470,9 @@ class ContextCompressor:
                 if isinstance(event, str):
                     events.append(f"第{ch}章: {event}")
                 elif isinstance(event, dict):
-                    events.append(f"第{ch}章: {event.get('event', event.get('description', str(event)))}")
+                    events.append(
+                        f"第{ch}章: {event.get('event', event.get('description', str(event)))}"
+                    )
 
         if not events:
             return ""
@@ -471,7 +485,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         volume_summaries: Optional[Dict[int, str]] = None,
     ) -> str:
-        """构建冷记忆：更早章节的卷级摘要"""
+        """构建冷记忆：更早章节的卷级摘要."""
         # 冷记忆起始点：跳过热+温记忆覆盖的章节
         cold_end = max(1, chapter_number - self.HOT_CHAPTERS - self.WARM_CHAPTERS)
 
@@ -514,7 +528,7 @@ class ContextCompressor:
     def _format_chapter_summary(
         self, chapter_number: int, summary: Dict[str, Any]
     ) -> str:
-        """格式化单章摘要"""
+        """格式化单章摘要."""
         parts = [f"第{chapter_number}章"]
 
         # 情节进展
@@ -539,21 +553,21 @@ class ContextCompressor:
         return " | ".join(parts)
 
     def _extract_ending(self, content: str) -> str:
-        """提取章节结尾部分"""
+        """提取章节结尾部分."""
         if not content:
             return ""
 
-        ending = content[-self.PREVIOUS_ENDING_LENGTH:]
+        ending = content[-self.PREVIOUS_ENDING_LENGTH :]
 
         # 尝试从句子开头开始
         first_period = ending.find("。")
         if 0 < first_period < 100:
-            ending = ending[first_period + 1:]
+            ending = ending[first_period + 1 :]
 
         return ending.strip()
 
     def _compress_world_setting(self, world_setting: Dict[str, Any]) -> str:
-        """压缩世界观设定"""
+        """压缩世界观设定."""
         parts = []
 
         # 世界类型
@@ -584,7 +598,7 @@ class ContextCompressor:
         return "；".join(parts)
 
     def _compress_characters(self, characters: List[Dict[str, Any]]) -> str:
-        """压缩角色信息，只保留主要角色"""
+        """压缩角色信息，只保留主要角色."""
         main_chars = []
 
         for char in characters:
@@ -592,7 +606,10 @@ class ContextCompressor:
             name = char.get("name", "")
 
             # 只保留主角和重要配角
-            if role_type in ("protagonist", "主角", "supporting", "配角") or not role_type:
+            if (
+                role_type in ("protagonist", "主角", "supporting", "配角")
+                or not role_type
+            ):
                 char_brief = name
                 personality = char.get("personality", "")
                 if personality:
@@ -605,7 +622,7 @@ class ContextCompressor:
         return "、".join(main_chars)
 
     def _compress_plot_outline(self, plot_outline: Any) -> str:
-        """压缩情节大纲"""
+        """压缩情节大纲."""
         if isinstance(plot_outline, str):
             return plot_outline[:200]
 
@@ -645,7 +662,7 @@ def compress_context(
     plot_outline: Any,
     **kwargs,
 ) -> CompressedContext:
-    """便捷函数：压缩上下文"""
+    """便捷函数：压缩上下文."""
     compressor = ContextCompressor(**kwargs)
     return compressor.compress(
         chapter_number=chapter_number,

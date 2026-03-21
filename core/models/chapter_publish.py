@@ -1,4 +1,5 @@
-"""章节发布记录模型"""
+"""章节发布记录模型."""
+
 import enum
 import uuid
 
@@ -11,20 +12,30 @@ from core.database import Base
 
 
 class PublishStatus(str, enum.Enum):
-    """发布状态"""
-    pending = "pending"        # 待发布
+    """发布状态."""
+
+    pending = "pending"  # 待发布
     publishing = "publishing"  # 发布中
-    published = "published"    # 已发布
-    failed = "failed"          # 失败
+    published = "published"  # 已发布
+    failed = "failed"  # 失败
 
 
 class ChapterPublish(Base):
-    """章节发布记录"""
+    """章节发布记录."""
+
     __tablename__ = "chapter_publishes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    publish_task_id = Column(UUID(as_uuid=True), ForeignKey("publish_tasks.id", ondelete="CASCADE"), nullable=False)
-    chapter_id = Column(UUID(as_uuid=True), ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
+    publish_task_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("publish_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chapter_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     chapter_number = Column(Integer, nullable=False)
     platform_chapter_id = Column(String(100), nullable=True)  # 平台返回的章节 ID
     platform_url = Column(String(500), nullable=True)

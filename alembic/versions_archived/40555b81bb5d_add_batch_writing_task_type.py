@@ -1,19 +1,19 @@
-"""add_batch_writing_task_type
+"""add_batch_writing_task_type.
 
 Revision ID: 40555b81bb5d
 Revises: 5badc20e064a
 Create Date: 2026-02-23 07:15:40.473518
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
-revision: str = '40555b81bb5d'
-down_revision: Union[str, Sequence[str], None] = '5badc20e064a'
+revision: str = "40555b81bb5d"
+down_revision: Union[str, Sequence[str], None] = "5badc20e064a"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
