@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       review_score: ${{ steps.score.outputs.composite_score }}
-      high_priority_count: 0
+      high_priority_count: '0'
       composite_score: ${{ steps.score.outputs.composite_score }}
     
     steps:
@@ -107,8 +107,8 @@ jobs:
   generate-pr-description:
     name: 📝 Generate PR Description
     runs-on: ubuntu-latest
-    needs: [code-review, auto-fix]
-    if: always() && needs.auto-fix.result == 'success'
+    needs: [code-review, quality-verify]
+    if: always() && needs.quality-verify.result == 'success'
     
     outputs:
       pr_title: ${{ steps.generate.outputs.title }}
