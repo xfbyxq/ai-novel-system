@@ -1,4 +1,4 @@
-"""Change crawl_type from enum to string
+"""Change crawl_type from enum to string.
 
 Revision ID: 82c931d1231a
 Revises: 4b47062db094

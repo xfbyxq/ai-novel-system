@@ -43,7 +43,7 @@ class ContextPropagator:
 """
 
     def __init__(self):
-        """初始化上下文携带器"""
+        """初始化上下文携带器."""
         logger.info("ContextPropagator initialized")
 
     def build_enhanced_prompt(

@@ -1,4 +1,4 @@
-"""Add length_type column to novels
+"""Add length_type column to novels.
 
 Revision ID: 575f1ce44645
 Revises: b5dd1dd83814

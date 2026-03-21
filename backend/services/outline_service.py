@@ -1,4 +1,4 @@
-"""大纲服务 - 大纲梳理和细化服务
+"""大纲服务 - 大纲梳理和细化服务.
 
 功能：
 1. 生成完整大纲（基于世界观设定）
@@ -113,7 +113,7 @@ class OutlineService:
     def _build_outline_generation_prompt(
         self, novel: Novel, world_setting: Dict[str, Any]
     ) -> str:
-        """构建大纲生成提示词"""
+        """构建大纲生成提示词."""
         world_name = world_setting.get("world_name", "未命名世界")
         world_type = world_setting.get("world_type", "未知类型")
         power_system = world_setting.get("power_system", {})
@@ -239,7 +239,7 @@ class OutlineService:
         return prompt
 
     def _parse_llm_outline_response(self, content: str) -> Dict[str, Any]:
-        """解析 LLM 返回的大纲内容"""
+        """解析 LLM 返回的大纲内容."""
         try:
             # 尝试直接解析 JSON
             content = content.strip()
@@ -275,7 +275,7 @@ class OutlineService:
             }
 
     async def _save_outline(self, novel_id: UUID, outline_data: Dict[str, Any]):
-        """保存大纲到数据库"""
+        """保存大纲到数据库."""
         # 检查是否已存在大纲
         result = await self.db.execute(
             select(PlotOutline).where(PlotOutline.novel_id == novel_id)
@@ -284,9 +284,7 @@ class OutlineService:
 
         if existing_outline:
             # 更新现有大纲
-            existing_outline.structure_type = outline_data.get(
-                "structure_type", "三幕式"
-            )
+            existing_outline.structure_type = outline_data.get("structure_type", "三幕式")
             existing_outline.volumes = outline_data.get("volumes", [])
             existing_outline.main_plot = outline_data.get("main_plot", {})
             existing_outline.sub_plots = outline_data.get("sub_plots", [])
@@ -429,7 +427,7 @@ class OutlineService:
         climax_chapter: Optional[int] = None,
         volume_is_climax: bool = False,
     ) -> Dict[str, Any]:
-        """生成单章配置"""
+        """生成单章配置."""
         # 1. 找到当前章所属的张力循环
         current_cycle = None
         cycle_position = None
@@ -710,9 +708,7 @@ class OutlineService:
             "climax_chapter": "根据故事结构，推荐高潮章节位置",
         }
 
-        prompt_template = field_prompts.get(
-            field_name, f"为大纲的 '{field_name}' 字段生成建议"
-        )
+        prompt_template = field_prompts.get(field_name, f"为大纲的 '{field_name}' 字段生成建议")
 
         # 构建上下文描述
         context_desc = self._build_context_description(context)
@@ -730,7 +726,7 @@ class OutlineService:
         }
 
     def _build_context_description(self, context: Dict[str, Any]) -> str:
-        """构建上下文描述"""
+        """构建上下文描述."""
         parts = []
 
         if "novel" in context:
@@ -764,7 +760,7 @@ class OutlineService:
         hints: Optional[str],
         prompt_template: str,
     ) -> str:
-        """为特定字段生成建议"""
+        """为特定字段生成建议."""
 
         novel = context.get("novel", {})
         world = context.get("world_setting", {})
@@ -915,7 +911,7 @@ class OutlineService:
         return versions
 
     def _calculate_total_chapters(self, volumes: Optional[List[Dict[str, Any]]]) -> int:
-        """计算总章节数"""
+        """计算总章节数."""
         if not volumes:
             return 0
 
@@ -928,7 +924,7 @@ class OutlineService:
         return total
 
     async def _record_token_usage(self, novel_id: UUID, task_type: str):
-        """记录 token 使用"""
+        """记录 token 使用."""
         cost_summary = self.cost_tracker.get_summary()
 
         for record in self.cost_tracker.records:
@@ -957,5 +953,5 @@ class OutlineService:
 
 # 便捷函数
 def get_outline_service(db: AsyncSession) -> OutlineService:
-    """获取大纲服务实例"""
+    """获取大纲服务实例."""
     return OutlineService(db)

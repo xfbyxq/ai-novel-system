@@ -1,4 +1,4 @@
-"""merge_migration
+"""merge_migration.
 
 Revision ID: ff3082519b6d
 Revises: 002, add_outline_enhancements

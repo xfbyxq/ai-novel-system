@@ -1,4 +1,4 @@
-"""测试数据生成器"""
+"""测试数据生成器."""
 
 import random
 from typing import Dict, List, Optional
@@ -6,7 +6,7 @@ from faker import Faker
 
 
 class TestDataGenerator:
-    """测试数据生成器类"""
+    """测试数据生成器类."""
 
     def __init__(self, locale: str = "zh_CN"):
         """
@@ -19,7 +19,7 @@ class TestDataGenerator:
         self._setup_constants()
 
     def _setup_constants(self):
-        """设置常量数据"""
+        """设置常量数据."""
         self.GENRES = [
             "仙侠",
             "都市",
@@ -239,37 +239,37 @@ _test_data_generator = TestDataGenerator()
 
 # 导出便捷函数
 def generate_novel_data(**kwargs) -> Dict:
-    """生成小说测试数据的便捷函数"""
+    """生成小说测试数据的便捷函数."""
     return _test_data_generator.generate_novel_data(**kwargs)
 
 
 def generate_character_data(**kwargs) -> Dict:
-    """生成角色测试数据的便捷函数"""
+    """生成角色测试数据的便捷函数."""
     return _test_data_generator.generate_character_data(**kwargs)
 
 
 def generate_outline_data(**kwargs) -> Dict:
-    """生成大纲测试数据的便捷函数"""
+    """生成大纲测试数据的便捷函数."""
     return _test_data_generator.generate_outline_data(**kwargs)
 
 
 def generate_chapter_data(**kwargs) -> Dict:
-    """生成章节测试数据的便捷函数"""
+    """生成章节测试数据的便捷函数."""
     return _test_data_generator.generate_chapter_data(**kwargs)
 
 
 def generate_user_data(**kwargs) -> Dict:
-    """生成用户测试数据的便捷函数"""
+    """生成用户测试数据的便捷函数."""
     return _test_data_generator.generate_user_data(**kwargs)
 
 
 def generate_platform_account_data(**kwargs) -> Dict:
-    """生成平台账号测试数据的便捷函数"""
+    """生成平台账号测试数据的便捷函数."""
     return _test_data_generator.generate_platform_account_data(**kwargs)
 
 
 def generate_batch_chapters_data(
     start_chapter: int = 1, end_chapter: int = 5
 ) -> List[Dict]:
-    """生成批量章节测试数据的便捷函数"""
+    """生成批量章节测试数据的便捷函数."""
     return _test_data_generator.generate_batch_chapters_data(start_chapter, end_chapter)

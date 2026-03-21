@@ -1,4 +1,4 @@
-"""监控API"""
+"""监控API."""
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession

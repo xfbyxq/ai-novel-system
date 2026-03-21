@@ -1,4 +1,4 @@
-"""枚举工具函数，提供安全的枚举值访问"""
+"""枚举工具函数，提供安全的枚举值访问."""
 
 from enum import Enum
 from typing import Any, Optional, Union

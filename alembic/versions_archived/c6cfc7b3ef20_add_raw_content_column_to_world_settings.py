@@ -1,4 +1,4 @@
-"""add_raw_content_column_to_world_settings
+"""add_raw_content_column_to_world_settings.
 
 Revision ID: c6cfc7b3ef20
 Revises: ff3082519b6d

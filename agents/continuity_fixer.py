@@ -17,7 +17,7 @@ from llm.qwen_client import QwenClient
 
 
 class ContinuityFixerAgent:
-    """连续性问题修复Agent
+    """连续性问题修复Agent。
 
     当连续性审查员发现严重问题时，自动修复章节内容。
     采用最小修改原则，仅修复指出的问题，保留原文风格。
@@ -57,7 +57,7 @@ class ContinuityFixerAgent:
 请直接输出修复后的完整章节内容，不要添加任何解释。"""
 
     def __init__(self, qwen_client: QwenClient, cost_tracker: CostTracker):
-        """初始化修复Agent
+        """初始化修复Agent。
 
         Args:
             qwen_client: 通义千问客户端
@@ -67,7 +67,7 @@ class ContinuityFixerAgent:
         self.cost_tracker = cost_tracker
 
     async def should_fix(self, continuity_report: Dict[str, Any]) -> bool:
-        """判断是否需要修复
+        """判断是否需要修复。
 
         Args:
             continuity_report: 连续性审查报告
@@ -90,7 +90,7 @@ class ContinuityFixerAgent:
         return critical_count > 0
 
     def _format_issues(self, issues: List[Dict[str, Any]]) -> str:
-        """格式化问题列表
+        """格式化问题列表。
 
         Args:
             issues: 问题列表
@@ -121,7 +121,7 @@ class ContinuityFixerAgent:
     def _filter_critical_issues(
         self, issues: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """筛选需要修复的严重问题
+        """筛选需要修复的严重问题。
 
         Args:
             issues: 所有问题列表
@@ -137,7 +137,7 @@ class ContinuityFixerAgent:
     async def fix_issues(
         self, content: str, continuity_report: Dict[str, Any], context: str = ""
     ) -> Dict[str, Any]:
-        """修复连续性问题
+        """修复连续性问题。
 
         Args:
             content: 原始章节内容
@@ -219,7 +219,7 @@ class ContinuityFixerAgent:
     async def fix_specific_issue(
         self, content: str, issue: Dict[str, Any], context: str = ""
     ) -> str:
-        """修复单个特定问题
+        """修复单个特定问题。
 
         Args:
             content: 原始内容
@@ -268,7 +268,7 @@ class ContinuityFixerAgent:
 
 
 class ContinuityFixerPipeline:
-    """连续性修复流水线
+    """连续性修复流水线。
 
     集成到章节生成流程中，在连续性检查后自动修复问题。
     """
@@ -284,7 +284,7 @@ class ContinuityFixerPipeline:
         context: str = "",
         chapter_number: int = 0,
     ) -> Dict[str, Any]:
-        """处理章节内容，必要时进行修复
+        """处理章节内容，必要时进行修复。
 
         Args:
             content: 章节内容

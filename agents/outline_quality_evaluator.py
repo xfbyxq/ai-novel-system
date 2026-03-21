@@ -1,4 +1,4 @@
-"""大纲质量评估器 - 扩展现有的质量评估维度"""
+"""大纲质量评估器 - 扩展现有的质量评估维度."""
 
 import json
 from typing import Any, Dict, List, Optional
@@ -75,7 +75,7 @@ EXTENDED_OUTLINE_DIMENSIONS = {
 
 @dataclass
 class OutlineQualityScore:
-    """大纲质量评分结果"""
+    """大纲质量评分结果."""
 
     overall_score: float
     dimension_scores: Dict[str, float]
@@ -94,7 +94,7 @@ class OutlineQualityScore:
 
 
 class OutlineQualityEvaluator:
-    """大纲质量评估器"""
+    """大纲质量评估器."""
 
     def __init__(
         self,
@@ -111,7 +111,7 @@ class OutlineQualityEvaluator:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> OutlineQualityScore:
-        """执行综合大纲质量评估"""
+        """执行综合大纲质量评估."""
         logger.info("开始执行综合大纲质量评估")
 
         try:
@@ -167,7 +167,7 @@ class OutlineQualityEvaluator:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, float]:
-        """评估所有维度"""
+        """评估所有维度."""
         dimension_scores = {}
 
         # 结构完整性评估
@@ -201,7 +201,7 @@ class OutlineQualityEvaluator:
         return dimension_scores
 
     async def _evaluate_structure_completeness(self, outline: Dict[str, Any]) -> float:
-        """评估结构完整性"""
+        """评估结构完整性."""
         try:
             score = 5.0
 
@@ -228,7 +228,7 @@ class OutlineQualityEvaluator:
     async def _evaluate_setting_consistency(
         self, outline: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> float:
-        """评估世界观一致性"""
+        """评估世界观一致性."""
         try:
             score = 5.0
             outline_text = json.dumps(outline, ensure_ascii=False)
@@ -262,7 +262,7 @@ class OutlineQualityEvaluator:
     async def _evaluate_character_coherence(
         self, outline: Dict[str, Any], characters: List[Dict[str, Any]]
     ) -> float:
-        """评估角色连贯性"""
+        """评估角色连贯性."""
         try:
             score = 5.0
             outline_text = json.dumps(outline, ensure_ascii=False)
@@ -297,7 +297,7 @@ class OutlineQualityEvaluator:
             return 5.0
 
     async def _evaluate_tension_management(self, outline: Dict[str, Any]) -> float:
-        """评估张力节奏控制"""
+        """评估张力节奏控制."""
         try:
             score = 5.0
 
@@ -333,7 +333,7 @@ class OutlineQualityEvaluator:
             return 5.0
 
     async def _evaluate_logical_flow(self, outline: Dict[str, Any]) -> float:
-        """评估逻辑连贯性"""
+        """评估逻辑连贯性."""
         try:
             score = 5.0
             outline_text = json.dumps(outline, ensure_ascii=False)
@@ -369,7 +369,7 @@ class OutlineQualityEvaluator:
             return 5.0
 
     async def _evaluate_innovation_factor(self, outline: Dict[str, Any]) -> float:
-        """评估创意新颖性"""
+        """评估创意新颖性."""
         try:
             score = 5.0
             outline_text = json.dumps(outline, ensure_ascii=False)
@@ -395,7 +395,7 @@ class OutlineQualityEvaluator:
             return 5.0
 
     def _calculate_weighted_score(self, dimension_scores: Dict[str, float]) -> float:
-        """计算加权综合评分"""
+        """计算加权综合评分."""
         total_score = 0.0
         total_weight = 0.0
 
@@ -407,7 +407,7 @@ class OutlineQualityEvaluator:
         return total_score / total_weight if total_weight > 0 else 5.0
 
     def _identify_strengths(self, dimension_scores: Dict[str, float]) -> List[str]:
-        """识别优势维度"""
+        """识别优势维度."""
         strengths = []
         for dimension, score in dimension_scores.items():
             if score >= 8.0:
@@ -416,7 +416,7 @@ class OutlineQualityEvaluator:
         return strengths
 
     def _identify_weaknesses(self, dimension_scores: Dict[str, float]) -> List[str]:
-        """识别劣势维度"""
+        """识别劣势维度."""
         weaknesses = []
         for dimension, score in dimension_scores.items():
             if score < 7.0:
@@ -430,7 +430,7 @@ class OutlineQualityEvaluator:
         dimension_scores: Dict[str, float],
         weaknesses: List[str],
     ) -> List[Dict[str, Any]]:
-        """生成改进建议"""
+        """生成改进建议."""
         suggestions = []
 
         # 基于低分维度生成具体建议

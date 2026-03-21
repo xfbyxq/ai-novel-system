@@ -1,4 +1,4 @@
-"""角色审查反馈循环 - 确保角色设计的深度和质量
+"""角色审查反馈循环 - 确保角色设计的深度和质量。
 
 通过 Designer-Reviewer 循环迭代，确保角色具有：
 - 心理深度和内在矛盾
@@ -177,7 +177,7 @@ class CharacterReviewHandler(
         List[Dict[str, Any]], CharacterReviewResult, CharacterQualityReport
     ]
 ):
-    """角色设计审查循环处理器
+    """角色设计审查循环处理器。
 
     流程：
     1. Designer 生成/修订角色
@@ -193,7 +193,7 @@ class CharacterReviewHandler(
         quality_threshold: float = 7.0,
         max_iterations: int = 2,
     ):
-        """初始化角色审查处理器
+        """初始化角色审查处理器。
 
         Args:
             client: LLM 客户端
@@ -214,7 +214,7 @@ class CharacterReviewHandler(
         world_setting: Dict[str, Any],
         topic_analysis: Dict[str, Any],
     ) -> CharacterReviewResult:
-        """执行角色设计审查循环
+        """执行角色设计审查循环。
 
         Args:
             initial_characters: 初始角色列表
@@ -280,7 +280,7 @@ class CharacterReviewHandler(
         previous_issues: List[str],
         **context,
     ) -> str:
-        """构建 Reviewer 任务提示词"""
+        """构建 Reviewer 任务提示词."""
         world_setting = context.get("world_setting", {})
 
         iteration_context = self._build_iteration_context(
@@ -303,7 +303,7 @@ class CharacterReviewHandler(
         review_data: Dict[str, Any],
         **context,
     ) -> str:
-        """构建修订任务提示词"""
+        """构建修订任务提示词."""
         world_setting = context.get("world_setting", {})
 
         return CHARACTER_REVISION_TASK.format(
@@ -317,7 +317,7 @@ class CharacterReviewHandler(
     def _validate_revision(
         self, revised: List[Dict[str, Any]], original: List[Dict[str, Any]]
     ) -> bool:
-        """验证修订结果是否有效"""
+        """验证修订结果是否有效."""
         if not revised:
             return False
         if not isinstance(revised, list):
@@ -330,7 +330,7 @@ class CharacterReviewHandler(
         final_content: List[Dict[str, Any]],
         last_report: Optional[CharacterQualityReport],
     ) -> None:
-        """填充最终结果"""
+        """填充最终结果."""
         result.final_characters = final_content
         result.final_output = final_content
         result.final_score = last_report.overall_score if last_report else 0
@@ -339,11 +339,11 @@ class CharacterReviewHandler(
         result.quality_report = last_report
 
     def _get_empty_content(self) -> List[Dict[str, Any]]:
-        """获取空内容"""
+        """获取空内容."""
         return []
 
     def _parse_builder_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """解析 Builder 响应"""
+        """解析 Builder 响应."""
         result = JsonExtractor.extract_json(response_text, default=[])
         # 确保返回列表
         if isinstance(result, dict):
@@ -357,7 +357,7 @@ class CharacterReviewHandler(
     def _build_issues_text(
         self, report: CharacterQualityReport, review_data: Dict[str, Any]
     ) -> str:
-        """构建问题列表文本，包含各角色具体问题"""
+        """构建问题列表文本，包含各角色具体问题."""
         lines = []
 
         # 添加各角色评估
@@ -385,7 +385,7 @@ class CharacterReviewHandler(
     def _collect_issues_for_next_round(
         self, report: CharacterQualityReport, review_data: Dict[str, Any]
     ) -> List[str]:
-        """收集问题用于下一轮审查"""
+        """收集问题用于下一轮审查."""
         issues = []
 
         # 添加严重问题

@@ -20,7 +20,7 @@ from core.logging_config import logger
 
 
 class ForeshadowingStatus(str, Enum):
-    """伏笔状态"""
+    """伏笔状态."""
 
     PENDING = "pending"  # 待回收
     PLANTED = "planted"  # 已埋设
@@ -31,7 +31,7 @@ class ForeshadowingStatus(str, Enum):
 
 @dataclass
 class Foreshadowing:
-    """伏笔定义"""
+    """伏笔定义."""
 
     id: str
     content: str  # 伏笔内容
@@ -55,7 +55,7 @@ class Foreshadowing:
 
     @property
     def urgency_score(self) -> int:
-        """计算紧急程度分数"""
+        """计算紧急程度分数."""
         if self.status == ForeshadowingStatus.RESOLVED:
             return 0
 
@@ -68,14 +68,14 @@ class Foreshadowing:
 
     @property
     def is_overdue(self) -> bool:
-        """是否超期"""
+        """是否超期."""
         if self.expected_resolve_chapter == 0:
             return False
         current_chapter = self.planted_chapter
         return current_chapter > self.expected_resolve_chapter
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "id": self.id,
             "content": self.content,
@@ -95,7 +95,7 @@ class Foreshadowing:
 
 @dataclass
 class ForeshadowingTask:
-    """伏笔任务"""
+    """伏笔任务."""
 
     foreshadowing_id: str
     task_type: str  # "plant", "payoff", "reminder"
@@ -106,7 +106,7 @@ class ForeshadowingTask:
     related_plot_point: str = ""
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         priority_icon = (
             "⚠️" if self.priority >= 8 else "📌" if self.priority >= 5 else "💡"
         )
@@ -129,7 +129,7 @@ class ForeshadowingTask:
 
 @dataclass
 class ForeshadowingReport:
-    """伏笔报告"""
+    """伏笔报告."""
 
     chapter_number: int
 
@@ -147,7 +147,7 @@ class ForeshadowingReport:
     suggestions: List[str] = field(default_factory=list)
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         parts = ["## 伏笔任务"]
 
         # 必须回收的伏笔
@@ -176,7 +176,7 @@ class ForeshadowingReport:
         return "\n".join(parts)
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter_number": self.chapter_number,
             "must_payoff": [t.to_dict() for t in self.must_payoff_tasks],
@@ -217,7 +217,7 @@ class ForeshadowingAutoInjector:
         logger.info(f"ForeshadowingAutoInjector initialized for novel {novel_id}")
 
     def add_foreshadowing(self, foreshadowing: Foreshadowing):
-        """添加伏笔"""
+        """添加伏笔."""
         self.foreshadowings[foreshadowing.id] = foreshadowing
         logger.info(
             f"Added foreshadowing: {foreshadowing.content[:50]}... "
@@ -225,7 +225,7 @@ class ForeshadowingAutoInjector:
         )
 
     def remove_foreshadowing(self, foreshadowing_id: str):
-        """移除伏笔"""
+        """移除伏笔."""
         if foreshadowing_id in self.foreshadowings:
             del self.foreshadowings[foreshadowing_id]
             logger.info(f"Removed foreshadowing: {foreshadowing_id}")
@@ -233,7 +233,7 @@ class ForeshadowingAutoInjector:
     def mark_as_resolved(
         self, foreshadowing_id: str, resolve_chapter: int, payoff_content: str = ""
     ):
-        """标记伏笔为已回收"""
+        """标记伏笔为已回收."""
         if foreshadowing_id not in self.foreshadowings:
             logger.warning(f"Foreshadowing not found: {foreshadowing_id}")
             return
@@ -315,7 +315,7 @@ class ForeshadowingAutoInjector:
         return report
 
     def _identify_payoff_tasks(self, current_chapter: int, report: ForeshadowingReport):
-        """识别需要回收的伏笔任务"""
+        """识别需要回收的伏笔任务."""
         for foreshadow in self.foreshadowings.values():
             if foreshadow.status == ForeshadowingStatus.RESOLVED:
                 continue
@@ -371,7 +371,7 @@ class ForeshadowingAutoInjector:
         plot_outline: Dict[str, Any],
         report: ForeshadowingReport,
     ):
-        """识别可以埋设的伏笔任务"""
+        """识别可以埋设的伏笔任务."""
         # 查找未来的转折点
         future_turning_points = self._get_future_turning_points(
             current_chapter, plot_outline, look_ahead=10
@@ -403,7 +403,7 @@ class ForeshadowingAutoInjector:
     def _get_future_turning_points(
         self, current_chapter: int, plot_outline: Dict[str, Any], look_ahead: int = 10
     ) -> List[Dict[str, Any]]:
-        """获取未来的转折点"""
+        """获取未来的转折点."""
         turning_points = []
 
         # 从大纲中提取关键事件
@@ -420,7 +420,7 @@ class ForeshadowingAutoInjector:
         return turning_points
 
     def _has_foreshadowing_for_event(self, event: str) -> Optional[Foreshadowing]:
-        """检查是否已有伏笔针对某个事件"""
+        """检查是否已有伏笔针对某个事件."""
         event_lower = event.lower()
 
         for foreshadow in self.foreshadowings.values():
@@ -436,7 +436,7 @@ class ForeshadowingAutoInjector:
         return None
 
     def _generate_suggestions(self, report: ForeshadowingReport):
-        """生成建议"""
+        """生成建议."""
         if report.must_payoff_tasks:
             report.suggestions.append(
                 f"⚠️ 有{len(report.must_payoff_tasks)}个关键伏笔已超期，必须在本章回收！"
@@ -580,7 +580,7 @@ class ForeshadowingAutoInjector:
         return result
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """获取统计信息."""
         total = len(self.foreshadowings)
         resolved = sum(
             1
@@ -606,13 +606,13 @@ class ForeshadowingAutoInjector:
         }
 
     def export_foreshadowings(self) -> List[Dict[str, Any]]:
-        """导出所有伏笔"""
+        """导出所有伏笔."""
         return [f.to_dict() for f in self.foreshadowings.values()]
 
 
 # 便捷函数
 def create_foreshadowing_injector(novel_id: str) -> ForeshadowingAutoInjector:
-    """便捷函数：创建伏笔注入器"""
+    """便捷函数：创建伏笔注入器."""
     return ForeshadowingAutoInjector(novel_id)
 
 
@@ -622,7 +622,7 @@ def get_chapter_foreshadowing_requirements(
     foreshadowings: List[Dict[str, Any]],
     plot_outline: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """便捷函数：获取章节伏笔要求"""
+    """便捷函数：获取章节伏笔要求."""
     injector = ForeshadowingAutoInjector(novel_id)
 
     # 添加伏笔

@@ -1,4 +1,4 @@
-"""基础页面对象模型"""
+"""基础页面对象模型."""
 
 from typing import Optional, Union
 from playwright.sync_api import Page, Locator, TimeoutError
@@ -6,7 +6,7 @@ import time
 
 
 class BasePage:
-    """页面对象模型基类"""
+    """页面对象模型基类."""
 
     def __init__(self, page: Page):
         """

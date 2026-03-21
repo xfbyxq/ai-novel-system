@@ -23,7 +23,7 @@ from core.logging_config import logger
 
 @dataclass
 class ContinuityConstraint:
-    """连贯性约束"""
+    """连贯性约束."""
 
     id: str
     type: str  # "expectation", "conflict", "goal", "foreshadowing"
@@ -35,7 +35,7 @@ class ContinuityConstraint:
     must_address: bool = True  # 是否必须回应
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "id": self.id,
             "type": self.type,
@@ -50,7 +50,7 @@ class ContinuityConstraint:
 
 @dataclass
 class PlanConflict:
-    """策划冲突"""
+    """策划冲突."""
 
     conflict_type: str  # "plot", "character", "timeline", "logic"
     description: str
@@ -60,7 +60,7 @@ class PlanConflict:
     suggestion: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "type": self.conflict_type,
             "description": self.description,
@@ -73,7 +73,7 @@ class PlanConflict:
 
 @dataclass
 class MissingProgress:
-    """缺失的剧情推进"""
+    """缺失的剧情推进."""
 
     element_type: str  # "plot_point", "character_arc", "foreshadowing"
     description: str
@@ -82,7 +82,7 @@ class MissingProgress:
     reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "type": self.element_type,
             "description": self.description,
@@ -94,7 +94,7 @@ class MissingProgress:
 
 @dataclass
 class PreventionReport:
-    """预防式检查报告"""
+    """预防式检查报告."""
 
     chapter_number: int
     passed: bool = True
@@ -118,7 +118,7 @@ class PreventionReport:
 
     @property
     def overall_score(self) -> float:
-        """计算综合评分"""
+        """计算综合评分."""
         return (
             self.constraint_response_score * 0.4
             + self.consistency_score * 0.35
@@ -127,12 +127,12 @@ class PreventionReport:
 
     @property
     def has_critical_issues(self) -> bool:
-        """是否有严重问题"""
+        """是否有严重问题."""
         return any(c.severity == "critical" for c in self.conflicts)
 
     @property
     def has_issues(self) -> bool:
-        """是否有问题"""
+        """是否有问题."""
         return (
             len(self.ignored_constraints) > 0
             or len(self.conflicts) > 0
@@ -140,7 +140,7 @@ class PreventionReport:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter_number": self.chapter_number,
             "passed": self.passed,
@@ -300,7 +300,7 @@ class PreventionContinuityChecker:
     def _check_constraint_response(
         self, chapter_plan: Dict[str, Any], constraints: List[ContinuityConstraint]
     ) -> Dict[str, Any]:
-        """检查约束回应"""
+        """检查约束回应."""
         ignored = []
         score = 10.0
 
@@ -333,7 +333,7 @@ class PreventionContinuityChecker:
     def _check_plot_consistency(
         self, chapter_plan: Dict[str, Any], previous_chapter: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """检查情节一致性"""
+        """检查情节一致性."""
         conflicts = []
         score = 10.0
 
@@ -422,7 +422,7 @@ class PreventionContinuityChecker:
         previous_chapter: Dict[str, Any],
         constraints: List[ContinuityConstraint],
     ) -> Dict[str, Any]:
-        """检查剧情推进"""
+        """检查剧情推进."""
         missing = []
         score = 10.0
 
@@ -473,7 +473,7 @@ class PreventionContinuityChecker:
     def _is_location_transition_valid(
         self, prev_location: str, new_location: str, chapter_plan: Dict[str, Any]
     ) -> bool:
-        """检查地点转换是否有效"""
+        """检查地点转换是否有效."""
         # 如果相同，有效
         if prev_location == new_location:
             return True
@@ -489,7 +489,7 @@ class PreventionContinuityChecker:
     def _is_time_transition_valid(
         self, prev_time: str, chapter_plan: Dict[str, Any]
     ) -> bool:
-        """检查时间转换是否有效"""
+        """检查时间转换是否有效."""
         opening = chapter_plan.get("opening", "")
 
         # 检查是否有时间流逝的描述
@@ -497,7 +497,7 @@ class PreventionContinuityChecker:
         return any(word in opening for word in time_words)
 
     def _is_state_transition_smooth(self, prev_ending: str, plan_start: str) -> bool:
-        """检查状态转换是否自然"""
+        """检查状态转换是否自然."""
         # 简化：检查是否有明显的冲突
         prev_lower = prev_ending.lower()
         start_lower = plan_start.lower()
@@ -515,7 +515,7 @@ class PreventionContinuityChecker:
     def _is_character_important(
         self, character: str, previous_chapter: Dict[str, Any]
     ) -> bool:
-        """检查角色是否重要"""
+        """检查角色是否重要."""
         # 简化：主角或重要配角都算重要
         main_characters = previous_chapter.get("main_characters", [])
         return character in main_characters
@@ -523,7 +523,7 @@ class PreventionContinuityChecker:
     def _plan_addresses_conflict(
         self, chapter_plan: Dict[str, Any], conflict_constraint: ContinuityConstraint
     ) -> bool:
-        """检查策划是否回应了冲突"""
+        """检查策划是否回应了冲突."""
         chapter_plan_text = json.dumps(chapter_plan, ensure_ascii=False).lower()
         conflict_text = conflict_constraint.description.lower()
 
@@ -532,7 +532,7 @@ class PreventionContinuityChecker:
         return any(kw in chapter_plan_text for kw in keywords)
 
     def _generate_analysis(self, report: PreventionReport) -> str:
-        """生成详细分析"""
+        """生成详细分析."""
         parts = []
 
         # 约束回应分析
@@ -558,7 +558,7 @@ class PreventionContinuityChecker:
         return " ".join(parts)
 
     def _generate_suggestions(self, report: PreventionReport) -> List[str]:
-        """生成建议"""
+        """生成建议."""
         suggestions = []
 
         if report.ignored_constraints:
@@ -577,7 +577,7 @@ class PreventionContinuityChecker:
         return suggestions
 
     def _generate_required_fixes(self, report: PreventionReport) -> List[str]:
-        """生成必须修正的问题"""
+        """生成必须修正的问题."""
         fixes = []
 
         for conflict in report.conflicts:
@@ -652,7 +652,7 @@ class PreventionContinuityChecker:
         return fixed_plan
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """获取统计信息."""
         if not self.check_history:
             return {"total_checks": 0, "pass_rate": 0, "average_score": 0}
 
@@ -673,7 +673,7 @@ class PreventionContinuityChecker:
 
 # 便捷函数
 def create_prevention_checker(novel_id: str) -> PreventionContinuityChecker:
-    """便捷函数：创建预防式检查器"""
+    """便捷函数：创建预防式检查器."""
     return PreventionContinuityChecker(novel_id)
 
 
@@ -684,7 +684,7 @@ async def check_chapter_continuity(
     constraints: List[Dict[str, Any]],
     chapter_number: int,
 ) -> PreventionReport:
-    """便捷函数：检查章节连贯性"""
+    """便捷函数：检查章节连贯性."""
     checker = PreventionContinuityChecker(novel_id)
 
     # 转换约束

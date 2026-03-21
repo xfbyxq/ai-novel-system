@@ -14,7 +14,7 @@ from core.logging_config import logger
 
 
 class ForeshadowingStatus(str, Enum):
-    """伏笔状态"""
+    """伏笔状态."""
 
     PENDING = "pending"  # 待回收
     RESOLVED = "resolved"  # 已回收
@@ -23,7 +23,7 @@ class ForeshadowingStatus(str, Enum):
 
 
 class ForeshadowingType(str, Enum):
-    """伏笔类型"""
+    """伏笔类型."""
 
     PLOT = "plot"  # 情节伏笔
     CHARACTER = "character"  # 角色伏笔
@@ -34,7 +34,7 @@ class ForeshadowingType(str, Enum):
 
 
 class Foreshadowing:
-    """伏笔实体"""
+    """伏笔实体."""
 
     def __init__(
         self,
@@ -63,21 +63,21 @@ class Foreshadowing:
         self.updated_at = datetime.now().isoformat()
 
     def resolve(self, chapter_number: int, resolution_content: str = ""):
-        """回收伏笔"""
+        """回收伏笔."""
         self.status = ForeshadowingStatus.RESOLVED
         self.resolved_chapter = chapter_number
         self.resolution_content = resolution_content
         self.updated_at = datetime.now().isoformat()
 
     def partial_resolve(self, chapter_number: int, resolution_content: str = ""):
-        """部分回收伏笔"""
+        """部分回收伏笔."""
         self.status = ForeshadowingStatus.PARTIAL
         self.resolved_chapter = chapter_number
         self.resolution_content = resolution_content
         self.updated_at = datetime.now().isoformat()
 
     def abandon(self, reason: str = ""):
-        """放弃伏笔"""
+        """放弃伏笔."""
         self.status = ForeshadowingStatus.ABANDONED
         self.notes = reason if reason else self.notes
         self.updated_at = datetime.now().isoformat()
@@ -105,7 +105,7 @@ class Foreshadowing:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Foreshadowing":
-        """从字典创建伏笔"""
+        """从字典创建伏笔."""
         f = cls(
             content=data.get("content", ""),
             planted_chapter=data.get("planted_chapter", 0),
@@ -196,7 +196,7 @@ class ForeshadowingTracker:
     def partial_resolve(
         self, fid: str, chapter_number: int, resolution_content: str = ""
     ) -> bool:
-        """部分回收伏笔"""
+        """部分回收伏笔."""
         if fid not in self.foreshadowings:
             return False
 
@@ -207,7 +207,7 @@ class ForeshadowingTracker:
         return True
 
     def abandon(self, fid: str, reason: str = "") -> bool:
-        """放弃伏笔"""
+        """放弃伏笔."""
         if fid not in self.foreshadowings:
             return False
 
@@ -216,11 +216,11 @@ class ForeshadowingTracker:
         return True
 
     def get_foreshadowing(self, fid: str) -> Optional[Foreshadowing]:
-        """获取伏笔"""
+        """获取伏笔."""
         return self.foreshadowings.get(fid)
 
     def get_pending_foreshadowings(self) -> List[Dict[str, Any]]:
-        """获取所有待回收的伏笔"""
+        """获取所有待回收的伏笔."""
         pending = [
             f.to_dict()
             for f in self.foreshadowings.values()
@@ -231,7 +231,7 @@ class ForeshadowingTracker:
         return pending
 
     def get_overdue_foreshadowings(self, current_chapter: int) -> List[Dict[str, Any]]:
-        """获取超期未回收的伏笔"""
+        """获取超期未回收的伏笔."""
         overdue = []
         for f in self.foreshadowings.values():
             if f.status == ForeshadowingStatus.PENDING:
@@ -363,7 +363,7 @@ class ForeshadowingTracker:
         return "\n\n".join(parts)
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取伏笔统计信息"""
+        """获取伏笔统计信息."""
         total = len(self.foreshadowings)
         pending = len(
             [
@@ -404,7 +404,7 @@ class ForeshadowingTracker:
         }
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为字典"""
+        """序列化为字典."""
         return {
             "novel_id": self.novel_id,
             "foreshadowings": {
@@ -415,18 +415,18 @@ class ForeshadowingTracker:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ForeshadowingTracker":
-        """从字典反序列化"""
+        """从字典反序列化."""
         tracker = cls(data.get("novel_id", ""))
         for fid, fdata in data.get("foreshadowings", {}).items():
             tracker.foreshadowings[fid] = Foreshadowing.from_dict(fdata)
         return tracker
 
     def export_to_json(self) -> str:
-        """导出为JSON字符串"""
+        """导出为JSON字符串."""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
     @classmethod
     def import_from_json(cls, json_str: str) -> "ForeshadowingTracker":
-        """从JSON字符串导入"""
+        """从JSON字符串导入."""
         data = json.loads(json_str)
         return cls.from_dict(data)

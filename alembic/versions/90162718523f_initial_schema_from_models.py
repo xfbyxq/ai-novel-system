@@ -1,4 +1,4 @@
-"""initial_schema_from_models
+"""initial_schema_from_models.
 
 Revision ID: 90162718523f
 Revises:

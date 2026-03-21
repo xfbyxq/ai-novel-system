@@ -1,4 +1,4 @@
-"""生成任务 API 端点"""
+"""生成任务 API 端点."""
 
 from typing import Optional
 from uuid import UUID
@@ -33,7 +33,7 @@ async def create_generation_task(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """创建生成任务（企划、单章写作、批量写作或大纲完善）。
+    """创建生成任务（企划、单章写作、批量写作或大纲完善）.
 
     - task_type=planning: 执行企划阶段（世界观、角色、大纲）
     - task_type=writing: 执行单章写作（需在 input_data 中指定 chapter_number）
@@ -71,9 +71,7 @@ async def create_generation_task(
                 status_code=400, detail="批量写作必须指定 from_chapter 和 to_chapter"
             )
         if task_in.from_chapter > task_in.to_chapter:
-            raise HTTPException(
-                status_code=400, detail="from_chapter 不能大于 to_chapter"
-            )
+            raise HTTPException(status_code=400, detail="from_chapter 不能大于 to_chapter")
 
     # 创建任务记录
     input_data = task_in.input_data or {}
@@ -95,7 +93,7 @@ async def create_generation_task(
 
     # 使用 BackgroundTasks 在后台执行任务
     async def run_task():
-        """在后台执行生成任务"""
+        """在后台执行生成任务."""
         from core.database import async_session_factory
 
         async with async_session_factory() as session:
@@ -139,7 +137,7 @@ async def list_generation_tasks(
     page_size: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取生成任务列表。"""
+    """获取生成任务列表."""
     offset = (page - 1) * page_size
 
     query = select(GenerationTask)
@@ -169,7 +167,7 @@ async def get_generation_task(
     task_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取生成任务状态。"""
+    """获取生成任务状态."""
     result = await db.execute(
         select(GenerationTask).where(GenerationTask.id == task_id)
     )

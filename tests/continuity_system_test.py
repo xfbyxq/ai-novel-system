@@ -29,7 +29,7 @@ from core.logging_config import logger
 
 
 async def test_constraint_inference():
-    """测试 1: 约束推断功能"""
+    """测试 1: 约束推断功能."""
     print("\n" + "=" * 60)
     print("测试 1: 约束推断功能")
     print("=" * 60)
@@ -73,7 +73,7 @@ async def test_constraint_inference():
 
 
 async def test_context_propagation():
-    """测试 2: 上下文携带功能"""
+    """测试 2: 上下文携带功能."""
     print("\n" + "=" * 60)
     print("测试 2: 上下文携带功能")
     print("=" * 60)
@@ -131,7 +131,7 @@ async def test_context_propagation():
 
 
 async def test_validation():
-    """测试 3: 验证引擎功能"""
+    """测试 3: 验证引擎功能."""
     print("\n" + "=" * 60)
     print("测试 3: 验证引擎功能")
     print("=" * 60)
@@ -204,7 +204,7 @@ async def test_validation():
 
 
 async def test_full_integration():
-    """测试 4: 完整集成流程"""
+    """测试 4: 完整集成流程."""
     print("\n" + "=" * 60)
     print("测试 4: 完整集成流程（模拟）")
     print("=" * 60)
@@ -222,7 +222,7 @@ async def test_full_integration():
 
     # 模拟生成回调
     async def mock_generate(prompt: str) -> str:
-        """模拟章节生成"""
+        """模拟章节生成."""
         return """
         "什么东西？"林默问道。
         对方沉默片刻："那封信，关于你身世的秘密。"
@@ -264,7 +264,7 @@ async def test_full_integration():
 
 
 async def main():
-    """主测试函数"""
+    """主测试函数."""
     print("\n" + "=" * 60)
     print("🧪 章节连贯性保障系统功能验证")
     print("=" * 60)

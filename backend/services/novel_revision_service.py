@@ -17,7 +17,7 @@ from core.models.plot_outline import PlotOutline
 
 
 class NovelRevisionService:
-    """小说修订服务"""
+    """小说修订服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -25,7 +25,7 @@ class NovelRevisionService:
     async def update_world_setting(
         self, novel_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """更新世界观设定"""
+        """更新世界观设定."""
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -53,7 +53,7 @@ class NovelRevisionService:
     async def update_character(
         self, novel_id: str, character_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """更新角色信息"""
+        """更新角色信息."""
         try:
             novel_uuid = uuid.UUID(novel_id)
             char_uuid = uuid.UUID(character_id)
@@ -81,7 +81,7 @@ class NovelRevisionService:
     async def update_plot_outline(
         self, novel_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """更新剧情大纲"""
+        """更新剧情大纲."""
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -106,7 +106,7 @@ class NovelRevisionService:
     async def update_novel_info(
         self, novel_id: str, updates: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """更新小说基本信息"""
+        """更新小说基本信息."""
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:

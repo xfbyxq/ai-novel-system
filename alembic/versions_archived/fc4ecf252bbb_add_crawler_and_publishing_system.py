@@ -1,4 +1,4 @@
-"""add_crawler_and_publishing_system
+"""add_crawler_and_publishing_system.
 
 Revision ID: fc4ecf252bbb
 Revises: 40555b81bb5d

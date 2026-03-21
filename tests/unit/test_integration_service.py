@@ -1,10 +1,10 @@
-"""集成服务单元测试"""
+"""集成服务单元测试."""
 import pytest
 from backend.services.integration_service import IntegrationService
 
 
 async def test_run_end_to_end_workflow(db_session):
-    """测试运行端到端的自动化小说创作和发布工作流"""
+    """测试运行端到端的自动化小说创作和发布工作流."""
     # 测试服务
     service = IntegrationService(db_session)
 
@@ -27,7 +27,7 @@ async def test_run_end_to_end_workflow(db_session):
 
 
 async def test_get_workflow_history(db_session):
-    """测试获取工作流历史记录"""
+    """测试获取工作流历史记录."""
     # 测试服务
     service = IntegrationService(db_session)
 
@@ -44,7 +44,7 @@ async def test_get_workflow_history(db_session):
 
 
 async def test_get_workflow_detail(db_session):
-    """测试获取工作流详情"""
+    """测试获取工作流详情."""
     # 测试服务
     service = IntegrationService(db_session)
 

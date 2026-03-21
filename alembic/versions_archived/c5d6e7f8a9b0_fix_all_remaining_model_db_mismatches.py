@@ -1,4 +1,4 @@
-"""fix: add all missing columns, tables, and convert remaining enums to varchar
+"""fix: add all missing columns, tables, and convert remaining enums to varchar.
 
 彻底修复所有 ORM 模型与数据库的不匹配：
 1. 添加缺失列：plot_outlines.main_plot_detailed
@@ -25,7 +25,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """修复所有 ORM 模型与数据库的差异。"""
+    """修复所有 ORM 模型与数据库的差异."""
 
     # ========== 1. 添加缺失列 ==========
     # plot_outlines.main_plot_detailed (JSONB) - PlotOutline 模型第 76 行
@@ -183,7 +183,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """回滚所有更改。"""
+    """回滚所有更改."""
     # 删除新增表
     op.drop_table("character_name_versions")
     op.drop_index("ix_agent_activities_activity_type", table_name="agent_activities")

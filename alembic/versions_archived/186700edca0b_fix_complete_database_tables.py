@@ -1,4 +1,4 @@
-"""fix: complete database tables
+"""fix: complete database tables.
 
 Revision ID: 186700edca0b
 Revises: 82c931d1231a
@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def table_exists(table_name: str) -> bool:
-    """检查表是否存在"""
+    """检查表是否存在."""
     conn = op.get_bind()
     result = conn.execute(
         sa.text(

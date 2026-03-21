@@ -22,7 +22,7 @@ from core.models.chapter import Chapter
 
 
 class CharacterDataSyncService:
-    """角色数据同步服务"""
+    """角色数据同步服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -141,9 +141,7 @@ class CharacterDataSyncService:
             synced = sum(1 for r in sync_results if r["status"] == "success")
             failed = total - synced
 
-            logger.info(
-                f"✅ 角色数据同步完成：总计 {total}, 成功 {synced}, 失败 {failed}"
-            )
+            logger.info(f"✅ 角色数据同步完成：总计 {total}, 成功 {synced}, 失败 {failed}")
 
             return {
                 "status": "completed",
@@ -247,7 +245,7 @@ class CharacterDataSyncService:
     async def _get_character(
         self, character_id: UUID, novel_id: UUID
     ) -> Optional[Character]:
-        """获取角色对象"""
+        """获取角色对象."""
         result = await self.db.execute(
             select(Character).where(
                 Character.id == character_id, Character.novel_id == novel_id
@@ -258,7 +256,7 @@ class CharacterDataSyncService:
     async def _get_character_usage_from_chapters(
         self, novel_id: UUID, character_name: str
     ) -> Dict[str, Any]:
-        """从章节中提取角色使用数据"""
+        """从章节中提取角色使用数据."""
         # 获取所有章节
         result = await self.db.execute(
             select(Chapter)
@@ -301,7 +299,7 @@ class CharacterDataSyncService:
     async def _analyze_differences(
         self, character: Character, chapter_usage: Dict[str, Any], source_type: str
     ) -> List[Dict[str, Any]]:
-        """分析数据库与章节使用之间的差异"""
+        """分析数据库与章节使用之间的差异."""
         differences = []
 
         # 检查名字变体
@@ -324,7 +322,7 @@ class CharacterDataSyncService:
     async def _apply_sync_fixes(
         self, character: Character, differences: List[Dict[str, Any]], source_type: str
     ) -> Dict[str, Any]:
-        """应用同步修复"""
+        """应用同步修复."""
         if not differences:
             return {"status": "success", "message": "无需修复"}
 
@@ -365,7 +363,7 @@ class CharacterDataSyncService:
         differences: List[Dict[str, Any]],
         result: Dict[str, Any],
     ):
-        """记录同步历史"""
+        """记录同步历史."""
         self.sync_history.append(
             {
                 "timestamp": datetime.now(timezone.utc),
@@ -377,10 +375,10 @@ class CharacterDataSyncService:
         )
 
     def get_sync_history(self) -> List[Dict[str, Any]]:
-        """获取同步历史"""
+        """获取同步历史."""
         return self.sync_history
 
 
 def get_character_sync_service(db: AsyncSession) -> CharacterDataSyncService:
-    """获取角色同步服务实例"""
+    """获取角色同步服务实例."""
     return CharacterDataSyncService(db)

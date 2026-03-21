@@ -294,7 +294,7 @@ class EnhancedCrewManager:
     def _build_generation_prompt(
         self, chapter_plan: Dict[str, Any], prep_result: Dict[str, Any], **kwargs
     ) -> str:
-        """构建生成提示词"""
+        """构建生成提示词."""
         parts = []
 
         # 1. 章节策划
@@ -323,7 +323,7 @@ class EnhancedCrewManager:
         return "\n".join(parts)
 
     async def _call_writer_agent(self, prompt: str) -> str:
-        """调用作家 Agent（简化示例）"""
+        """调用作家 Agent（简化示例）."""
         return "本章内容..."
 
 
@@ -331,7 +331,7 @@ class EnhancedCrewManager:
 
 
 async def example_usage():
-    """使用示例"""
+    """使用示例."""
     # 准备小说数据
     novel_data = {
         "topic_analysis": {

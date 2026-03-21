@@ -1,4 +1,4 @@
-"""CrewAI 风格的小说生成 Crew 管理器
+"""CrewAI 风格的小说生成 Crew 管理器。
 
 采用直接编排模式，通过 QwenClient 调用通义千问模型，
 而非使用 CrewAI 的内置 LLM 集成。
@@ -39,7 +39,7 @@ from agents.chapter_summary_generator import ChapterSummaryGenerator
 
 
 class NovelCrewManager:
-    """小说生成 Crew 管理器
+    """小说生成 Crew 管理器。
 
     负责协调企划阶段和写作阶段的所有 Agent,
     通过直接调用 QwenClient 实现 Agent 间的数据传递和任务编排。
@@ -70,7 +70,7 @@ class NovelCrewManager:
         max_world_review_iterations: int = 2,
         max_plot_review_iterations: int = 2,
     ):
-        """初始化 Crew 管理器
+        """初始化 Crew 管理器。
 
         Args:
             qwen_client: 通义千问客户端实例
@@ -163,7 +163,7 @@ class NovelCrewManager:
         self.reflection_agent = None
 
     def _extract_json_from_response(self, response: str) -> dict | list:
-        """从 LLM 响应中提取 JSON
+        """从 LLM 响应中提取 JSON。
 
         LLM 可能会在 JSON 前后添加 markdown 代码块标记或其他文本,
         这个方法使用多种策略找到 JSON 内容并解析。
@@ -253,7 +253,7 @@ class NovelCrewManager:
     def _find_json_by_brackets(
         self, response: str, start_char: str, end_char: str
     ) -> Optional[dict | list]:
-        """使用括号匹配法找到完整的 JSON
+        """使用括号匹配法找到完整的 JSON。
 
         Args:
             response: 原始响应文本
@@ -365,7 +365,7 @@ class NovelCrewManager:
         max_tokens: int = 4096,
         expect_json: bool = True,
     ) -> dict | str:
-        """调用单个 Agent 并追踪成本
+        """调用单个 Agent 并追踪成本。
 
         Args:
             agent_name: Agent 名称（用于日志和成本追踪）
@@ -435,7 +435,7 @@ class NovelCrewManager:
         failed_response: str,
         max_retries: int = 2,
     ) -> dict | list:
-        """JSON 提取失败后，用修正提示词让 LLM 重新输出合法 JSON。"""
+        """JSON 提取失败后，用修正提示词让 LLM 重新输出合法 JSON."""
         json_fix_prompt = (
             "你上一次的输出无法解析为有效的JSON。请仅输出修正后的合法JSON，"
             "不要添加任何解释文字或markdown标记。\n\n"
@@ -486,7 +486,7 @@ class NovelCrewManager:
         context: str = "",
         length_type: str = "medium",
     ) -> dict[str, Any]:
-        """执行完整的企划阶段
+        """执行完整的企划阶段。
 
         顺序执行以下步骤：
         1. 主题分析师：分析市场趋势，推荐选题
@@ -794,7 +794,7 @@ class NovelCrewManager:
         writing_style: str = "modern",
         team_context: Optional[NovelTeamContext] = None,
     ) -> dict[str, Any]:
-        """执行单章写作阶段
+        """执行单章写作阶段。
 
         流程：
         1. 章节策划师：制定章节计划
@@ -1298,7 +1298,7 @@ class NovelCrewManager:
     def _build_plot_outline_context(
         self, plot_outline: dict | list, volume_number: int, chapter_number: int
     ) -> str:
-        """从全局大纲中提取与当前章节相关的上下文信息
+        """从全局大纲中提取与当前章节相关的上下文信息。
 
         提取内容包括：
         - 主线剧情核心冲突
@@ -1405,7 +1405,7 @@ class NovelCrewManager:
         return "\n".join(parts) if parts else "（无全局大纲信息）"
 
     def _build_previous_key_events(self, chapter_number: int) -> str:
-        """构建前几章的关键事件列表（用于防止重复）"""
+        """构建前几章的关键事件列表（用于防止重复）."""
         events = []
         for ch in range(max(1, chapter_number - 3), chapter_number):
             if ch not in self._chapter_summaries:
@@ -1435,7 +1435,7 @@ class NovelCrewManager:
         previous_key_events: str = "（无前章记录）",
         max_query_rounds: int = 2,
     ) -> str:
-        """处理 Writer 输出中的 [QUERY] 标记
+        """处理 Writer 输出中的 [QUERY] 标记。
 
         解析查询标记，调用 AgentQueryService 获取答案，
         然后让 Writer 在答案基础上重新写作。
@@ -1515,7 +1515,7 @@ class NovelCrewManager:
         options: dict,
         max_rounds: int = 3,
     ) -> dict:
-        """综合大纲完善功能
+        """综合大纲完善功能。
 
         对现有大纲进行全面的质量评估和优化，包括：
         - 结构完整性检查
@@ -1596,7 +1596,7 @@ class NovelCrewManager:
     async def _analyze_outline_issues(
         self, outline: dict, world_setting: dict, characters: list
     ) -> dict:
-        """分析大纲存在的问题"""
+        """分析大纲存在的问题."""
         analysis_prompt = f"""
 请分析以下小说大纲存在的问题和不足之处：
 
@@ -1644,7 +1644,7 @@ class NovelCrewManager:
         world_setting: dict,
         characters: list,
     ) -> list:
-        """基于分析结果生成优化建议"""
+        """基于分析结果生成优化建议."""
         suggestions_prompt = f"""
 基于以下大纲分析结果，请生成具体的优化建议：
 
@@ -1678,7 +1678,7 @@ class NovelCrewManager:
     async def _apply_outline_optimizations(
         self, outline: dict, suggestions: list, world_setting: dict, characters: list
     ) -> dict:
-        """应用优化建议到大纲"""
+        """应用优化建议到大纲."""
         if not suggestions:
             return outline
 
@@ -1710,7 +1710,7 @@ class NovelCrewManager:
     def _extract_improvements(
         self, original: dict, optimized: dict, suggestions: list
     ) -> list:
-        """提取本次优化的具体改进点"""
+        """提取本次优化的具体改进点."""
         improvements = []
 
         # 基于建议生成改进描述
@@ -1729,7 +1729,7 @@ class NovelCrewManager:
         return improvements
 
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
-        """判断是否应该停止完善迭代"""
+        """判断是否应该停止完善迭代."""
         quality_threshold = options.get("quality_threshold", 8.0)
 
         # 简单的质量评估逻辑
@@ -1749,7 +1749,7 @@ class NovelCrewManager:
         return has_positive_words or few_issues
 
     def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
-        """设置反思代理
+        """设置反思代理。
 
         Args:
             storage: 存储实例（如 NovelMemoryStorage）
@@ -1770,7 +1770,7 @@ class NovelCrewManager:
     def _extract_improvements(
         self, original: dict, optimized: dict, suggestions: list
     ) -> list:
-        """提取本次优化的具体改进点"""
+        """提取本次优化的具体改进点."""
         improvements = []
 
         # 基于建议生成改进描述
@@ -1789,7 +1789,7 @@ class NovelCrewManager:
         return improvements
 
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
-        """判断是否应该停止完善迭代"""
+        """判断是否应该停止完善迭代."""
         quality_threshold = options.get("quality_threshold", 8.0)
 
         # 简单的质量评估逻辑
@@ -1809,7 +1809,7 @@ class NovelCrewManager:
         return has_positive_words or few_issues
 
     def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
-        """设置反思代理
+        """设置反思代理。
 
         Args:
             storage: 存储实例（如 NovelMemoryStorage）

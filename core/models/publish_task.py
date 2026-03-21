@@ -1,4 +1,4 @@
-"""发布任务模型"""
+"""发布任务模型."""
 
 import enum
 import uuid
@@ -12,7 +12,7 @@ from core.database import Base
 
 
 class PublishType(str, enum.Enum):
-    """发布类型"""
+    """发布类型."""
 
     create_book = "create_book"  # 创建新书
     publish_chapter = "publish_chapter"  # 发布章节
@@ -20,7 +20,7 @@ class PublishType(str, enum.Enum):
 
 
 class PublishTaskStatus(str, enum.Enum):
-    """发布任务状态"""
+    """发布任务状态."""
 
     pending = "pending"
     running = "running"
@@ -30,7 +30,7 @@ class PublishTaskStatus(str, enum.Enum):
 
 
 class PublishTask(Base):
-    """发布任务"""
+    """发布任务."""
 
     __tablename__ = "publish_tasks"
 

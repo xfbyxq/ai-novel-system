@@ -407,9 +407,7 @@ async def revert_character_name_version(
     )
 
     if not reverted_version:
-        raise HTTPException(
-            status_code=404, detail=f"目标版本 {target_version_id} 未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"目标版本 {target_version_id} 未找到")
 
     return {
         "id": str(reverted_version.id),

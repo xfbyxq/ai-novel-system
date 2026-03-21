@@ -1,4 +1,4 @@
-"""审查反馈循环 - Writer 与 Editor 间的质量驱动迭代"""
+"""审查反馈循环 - Writer 与 Editor 间的质量驱动迭代."""
 
 import json
 from typing import Any, Dict, List, Optional
@@ -82,7 +82,7 @@ WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title
 class ReviewLoopHandler(
     BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]
 ):
-    """Writer-Editor 审查反馈循环处理器
+    """Writer-Editor 审查反馈循环处理器。
 
     流程：
     1. Writer 生成/修订内容
@@ -98,7 +98,7 @@ class ReviewLoopHandler(
         quality_threshold: float = 7.5,
         max_iterations: int = 3,
     ):
-        """初始化章节审查处理器
+        """初始化章节审查处理器。
 
         Args:
             client: LLM 客户端
@@ -123,7 +123,7 @@ class ReviewLoopHandler(
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
     ) -> ReviewLoopResult:
-        """执行 Writer-Editor 反馈循环
+        """执行 Writer-Editor 反馈循环。
 
         Args:
             initial_draft: Writer 的首版初稿
@@ -179,7 +179,7 @@ class ReviewLoopHandler(
         edited_content: str,
         review_data: Dict[str, Any],
     ) -> float:
-        """验证 Editor 润色后的内容质量
+        """验证 Editor 润色后的内容质量。
 
         Args:
             original_content: 原始内容
@@ -257,7 +257,7 @@ class ReviewLoopHandler(
         previous_issues: List[str],
         **context,
     ) -> str:
-        """构建 Editor 审查任务提示词"""
+        """构建 Editor 审查任务提示词."""
         chapter_number = context.get("chapter_number", 1)
         chapter_title = context.get("chapter_title", "")
         chapter_summary = context.get("chapter_summary", "")
@@ -279,7 +279,7 @@ class ReviewLoopHandler(
         review_data: Dict[str, Any],
         **context,
     ) -> str:
-        """构建 Writer 修订任务提示词"""
+        """构建 Writer 修订任务提示词."""
         chapter_number = context.get("chapter_number", 1)
         chapter_title = context.get("chapter_title", "")
         chapter_plan_json = context.get("chapter_plan_json", "{}")
@@ -304,7 +304,7 @@ class ReviewLoopHandler(
         )
 
     def _validate_revision(self, revised: str, original: str) -> bool:
-        """验证修订结果是否有效"""
+        """验证修订结果是否有效."""
         if not revised:
             return False
         # 修订后内容应该至少是原内容的 30%
@@ -316,7 +316,7 @@ class ReviewLoopHandler(
         final_content: str,
         last_report: Optional[ChapterQualityReport],
     ) -> None:
-        """填充最终结果"""
+        """填充最终结果."""
         result.final_content = final_content
         result.final_output = final_content
         result.final_score = last_report.overall_score if last_report else 0
@@ -329,7 +329,7 @@ class ReviewLoopHandler(
         result.editor_stats = editor_stats
 
     def _get_editor_stats(self, iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """获取 Editor 效果统计信息
+        """获取 Editor 效果统计信息。
 
         Args:
             iterations: 迭代历史记录
@@ -359,11 +359,11 @@ class ReviewLoopHandler(
         }
 
     def _get_empty_content(self) -> str:
-        """获取空内容"""
+        """获取空内容."""
         return ""
 
     def _parse_builder_response(self, response_text: str) -> str:
-        """解析 Writer 修订响应（纯文本，不需要 JSON 解析）"""
+        """解析 Writer 修订响应（纯文本，不需要 JSON 解析）."""
         return response_text.strip()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -378,7 +378,7 @@ class ReviewLoopHandler(
         previous_issues: List[str],
         **context,
     ) -> Dict[str, Any]:
-        """调用 Editor 进行审查评分+润色"""
+        """调用 Editor 进行审查评分+润色."""
         task_prompt = self._build_reviewer_task_prompt(
             content=content,
             iteration=iteration,
@@ -428,7 +428,7 @@ class ReviewLoopHandler(
         review_data: Dict[str, Any],
         **kwargs,
     ) -> None:
-        """记录迭代历史，并同步到 TeamContext"""
+        """记录迭代历史，并同步到 TeamContext."""
         # 调用基类实现
         result.add_iteration(
             iteration=iteration,
@@ -468,7 +468,7 @@ class ReviewLoopHandler(
     def _build_issues_text(
         self, report: ChapterQualityReport, review_data: Dict[str, Any]
     ) -> str:
-        """构建问题列表文本"""
+        """构建问题列表文本."""
         suggestions = review_data.get("revision_suggestions", [])
         if not suggestions:
             return "（无具体问题）"
@@ -495,7 +495,7 @@ class ReviewLoopHandler(
         team_context: Optional[NovelTeamContext] = None,
         chapter_type: Optional[str] = None,
     ) -> ReviewLoopResult:
-        """执行审查循环，支持使用 Editor 润色后的内容
+        """执行审查循环，支持使用 Editor 润色后的内容。
 
         这是原始 execute 方法的增强版本，会优先使用 Editor 返回的润色内容。
 

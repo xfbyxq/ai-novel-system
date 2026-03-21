@@ -1,4 +1,4 @@
-"""Logging configuration for the Novel Generation System"""
+"""Logging configuration for the Novel Generation System."""
 
 import logging
 import sys
@@ -18,7 +18,7 @@ LOG_FILE = "novel_system.log"
 
 
 def setup_logging():
-    """Set up logging configuration"""
+    """Set up logging configuration."""
     # Create root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(LOG_LEVEL)

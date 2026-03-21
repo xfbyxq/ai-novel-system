@@ -1,4 +1,4 @@
-"""AI 对话服务 - 提供智能辅助能力"""
+"""AI 对话服务 - 提供智能辅助能力."""
 
 import json
 import logging
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # 结构化修订建议类型
 class RevisionSuggestion:
-    """结构化的修订建议"""
+    """结构化的修订建议."""
 
     def __init__(
         self,
@@ -77,7 +77,7 @@ CRAWLER_TYPES = ["ranking", "trending_tags", "book_metadata", "genre_list"]
 RANKING_TYPES = ["yuepiao", "hotsales", "readIndex", "recom", "collect"]
 
 SYSTEM_PROMPTS = {
-    SCENE_NOVEL_CREATION: """你是一位专业的小说创作顾问，专门帮助作者规划小说世界。你需要根据用户的需求提供创意建议，包括但不限于：
+    SCENE_NOVEL_CREATION: """你是一位专业的小说创作顾问，专门帮助作者规划小说世界。你需要根据用户的需求提供创意建议，包括但不限于：.
 
 1. **世界观设定**：修炼体系、地理环境、势力划分、规则设定
 2. **角色设定**：主角/配角的性格、背景、能力、成长路线
@@ -85,7 +85,7 @@ SYSTEM_PROMPTS = {
 4. **类型特色**：根据用户选择的类型（玄幻、都市、仙侠等）提供该类型的经典元素
 
 请用中文回复，语气专业但亲切幽默。可以主动询问用户更多细节以便给出更好的建议。""",
-    SCENE_CRAWLER_TASK: """你是一位网络文学数据分析师，专门帮助用户分析市场趋势和制定爬虫策略。你需要根据用户的需求提供专业建议，包括但不限于：
+    SCENE_CRAWLER_TASK: """你是一位网络文学数据分析师，专门帮助用户分析市场趋势和制定爬虫策略。你需要根据用户的需求提供专业建议，包括但不限于：.
 
 1. **平台分析**：起点、纵横、番茄等主流平台的特点
 2. **数据维度**：排行榜类型（月票榜、畅销榜等）、分类筛选、标签分析
@@ -93,7 +93,7 @@ SYSTEM_PROMPTS = {
 4. **市场洞察**：热门类型分析、读者偏好趋势、竞用中文回复，专业品分析
 
 请且务实。可以主动询问用户想了解哪方面的数据。""",
-    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑助手，专门帮助作者修订和完善小说内容。根据用户的需求和小说的现有内容，**直接生成具体的修订内容**，包括但不限于：
+    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑助手，专门帮助作者修订和完善小说内容。根据用户的需求和小说的现有内容，**直接生成具体的修订内容**，包括但不限于：.
 
 1. **世界观修订**：直接生成优化后的修炼体系、地理环境、势力划分、规则设定内容
 2. **角色修订**：直接生成优化后的角色性格、背景、能力、成长路线描述
@@ -108,7 +108,7 @@ SYSTEM_PROMPTS = {
 - **直接可用**：生成的内容应该能直接替换原有内容使用
 
 请用中文回复，语气专业但亲切。如果用户需求不明确，可以简短询问确认，但不要过度分析。""",
-    SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。你需要根据小说的现有内容，提供全面的分析和建议，包括但不限于：
+    SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。你需要根据小说的现有内容，提供全面的分析和建议，包括但不限于：.
 
 1. **整体结构分析**：小说结构的合理性、节奏的把控、情节的连贯性
 2. **元素分析**：世界观、角色、大纲、章节内容的质量和协调性
@@ -127,7 +127,7 @@ WELCOME_MESSAGES = {
 
 
 class ChatMessage:
-    """对话消息"""
+    """对话消息."""
 
     def __init__(self, role: str, content: str):
         self.role = role
@@ -138,7 +138,7 @@ class ChatMessage:
 
 
 class ChatSession:
-    """对话会话"""
+    """对话会话."""
 
     def __init__(
         self,
@@ -178,38 +178,38 @@ class ChatSession:
         return result
 
     def get_conversation_history(self, limit: int = 10) -> list[dict]:
-        """获取最近的对话历史"""
+        """获取最近的对话历史."""
         return self.conversation_history[-limit:]
 
     def set_dialogue_state(self, state: str) -> None:
-        """设置对话状态"""
+        """设置对话状态."""
         self.dialogue_state = state
 
     def add_pending_question(self, question: str) -> None:
-        """添加待处理的问题"""
+        """添加待处理的问题."""
         self.pending_questions.append(question)
 
     def get_pending_question(self) -> Optional[str]:
-        """获取待处理的问题"""
+        """获取待处理的问题."""
         if self.pending_questions:
             return self.pending_questions.pop(0)
         return None
 
     def set_last_user_intent(self, intent: str) -> None:
-        """设置用户的最后意图"""
+        """设置用户的最后意图."""
         self.last_user_intent = intent
 
     def add_follow_up_question(self, question: str) -> None:
-        """添加后续问题"""
+        """添加后续问题."""
         self.follow_up_questions.append(question)
 
     def get_follow_up_questions(self) -> list[str]:
-        """获取后续问题"""
+        """获取后续问题."""
         return self.follow_up_questions
 
 
 class AiChatService:
-    """AI 对话服务"""
+    """AI 对话服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -232,7 +232,7 @@ class AiChatService:
         chapter_end: int = 10,
         force_db: bool = False,
     ) -> dict:
-        """获取小说的完整信息，包括世界观、角色、大纲和章节
+        """获取小说的完整信息，包括世界观、角色、大纲和章节.
 
         Args:
             novel_id: 小说ID
@@ -415,7 +415,7 @@ class AiChatService:
             return {"error": "获取小说信息失败，请稍后重试"}
 
     async def save_session(self, session: ChatSession) -> None:
-        """保存会话到数据库"""
+        """保存会话到数据库."""
         from sqlalchemy import insert
 
         from core.database import async_session_factory
@@ -477,7 +477,7 @@ class AiChatService:
                 await db.rollback()
 
     async def load_session(self, session_id: str) -> Optional[ChatSession]:
-        """从数据库加载会话"""
+        """从数据库加载会话."""
         from sqlalchemy import select
 
         from core.database import async_session_factory
@@ -531,7 +531,7 @@ class AiChatService:
     async def get_sessions(
         self, scene: Optional[str] = None, novel_id: Optional[str] = None
     ) -> list[dict]:
-        """获取会话列表
+        """获取会话列表.
 
         Args:
             scene: 场景过滤
@@ -582,7 +582,7 @@ class AiChatService:
                 return []
 
     async def delete_session(self, session_id: str) -> bool:
-        """删除会话"""
+        """删除会话."""
         from sqlalchemy import delete
 
         from core.database import async_session_factory
@@ -682,7 +682,7 @@ class AiChatService:
         return self.sessions.get(session_id)
 
     async def _generate_session_title(self, session: ChatSession) -> str:
-        """使用 AI 从对话内容中生成会话标题"""
+        """使用 AI 从对话内容中生成会话标题."""
         # 获取对话内容用于生成标题
         conversation_content = []
         for msg in session.messages[:6]:  # 只取前6条消息
@@ -734,7 +734,7 @@ class AiChatService:
             return "新会话"
 
     async def _update_session_title(self, session: ChatSession) -> None:
-        """更新会话标题到数据库"""
+        """更新会话标题到数据库."""
         if session.title:
             return  # 已有标题，不更新
 
@@ -767,14 +767,12 @@ class AiChatService:
                 await db.rollback()
 
     def _analyze_user_intent(self, user_message: str, scene: str) -> str:
-        """分析用户的意图，识别用户需求类型"""
+        """分析用户的意图，识别用户需求类型."""
         if scene == SCENE_NOVEL_REVISION:
             return self._analyze_revision_intent(user_message)
         elif scene == SCENE_NOVEL_CREATION:
             # 分析创作意图
-            if any(
-                keyword in user_message for keyword in ["世界观", "世界设定", "背景"]
-            ):
+            if any(keyword in user_message for keyword in ["世界观", "世界设定", "背景"]):
                 return "world_creation"
             elif any(keyword in user_message for keyword in ["角色", "人物", "主角"]):
                 return "character_creation"
@@ -800,7 +798,7 @@ class AiChatService:
             return "general"
 
     def _analyze_revision_intent(self, user_message: str) -> str:
-        """分析用户的修订意图，识别修订类型"""
+        """分析用户的修订意图，识别修订类型."""
         # 扩展关键词列表
         world_keywords = [
             "世界观",
@@ -922,14 +920,12 @@ class AiChatService:
     def _generate_follow_up_questions(
         self, intent: str, scene: str, novel_info: Optional[dict] = None
     ) -> list[str]:
-        """根据用户意图生成后续问题"""
+        """根据用户意图生成后续问题."""
         questions = []
 
         if scene == SCENE_NOVEL_REVISION:
             if intent == "world_setting":
-                questions.append(
-                    "你希望在世界观设定中重点改进哪个方面？（如修炼体系、地理环境、势力划分等）"
-                )
+                questions.append("你希望在世界观设定中重点改进哪个方面？（如修炼体系、地理环境、势力划分等）")
                 questions.append("你对当前世界观设定有什么具体的不满意之处？")
             elif intent == "character":
                 questions.append("你希望重点改进哪个角色？")
@@ -981,7 +977,7 @@ class AiChatService:
         return questions
 
     def _check_need_clarification(self, user_message: str, scene: str) -> bool:
-        """检查是否需要澄清用户意图"""
+        """检查是否需要澄清用户意图."""
         # 检查用户输入是否过于简短或模糊
         if len(user_message) < 10:
             return True
@@ -999,7 +995,7 @@ class AiChatService:
         return False
 
     def _safe_get(self, data: dict, path: str, default: Any = "") -> Any:
-        """安全访问嵌套字典字段
+        """安全访问嵌套字典字段.
 
         Args:
             data: 字典数据
@@ -1023,7 +1019,7 @@ class AiChatService:
         return current if current is not None else default
 
     def _merge_analysis(self, existing: dict, new: dict) -> dict:
-        """增量合并分析结果
+        """增量合并分析结果.
 
         strengths/weaknesses/suggestions 追加不重复项，
         genre_specific 替换为新值。
@@ -1055,7 +1051,7 @@ class AiChatService:
         return merged
 
     def _analyze_novel_content(self, novel_info: dict) -> dict:
-        """分析小说内容，生成分析结果"""
+        """分析小说内容，生成分析结果."""
         analysis = {
             "strengths": [],
             "weaknesses": [],
@@ -1106,28 +1102,20 @@ class AiChatService:
         # 基于小说类型的分析
         genre = novel_info.get("genre", "")
         if genre == "玄幻":
-            analysis["genre_specific"].append(
-                "作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写"
-            )
+            analysis["genre_specific"].append("作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写")
         elif genre == "都市":
-            analysis["genre_specific"].append(
-                "作为都市小说，建议加强人物关系和现实感的描写"
-            )
+            analysis["genre_specific"].append("作为都市小说，建议加强人物关系和现实感的描写")
         elif genre == "仙侠":
-            analysis["genre_specific"].append(
-                "作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定"
-            )
+            analysis["genre_specific"].append("作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定")
         elif genre == "历史":
-            analysis["genre_specific"].append(
-                "作为历史小说，建议加强历史细节的准确性和时代背景的描写"
-            )
+            analysis["genre_specific"].append("作为历史小说，建议加强历史细节的准确性和时代背景的描写")
 
         return analysis
 
     def _get_persistent_memory_context(
         self, novel_id: str, current_chapter: int = 0
     ) -> str:
-        """从持久化记忆获取增强上下文信息
+        """从持久化记忆获取增强上下文信息.
 
         Args:
             novel_id: 小说ID
@@ -1162,9 +1150,7 @@ class AiChatService:
             )
             if character_states:
                 context_parts.append("\n## 主要角色当前状态")
-                for name, state in list(character_states.items())[
-                    :5
-                ]:  # 只取5个主要角色
+                for name, state in list(character_states.items())[:5]:  # 只取5个主要角色
                     location = state.get("current_location", "未知")
                     level = state.get("cultivation_level", "")
                     emotional = state.get("emotional_state", "")
@@ -1208,7 +1194,7 @@ class AiChatService:
     def _initialize_persistent_memory_for_novel(
         self, novel_id: str, novel_info: dict
     ) -> None:
-        """为小说初始化持久化记忆
+        """为小说初始化持久化记忆.
 
         Args:
             novel_id: 小说ID
@@ -1256,7 +1242,7 @@ class AiChatService:
     def _generate_revision_prompt(
         self, user_message: str, revision_type: str, novel_info: dict
     ) -> str:
-        """根据修订类型和小说内容生成针对性的提示词"""
+        """根据修订类型和小说内容生成针对性的提示词."""
         # 生成小说分析
         analysis = self._analyze_novel_content(novel_info)
 
@@ -1336,9 +1322,7 @@ class AiChatService:
                             key_points.append(f"世界类型: {world_data['world_type']}")
                         if "power_system" in world_data:
                             power_system = world_data["power_system"]
-                            key_points.append(
-                                f"修炼体系: {power_system.get('name', '未知')}"
-                            )
+                            key_points.append(f"修炼体系: {power_system.get('name', '未知')}")
                             if "levels" in power_system:
                                 levels = power_system["levels"][:3]  # 只取前3个境界
                                 for level in levels:
@@ -1575,9 +1559,9 @@ class AiChatService:
                         stored_novel_id, chapter_start, chapter_end, force_db=True
                     )
                     session.context["novel_info"] = novel_info
-                    session.context["novel_version"] = (
-                        self.memory_service.get_novel_version(stored_novel_id)
-                    )
+                    session.context[
+                        "novel_version"
+                    ] = self.memory_service.get_novel_version(stored_novel_id)
                     logger.info(f"小说 {stored_novel_id} 信息已重新加载")
 
             if novel_info and "error" not in novel_info:
@@ -1701,9 +1685,7 @@ class AiChatService:
             user_intent, session.scene, session.context.get("novel_info")
         )
         if follow_up_questions:
-            assistant_message += (
-                f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
-            )
+            assistant_message += f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
 
         session.add_assistant_message(assistant_message)
 
@@ -1904,9 +1886,7 @@ class AiChatService:
                 user_intent, session.scene, session.context.get("novel_info")
             )
             if follow_up_questions:
-                follow_up_text = (
-                    f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
-                )
+                follow_up_text = f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
                 full_response += follow_up_text
                 yield follow_up_text
 
@@ -1933,7 +1913,7 @@ class AiChatService:
                 logger.error(f"保存会话失败: {save_error}")
 
     async def parse_novel_intent(self, user_input: str) -> dict:
-        """解析小说创建意图，将用户自然语言转换为结构化数据"""
+        """解析小说创建意图，将用户自然语言转换为结构化数据."""
 
         parse_prompt = f"""请分析以下用户输入，提取小说创建所需的信息。
 请以 JSON 格式返回结果，包含以下字段（如果没有相关信息则为空字符串或空列表）：
@@ -1988,7 +1968,7 @@ class AiChatService:
             return {"title": "", "genre": "", "tags": [], "synopsis": ""}
 
     async def parse_crawler_intent(self, user_input: str) -> dict:
-        """解析爬虫任务意图，将用户自然语言转换为结构化数据"""
+        """解析爬虫任务意图，将用户自然语言转换为结构化数据."""
 
         parse_prompt = f"""请分析以下用户输入，提取爬虫任务创建所需的信息。
 请以 JSON 格式返回结果，包含以下字段：
@@ -2068,7 +2048,7 @@ class AiChatService:
     async def extract_structured_suggestions(
         self, ai_response: str, novel_info: dict, revision_type: str
     ) -> List[Dict[str, Any]]:
-        """从AI响应中提取结构化的修订建议
+        """从AI响应中提取结构化的修订建议.
 
         Args:
             ai_response: AI的回复文本
@@ -2172,7 +2152,7 @@ AI修订建议内容：
     async def apply_suggestion_to_database(
         self, novel_id: str, suggestion: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """将单个修订建议应用到数据库
+        """将单个修订建议应用到数据库.
 
         Args:
             novel_id: 小说ID
@@ -2260,9 +2240,7 @@ AI修订建议内容：
                             suggested_value = items
                         else:
                             # 无法解析为结构化数据，拒绝更新
-                            logger.warning(
-                                f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}"
-                            )
+                            logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
                             return {
                                 "success": False,
                                 "error": f"字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。",
@@ -2284,9 +2262,7 @@ AI修订建议内容：
                         suggested_value = items
                     else:
                         # 无法解析为结构化数据，拒绝更新
-                        logger.warning(
-                            f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}"
-                        )
+                        logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
                         return {
                             "success": False,
                             "error": f"字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。",
@@ -2344,9 +2320,7 @@ AI修订建议内容：
                         target_id.startswith("new_") or len(target_id) < 32
                     ):
                         # 这是创建新角色的建议，跳过
-                        logger.warning(
-                            f"跳过创建新角色的建议: {target_name}, 需要手动创建角色"
-                        )
+                        logger.warning(f"跳过创建新角色的建议: {target_name}, 需要手动创建角色")
                         return {
                             "success": False,
                             "error": f"请先创建角色: {target_name}，然后再应用修订建议",
@@ -2469,7 +2443,7 @@ AI修订建议内容：
     async def apply_suggestions_batch(
         self, novel_id: str, suggestions: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """批量应用修订建议到数据库
+        """批量应用修订建议到数据库.
 
         Args:
             novel_id: 小说ID
@@ -2499,14 +2473,12 @@ AI修订建议内容：
             # 增加版本号
             current_version = self.memory_service.get_novel_version(novel_id)
             self.memory_service.version_map[novel_id] = current_version + 1
-            logger.info(
-                f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}"
-            )
+            logger.info(f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}")
 
         return results
 
     async def get_novel_characters(self, novel_id: str) -> List[Dict[str, Any]]:
-        """获取小说的所有角色
+        """获取小说的所有角色.
 
         Args:
             novel_id: 小说ID
@@ -2546,7 +2518,7 @@ AI修订建议内容：
                 return []
 
     async def get_novel_chapters(self, novel_id: str) -> List[Dict[str, Any]]:
-        """获取小说的所有章节
+        """获取小说的所有章节.
 
         Args:
             novel_id: 小说ID
@@ -2590,7 +2562,7 @@ AI修订建议内容：
     async def start_novel_dialogue_flow(
         self, session_id: str, scene: str = "create"
     ) -> str:
-        """启动小说对话流程（创建/查询/修改）
+        """启动小说对话流程（创建/查询/修改）.
 
         Args:
             session_id: 会话 ID
@@ -2622,7 +2594,7 @@ AI修订建议内容：
 
         # 根据场景返回不同的欢迎消息
         if flow_scene == NovelDialogueScene.CREATE:
-            return """您好！我是您的小说创作助手📚
+            return """您好！我是您的小说创作助手📚.
 
 我将通过对话帮您完成小说的创建，包括：
 ✅ 确认小说类型
@@ -2635,7 +2607,7 @@ AI修订建议内容：
 比如：玄幻、科幻、言情、都市、历史、悬疑等"""
 
         elif flow_scene == NovelDialogueScene.QUERY:
-            return """您好！我是您的小说查询助手📖
+            return """您好！我是您的小说查询助手📖.
 
 我可以帮您查询已有小说的各种信息：
 - 📚 基本信息（标题、类型、字数等）
@@ -2647,7 +2619,7 @@ AI修订建议内容：
 请告诉我您想查询哪部小说？您可以提供小说 ID、名称或关键词。"""
 
         elif flow_scene == NovelDialogueScene.REVISE:
-            return """您好！我是您的小说修订助手✏️
+            return """您好！我是您的小说修订助手✏️.
 
 我可以帮您通过对话修改小说内容：
 - 🌍 修改世界观设定
@@ -2663,7 +2635,7 @@ AI修订建议内容：
     async def process_novel_dialogue_message(
         self, session_id: str, user_message: str
     ) -> str:
-        """处理小说对话流程中的消息
+        """处理小说对话流程中的消息.
 
         Args:
             session_id: 会话 ID

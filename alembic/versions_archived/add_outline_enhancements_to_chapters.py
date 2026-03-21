@@ -1,4 +1,4 @@
-"""Add outline enhancements to chapters
+"""Add outline enhancements to chapters.
 
 Revision ID: add_outline_enhancements
 Revises: 2a4218cba9df

@@ -1,4 +1,4 @@
-"""平台账号模型"""
+"""平台账号模型."""
 
 import enum
 import uuid
@@ -12,7 +12,7 @@ from core.database import Base
 
 
 class AccountStatus(str, enum.Enum):
-    """账号状态"""
+    """账号状态."""
 
     active = "active"  # 正常
     inactive = "inactive"  # 未激活
@@ -21,7 +21,7 @@ class AccountStatus(str, enum.Enum):
 
 
 class PlatformAccount(Base):
-    """平台账号（加密存储凭证）"""
+    """平台账号（加密存储凭证）."""
 
     __tablename__ = "platform_accounts"
 

@@ -1,4 +1,4 @@
-"""Celery 应用配置"""
+"""Celery 应用配置."""
 
 from celery import Celery
 from backend.config import settings

@@ -1,4 +1,4 @@
-"""审查循环处理器基类
+"""审查循环处理器基类。
 
 使用模板方法模式封装 Designer-Reviewer 审查循环的核心迭代逻辑。
 子类只需实现特定领域的方法即可获得完整的审查循环功能。
@@ -37,7 +37,7 @@ TReport = TypeVar("TReport", bound=BaseQualityReport)  # 报告类型
 
 @dataclass
 class ReviewLoopConfig:
-    """审查循环配置
+    """审查循环配置。
 
     封装循环控制相关的参数。
     """
@@ -76,7 +76,7 @@ class ReviewLoopConfig:
 
 
 class QualityLevel(Enum):
-    """质量级别枚举
+    """质量级别枚举。
 
     根据评分将内容分为5个质量级别，
     每个级别对应不同的修订策略指引。
@@ -90,7 +90,7 @@ class QualityLevel(Enum):
 
     @classmethod
     def from_score(cls, score: float) -> "QualityLevel":
-        """根据评分返回对应的质量级别"""
+        """根据评分返回对应的质量级别."""
         if score < 5.0:
             return cls.CRITICAL
         elif score < 6.0:
@@ -103,7 +103,7 @@ class QualityLevel(Enum):
             return cls.EXCELLENT
 
     def get_revision_strategy(self) -> str:
-        """获取对应的中文修订策略指引"""
+        """获取对应的中文修订策略指引."""
         strategies = {
             QualityLevel.CRITICAL: (
                 "【修订策略：结构性重写】\n"
@@ -134,7 +134,7 @@ class QualityLevel(Enum):
         return strategies.get(self, strategies[QualityLevel.MEDIUM])
 
     def get_feedback_prefix(self) -> str:
-        """获取反馈文本的质量层级引导语"""
+        """获取反馈文本的质量层级引导语."""
         prefixes = {
             QualityLevel.CRITICAL: (
                 "【严重不合格 - 需要大幅重写】\n"
@@ -160,7 +160,7 @@ class QualityLevel(Enum):
 
 @dataclass
 class IssueRecord:
-    """单条问题记录，用于跨轮次追踪问题生命周期"""
+    """单条问题记录，用于跨轮次追踪问题生命周期."""
 
     id: str  # 由 area + description 生成的标识
     area: str  # 问题领域
@@ -174,7 +174,7 @@ class IssueRecord:
 
 
 class IssueTracker:
-    """跨轮次问题追踪器
+    """跨轮次问题追踪器。
 
     使用字符 bigram Jaccard 相似度进行问题匹配（无外部依赖），
     追踪每个问题在多轮审查中的生命周期（open → resolved/recurring）。
@@ -195,7 +195,7 @@ class IssueTracker:
         report: BaseQualityReport,
         review_data: Dict[str, Any],
     ) -> None:
-        """更新一轮审查的问题状态
+        """更新一轮审查的问题状态。
 
         Args:
             round_num: 当前轮次
@@ -273,7 +273,7 @@ class IssueTracker:
         return self._new_this_round
 
     def get_active_issues(self) -> List[IssueRecord]:
-        """获取所有活跃问题（open + recurring）"""
+        """获取所有活跃问题（open + recurring）."""
         return [r for r in self._records if r.status in ("open", "recurring")]
 
     def get_summary(self) -> Dict[str, int]:
@@ -287,7 +287,7 @@ class IssueTracker:
     # ── 格式化输出 ────────────────────────────────────────────
 
     def format_for_reviewer(self, max_chars: int = 1000) -> str:
-        """生成给 Reviewer 的历史问题摘要"""
+        """生成给 Reviewer 的历史问题摘要."""
         if not self._records:
             return ""
 
@@ -339,7 +339,7 @@ class IssueTracker:
         return result
 
     def format_for_builder(self, max_chars: int = 800) -> str:
-        """生成给 Builder 的待解决问题清单（按优先级排序）"""
+        """生成给 Builder 的待解决问题清单（按优先级排序）."""
         active = self.get_active_issues()
         if not active:
             return ""
@@ -387,7 +387,7 @@ class IssueTracker:
         review_data: Dict[str, Any],
         round_num: int,
     ) -> List[Dict[str, str]]:
-        """从报告和审查数据中提取所有问题（兼容所有子类格式）"""
+        """从报告和审查数据中提取所有问题（兼容所有子类格式）."""
         issues: List[Dict[str, str]] = []
         seen_descs: Set[str] = set()  # 去重
 
@@ -453,7 +453,7 @@ class IssueTracker:
     def _find_matching_record(
         self, issue_dict: Dict[str, str]
     ) -> Optional[IssueRecord]:
-        """在已有记录中查找与当前问题匹配的记录"""
+        """在已有记录中查找与当前问题匹配的记录."""
         area = issue_dict.get("area", "")
         desc = issue_dict.get("description", "")
 
@@ -481,7 +481,7 @@ class IssueTracker:
 
     @staticmethod
     def _bigram_similarity(text1: str, text2: str) -> float:
-        """计算两个文本的字符 bigram Jaccard 相似度"""
+        """计算两个文本的字符 bigram Jaccard 相似度."""
         if not text1 or not text2:
             return 0.0
         if text1 == text2:
@@ -504,12 +504,12 @@ class IssueTracker:
 
     @staticmethod
     def _generate_id(area: str, description: str) -> str:
-        """生成问题的唯一标识"""
+        """生成问题的唯一标识."""
         return f"{area}::{description[:50]}"
 
     @staticmethod
     def _compress_text(text: str, max_chars: int) -> str:
-        """压缩文本到指定长度"""
+        """压缩文本到指定长度."""
         if len(text) <= max_chars:
             return text
         # 保留开头和结尾，中间截断
@@ -518,7 +518,7 @@ class IssueTracker:
 
 
 class ReviewProgressSummary:
-    """审查进度摘要
+    """审查进度摘要。
 
     构建审查过程的全局视角，包括评分趋势、各轮概况。
     """
@@ -533,7 +533,7 @@ class ReviewProgressSummary:
         score: float,
         issue_tracker: Optional["IssueTracker"] = None,
     ) -> None:
-        """每轮更新进度信息"""
+        """每轮更新进度信息."""
         round_info: Dict[str, Any] = {
             "iteration": iteration,
             "score": score,
@@ -554,7 +554,7 @@ class ReviewProgressSummary:
 
     @property
     def score_trend(self) -> str:
-        """获取评分趋势描述"""
+        """获取评分趋势描述."""
         if len(self._scores) < 2:
             return "首轮评估"
 
@@ -569,7 +569,7 @@ class ReviewProgressSummary:
             return "有所下降"
 
     def format_for_reviewer(self, max_chars: int = 800) -> str:
-        """生成给 Reviewer 的进度概览"""
+        """生成给 Reviewer 的进度概览."""
         if not self._rounds:
             return ""
 
@@ -615,7 +615,7 @@ class ReviewProgressSummary:
         return result
 
     def format_for_builder(self, max_chars: int = 500) -> str:
-        """生成给 Builder 的简洁进度文本"""
+        """生成给 Builder 的简洁进度文本."""
         if len(self._rounds) < 2:
             return ""
 
@@ -634,7 +634,7 @@ class ReviewProgressSummary:
 
 
 class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
-    """审查循环处理器基类
+    """审查循环处理器基类。
 
     使用模板方法模式，将共同的迭代控制逻辑封装在基类中，
     子类只需实现特定领域的抽象方法。
@@ -660,7 +660,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         max_iterations: int = 2,
         config: Optional[ReviewLoopConfig] = None,
     ):
-        """初始化审查循环处理器
+        """初始化审查循环处理器。
 
         Args:
             client: LLM 客户端
@@ -696,7 +696,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     # ══════════════════════════════════════════════════════════════════════════
 
     async def execute(self, initial_content: TContent, **context) -> TResult:
-        """执行审查循环（模板方法）
+        """执行审查循环（模板方法）。
 
         这是核心的模板方法，定义了审查循环的完整流程。
         子类通过实现抽象方法来定制特定领域的行为。
@@ -883,7 +883,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _get_loop_name(self) -> str:
-        """获取循环名称（用于日志）
+        """获取循环名称（用于日志）。
 
         Returns:
             如 "WorldReview", "CharacterReview", "PlotReview", "ReviewLoop"
@@ -892,7 +892,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _create_result(self) -> TResult:
-        """创建空的结果对象
+        """创建空的结果对象。
 
         Returns:
             对应类型的审查结果实例
@@ -901,7 +901,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _create_quality_report(self, review_data: Dict[str, Any]) -> TReport:
-        """从 Reviewer 响应创建质量报告
+        """从 Reviewer 响应创建质量报告。
 
         Args:
             review_data: Reviewer 返回的评估数据
@@ -913,7 +913,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _get_reviewer_system_prompt(self) -> str:
-        """获取 Reviewer 的 system prompt
+        """获取 Reviewer 的 system prompt。
 
         Returns:
             Reviewer 角色的系统提示词
@@ -929,7 +929,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         previous_issues: List[str],
         **context,
     ) -> str:
-        """构建 Reviewer 的任务提示词
+        """构建 Reviewer 的任务提示词。
 
         Args:
             content: 当前被审查的内容
@@ -945,7 +945,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _get_builder_system_prompt(self) -> str:
-        """获取 Builder 的 system prompt
+        """获取 Builder 的 system prompt。
 
         Returns:
             Builder/Designer/Architect 角色的系统提示词
@@ -963,7 +963,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         review_data: Dict[str, Any],
         **context,
     ) -> str:
-        """构建修订任务的提示词
+        """构建修订任务的提示词。
 
         Args:
             score: 当前评分
@@ -981,7 +981,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @abstractmethod
     def _validate_revision(self, revised: TContent, original: TContent) -> bool:
-        """验证修订结果是否有效
+        """验证修订结果是否有效。
 
         Args:
             revised: 修订后的内容
@@ -999,7 +999,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         final_content: TContent,
         last_report: Optional[TReport],
     ) -> None:
-        """填充最终结果
+        """填充最终结果。
 
         Args:
             result: 结果对象（原地修改）
@@ -1013,15 +1013,15 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     # ══════════════════════════════════════════════════════════════════════════
 
     def _get_reviewer_agent_name(self) -> str:
-        """获取 Reviewer 的代理名称（用于成本追踪）"""
+        """获取 Reviewer 的代理名称（用于成本追踪）."""
         return f"{self._get_loop_name()}审查员"
 
     def _get_builder_agent_name(self) -> str:
-        """获取 Builder 的代理名称（用于成本追踪）"""
+        """获取 Builder 的代理名称（用于成本追踪）."""
         return f"{self._get_loop_name()}修订者"
 
     def _get_dimension_names(self) -> Dict[str, str]:
-        """获取维度名称映射（用于反馈文本）
+        """获取维度名称映射（用于反馈文本）。
 
         Returns:
             英文维度名 -> 中文维度名的映射
@@ -1029,7 +1029,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         return {}
 
     def _build_feedback_text(self, report: TReport, review_data: Dict[str, Any]) -> str:
-        """构建反馈文本
+        """构建反馈文本。
 
         自动读取 self._quality_level 和 self._issue_tracker，
         生成包含质量层级引导语和问题解决状态的增强反馈。
@@ -1068,7 +1068,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         return "\n".join(lines)
 
     def _build_issues_text(self, report: TReport, review_data: Dict[str, Any]) -> str:
-        """构建问题列表文本
+        """构建问题列表文本。
 
         默认实现：列出所有严重问题。
         子类可覆盖以添加特定领域的问题格式。
@@ -1104,7 +1104,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     def _collect_issues_for_next_round(
         self, report: TReport, review_data: Dict[str, Any]
     ) -> List[str]:
-        """收集问题用于下一轮审查
+        """收集问题用于下一轮审查。
 
         默认实现：收集所有 critical_issues。
         子类可覆盖以添加特定领域的问题收集逻辑。
@@ -1139,7 +1139,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         review_data: Dict[str, Any],
         **kwargs,
     ) -> None:
-        """记录迭代历史
+        """记录迭代历史。
 
         默认实现：使用 result.add_iteration()。
         子类可覆盖以添加额外字段。
@@ -1167,7 +1167,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         previous_score: float,
         previous_issues: List[str],
     ) -> str:
-        """构建迭代上下文文本
+        """构建迭代上下文文本。
 
         用于告诉 Reviewer 这是第几轮审查，上一轮的问题是什么。
         自动读取 self._issue_tracker 和 self._progress_summary 生成增强上下文。
@@ -1235,7 +1235,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     # ══════════════════════════════════════════════════════════════════════════
 
     def _determine_quality_level(self, score: float) -> QualityLevel:
-        """根据评分确定质量级别
+        """根据评分确定质量级别。
 
         子类可覆盖以自定义质量分界。
         """
@@ -1244,14 +1244,14 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
     def _build_revision_strategy_text(
         self, quality_level: QualityLevel, score: float
     ) -> str:
-        """根据质量级别生成修订策略指引
+        """根据质量级别生成修订策略指引。
 
         子类可覆盖以添加领域特定的策略细节。
         """
         return quality_level.get_revision_strategy()
 
     def _enhance_revision_prompt(self, original_prompt: str) -> str:
-        """在子类的 _build_revision_prompt 返回值前注入增强上下文
+        """在子类的 _build_revision_prompt 返回值前注入增强上下文。
 
         读取 self._quality_level, self._issue_tracker, self._progress_summary，
         组装修订策略、进度上下文和问题优先级清单。
@@ -1295,7 +1295,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         return f"{prefix}\n\n---以下是具体修订任务---\n\n{original_prompt}"
 
     def _get_enhanced_reviewer_system_suffix(self) -> str:
-        """非首轮审查时追加到 Reviewer system prompt 的追踪指引"""
+        """非首轮审查时追加到 Reviewer system prompt 的追踪指引."""
         return (
             "\n\n【审查追踪指引】\n"
             "如果这不是首轮审查，请特别注意：\n"
@@ -1317,7 +1317,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         previous_issues: List[str],
         **context,
     ) -> Dict[str, Any]:
-        """调用 Reviewer 进行评估
+        """调用 Reviewer 进行评估。
 
         Args:
             content: 被评估的内容
@@ -1379,7 +1379,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         review_data: Dict[str, Any],
         **context,
     ) -> TContent:
-        """调用 Builder 进行修订
+        """调用 Builder 进行修订。
 
         Args:
             score: 当前评分
@@ -1428,7 +1428,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
             return self._get_empty_content()
 
     def _parse_builder_response(self, response_text: str) -> TContent:
-        """解析 Builder 响应
+        """解析 Builder 响应。
 
         默认实现: 提取 JSON.
         章节审查子类应覆盖此方法以返回纯文本.
@@ -1444,7 +1444,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         )
 
     def _get_empty_content(self) -> TContent:
-        """获取空内容（修订失败时的默认值）
+        """获取空内容（修订失败时的默认值）。
 
         子类应覆盖此方法返回正确类型的空值。
 
@@ -1459,7 +1459,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
     @staticmethod
     def to_json(obj: Any, indent: int = 2, max_length: Optional[int] = None) -> str:
-        """将对象转换为 JSON 字符串
+        """将对象转换为 JSON 字符串。
 
         Args:
             obj: 要转换的对象

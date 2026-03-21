@@ -40,7 +40,7 @@ class ContinuityConstraint:
     confidence: float = 0.9
 
     def __post_init__(self):
-        """验证数据有效性"""
+        """验证数据有效性."""
         if not 1 <= self.priority <= 10:
             raise ValueError(f"Priority must be between 1 and 10, got {self.priority}")
         if not 0 <= self.confidence <= 1:
@@ -49,7 +49,7 @@ class ContinuityConstraint:
             )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "constraint_type": self.constraint_type,
             "description": self.description,
@@ -62,7 +62,7 @@ class ContinuityConstraint:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ContinuityConstraint":
-        """从字典创建"""
+        """从字典创建."""
         return cls(
             constraint_type=data.get("constraint_type", "other"),
             description=data.get("description", ""),
@@ -106,14 +106,14 @@ class ValidationReport:
     quality_score: float = 0.0
 
     def __post_init__(self):
-        """根据验证结果自动设置 needs_regeneration"""
+        """根据验证结果自动设置 needs_regeneration."""
         if self.overall_assessment == "严重问题":
             self.needs_regeneration = True
         elif self.overall_assessment == "需改进" and len(self.critical_issues) > 0:
             self.needs_regeneration = True
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "overall_assessment": self.overall_assessment,
             "satisfied_constraints": self.satisfied_constraints,
@@ -127,7 +127,7 @@ class ValidationReport:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ValidationReport":
-        """从字典创建"""
+        """从字典创建."""
         return cls(
             overall_assessment=data.get("overall_assessment", "需改进"),
             satisfied_constraints=data.get("satisfied_constraints", []),
@@ -168,7 +168,7 @@ class ChapterTransition:
     created_at: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self):
-        """验证最终决策的有效性"""
+        """验证最终决策的有效性."""
         valid_decisions = ["直接采用", "修改后采用", "重新生成"]
         if self.final_decision not in valid_decisions:
             raise ValueError(
@@ -176,7 +176,7 @@ class ChapterTransition:
             )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "novel_id": self.novel_id,
             "from_chapter": self.from_chapter,
@@ -190,7 +190,7 @@ class ChapterTransition:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ChapterTransition":
-        """从字典创建"""
+        """从字典创建."""
         return cls(
             novel_id=data["novel_id"],
             from_chapter=data["from_chapter"],

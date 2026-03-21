@@ -1,4 +1,4 @@
-"""生成服务 - 连接 API 层和 Agent 层"""
+"""生成服务 - 连接 API 层和 Agent 层."""
 
 import json
 import re
@@ -32,7 +32,7 @@ from .agent_activity_recorder import AgentActivityRecorder, get_agent_activity_r
 
 
 class GenerationService:
-    """小说生成服务，编排 CrewManager 并将结果持久化到数据库。"""
+    """小说生成服务，编排 CrewManager 并将结果持久化到数据库."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -79,7 +79,7 @@ class GenerationService:
         self._last_active_time: dict[str, datetime] = {}
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
-        """执行企划阶段并保存结果到数据库。"""
+        """执行企划阶段并保存结果到数据库."""
         # 加载小说
         result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = result.scalar_one_or_none()
@@ -99,9 +99,7 @@ class GenerationService:
         )
         existing_task = existing_result.scalar_one_or_none()
         if existing_task:
-            raise ValueError(
-                f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})"
-            )
+            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -329,7 +327,7 @@ class GenerationService:
             raise
 
     async def run_outline_refinement(self, novel_id: UUID, task_id: UUID) -> dict:
-        """执行大纲完善任务并保存结果到数据库。"""
+        """执行大纲完善任务并保存结果到数据库."""
         from agents.crew_manager import NovelCrewManager
         from core.models.plot_outline import PlotOutline
         from core.models.world_setting import WorldSetting
@@ -356,9 +354,7 @@ class GenerationService:
         existing_tasks = existing_result.scalars().all()
         if existing_tasks:
             existing_task = existing_tasks[0]  # 取最新的一条
-            raise ValueError(
-                f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})"
-            )
+            raise ValueError(f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})")
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -409,9 +405,7 @@ class GenerationService:
                 logger.error(
                     f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}"
                 )
-                raise ValueError(
-                    f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}"
-                )
+                raise ValueError(f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}")
 
             world_data = (
                 {
@@ -585,7 +579,7 @@ class GenerationService:
         chapter_number: int,
         volume_number: int = 1,
     ) -> dict:
-        """执行单章写作并保存结果到数据库。"""
+        """执行单章写作并保存结果到数据库."""
         # 加载小说及相关数据
         result = await self.db.execute(
             select(Novel)
@@ -919,7 +913,7 @@ class GenerationService:
         to_chapter: int,
         volume_number: int = 1,
     ) -> dict:
-        """执行批量章节写作并保存结果到数据库。"""
+        """执行批量章节写作并保存结果到数据库."""
         # 更新任务状态
         task_result = await self.db.execute(
             select(GenerationTask).where(GenerationTask.id == task_id)
@@ -949,8 +943,7 @@ class GenerationService:
             all_results = []
 
             logger.info(
-                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，"
-                f"共 {total_chapters} 章"
+                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，" f"共 {total_chapters} 章"
             )
 
             # 初始化Agent调度器
@@ -1046,8 +1039,7 @@ class GenerationService:
                     # 连续失败超过阈值，中断批量生成
                     if continuous_failures >= max_continuous_failures:
                         logger.error(
-                            f"⚠️ 连续{max_continuous_failures}章生成失败，"
-                            f"中止批量生成以防止上下文断裂"
+                            f"⚠️ 连续{max_continuous_failures}章生成失败，" f"中止批量生成以防止上下文断裂"
                         )
                         batch_interrupted = True
                         # 记录剩余未生成的章节
@@ -1097,9 +1089,7 @@ class GenerationService:
                 task.completed_at = datetime.now(timezone.utc)
 
                 # 构建摘要信息
-                summary = (
-                    f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
-                )
+                summary = f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
                 if batch_interrupted:
                     summary += f"，因连续失败中断（跳过 {skipped_chapters} 章）"
 
@@ -1116,9 +1106,7 @@ class GenerationService:
 
                 # 构建错误信息
                 if batch_interrupted:
-                    task.error_message = (
-                        f"连续{max_continuous_failures}章生成失败，批量任务已中断"
-                    )
+                    task.error_message = f"连续{max_continuous_failures}章生成失败，批量任务已中断"
                 elif failed_chapters_list > 0:
                     task.error_message = f"{failed_chapters_list} 章生成失败"
                 else:
@@ -1155,7 +1143,7 @@ class GenerationService:
         chapter_number: int,
         volume_number: int = 1,
     ) -> dict:
-        """内部方法：生成单个章节（不创建任务记录）。"""
+        """内部方法：生成单个章节（不创建任务记录）."""
         # 加载小说及相关数据
         result = await self.db.execute(
             select(Novel)
@@ -1361,11 +1349,9 @@ class GenerationService:
     async def _try_dynamic_outline_update(
         self, novel_id: UUID, current_chapter: int
     ) -> None:
-        """尝试执行大纲动态更新（不阻塞章节写作流程）"""
+        """尝试执行大纲动态更新（不阻塞章节写作流程）."""
         try:
-            logger.info(
-                f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}"
-            )
+            logger.info(f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}")
 
             # 加载最近 N 章的摘要
             interval = settings.OUTLINE_UPDATE_INTERVAL
@@ -1458,8 +1444,7 @@ class GenerationService:
                 await self.db.commit()
             else:
                 logger.info(
-                    f"[DynamicOutline] 跳过更新: "
-                    f"{update_result.get('reason', '未知原因')}"
+                    f"[DynamicOutline] 跳过更新: " f"{update_result.get('reason', '未知原因')}"
                 )
 
         except Exception as e:
@@ -1471,7 +1456,7 @@ class GenerationService:
     # ==================== 辅助方法 ====================
 
     def _cleanup_expired_counters(self, max_inactive_hours: int = 24):
-        """清理长期未活跃的小说计数器，防止内存泄漏
+        """清理长期未活跃的小说计数器，防止内存泄漏.
 
         Args:
             max_inactive_hours: 最大非活跃小时数，默认24小时
@@ -1494,7 +1479,7 @@ class GenerationService:
     def _build_previous_context(
         self, novel_id: UUID, novel: Novel, chapter_number: int
     ) -> str:
-        """构建结构化的前置章节上下文
+        """构建结构化的前置章节上下文.
 
         优先使用记忆系统中的结构化摘要，回退到智能截取。
 
@@ -1516,9 +1501,7 @@ class GenerationService:
                 if ch_num_str in summaries:
                     # 使用结构化摘要
                     summary = summaries[ch_num_str]
-                    previous_context += (
-                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
-                    )
+                    previous_context += f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
 
                     key_events = summary.get("key_events", [])
                     if key_events:
@@ -1557,7 +1540,7 @@ class GenerationService:
     def _extract_chapter_summary(
         self, content: str, chapter_plan: dict, chapter_number: int
     ) -> dict:
-        """从章节内容提取结构化摘要
+        """从章节内容提取结构化摘要.
 
         Args:
             content: 章节完整内容
@@ -1591,9 +1574,7 @@ class GenerationService:
         return {
             "chapter_number": chapter_number,
             "title": chapter_plan.get("title", f"第{chapter_number}章"),
-            "key_events": chapter_plan.get("plot_points", [])[
-                :5
-            ],  # 主要事件（最多5个）
+            "key_events": chapter_plan.get("plot_points", [])[:5],  # 主要事件（最多5个）
             "character_changes": self._extract_character_mentions(content),  # 角色变化
             "plot_progress": plot_progress,  # 情节摘要
             "foreshadowing": chapter_plan.get("foreshadowing", []),  # 伏笔
@@ -1601,7 +1582,7 @@ class GenerationService:
         }
 
     def _format_character_states(self, states_dict: dict) -> str:
-        """将角色状态字典格式化为提示词字符串
+        """将角色状态字典格式化为提示词字符串.
 
         Args:
             states_dict: 角色状态字典 {角色名: 状态信息}
@@ -1632,7 +1613,7 @@ class GenerationService:
         return "\n\n".join(parts) if parts else ""
 
     def _extract_character_mentions(self, content: str) -> str:
-        """提取角色变化描述
+        """提取角色变化描述.
 
         简化实现：返回内容中可能的角色状态变化关键词。
         后续可增强为 LLM 提取或更复杂的规则匹配。
@@ -1687,7 +1668,7 @@ class GenerationService:
     def _get_or_create_team_context(
         self, novel_id: str, novel_title: str, novel_data: dict
     ) -> NovelTeamContext:
-        """获取或创建小说的 TeamContext
+        """获取或创建小说的 TeamContext.
 
         TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享。
 
@@ -1714,7 +1695,7 @@ class GenerationService:
     async def _initialize_novel_persistent_memory(
         self, novel_id: UUID, planning_result: dict
     ):
-        """初始化小说的持久化长期记忆
+        """初始化小说的持久化长期记忆.
 
         在企划阶段完成后调用，保存世界观、角色、大纲等核心设定。
 
@@ -1748,7 +1729,7 @@ class GenerationService:
     async def _build_previous_context_enhanced(
         self, novel_id: UUID, novel: Novel, chapter_number: int
     ) -> str:
-        """构建增强的前置章节上下文
+        """构建增强的前置章节上下文.
 
         优先使用持久化记忆系统，回退到内存缓存和数据库。
 
@@ -1781,7 +1762,7 @@ class GenerationService:
     async def _record_planning_activities(
         self, novel_id: UUID, task_id: UUID, planning_result: dict, cost_summary: dict
     ):
-        """记录企划阶段的 Agent 活动摘要
+        """记录企划阶段的 Agent 活动摘要.
 
         Args:
             novel_id: 小说 ID

@@ -1,4 +1,4 @@
-"""大纲相关的 Pydantic schemas"""
+"""大纲相关的 Pydantic schemas."""
 
 from datetime import datetime
 from typing import Optional
@@ -8,16 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorldSettingResponse(BaseModel):
-    """世界观设定响应模型"""
+    """世界观设定响应模型."""
 
     id: UUID = Field(..., description="世界观设定唯一标识符")
     novel_id: UUID = Field(..., description="所属小说 ID")
-    world_name: Optional[str] = Field(
-        default=None, description="世界名称，如'青玄大陆'、'蔚蓝星'"
-    )
-    world_type: Optional[str] = Field(
-        default=None, description="世界类型：仙侠/都市/科幻/武侠/悬疑等"
-    )
+    world_name: Optional[str] = Field(default=None, description="世界名称，如'青玄大陆'、'蔚蓝星'")
+    world_type: Optional[str] = Field(default=None, description="世界类型：仙侠/都市/科幻/武侠/悬疑等")
     power_system: Optional[dict] = Field(
         default=None,
         description="力量体系，格式：{name: 体系名，levels: [等级列表], description: 描述}",
@@ -40,7 +36,7 @@ class WorldSettingResponse(BaseModel):
 
 
 class WorldSettingUpdate(BaseModel):
-    """更新世界观设定的请求模型（仅更新提供的字段，不存在时自动创建）"""
+    """更新世界观设定的请求模型（仅更新提供的字段，不存在时自动创建）."""
 
     world_name: Optional[str] = Field(default=None, description="世界名称")
     world_type: Optional[str] = Field(
@@ -65,14 +61,12 @@ class WorldSettingUpdate(BaseModel):
 
 
 class VolumeInfo(BaseModel):
-    """卷信息详细模型（增强版）"""
+    """卷信息详细模型（增强版）."""
 
     number: int = Field(..., description="卷号")
     title: str = Field(..., description="卷标题")
     summary: Optional[str] = Field(default=None, description="卷概要")
-    chapters: list[int] = Field(
-        default_factory=list, description="章节范围 [start, end]"
-    )
+    chapters: list[int] = Field(default_factory=list, description="章节范围 [start, end]")
 
     # 核心冲突
     core_conflict: Optional[str] = Field(default=None, description="本卷核心矛盾")
@@ -126,7 +120,7 @@ class VolumeInfo(BaseModel):
 
 
 class PlotOutlineResponse(BaseModel):
-    """剧情大纲响应模型"""
+    """剧情大纲响应模型."""
 
     id: UUID = Field(..., description="大纲唯一标识符")
     novel_id: UUID = Field(..., description="所属小说 ID")
@@ -158,11 +152,9 @@ class PlotOutlineResponse(BaseModel):
 
 
 class PlotOutlineUpdate(BaseModel):
-    """更新剧情大纲的请求模型（仅更新提供的字段，不存在时自动创建）"""
+    """更新剧情大纲的请求模型（仅更新提供的字段，不存在时自动创建）."""
 
-    structure_type: Optional[str] = Field(
-        default=None, description="结构类型：三幕式/英雄之旅等"
-    )
+    structure_type: Optional[str] = Field(default=None, description="结构类型：三幕式/英雄之旅等")
     volumes: Optional[list[dict]] = Field(
         default=None,
         description="卷/篇设定列表，每项格式：{number, title, chapters: [start, end], summary, core_conflict, main_events, key_turning_points, tension_cycles, emotional_arc, character_arcs, side_plots, foreshadowing, themes, word_count_range}",
@@ -181,7 +173,7 @@ class PlotOutlineUpdate(BaseModel):
 
 
 class ChapterCreate(BaseModel):
-    """创建章节的请求模型"""
+    """创建章节的请求模型."""
 
     chapter_number: int = Field(..., description="章节号（从 1 开始）")
     volume_number: int = Field(default=1, description="所属卷号")
@@ -189,7 +181,7 @@ class ChapterCreate(BaseModel):
 
 
 class ChapterUpdate(BaseModel):
-    """更新章节的请求模型（仅更新提供的字段）"""
+    """更新章节的请求模型（仅更新提供的字段）."""
 
     title: Optional[str] = Field(default=None, description="章节标题")
     content: Optional[str] = Field(default=None, description="章节正文内容")
@@ -200,7 +192,7 @@ class ChapterUpdate(BaseModel):
 
 
 class ChapterResponse(BaseModel):
-    """章节响应模型"""
+    """章节响应模型."""
 
     id: UUID = Field(..., description="章节唯一标识符")
     novel_id: UUID = Field(..., description="所属小说 ID")
@@ -210,9 +202,7 @@ class ChapterResponse(BaseModel):
     content: Optional[str] = Field(default=None, description="章节正文内容")
     word_count: int = Field(..., description="章节字数")
     status: str = Field(..., description="章节状态：draft/reviewing/published")
-    quality_score: Optional[float] = Field(
-        default=None, description="AI 评估的质量评分（0-10）"
-    )
+    quality_score: Optional[float] = Field(default=None, description="AI 评估的质量评分（0-10）")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="最后更新时间")
 
@@ -220,7 +210,7 @@ class ChapterResponse(BaseModel):
 
 
 class ChapterListResponse(BaseModel):
-    """章节列表响应模型（分页）"""
+    """章节列表响应模型（分页）."""
 
     items: list[ChapterResponse] = Field(..., description="章节列表")
     total: int = Field(..., description="符合条件的章节总数")
@@ -229,7 +219,7 @@ class ChapterListResponse(BaseModel):
 
 
 class OutlineGenerateRequest(BaseModel):
-    """生成大纲请求模型"""
+    """生成大纲请求模型."""
 
     structure_type: Optional[str] = Field(
         default="three_act",
@@ -238,16 +228,14 @@ class OutlineGenerateRequest(BaseModel):
     total_chapters: Optional[int] = Field(default=None, description="预计总章节数")
     volumes_count: Optional[int] = Field(default=None, description="预计卷数")
     generate_volumes: Optional[bool] = Field(default=True, description="是否生成卷设定")
-    generate_subplots: Optional[bool] = Field(
-        default=True, description="是否生成支线剧情"
-    )
+    generate_subplots: Optional[bool] = Field(default=True, description="是否生成支线剧情")
     generate_turning_points: Optional[bool] = Field(
         default=True, description="是否生成关键转折点"
     )
 
 
 class OutlineDecomposeRequest(BaseModel):
-    """分解大纲请求模型"""
+    """分解大纲请求模型."""
 
     chapter_start: int = Field(..., description="起始章节号")
     chapter_end: int = Field(..., description="结束章节号")
@@ -259,7 +247,7 @@ class OutlineDecomposeRequest(BaseModel):
 
 
 class ChapterOutlineTaskResponse(BaseModel):
-    """章节大纲任务响应模型"""
+    """章节大纲任务响应模型."""
 
     chapter_number: int = Field(..., description="章节号")
     volume_number: int = Field(..., description="所属卷号")
@@ -267,16 +255,14 @@ class ChapterOutlineTaskResponse(BaseModel):
     outline_task: dict = Field(..., description="章节大纲任务内容")
     main_plot_points: list = Field(default_factory=list, description="主要剧情点列表")
     character_arcs: list = Field(default_factory=list, description="角色发展弧线")
-    foreshadowing_requirements: list = Field(
-        default_factory=list, description="伏笔要求列表"
-    )
+    foreshadowing_requirements: list = Field(default_factory=list, description="伏笔要求列表")
     consistency_checks: list = Field(default_factory=list, description="一致性检查项")
     created_at: Optional[datetime] = Field(default=None, description="任务创建时间")
     updated_at: Optional[datetime] = Field(default=None, description="任务更新时间")
 
 
 class OutlineValidationRequest(BaseModel):
-    """大纲验证请求模型"""
+    """大纲验证请求模型."""
 
     chapter_outline: dict = Field(..., description="待验证的章节大纲")
     validation_scope: Optional[list] = Field(
@@ -287,20 +273,18 @@ class OutlineValidationRequest(BaseModel):
 
 
 class OutlineValidationResponse(BaseModel):
-    """大纲验证响应模型"""
+    """大纲验证响应模型."""
 
     is_valid: bool = Field(..., description="是否通过验证")
     validation_results: dict = Field(..., description="验证结果详情")
     issues: list = Field(default_factory=list, description="发现的问题列表")
     suggestions: list = Field(default_factory=list, description="改进建议列表")
-    consistency_score: Optional[float] = Field(
-        default=None, description="一致性评分（0-1）"
-    )
+    consistency_score: Optional[float] = Field(default=None, description="一致性评分（0-1）")
     validated_at: datetime = Field(..., description="验证时间")
 
 
 class OutlineVersionInfo(BaseModel):
-    """大纲版本信息模型"""
+    """大纲版本信息模型."""
 
     version_id: str = Field(..., description="版本号")
     novel_id: UUID = Field(..., description="所属小说 ID")
@@ -313,11 +297,9 @@ class OutlineVersionInfo(BaseModel):
 
 
 class EnhancementOptions(BaseModel):
-    """智能完善选项模型"""
+    """智能完善选项模型."""
 
-    max_iterations: Optional[int] = Field(
-        default=3, description="最大迭代次数", ge=1, le=10
-    )
+    max_iterations: Optional[int] = Field(default=3, description="最大迭代次数", ge=1, le=10)
     quality_threshold: Optional[float] = Field(
         default=8.0, description="质量阈值（0-10）", ge=0.0, le=10.0
     )
@@ -330,24 +312,20 @@ class EnhancementOptions(BaseModel):
 
 
 class OutlineQualityReport(BaseModel):
-    """大纲质量评估报告模型"""
+    """大纲质量评估报告模型."""
 
-    overall_score: float = Field(
-        ..., description="总体质量评分（0-10）", ge=0.0, le=10.0
-    )
+    overall_score: float = Field(..., description="总体质量评分（0-10）", ge=0.0, le=10.0)
     dimension_scores: dict = Field(
         ..., description="各维度评分，格式：{'完整性': 8.5, '逻辑性': 7.2, ...}"
     )
     strengths: list = Field(default_factory=list, description="优势点列表")
     weaknesses: list = Field(default_factory=list, description="薄弱点列表")
-    improvement_suggestions: list = Field(
-        default_factory=list, description="改进建议列表"
-    )
+    improvement_suggestions: list = Field(default_factory=list, description="改进建议列表")
     evaluated_at: datetime = Field(..., description="评估时间")
 
 
 class EnhancementPreviewResponse(BaseModel):
-    """智能完善预览响应模型"""
+    """智能完善预览响应模型."""
 
     original_outline: PlotOutlineResponse = Field(..., description="原始大纲")
     enhanced_outline: PlotOutlineResponse = Field(..., description="增强后的大纲")
@@ -355,9 +333,7 @@ class EnhancementPreviewResponse(BaseModel):
         ...,
         description="质量对比数据，格式：{original_score, enhanced_score, improvement, dimension_improvements}",
     )
-    improvements_made: list = Field(
-        default_factory=list, description="实施的改进措施列表"
-    )
+    improvements_made: list = Field(default_factory=list, description="实施的改进措施列表")
     processing_time: float = Field(..., description="处理耗时（秒）")
     cost_estimate: float = Field(..., description="预估成本（元）")
 
@@ -365,7 +341,7 @@ class EnhancementPreviewResponse(BaseModel):
 
 
 class AIAssistRequest(BaseModel):
-    """AI 辅助生成大纲字段请求模型"""
+    """AI 辅助生成大纲字段请求模型."""
 
     field_name: str = Field(
         ...,
@@ -380,7 +356,7 @@ class AIAssistRequest(BaseModel):
 
 
 class AIAssistResponse(BaseModel):
-    """AI 辅助生成响应模型"""
+    """AI 辅助生成响应模型."""
 
     field_name: str = Field(..., description="字段名")
     suggestion: str = Field(..., description="AI 生成的建议内容")

@@ -1,4 +1,4 @@
-"""生成任务 Celery Worker"""
+"""生成任务 Celery Worker."""
 
 import asyncio
 import logging
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_async(coro):
-    """在同步 Celery task 中运行异步函数。"""
+    """在同步 Celery task 中运行异步函数."""
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)
@@ -19,7 +19,7 @@ def _run_async(coro):
 
 
 async def _execute_planning(novel_id: str, task_id: str):
-    """异步执行企划任务。"""
+    """异步执行企划任务."""
     from core.database import async_session_factory
     from backend.services.generation_service import GenerationService
     from core.models.generation_task import GenerationTask, TaskStatus
@@ -58,7 +58,7 @@ async def _execute_planning(novel_id: str, task_id: str):
 async def _execute_writing(
     novel_id: str, task_id: str, chapter_number: int, volume_number: int
 ):
-    """异步执行写作任务。"""
+    """异步执行写作任务."""
     from core.database import async_session_factory
     from backend.services.generation_service import GenerationService
 
@@ -83,7 +83,7 @@ async def _execute_writing(
 
 @celery_app.task(name="workers.generation_worker.run_planning_task", bind=True)
 def run_planning_task(self, novel_id: str, task_id: str):
-    """Celery task: 执行企划阶段。"""
+    """Celery task: 执行企划阶段."""
     logger.info(f"Starting planning task for novel {novel_id}")
     return _run_async(_execute_planning(novel_id, task_id))
 
@@ -92,7 +92,7 @@ def run_planning_task(self, novel_id: str, task_id: str):
 def run_writing_task(
     self, novel_id: str, task_id: str, chapter_number: int, volume_number: int = 1
 ):
-    """Celery task: 执行单章写作。"""
+    """Celery task: 执行单章写作."""
     logger.info(f"Starting writing task for novel {novel_id}, chapter {chapter_number}")
     return _run_async(
         _execute_writing(novel_id, task_id, chapter_number, volume_number)

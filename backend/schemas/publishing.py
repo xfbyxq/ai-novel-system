@@ -1,4 +1,4 @@
-"""发布系统相关的 Pydantic schemas"""
+"""发布系统相关的 Pydantic schemas."""
 
 from datetime import datetime
 from typing import Optional
@@ -12,15 +12,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlatformAccountCreate(BaseModel):
-    """创建平台账号的请求模型"""
+    """创建平台账号的请求模型."""
 
     platform: str = Field(
         default="qidian",
         description="平台名称：qidian(起点中文网)、jjwxc(晋江文学城)、hongxiu(红袖添香)、zongheng(纵横文学)、17k(17K小说网)、fanqie(番茄小说)",
     )
-    account_name: str = Field(
-        ..., description="账号名称/昵称，用于标识", max_length=100
-    )
+    account_name: str = Field(..., description="账号名称/昵称，用于标识", max_length=100)
     username: str = Field(..., description="平台登录用户名", max_length=100)
     password: str = Field(..., description="平台登录密码（系统会加密存储）")
     extra_credentials: Optional[dict] = Field(
@@ -30,7 +28,7 @@ class PlatformAccountCreate(BaseModel):
 
 
 class PlatformAccountUpdate(BaseModel):
-    """更新平台账号的请求模型（仅更新提供的字段）"""
+    """更新平台账号的请求模型（仅更新提供的字段）."""
 
     account_name: Optional[str] = Field(default=None, description="账号名称/昵称")
     password: Optional[str] = Field(default=None, description="登录密码")
@@ -42,7 +40,7 @@ class PlatformAccountUpdate(BaseModel):
 
 
 class PlatformAccountResponse(BaseModel):
-    """平台账号响应模型"""
+    """平台账号响应模型."""
 
     id: UUID = Field(..., description="账号唯一标识符")
     platform: str = Field(..., description="平台名称")
@@ -57,7 +55,7 @@ class PlatformAccountResponse(BaseModel):
 
 
 class PlatformAccountListResponse(BaseModel):
-    """平台账号列表响应模型"""
+    """平台账号列表响应模型."""
 
     items: list[PlatformAccountResponse] = Field(..., description="账号列表")
     total: int = Field(..., description="符合条件的账号总数")
@@ -69,7 +67,7 @@ class PlatformAccountListResponse(BaseModel):
 
 
 class PublishTaskCreate(BaseModel):
-    """创建发布任务的请求模型"""
+    """创建发布任务的请求模型."""
 
     novel_id: UUID = Field(..., description="要发布的小说ID")
     account_id: UUID = Field(..., description="使用的平台账号ID")
@@ -79,16 +77,12 @@ class PublishTaskCreate(BaseModel):
     )
     config: Optional[dict] = Field(default=None, description="发布配置，如章节范围等")
     # 批量发布专用字段
-    from_chapter: Optional[int] = Field(
-        default=None, description="批量发布起始章节号（含）"
-    )
-    to_chapter: Optional[int] = Field(
-        default=None, description="批量发布结束章节号（含）"
-    )
+    from_chapter: Optional[int] = Field(default=None, description="批量发布起始章节号（含）")
+    to_chapter: Optional[int] = Field(default=None, description="批量发布结束章节号（含）")
 
 
 class PublishTaskResponse(BaseModel):
-    """发布任务响应模型"""
+    """发布任务响应模型."""
 
     id: UUID = Field(..., description="任务唯一标识符")
     novel_id: UUID = Field(..., description="小说ID")
@@ -103,9 +97,7 @@ class PublishTaskResponse(BaseModel):
         default=None, description="进度信息，如 {current: 5, total: 10}"
     )
     result_summary: Optional[dict] = Field(default=None, description="结果摘要")
-    error_message: Optional[str] = Field(
-        default=None, description="错误信息（仅失败时有值）"
-    )
+    error_message: Optional[str] = Field(default=None, description="错误信息（仅失败时有值）")
     platform_book_id: Optional[str] = Field(default=None, description="平台上的书籍ID")
     started_at: Optional[datetime] = Field(default=None, description="任务开始时间")
     completed_at: Optional[datetime] = Field(default=None, description="任务完成时间")
@@ -116,7 +108,7 @@ class PublishTaskResponse(BaseModel):
 
 
 class PublishTaskListResponse(BaseModel):
-    """发布任务列表响应模型"""
+    """发布任务列表响应模型."""
 
     items: list[PublishTaskResponse] = Field(..., description="任务列表")
     total: int = Field(..., description="符合条件的任务总数")
@@ -128,18 +120,14 @@ class PublishTaskListResponse(BaseModel):
 
 
 class ChapterPublishResponse(BaseModel):
-    """章节发布记录响应模型"""
+    """章节发布记录响应模型."""
 
     id: UUID = Field(..., description="记录唯一标识符")
     publish_task_id: UUID = Field(..., description="所属发布任务ID")
     chapter_id: UUID = Field(..., description="章节ID")
     chapter_number: int = Field(..., description="章节序号")
-    status: str = Field(
-        ..., description="发布状态：pending/publishing/published/failed"
-    )
-    platform_chapter_id: Optional[str] = Field(
-        default=None, description="平台上的章节ID"
-    )
+    status: str = Field(..., description="发布状态：pending/publishing/published/failed")
+    platform_chapter_id: Optional[str] = Field(default=None, description="平台上的章节ID")
     error_message: Optional[str] = Field(default=None, description="错误信息")
     published_at: Optional[datetime] = Field(default=None, description="发布成功时间")
     created_at: datetime = Field(..., description="记录创建时间")
@@ -148,7 +136,7 @@ class ChapterPublishResponse(BaseModel):
 
 
 class ChapterPublishListResponse(BaseModel):
-    """章节发布记录列表响应模型"""
+    """章节发布记录列表响应模型."""
 
     items: list[ChapterPublishResponse] = Field(..., description="发布记录列表")
     total: int = Field(..., description="符合条件的记录总数")
@@ -160,17 +148,15 @@ class ChapterPublishListResponse(BaseModel):
 
 
 class PublishPreviewRequest(BaseModel):
-    """发布预览请求"""
+    """发布预览请求."""
 
     novel_id: UUID = Field(..., description="小说ID")
     from_chapter: Optional[int] = Field(default=1, description="预览起始章节号")
-    to_chapter: Optional[int] = Field(
-        default=None, description="预览结束章节号（不指定则到最后一章）"
-    )
+    to_chapter: Optional[int] = Field(default=None, description="预览结束章节号（不指定则到最后一章）")
 
 
 class ChapterPreviewItem(BaseModel):
-    """章节预览项"""
+    """章节预览项."""
 
     chapter_number: int = Field(..., description="章节号")
     title: str = Field(..., description="章节标题")
@@ -181,7 +167,7 @@ class ChapterPreviewItem(BaseModel):
 
 
 class PublishPreviewResponse(BaseModel):
-    """发布预览响应"""
+    """发布预览响应."""
 
     novel_id: UUID = Field(..., description="小说ID")
     novel_title: str = Field(..., description="小说标题")

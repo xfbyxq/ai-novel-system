@@ -1,4 +1,4 @@
-"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲
+"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲。
 
 每 N 章触发一次偏差评估，分析实际内容与大纲的偏差，
 自动更新未来章节的大纲（已写章节不受影响）。
@@ -24,7 +24,7 @@ from llm.qwen_client import QwenClient
 
 @dataclass
 class DeviationReport:
-    """偏差分析报告"""
+    """偏差分析报告."""
 
     character_deviation: float = 0.0  # 角色偏差分 (0-10)
     plot_deviation: float = 0.0  # 情节偏差分 (0-10)
@@ -36,7 +36,7 @@ class DeviationReport:
     needs_update: bool = False
 
     def compute_overall(self) -> float:
-        """计算加权平均偏差分"""
+        """计算加权平均偏差分."""
         self.overall_deviation = (
             self.character_deviation * 0.30
             + self.plot_deviation * 0.35
@@ -48,7 +48,7 @@ class DeviationReport:
 
 @dataclass
 class OutlineUpdatePlan:
-    """大纲更新计划"""
+    """大纲更新计划."""
 
     updated_volumes: Optional[List[Dict]] = None
     updated_sub_plots: Optional[List[Dict]] = None
@@ -60,7 +60,7 @@ class OutlineUpdatePlan:
 
 
 class OutlineDynamicUpdater:
-    """大纲动态更新器
+    """大纲动态更新器。
 
     核心功能：
     1. 分析最近 N 章内容与大纲的偏差
@@ -89,7 +89,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用
+        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用。
 
         Args:
             db: 数据库会话
@@ -204,7 +204,7 @@ class OutlineDynamicUpdater:
         outline_data: Dict[str, Any],
         current_chapter: int,
     ) -> DeviationReport:
-        """分析最近章节内容与大纲的偏差
+        """分析最近章节内容与大纲的偏差。
 
         Args:
             recent_chapters: 最近 N 章的摘要
@@ -276,7 +276,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> OutlineUpdatePlan:
-        """生成大纲更新方案
+        """生成大纲更新方案。
 
         核心约束：仅修改 current_chapter 之后的章节。
 
@@ -369,7 +369,7 @@ class OutlineDynamicUpdater:
         current_chapter: int,
         deviation_report: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """将更新方案应用到数据库
+        """将更新方案应用到数据库。
 
         Args:
             db: 数据库会话
@@ -485,7 +485,7 @@ class OutlineDynamicUpdater:
         recent_chapters: List[Dict[str, Any]],
         current_chapter: int,
     ) -> str:
-        """提取大纲中与最近章节对应的计划信息"""
+        """提取大纲中与最近章节对应的计划信息."""
         parts = []
 
         # 从 volumes 中提取相关卷的信息
@@ -542,7 +542,7 @@ class OutlineDynamicUpdater:
         return "\n".join(parts) if parts else "（大纲中未找到对应章节的详细计划）"
 
     def _format_recent_chapters(self, recent_chapters: List[Dict[str, Any]]) -> str:
-        """格式化最近章节的摘要信息"""
+        """格式化最近章节的摘要信息."""
         parts = []
         for ch in recent_chapters:
             ch_num = ch.get("chapter_number", "?")
@@ -574,7 +574,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _summarize_world_setting(world_setting: Dict[str, Any]) -> str:
-        """精简世界观信息"""
+        """精简世界观信息."""
         if not world_setting:
             return "（无世界观设定）"
         parts = []
@@ -592,7 +592,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _summarize_characters(characters: List[Dict[str, Any]]) -> str:
-        """精简角色信息"""
+        """精简角色信息."""
         if not characters:
             return "（无角色信息）"
         parts = []
@@ -608,7 +608,7 @@ class OutlineDynamicUpdater:
         updated: List[Dict],
         current_chapter: int,
     ) -> List[Dict]:
-        """合并卷大纲：保留已写卷数据，替换未写卷数据"""
+        """合并卷大纲：保留已写卷数据，替换未写卷数据."""
         existing_by_num = {}
         for vol in existing:
             num = vol.get("number", vol.get("volume_num"))
@@ -655,7 +655,7 @@ class OutlineDynamicUpdater:
         updated: List[Dict],
         current_chapter: int,
     ) -> List[Dict]:
-        """合并转折点：保留已发生的，替换未发生的"""
+        """合并转折点：保留已发生的，替换未发生的."""
         # 保留已发生的转折点
         frozen = [
             tp
@@ -676,7 +676,7 @@ class OutlineDynamicUpdater:
         outline_data: Dict[str, Any],
         current_chapter: int,
     ) -> Tuple[int, int]:
-        """计算受影响的章节范围"""
+        """计算受影响的章节范围."""
         min_ch = current_chapter + 1
         max_ch = current_chapter + 1
 
@@ -706,7 +706,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _extract_json_object(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON 对象
+        """从 LLM 响应中提取 JSON 对象。
 
         多层策略，兼容各种 LLM 输出格式。
         """

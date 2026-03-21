@@ -1,4 +1,4 @@
-"""具体的Agent实现"""
+"""具体的Agent实现."""
 
 import asyncio
 from typing import Dict, Any, List, Optional
@@ -14,7 +14,7 @@ from core.logging_config import logger
 
 
 class MarketAnalysisAgent(BaseAgent):
-    """市场分析Agent"""
+    """市场分析Agent."""
 
     def __init__(
         self,
@@ -23,7 +23,7 @@ class MarketAnalysisAgent(BaseAgent):
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
     ):
-        """初始化市场分析Agent
+        """初始化市场分析Agent。
 
         Args:
             name: Agent名称
@@ -37,7 +37,7 @@ class MarketAnalysisAgent(BaseAgent):
         self.pm = PromptManager
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务
+        """处理任务。
 
         Args:
             task_data: 任务数据
@@ -116,7 +116,7 @@ class MarketAnalysisAgent(BaseAgent):
 
 
 class ContentPlanningAgent(BaseAgent):
-    """内容策划Agent"""
+    """内容策划Agent."""
 
     def __init__(
         self,
@@ -125,7 +125,7 @@ class ContentPlanningAgent(BaseAgent):
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
     ):
-        """初始化内容策划Agent
+        """初始化内容策划Agent。
 
         Args:
             name: Agent名称
@@ -139,7 +139,7 @@ class ContentPlanningAgent(BaseAgent):
         self.pm = PromptManager
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务
+        """处理任务。
 
         Args:
             task_data: 任务数据
@@ -219,7 +219,7 @@ class ContentPlanningAgent(BaseAgent):
 
 
 class WritingAgent(BaseAgent):
-    """创作Agent"""
+    """创作Agent."""
 
     def __init__(
         self,
@@ -228,7 +228,7 @@ class WritingAgent(BaseAgent):
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
     ):
-        """初始化创作Agent
+        """初始化创作Agent。
 
         Args:
             name: Agent名称
@@ -242,7 +242,7 @@ class WritingAgent(BaseAgent):
         self.pm = PromptManager
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务
+        """处理任务。
 
         Args:
             task_data: 任务数据
@@ -329,7 +329,7 @@ class WritingAgent(BaseAgent):
 
 
 class EditingAgent(BaseAgent):
-    """编辑Agent"""
+    """编辑Agent."""
 
     def __init__(
         self,
@@ -338,7 +338,7 @@ class EditingAgent(BaseAgent):
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
     ):
-        """初始化编辑Agent
+        """初始化编辑Agent。
 
         Args:
             name: Agent名称
@@ -352,7 +352,7 @@ class EditingAgent(BaseAgent):
         self.pm = PromptManager
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务
+        """处理任务。
 
         Args:
             task_data: 任务数据
@@ -434,7 +434,7 @@ class EditingAgent(BaseAgent):
 
 
 class PublishingAgent(BaseAgent):
-    """发布Agent"""
+    """发布Agent."""
 
     def __init__(
         self,
@@ -443,7 +443,7 @@ class PublishingAgent(BaseAgent):
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
     ):
-        """初始化发布Agent
+        """初始化发布Agent。
 
         Args:
             name: Agent名称
@@ -457,7 +457,7 @@ class PublishingAgent(BaseAgent):
         self.pm = PromptManager
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务
+        """处理任务。
 
         Args:
             task_data: 任务数据

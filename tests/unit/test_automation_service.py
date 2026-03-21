@@ -1,10 +1,10 @@
-"""自动化服务单元测试"""
+"""自动化服务单元测试."""
 import pytest
 from backend.services.automation_service import AutomationService
 
 
 async def test_run_automated_novel_creation(db_session):
-    """测试运行自动化小说创建流程"""
+    """测试运行自动化小说创建流程."""
     # 测试服务
     service = AutomationService(db_session)
 
@@ -24,7 +24,7 @@ async def test_run_automated_novel_creation(db_session):
 
 
 async def test_initialize_agents(db_session):
-    """测试初始化代理"""
+    """测试初始化代理."""
     # 测试服务
     service = AutomationService(db_session)
 
@@ -42,7 +42,7 @@ async def test_initialize_agents(db_session):
 
 
 async def test_get_workflow_status(db_session):
-    """测试获取工作流状态"""
+    """测试获取工作流状态."""
     # 测试服务
     service = AutomationService(db_session)
 
@@ -57,7 +57,7 @@ async def test_get_workflow_status(db_session):
 
 
 async def test_run_batch_automation(db_session):
-    """测试运行批量自动化任务"""
+    """测试运行批量自动化任务."""
     # 测试服务
     service = AutomationService(db_session)
 

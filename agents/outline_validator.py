@@ -1,4 +1,4 @@
-"""大纲一致性验证 Agent
+"""大纲一致性验证 Agent。
 
 功能：
 1. 验证章节与大纲一致性
@@ -18,14 +18,14 @@ from core.logging_config import logger
 
 
 class OutlineValidator:
-    """大纲验证 Agent"""
+    """大纲验证 Agent."""
 
     def __init__(
         self,
         client: Optional[QwenClient] = None,
         cost_tracker: Optional[CostTracker] = None,
     ):
-        """初始化大纲验证 Agent
+        """初始化大纲验证 Agent。
 
         Args:
             client: LLM 客户端
@@ -37,7 +37,7 @@ class OutlineValidator:
     async def validate_chapter_against_outline(
         self, chapter_plan: Dict[str, Any], outline_task: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """验证章节与大纲一致性
+        """验证章节与大纲一致性。
 
         检查章节计划是否符合大纲要求
 
@@ -83,7 +83,7 @@ class OutlineValidator:
     async def check_character_consistency(
         self, chapter_plan: Dict[str, Any], character_states: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """检查角色一致性
+        """检查角色一致性。
 
         检查章节中的角色行为、性格、能力是否与设定一致
 
@@ -133,7 +133,7 @@ class OutlineValidator:
     async def check_plot_continuity(
         self, chapter_plan: Dict[str, Any], previous_chapters: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """检查剧情连贯性
+        """检查剧情连贯性。
 
         检查章节与之前章节的剧情是否连贯
 
@@ -181,7 +181,7 @@ class OutlineValidator:
     async def check_world_setting_consistency(
         self, chapter_plan: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """检查世界观一致性
+        """检查世界观一致性。
 
         检查章节内容是否符合世界观设定
 
@@ -231,7 +231,7 @@ class OutlineValidator:
     async def generate_improvement_suggestions(
         self, validation_issues: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """生成改进建议
+        """生成改进建议。
 
         基于验证发现的问题，生成具体的改进建议
 
@@ -273,7 +273,7 @@ class OutlineValidator:
     def _build_chapter_validation_prompt(
         self, chapter_plan: Dict[str, Any], outline_task: Dict[str, Any]
     ) -> str:
-        """构建章节验证提示词"""
+        """构建章节验证提示词."""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         outline_task_str = json.dumps(outline_task, ensure_ascii=False)
 
@@ -361,7 +361,7 @@ class OutlineValidator:
     def _build_character_consistency_prompt(
         self, chapter_plan: Dict[str, Any], character_states: Dict[str, Any]
     ) -> str:
-        """构建角色一致性检查提示词"""
+        """构建角色一致性检查提示词."""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         character_states_str = json.dumps(character_states, ensure_ascii=False)
 
@@ -437,7 +437,7 @@ class OutlineValidator:
     def _build_plot_continuity_prompt(
         self, chapter_plan: Dict[str, Any], previous_chapters: List[Dict[str, Any]]
     ) -> str:
-        """构建剧情连贯性检查提示词"""
+        """构建剧情连贯性检查提示词."""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         previous_chapters_str = json.dumps(
             previous_chapters[:5], ensure_ascii=False
@@ -531,7 +531,7 @@ class OutlineValidator:
     def _build_world_setting_consistency_prompt(
         self, chapter_plan: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> str:
-        """构建世界观一致性检查提示词"""
+        """构建世界观一致性检查提示词."""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         world_setting_str = json.dumps(world_setting, ensure_ascii=False)
 
@@ -638,7 +638,7 @@ class OutlineValidator:
     def _build_improvement_suggestions_prompt(
         self, validation_issues: List[Dict[str, Any]]
     ) -> str:
-        """构建改进建议提示词"""
+        """构建改进建议提示词."""
         issues_str = json.dumps(validation_issues, ensure_ascii=False)
 
         prompt = f"""
@@ -696,7 +696,7 @@ class OutlineValidator:
         return prompt
 
     def _parse_validation_response(self, content: str) -> Dict[str, Any]:
-        """解析章节验证响应"""
+        """解析章节验证响应."""
         try:
             content = content.strip()
 
@@ -728,7 +728,7 @@ class OutlineValidator:
             }
 
     def _parse_character_consistency_response(self, content: str) -> Dict[str, Any]:
-        """解析角色一致性响应"""
+        """解析角色一致性响应."""
         try:
             content = content.strip()
 
@@ -754,7 +754,7 @@ class OutlineValidator:
             }
 
     def _parse_plot_continuity_response(self, content: str) -> Dict[str, Any]:
-        """解析剧情连贯性响应"""
+        """解析剧情连贯性响应."""
         try:
             content = content.strip()
 
@@ -784,7 +784,7 @@ class OutlineValidator:
             }
 
     def _parse_world_setting_consistency_response(self, content: str) -> Dict[str, Any]:
-        """解析世界观一致性响应"""
+        """解析世界观一致性响应."""
         try:
             content = content.strip()
 
@@ -815,7 +815,7 @@ class OutlineValidator:
             }
 
     def _parse_suggestions_response(self, content: str) -> List[Dict[str, Any]]:
-        """解析改进建议响应"""
+        """解析改进建议响应."""
         try:
             content = content.strip()
 

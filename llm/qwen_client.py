@@ -1,4 +1,4 @@
-"""通义千问 LLM 客户端封装"""
+"""通义千问 LLM 客户端封装."""
 
 import asyncio
 import logging
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class QwenClient:
-    """封装 DashScope API 调用，支持重试和流式输出。"""
+    """封装 DashScope API 调用，支持重试和流式输出."""
 
     def __init__(
         self,
@@ -67,7 +67,7 @@ class QwenClient:
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
-        """异步调用通义千问 API。
+        """异步调用通义千问 API.
 
         Returns:
             dict: {"content": str, "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}}
@@ -89,7 +89,7 @@ class QwenClient:
         max_tokens: int = 4096,
         retries: int = 3,
     ) -> dict:
-        """使用 OpenAI 兼容模式调用 API。"""
+        """使用 OpenAI 兼容模式调用 API."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -137,7 +137,7 @@ class QwenClient:
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
-        """使用标准 DashScope SDK 调用 API。"""
+        """使用标准 DashScope SDK 调用 API."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -197,7 +197,7 @@ class QwenClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> "AsyncIterator[str]":
-        """流式调用通义千问 API，逐块返回文本。"""
+        """流式调用通义千问 API，逐块返回文本."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -244,7 +244,7 @@ class QwenClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> "AsyncIterator[str]":
-        """使用 OpenAI 兼容模式进行流式调用"""
+        """使用 OpenAI 兼容模式进行流式调用."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})

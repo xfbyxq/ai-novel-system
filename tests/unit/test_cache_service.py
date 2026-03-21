@@ -10,10 +10,10 @@ import json
 
 
 class TestCacheServiceSingleton:
-    """CacheService 单例模式测试"""
+    """CacheService 单例模式测试."""
     
     def test_singleton_instance(self):
-        """测试单例模式确保只有一个实例"""
+        """测试单例模式确保只有一个实例."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -27,7 +27,7 @@ class TestCacheServiceSingleton:
         assert instance1 is instance2
     
     def test_singleton_with_multiple_imports(self):
-        """测试多次导入仍保持单例"""
+        """测试多次导入仍保持单例."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -43,11 +43,11 @@ class TestCacheServiceSingleton:
 
 
 class TestCacheServiceConnection:
-    """CacheService 连接管理测试"""
+    """CacheService 连接管理测试."""
     
     @patch('backend.services.cache_service.redis')
     def test_redis_client_initialization(self, mock_redis):
-        """测试 Redis 客户端初始化"""
+        """测试 Redis 客户端初始化."""
         from backend.services.cache_service import CacheService
         from backend.config import settings
         
@@ -70,7 +70,7 @@ class TestCacheServiceConnection:
     
     @patch('backend.services.cache_service.redis')
     def test_redis_client_property(self, mock_redis):
-        """测试 client 属性返回正确的客户端"""
+        """测试 client 属性返回正确的客户端."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -86,7 +86,7 @@ class TestCacheServiceConnection:
     
     @patch('backend.services.cache_service.redis')
     def test_close_connection(self, mock_redis):
-        """测试关闭 Redis 连接"""
+        """测试关闭 Redis 连接."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -105,11 +105,11 @@ class TestCacheServiceConnection:
 
 
 class TestCacheServiceOperations:
-    """CacheService 基本操作测试"""
+    """CacheService 基本操作测试."""
     
     @pytest.fixture
     def mock_cache_service(self):
-        """创建 Mock 缓存服务"""
+        """创建 Mock 缓存服务."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -125,7 +125,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_get_success(self, mock_cache_service):
-        """测试成功获取缓存"""
+        """测试成功获取缓存."""
         service, mock_client = mock_cache_service
         
         mock_client.get.return_value = b'test_value'
@@ -138,7 +138,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_get_not_found(self, mock_cache_service):
-        """测试获取不存在的缓存"""
+        """测试获取不存在的缓存."""
         service, mock_client = mock_cache_service
         
         mock_client.get.return_value = None
@@ -149,7 +149,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_get_exception_handling(self, mock_cache_service):
-        """测试获取缓存时的异常处理"""
+        """测试获取缓存时的异常处理."""
         service, mock_client = mock_cache_service
         
         mock_client.get.side_effect = Exception('Redis error')
@@ -161,7 +161,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_set_success(self, mock_cache_service):
-        """测试成功设置缓存"""
+        """测试成功设置缓存."""
         service, mock_client = mock_cache_service
         
         result = await service.set('test_key', 'test_value', ttl=3600)
@@ -171,7 +171,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_set_exception_handling(self, mock_cache_service):
-        """测试设置缓存时的异常处理"""
+        """测试设置缓存时的异常处理."""
         service, mock_client = mock_cache_service
         
         mock_client.setex.side_effect = Exception('Redis error')
@@ -183,7 +183,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_delete_success(self, mock_cache_service):
-        """测试成功删除缓存"""
+        """测试成功删除缓存."""
         service, mock_client = mock_cache_service
         
         result = await service.delete('test_key')
@@ -193,7 +193,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_exists_true(self, mock_cache_service):
-        """测试缓存存在"""
+        """测试缓存存在."""
         service, mock_client = mock_cache_service
         
         mock_client.exists.return_value = 1
@@ -204,7 +204,7 @@ class TestCacheServiceOperations:
     
     @pytest.mark.asyncio
     async def test_exists_false(self, mock_cache_service):
-        """测试缓存不存在"""
+        """测试缓存不存在."""
         service, mock_client = mock_cache_service
         
         mock_client.exists.return_value = 0
@@ -215,11 +215,11 @@ class TestCacheServiceOperations:
 
 
 class TestCacheServiceGenerationResult:
-    """生成结果缓存测试"""
+    """生成结果缓存测试."""
     
     @pytest.fixture
     def mock_cache_service(self):
-        """创建 Mock 缓存服务"""
+        """创建 Mock 缓存服务."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -235,7 +235,7 @@ class TestCacheServiceGenerationResult:
     
     @pytest.mark.asyncio
     async def test_get_generation_result(self, mock_cache_service):
-        """测试获取生成结果"""
+        """测试获取生成结果."""
         service, mock_client = mock_cache_service
         
         test_data = {'result': 'test', 'status': 'completed'}
@@ -248,7 +248,7 @@ class TestCacheServiceGenerationResult:
     
     @pytest.mark.asyncio
     async def test_set_generation_result(self, mock_cache_service):
-        """测试设置生成结果"""
+        """测试设置生成结果."""
         service, mock_client = mock_cache_service
         
         test_data = {'result': 'test', 'status': 'completed'}
@@ -260,7 +260,7 @@ class TestCacheServiceGenerationResult:
     
     @pytest.mark.asyncio
     async def test_delete_generation_result(self, mock_cache_service):
-        """测试删除生成结果"""
+        """测试删除生成结果."""
         service, mock_client = mock_cache_service
         
         await service.delete_generation_result('task_123')
@@ -269,11 +269,11 @@ class TestCacheServiceGenerationResult:
 
 
 class TestCacheServiceAgentOutput:
-    """Agent 输出缓存测试"""
+    """Agent 输出缓存测试."""
     
     @pytest.fixture
     def mock_cache_service(self):
-        """创建 Mock 缓存服务"""
+        """创建 Mock 缓存服务."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -289,7 +289,7 @@ class TestCacheServiceAgentOutput:
     
     @pytest.mark.asyncio
     async def test_get_agent_output(self, mock_cache_service):
-        """测试获取 Agent 输出"""
+        """测试获取 Agent 输出."""
         service, mock_client = mock_cache_service
         
         test_data = {'output': 'test content'}
@@ -303,7 +303,7 @@ class TestCacheServiceAgentOutput:
     
     @pytest.mark.asyncio
     async def test_set_agent_output(self, mock_cache_service):
-        """测试设置 Agent 输出"""
+        """测试设置 Agent 输出."""
         service, mock_client = mock_cache_service
         
         test_data = {'output': 'test content'}
@@ -316,11 +316,11 @@ class TestCacheServiceAgentOutput:
 
 
 class TestCacheServiceChapterContent:
-    """章节内容缓存测试"""
+    """章节内容缓存测试."""
     
     @pytest.fixture
     def mock_cache_service(self):
-        """创建 Mock 缓存服务"""
+        """创建 Mock 缓存服务."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -336,7 +336,7 @@ class TestCacheServiceChapterContent:
     
     @pytest.mark.asyncio
     async def test_get_chapter_content(self, mock_cache_service):
-        """测试获取章节内容"""
+        """测试获取章节内容."""
         service, mock_client = mock_cache_service
         
         mock_client.get.return_value = b'Chapter content here'
@@ -349,7 +349,7 @@ class TestCacheServiceChapterContent:
     
     @pytest.mark.asyncio
     async def test_set_chapter_content(self, mock_cache_service):
-        """测试设置章节内容"""
+        """测试设置章节内容."""
         service, mock_client = mock_cache_service
         
         content = 'This is chapter content'
@@ -361,11 +361,11 @@ class TestCacheServiceChapterContent:
 
 
 class TestCacheServiceDashboardStats:
-    """仪表盘统计缓存测试"""
+    """仪表盘统计缓存测试."""
     
     @pytest.fixture
     def mock_cache_service(self):
-        """创建 Mock 缓存服务"""
+        """创建 Mock 缓存服务."""
         from backend.services.cache_service import CacheService
         
         # 清除之前的实例
@@ -381,7 +381,7 @@ class TestCacheServiceDashboardStats:
     
     @pytest.mark.asyncio
     async def test_get_dashboard_stats(self, mock_cache_service):
-        """测试获取仪表盘统计"""
+        """测试获取仪表盘统计."""
         service, mock_client = mock_cache_service
         
         test_stats = {'total_novels': 10, 'total_words': 50000}
@@ -395,7 +395,7 @@ class TestCacheServiceDashboardStats:
     
     @pytest.mark.asyncio
     async def test_set_dashboard_stats(self, mock_cache_service):
-        """测试设置仪表盘统计"""
+        """测试设置仪表盘统计."""
         service, mock_client = mock_cache_service
         
         test_stats = {'total_novels': 10, 'total_words': 50000}

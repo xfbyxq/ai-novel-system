@@ -1,4 +1,4 @@
-"""质量报告基类
+"""质量报告基类。
 
 提供所有审查循环共享的质量评估报告基础结构。
 各子类可以通过添加额外字段来扩展特定领域的分析。
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_extract_score(data: Dict[str, Any], quality_threshold: float) -> float:
-    """从 LLM 响应中安全提取 overall_score，字段缺失时降级处理。
+    """从 LLM 响应中安全提取 overall_score，字段缺失时降级处理.
 
     降级策略：
     1. 优先使用 overall_score 字段
@@ -43,7 +43,7 @@ def _safe_extract_score(data: Dict[str, Any], quality_threshold: float) -> float
 
 @dataclass
 class BaseQualityReport:
-    """质量评估报告基类
+    """质量评估报告基类。
 
     所有审查循环的质量报告都继承自此类，包含：
     - overall_score: 综合评分 (1-10)
@@ -83,7 +83,7 @@ class BaseQualityReport:
     summary: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典
+        """转换为字典。
 
         子类应覆盖此方法以包含额外字段。
 
@@ -100,7 +100,7 @@ class BaseQualityReport:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BaseQualityReport":
-        """从字典创建报告
+        """从字典创建报告。
 
         Args:
             data: 包含报告数据的字典
@@ -120,7 +120,7 @@ class BaseQualityReport:
     def from_llm_response(
         cls, data: Dict[str, Any], quality_threshold: float = 7.0
     ) -> "BaseQualityReport":
-        """从 LLM 响应创建报告
+        """从 LLM 响应创建报告。
 
         自动计算 passed 状态。
 
@@ -141,7 +141,7 @@ class BaseQualityReport:
         )
 
     def get_issue_count(self, severity: Optional[str] = None) -> int:
-        """获取问题数量
+        """获取问题数量。
 
         Args:
             severity: 可选的严重程度筛选 (high/medium/low)
@@ -158,7 +158,7 @@ class BaseQualityReport:
         )
 
     def get_high_severity_issues(self) -> List[Dict[str, Any]]:
-        """获取高严重度问题"""
+        """获取高严重度问题."""
         return [
             issue
             for issue in self.issues
@@ -166,13 +166,13 @@ class BaseQualityReport:
         ]
 
     def get_dimension_average(self) -> float:
-        """计算维度评分平均值"""
+        """计算维度评分平均值."""
         if not self.dimension_scores:
             return 0.0
         return sum(self.dimension_scores.values()) / len(self.dimension_scores)
 
     def merge_issues(self, other: "BaseQualityReport") -> None:
-        """合并另一个报告的问题
+        """合并另一个报告的问题。
 
         用于在多轮迭代中追踪所有发现的问题。
 
@@ -190,7 +190,7 @@ class BaseQualityReport:
 
 @dataclass
 class WorldQualityReport(BaseQualityReport):
-    """世界观质量评估报告
+    """世界观质量评估报告。
 
     在基类基础上添加一致性分析。
     """
@@ -220,7 +220,7 @@ class WorldQualityReport(BaseQualityReport):
 
 @dataclass
 class CharacterQualityReport(BaseQualityReport):
-    """角色质量评估报告
+    """角色质量评估报告。
 
     在基类基础上添加独特性分析。
     """
@@ -250,7 +250,7 @@ class CharacterQualityReport(BaseQualityReport):
 
 @dataclass
 class PlotQualityReport(BaseQualityReport):
-    """情节质量评估报告
+    """情节质量评估报告。
 
     在基类基础上添加结构分析。
     """
@@ -280,7 +280,7 @@ class PlotQualityReport(BaseQualityReport):
 
 @dataclass
 class ChapterQualityReport(BaseQualityReport):
-    """章节质量评估报告
+    """章节质量评估报告。
 
     在基类基础上添加修订建议和加权总分计算。
     权重设计：爽感设计 30%，其他维度共 70%
@@ -302,7 +302,7 @@ class ChapterQualityReport(BaseQualityReport):
 
     @property
     def weighted_score(self) -> float:
-        """计算加权总分
+        """计算加权总分。
 
         Returns:
             加权后的总分（0-10）

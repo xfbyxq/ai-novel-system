@@ -11,11 +11,11 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 
 class TestAPIKeyAuth:
-    """API Key 认证类测试"""
+    """API Key 认证类测试."""
     
     @pytest.mark.asyncio
     async def test_auth_skip_in_dev_mode(self):
-        """测试开发模式下跳过认证"""
+        """测试开发模式下跳过认证."""
         from backend.middleware.auth import api_key_auth
         from backend.config import settings
         
@@ -42,7 +42,7 @@ class TestAPIKeyAuth:
     
     @pytest.mark.asyncio
     async def test_auth_missing_credentials(self):
-        """测试缺少认证凭据"""
+        """测试缺少认证凭据."""
         from backend.dependencies import verify_api_key
         
         # Mock credentials as None
@@ -56,7 +56,7 @@ class TestAPIKeyAuth:
     
     @pytest.mark.asyncio
     async def test_auth_invalid_api_key(self):
-        """测试无效的 API Key"""
+        """测试无效的 API Key."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -74,7 +74,7 @@ class TestAPIKeyAuth:
     
     @pytest.mark.asyncio
     async def test_auth_valid_api_key(self):
-        """测试有效的 API Key"""
+        """测试有效的 API Key."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -100,7 +100,7 @@ class TestAPIKeyAuth:
     
     @pytest.mark.asyncio
     async def test_auth_dev_mode_with_credentials(self):
-        """测试开发模式下有 API Key 仍需验证"""
+        """测试开发模式下有 API Key 仍需验证."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -129,11 +129,11 @@ class TestAPIKeyAuth:
 
 
 class TestVerifyApiKey:
-    """verify_api_key 依赖函数测试"""
+    """verify_api_key 依赖函数测试."""
     
     @pytest.mark.asyncio
     async def test_verify_api_key_no_credentials(self):
-        """测试没有凭据时抛出异常"""
+        """测试没有凭据时抛出异常."""
         from backend.dependencies import verify_api_key
         
         with pytest.raises(HTTPException) as exc_info:
@@ -144,7 +144,7 @@ class TestVerifyApiKey:
     
     @pytest.mark.asyncio
     async def test_verify_api_key_correct_key(self):
-        """测试正确的 API Key"""
+        """测试正确的 API Key."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -166,7 +166,7 @@ class TestVerifyApiKey:
     
     @pytest.mark.asyncio
     async def test_verify_api_key_wrong_key(self):
-        """测试错误的 API Key"""
+        """测试错误的 API Key."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -191,7 +191,7 @@ class TestVerifyApiKey:
     
     @pytest.mark.asyncio
     async def test_verify_api_key_dev_mode_no_key(self):
-        """测试开发模式无 API Key 时返回 dev-mode"""
+        """测试开发模式无 API Key 时返回 dev-mode."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         
@@ -220,10 +220,10 @@ class TestVerifyApiKey:
 
 
 class TestAPIKeyAuthMiddleware:
-    """API Key 认证中间件集成测试"""
+    """API Key 认证中间件集成测试."""
     
     def test_api_key_auth_import_from_dependencies(self):
-        """测试 auth 模块从 dependencies 导入 verify_api_key"""
+        """测试 auth 模块从 dependencies 导入 verify_api_key."""
         from backend.middleware import auth
         from backend import dependencies
         
@@ -232,7 +232,7 @@ class TestAPIKeyAuthMiddleware:
         assert auth.verify_api_key is dependencies.verify_api_key
     
     def test_api_key_auth_exports(self):
-        """测试 auth 模块导出"""
+        """测试 auth 模块导出."""
         from backend.middleware import auth
         
         # 验证导出
@@ -243,11 +243,11 @@ class TestAPIKeyAuthMiddleware:
 
 
 class TestHTTPExceptionDetails:
-    """HTTP 异常详情测试"""
+    """HTTP 异常详情测试."""
     
     @pytest.mark.asyncio
     async def test_unauthorized_exception_format(self):
-        """测试未授权异常格式"""
+        """测试未授权异常格式."""
         from backend.dependencies import verify_api_key
         
         with pytest.raises(HTTPException) as exc_info:
@@ -261,7 +261,7 @@ class TestHTTPExceptionDetails:
     
     @pytest.mark.asyncio
     async def test_error_messages_are_chinese(self):
-        """测试错误消息使用中文"""
+        """测试错误消息使用中文."""
         from backend.dependencies import verify_api_key
         from backend.config import settings
         

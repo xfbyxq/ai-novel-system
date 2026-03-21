@@ -23,7 +23,7 @@ from llm.cost_tracker import CostTracker
 
 
 async def demo_outline_enhancement():
-    """演示大纲协作完善功能"""
+    """演示大纲协作完善功能."""
 
     print("🚀 开始大纲协作完善功能演示")
     print("=" * 50)
@@ -269,7 +269,7 @@ async def demo_outline_enhancement():
 
 
 async def main():
-    """主函数"""
+    """主函数."""
     try:
         await demo_outline_enhancement()
     except KeyboardInterrupt:

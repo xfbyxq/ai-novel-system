@@ -19,7 +19,7 @@ from core.logging_config import logger
 
 @dataclass
 class TensionCycle:
-    """张力循环（欲扬先抑）"""
+    """张力循环（欲扬先抑）."""
 
     cycle_number: int
     start_chapter: int
@@ -31,7 +31,7 @@ class TensionCycle:
     release_events: List[str] = field(default_factory=list)
 
     def position(self, chapter_number: int) -> str:
-        """判断章节在循环中的位置"""
+        """判断章节在循环中的位置."""
         if chapter_number in self.suppress_chapters:
             return "suppress"
         elif chapter_number == self.release_chapter:
@@ -40,7 +40,7 @@ class TensionCycle:
             return "transition"
 
     def progress(self, chapter_number: int) -> float:
-        """计算循环进度 (0-1)"""
+        """计算循环进度 (0-1)."""
         if chapter_number < self.start_chapter:
             return 0.0
         elif chapter_number > self.end_chapter:
@@ -53,7 +53,7 @@ class TensionCycle:
 
 @dataclass
 class ChapterOutlineTask:
-    """章节级大纲任务"""
+    """章节级大纲任务."""
 
     chapter_number: int
     volume_number: int
@@ -83,7 +83,7 @@ class ChapterOutlineTask:
     is_golden_chapter: bool = False  # 黄金三章
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = [
             f"## 第{self.chapter_number}章 大纲任务（第{self.volume_number}卷）",
         ]
@@ -132,7 +132,7 @@ class ChapterOutlineTask:
         return "\n".join(parts)
 
     def is_complete(self, chapter_plan: Dict[str, Any]) -> bool:
-        """检查章节计划是否完成了大纲任务"""
+        """检查章节计划是否完成了大纲任务."""
         # 简单检查：是否包含所有强制性事件的关键词
         chapter_text = json.dumps(chapter_plan, ensure_ascii=False)
 
@@ -147,7 +147,7 @@ class ChapterOutlineTask:
 
 @dataclass
 class OutlineValidationReport:
-    """大纲验证报告"""
+    """大纲验证报告."""
 
     chapter_number: int
     passed: bool = False
@@ -168,7 +168,7 @@ class OutlineValidationReport:
     suggestions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter_number": self.chapter_number,
             "passed": self.passed,
@@ -316,7 +316,7 @@ class ChapterOutlineMapper:
         chapter_number: int,
         character_states: Dict[str, Any],
     ):
-        """添加角色发展任务"""
+        """添加角色发展任务."""
         for char_name, state in character_states.items():
             # 检查角色是否在当前章节有发展需求
             pending_events = state.get("pending_events", [])
@@ -633,7 +633,7 @@ class ChapterOutlineMapper:
     def _find_current_cycle(
         self, volume_number: int, chapter_number: int
     ) -> Optional[TensionCycle]:
-        """找到当前章所属的张力循环"""
+        """找到当前章所属的张力循环."""
         cycles = self.tension_cycles.get(volume_number, [])
 
         for cycle in cycles:
@@ -870,7 +870,7 @@ class ChapterOutlineMapper:
     def _generate_task_description(
         self, task: ChapterOutlineTask, volume_outline: Dict[str, Any]
     ) -> str:
-        """生成任务描述"""
+        """生成任务描述."""
         parts = []
 
         if task.is_golden_chapter:
@@ -890,7 +890,7 @@ class ChapterOutlineMapper:
     def _create_empty_task(
         self, chapter_number: int, volume_number: int
     ) -> ChapterOutlineTask:
-        """创建空任务（当找不到大纲时）"""
+        """创建空任务（当找不到大纲时）."""
         return ChapterOutlineTask(
             chapter_number=chapter_number,
             volume_number=volume_number,
@@ -983,7 +983,7 @@ class ChapterOutlineMapper:
     def get_outline_progress(
         self, volume_number: int, current_chapter: int
     ) -> Dict[str, Any]:
-        """获取大纲进度"""
+        """获取大纲进度."""
         cycles = self.tension_cycles.get(volume_number, [])
 
         completed_tasks = sum(
@@ -1018,7 +1018,7 @@ class ChapterOutlineMapper:
 
 # 便捷函数
 def create_outline_mapper(novel_id: str) -> ChapterOutlineMapper:
-    """便捷函数：创建大纲映射器"""
+    """便捷函数：创建大纲映射器."""
     return ChapterOutlineMapper(novel_id)
 
 

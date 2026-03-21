@@ -1,4 +1,4 @@
-"""Add detailed_outline column to chapters
+"""Add detailed_outline column to chapters.
 
 Revision ID: 2a4218cba9df
 Revises: 5c24a4e1ec52

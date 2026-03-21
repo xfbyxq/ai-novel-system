@@ -1,4 +1,4 @@
-"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要
+"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要。
 
 替代简单的文本截断，生成包含关键事件、角色变化、情节推进等维度的摘要。
 """
@@ -13,7 +13,7 @@ from llm.qwen_client import QwenClient
 
 
 class ChapterSummaryGenerator:
-    """使用 LLM 生成高质量的章节摘要"""
+    """使用 LLM 生成高质量的章节摘要."""
 
     def __init__(self, client: QwenClient, cost_tracker: CostTracker):
         self.client = client
@@ -26,7 +26,7 @@ class ChapterSummaryGenerator:
         chapter_content: str,
         chapter_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """使用 LLM 生成结构化章节摘要
+        """使用 LLM 生成结构化章节摘要。
 
         Args:
             chapter_number: 章节号
@@ -109,7 +109,7 @@ class ChapterSummaryGenerator:
         content: str,
         chapter_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """回退方案：从原文截取摘要"""
+        """回退方案：从原文截取摘要."""
         plot_progress = content[:200] if content else ""
         last_period = plot_progress.rfind("。")
         if last_period > 100:
@@ -134,7 +134,7 @@ class ChapterSummaryGenerator:
 
     @staticmethod
     def _extract_ending(content: str, length: int = 100) -> str:
-        """从内容中提取结尾部分"""
+        """从内容中提取结尾部分."""
         if not content:
             return ""
         ending = content[-length:]
@@ -145,7 +145,7 @@ class ChapterSummaryGenerator:
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON
+        """从 LLM 响应中提取 JSON。
 
         使用多层策略：
         1. 直接解析完整文本

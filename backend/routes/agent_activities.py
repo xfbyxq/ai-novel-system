@@ -1,4 +1,4 @@
-"""Agent 活动 API 路由 - 查看 Agent 详细活动记录"""
+"""Agent 活动 API 路由 - 查看 Agent 详细活动记录."""
 
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -73,7 +73,7 @@ async def get_agent_activity_detail(
     activity_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """获取特定 Agent 活动的详细信息"""
+    """获取特定 Agent 活动的详细信息."""
     try:
         activity_uuid = UUID(activity_id)
     except ValueError:
@@ -95,7 +95,7 @@ async def get_task_activity_summary(
     task_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """获取任务的 Agent 活动摘要"""
+    """获取任务的 Agent 活动摘要."""
     try:
         task_uuid = UUID(task_id)
     except ValueError:
@@ -154,7 +154,7 @@ async def get_novel_activity_timeline(
     limit: int = Query(200, ge=1, le=1000, description="返回记录数限制"),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """获取小说的 Agent 活动时间线"""
+    """获取小说的 Agent 活动时间线."""
     try:
         novel_uuid = UUID(novel_id)
     except ValueError:
@@ -189,7 +189,7 @@ async def get_agent_statistics(
     novel_id: Optional[str] = Query(None, description="小说 ID（可选）"),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """获取特定 Agent 的统计信息"""
+    """获取特定 Agent 的统计信息."""
     query = select(AgentActivity).where(AgentActivity.agent_name == agent_name)
 
     if novel_id:

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 
 async def migrate():
-    """执行数据库迁移"""
+    """执行数据库迁移."""
     print("开始数据库迁移...")
 
     async with engine.begin() as conn:
@@ -55,7 +55,7 @@ async def migrate():
 
 
 async def rollback():
-    """回滚迁移（仅用于测试）"""
+    """回滚迁移（仅用于测试）."""
     print("开始回滚数据库迁移...")
 
     async with engine.begin() as conn:
@@ -85,7 +85,7 @@ async def rollback():
 
 
 async def check_migration_status():
-    """检查迁移状态"""
+    """检查迁移状态."""
     print("检查数据库迁移状态...")
 
     async with engine.begin() as conn:
@@ -115,7 +115,7 @@ async def check_migration_status():
 
 
 async def main():
-    """主函数"""
+    """主函数."""
     import argparse
 
     parser = argparse.ArgumentParser(description="数据库迁移脚本")

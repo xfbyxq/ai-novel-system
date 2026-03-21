@@ -20,7 +20,7 @@ from core.logging_config import logger
 
 @dataclass
 class CoreLayer:
-    """核心层：小说的核心要素"""
+    """核心层：小说的核心要素."""
 
     theme: str = ""  # 核心主题
     central_question: str = ""  # 核心问题
@@ -29,7 +29,7 @@ class CoreLayer:
     genre: str = ""  # 类型
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = []
         if self.theme:
             parts.append(f"**核心主题**: {self.theme}")
@@ -47,7 +47,7 @@ class CoreLayer:
 
 @dataclass
 class CriticalElement:
-    """关键元素：必须在上下文中保留的信息"""
+    """关键元素：必须在上下文中保留的信息."""
 
     id: str
     type: str  # "foreshadowing", "conflict", "decision", "goal"
@@ -60,11 +60,11 @@ class CriticalElement:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def priority_score(self) -> int:
-        """计算优先级分数（重要性 * 紧急程度）"""
+        """计算优先级分数（重要性 * 紧急程度）."""
         return self.importance * max(1, self.urgency)
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         if self.type == "foreshadowing":
             return f"[伏笔] 第{self.planted_chapter}章：{self.content} (已{self.urgency}章未回收，重要性：{self.importance})"
         elif self.type == "conflict":
@@ -77,7 +77,7 @@ class CriticalElement:
 
 @dataclass
 class RecentChapter:
-    """近期章节：详细摘要"""
+    """近期章节：详细摘要."""
 
     chapter_number: int
     title: str
@@ -89,7 +89,7 @@ class RecentChapter:
     word_count: int = 0
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         parts = [f"## 第{self.chapter_number}章 {self.title}"]
 
         if self.summary:
@@ -117,7 +117,7 @@ class RecentChapter:
 
 @dataclass
 class HistoricalIndex:
-    """历史索引：早期章节的索引式回顾"""
+    """历史索引：早期章节的索引式回顾."""
 
     volume_number: int
     volume_title: str
@@ -127,7 +127,7 @@ class HistoricalIndex:
     milestones: List[str]  # 重大里程碑
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         parts = [f"## 第{self.volume_number}卷：{self.volume_title}"]
         parts.append(f"章节范围：第{self.chapter_range[0]}-{self.chapter_range[1]}章")
 
@@ -149,7 +149,7 @@ class HistoricalIndex:
 
 @dataclass
 class EnhancedContext:
-    """增强型上下文"""
+    """增强型上下文."""
 
     core_layer: CoreLayer = field(default_factory=CoreLayer)
     critical_layer: List[CriticalElement] = field(default_factory=list)
@@ -162,7 +162,7 @@ class EnhancedContext:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_prompt(self) -> str:
-        """转换为完整的提示词"""
+        """转换为完整的提示词."""
         parts = []
 
         # 1. 核心层（始终在最前面）
@@ -194,7 +194,7 @@ class EnhancedContext:
         return "\n\n".join(parts)
 
     def estimate_tokens(self) -> int:
-        """估算 token 数（中文约 1.5 字符/token）"""
+        """估算 token 数（中文约 1.5 字符/token）."""
         prompt = self.to_prompt()
         return int(len(prompt) / 1.5)
 
@@ -285,7 +285,7 @@ class EnhancedContextManager:
         return ctx
 
     def _build_core_layer(self, novel_data: Dict[str, Any]) -> CoreLayer:
-        """构建核心层"""
+        """构建核心层."""
         core = CoreLayer()
 
         # 从主题分析中提取
@@ -422,7 +422,7 @@ class EnhancedContextManager:
         chapter_contents: Dict[int, str],
         last_n: int = 3,
     ) -> List[RecentChapter]:
-        """构建近期层（最近 N 章的详细信息）"""
+        """构建近期层（最近 N 章的详细信息）."""
         chapters = []
 
         start_chapter = max(1, chapter_number - last_n)
@@ -457,7 +457,7 @@ class EnhancedContextManager:
         chapter_summaries: Dict[int, Dict[str, Any]],
         volume_summaries: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> List[HistoricalIndex]:
-        """构建历史层（早期章节的索引式回顾）"""
+        """构建历史层（早期章节的索引式回顾）."""
         historical_indices = []
 
         # 冷记忆起始点：跳过热记忆覆盖的章节
@@ -541,11 +541,11 @@ class EnhancedContextManager:
         return historical_indices
 
     def get_context(self, chapter_number: int) -> Optional[EnhancedContext]:
-        """从缓存获取上下文"""
+        """从缓存获取上下文."""
         return self.context_cache.get(chapter_number)
 
     def clear_cache(self):
-        """清除缓存"""
+        """清除缓存."""
         self.context_cache.clear()
         logger.info("Context cache cleared")
 
@@ -554,6 +554,6 @@ class EnhancedContextManager:
 def build_enhanced_context(
     novel_id: str, chapter_number: int, **kwargs
 ) -> EnhancedContext:
-    """便捷函数：构建增强上下文"""
+    """便捷函数：构建增强上下文."""
     manager = EnhancedContextManager(novel_id)
     return manager.build_context_for_chapter(chapter_number, **kwargs)

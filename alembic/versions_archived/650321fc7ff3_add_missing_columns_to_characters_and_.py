@@ -1,4 +1,4 @@
-"""add_missing_columns_to_characters_and_remove_old_columns
+"""add_missing_columns_to_characters_and_remove_old_columns.
 
 Revision ID: 650321fc7ff3
 Revises: c6cfc7b3ef20

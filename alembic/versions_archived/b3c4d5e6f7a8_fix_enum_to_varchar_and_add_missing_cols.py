@@ -1,4 +1,4 @@
-"""fix: convert enum columns to varchar and add missing columns
+"""fix: convert enum columns to varchar and add missing columns.
 
 将所有 PostgreSQL 原生枚举类型列转换为 varchar，以匹配 ORM 模型定义。
 同时添加 ORM 模型中定义但数据库缺失的列。
@@ -23,7 +23,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """将枚举类型列转换为 varchar，添加缺失列，修复类型不匹配。"""
+    """将枚举类型列转换为 varchar，添加缺失列，修复类型不匹配."""
 
     # ========== 1. novels 表 ==========
     # novels.status: novelstatus enum -> varchar(50)
@@ -158,7 +158,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """恢复枚举类型，移除新增列。"""
+    """恢复枚举类型，移除新增列."""
     # 重建枚举类型
     novelstatus = postgresql.ENUM(
         "planning",

@@ -1,11 +1,11 @@
-"""小说详情页面对象"""
+"""小说详情页面对象."""
 
 from typing import Optional
 from .base_page import BasePage
 
 
 class NovelDetailPage(BasePage):
-    """小说详情页面对象"""
+    """小说详情页面对象."""
 
     # 标签页选择器
     TAB_SELECTORS = {
@@ -117,24 +117,24 @@ class NovelDetailPage(BasePage):
 
     # 概览标签页方法
     def click_start_planning(self):
-        """点击开始企划按钮"""
+        """点击开始企划按钮."""
         self.switch_to_tab("overview")
         self.click_element(self.OVERVIEW_SELECTORS["start_planning_btn"])
 
     def click_generate_single_chapter(self):
-        """点击生成单章按钮"""
+        """点击生成单章按钮."""
         self.switch_to_tab("overview")
         self.click_element(self.OVERVIEW_SELECTORS["generate_single_chapter_btn"])
         self.wait_for_element_visible(self.OVERVIEW_SELECTORS["chapter_modal"])
 
     def click_batch_generate(self):
-        """点击批量生成按钮"""
+        """点击批量生成按钮."""
         self.switch_to_tab("overview")
         self.click_element(self.OVERVIEW_SELECTORS["batch_generate_btn"])
         self.wait_for_element_visible(self.OVERVIEW_SELECTORS["chapter_modal"])
 
     def click_edit_novel(self):
-        """点击编辑小说按钮"""
+        """点击编辑小说按钮."""
         self.switch_to_tab("overview")
         self.click_element(self.OVERVIEW_SELECTORS["edit_novel_btn"])
         self.wait_for_element_visible(self.OVERVIEW_SELECTORS["edit_modal"])
@@ -164,7 +164,7 @@ class NovelDetailPage(BasePage):
         self.fill_input(self.OVERVIEW_SELECTORS["batch_end_input"], str(end_chapter))
 
     def confirm_chapter_generation(self):
-        """确认章节生成"""
+        """确认章节生成."""
         self.click_element(self.OVERVIEW_SELECTORS["confirm_generation_btn"])
         self.wait_for_element_hidden(self.OVERVIEW_SELECTORS["chapter_modal"])
 
@@ -197,13 +197,13 @@ class NovelDetailPage(BasePage):
             self.fill_input(self.OVERVIEW_SELECTORS["edit_synopsis_textarea"], synopsis)
 
     def save_edit_novel(self):
-        """保存小说编辑"""
+        """保存小说编辑."""
         self.click_element(self.OVERVIEW_SELECTORS["save_edit_btn"])
         self.wait_for_element_hidden(self.OVERVIEW_SELECTORS["edit_modal"])
 
     # 大纲梳理标签页方法
     def switch_to_outline_refinement(self):
-        """切换到大纲梳理标签页"""
+        """切换到大纲梳理标签页."""
         self.switch_to_tab("outline_refinement")
 
     def fill_outline_fields(self, outline_data: dict):
@@ -231,20 +231,20 @@ class NovelDetailPage(BasePage):
                 self.fill_input(selector, outline_data[field])
 
     def save_outline(self):
-        """保存大纲"""
+        """保存大纲."""
         self.click_element(self.OUTLINE_SELECTORS["save_outline_btn"])
 
     def click_enhance_outline(self):
-        """点击智能完善大纲按钮"""
+        """点击智能完善大纲按钮."""
         self.click_element(self.OUTLINE_SELECTORS["enhance_outline_btn"])
 
     def click_preview_enhancement(self):
-        """点击预览增强按钮"""
+        """点击预览增强按钮."""
         self.click_element(self.OUTLINE_SELECTORS["preview_enhancement_btn"])
         self.wait_for_element_visible(self.OUTLINE_SELECTORS["enhancement_modal"])
 
     def apply_enhancement(self):
-        """应用大纲增强"""
+        """应用大纲增强."""
         self.click_element(self.OUTLINE_SELECTORS["apply_enhancement_btn"])
         self.wait_for_element_hidden(self.OUTLINE_SELECTORS["enhancement_modal"])
 
@@ -263,7 +263,7 @@ class NovelDetailPage(BasePage):
 
     # 章节标签页方法
     def switch_to_chapters(self):
-        """切换到章节标签页"""
+        """切换到章节标签页."""
         self.switch_to_tab("chapters")
 
     def get_chapter_count(self) -> int:
@@ -342,6 +342,6 @@ class NovelDetailPage(BasePage):
             pass  # 超时或元素不存在都是正常的
 
     def refresh_page(self):
-        """刷新当前页面"""
+        """刷新当前页面."""
         self.page.reload()
         self.wait_for_load()

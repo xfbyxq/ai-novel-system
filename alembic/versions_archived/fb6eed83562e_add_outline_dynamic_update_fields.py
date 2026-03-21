@@ -1,4 +1,4 @@
-"""add_outline_dynamic_update_fields
+"""add_outline_dynamic_update_fields.
 
 Revision ID: fb6eed83562e
 Revises: d784dd8cedf8
@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """plot_outlines 表新增大纲动态更新相关字段"""
+    """plot_outlines 表新增大纲动态更新相关字段."""
     op.add_column(
         "plot_outlines",
         sa.Column(
@@ -44,6 +44,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """移除大纲动态更新字段"""
+    """移除大纲动态更新字段."""
     op.drop_column("plot_outlines", "version")
     op.drop_column("plot_outlines", "update_history")

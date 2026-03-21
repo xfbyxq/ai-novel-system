@@ -1,4 +1,4 @@
-"""Add douyin crawl types
+"""Add douyin crawl types.
 
 Revision ID: 4b47062db094
 Revises: fc4ecf252bbb

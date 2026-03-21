@@ -1,4 +1,4 @@
-"""Agent管理器 - 负责初始化和管理所有Agent"""
+"""Agent管理器 - 负责初始化和管理所有Agent."""
 
 import asyncio
 from typing import Dict, Optional
@@ -20,18 +20,18 @@ from llm.cost_tracker import CostTracker
 
 
 class AgentManager:
-    """Agent管理器，负责初始化和管理所有Agent"""
+    """Agent管理器，负责初始化和管理所有Agent."""
 
     _instance = None
 
     def __new__(cls):
-        """单例模式"""
+        """单例模式."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
-        """初始化Agent管理器"""
+        """初始化Agent管理器."""
         if not hasattr(self, "initialized"):
             self.initialized = False
             self.communicator = None
@@ -41,7 +41,7 @@ class AgentManager:
             self.cost_tracker = None
 
     async def initialize(self):
-        """初始化Agent系统
+        """初始化Agent系统。
 
         - 创建通信管理器
         - 创建调度器
@@ -74,7 +74,7 @@ class AgentManager:
         logger.info("🤖 Agent系统初始化完成！")
 
     async def _create_and_register_agents(self):
-        """创建并注册所有Agent"""
+        """创建并注册所有Agent."""
         # 创建各种Agent
         market_agent = MarketAnalysisAgent(
             name="market_analysis_agent",
@@ -126,7 +126,7 @@ class AgentManager:
             logger.info(f"🤖 注册Agent: {agent.name}")
 
     async def start(self):
-        """启动所有Agent"""
+        """启动所有Agent."""
         if not self.initialized:
             await self.initialize()
 
@@ -140,7 +140,7 @@ class AgentManager:
         logger.info("🤖 所有Agent启动完成！")
 
     async def stop(self):
-        """停止所有Agent"""
+        """停止所有Agent."""
         if not self.initialized:
             logger.info("🤖 Agent系统未初始化")
             return
@@ -156,7 +156,7 @@ class AgentManager:
         logger.info("🤖 所有Agent停止完成！")
 
     def get_scheduler(self) -> Optional[AgentScheduler]:
-        """获取调度器
+        """获取调度器。
 
         Returns:
             AgentScheduler: 调度器实例
@@ -164,7 +164,7 @@ class AgentManager:
         return self.scheduler
 
     def get_agent(self, agent_name: str) -> Optional[object]:
-        """获取指定Agent
+        """获取指定Agent。
 
         Args:
             agent_name: Agent名称
@@ -175,7 +175,7 @@ class AgentManager:
         return self.agents.get(agent_name)
 
     def get_all_agents(self) -> Dict[str, object]:
-        """获取所有Agent
+        """获取所有Agent。
 
         Returns:
             Dict[str, object]: Agent名称到实例的映射
@@ -183,7 +183,7 @@ class AgentManager:
         return self.agents
 
     async def get_agent_status(self, agent_name: str) -> Optional[str]:
-        """获取Agent状态
+        """获取Agent状态。
 
         Args:
             agent_name: Agent名称
@@ -197,7 +197,7 @@ class AgentManager:
         return await self.scheduler.get_agent_status(agent_name)
 
     async def get_all_agent_statuses(self) -> Dict[str, str]:
-        """获取所有Agent状态
+        """获取所有Agent状态。
 
         Returns:
             Dict[str, str]: Agent名称到状态的映射
@@ -219,7 +219,7 @@ global_agent_manager = AgentManager()
 
 
 def get_agent_manager() -> AgentManager:
-    """获取全局Agent管理器实例
+    """获取全局Agent管理器实例。
 
     Returns:
         AgentManager: 全局Agent管理器实例

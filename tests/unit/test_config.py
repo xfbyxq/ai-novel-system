@@ -10,10 +10,10 @@ from pydantic import ValidationError
 
 
 class TestSettings:
-    """Settings 配置测试类"""
+    """Settings 配置测试类."""
     
     def test_settings_default_values(self):
-        """测试配置的默认值"""
+        """测试配置的默认值."""
         from backend.config import Settings
         
         # 清除环境变量以避免干扰
@@ -42,7 +42,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_db_password_required(self):
-        """测试数据库密码为必填项"""
+        """测试数据库密码为必填项."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -61,7 +61,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_database_url_generation(self):
-        """测试数据库 URL 动态生成"""
+        """测试数据库 URL 动态生成."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -82,7 +82,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_docker_environment(self):
-        """测试 Docker 环境配置"""
+        """测试 Docker 环境配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -102,7 +102,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_redis_url(self):
-        """测试 Redis URL 配置"""
+        """测试 Redis URL 配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -121,7 +121,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_docker_redis_url(self):
-        """测试 Docker 环境 Redis URL"""
+        """测试 Docker 环境 Redis URL."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -140,7 +140,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_review_thresholds(self):
-        """测试审查阈值配置"""
+        """测试审查阈值配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -160,7 +160,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_review_iterations(self):
-        """测试审查迭代次数配置"""
+        """测试审查迭代次数配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -180,7 +180,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_feature_flags(self):
-        """测试功能开关配置"""
+        """测试功能开关配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -203,7 +203,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_crawler_config(self):
-        """测试爬虫配置"""
+        """测试爬虫配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -223,7 +223,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_character_detection_validation(self):
-        """测试角色检测配置验证"""
+        """测试角色检测配置验证."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -240,7 +240,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_outline_update_config(self):
-        """测试大纲更新配置"""
+        """测试大纲更新配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -258,7 +258,7 @@ class TestSettings:
             os.environ.update(env_backup)
     
     def test_settings_reflection_config(self):
-        """测试反思机制配置"""
+        """测试反思机制配置."""
         from backend.config import Settings
         
         env_backup = os.environ.copy()
@@ -278,10 +278,10 @@ class TestSettings:
 
 
 class TestGetSettings:
-    """get_settings 函数测试"""
+    """get_settings 函数测试."""
     
     def test_get_settings_singleton(self):
-        """测试 get_settings 返回单例"""
+        """测试 get_settings 返回单例."""
         from backend.config import get_settings
         
         settings1 = get_settings()

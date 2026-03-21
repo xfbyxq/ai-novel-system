@@ -19,7 +19,7 @@ from core.logging_config import logger
 
 @dataclass
 class ThemeDefinition:
-    """主题定义"""
+    """主题定义."""
 
     core_theme: str  # 核心主题，如"成长与牺牲"
     central_question: str  # 核心问题，如"主角能否拯救世界？"
@@ -29,7 +29,7 @@ class ThemeDefinition:
     theme_statements: List[str] = field(default_factory=list)  # 主题陈述
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = [
             "## 本小说的核心主题",
             f"**核心主题**: {self.core_theme}",
@@ -50,7 +50,7 @@ class ThemeDefinition:
 
     @classmethod
     def from_novel_data(cls, novel_data: Dict[str, Any]) -> "ThemeDefinition":
-        """从小说数据创建主题定义"""
+        """从小说数据创建主题定义."""
         topic_analysis = novel_data.get("topic_analysis", {})
         plot_outline = novel_data.get("plot_outline", {})
 
@@ -98,7 +98,7 @@ class ThemeDefinition:
 
     @staticmethod
     def _infer_theme_from_genre(genre: str, tags: List[str]) -> str:
-        """从类型和标签推断主题"""
+        """从类型和标签推断主题."""
         genre_themes = {
             "玄幻": "力量与责任",
             "都市": "现实与理想",
@@ -112,7 +112,7 @@ class ThemeDefinition:
 
 @dataclass
 class ThemeConsistencyReport:
-    """主题一致性审查报告"""
+    """主题一致性审查报告."""
 
     chapter_number: int = 0
     overall_score: float = 0.0
@@ -138,7 +138,7 @@ class ThemeConsistencyReport:
     subplot_analysis: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter_number": self.chapter_number,
             "overall_score": self.overall_score,
@@ -523,7 +523,7 @@ class ThemeGuardian:
         return round(score, 1)
 
     def _generate_suggestions(self, report: ThemeConsistencyReport) -> List[str]:
-        """生成改进建议"""
+        """生成改进建议."""
         suggestions = []
 
         if report.main_plot_advancement < 6.0:
@@ -580,7 +580,7 @@ class ThemeGuardian:
 """
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取审查统计"""
+        """获取审查统计."""
         if not self.review_history:
             return {"total_reviews": 0, "average_score": 0, "pass_rate": 0}
 
@@ -597,7 +597,7 @@ class ThemeGuardian:
 
 # 便捷函数
 def create_theme_guardian(novel_id: str, novel_data: Dict[str, Any]) -> ThemeGuardian:
-    """便捷函数：创建主题守护者"""
+    """便捷函数：创建主题守护者."""
     theme = ThemeDefinition.from_novel_data(novel_data)
     return ThemeGuardian(novel_id, theme)
 
@@ -608,6 +608,6 @@ def review_chapter_theme_consistency(
     chapter_plan: Dict[str, Any],
     chapter_number: int,
 ) -> ThemeConsistencyReport:
-    """便捷函数：审查章节主题一致性"""
+    """便捷函数：审查章节主题一致性."""
     guardian = create_theme_guardian(novel_id, novel_data)
     return guardian.review_chapter_plan(chapter_plan, chapter_number)

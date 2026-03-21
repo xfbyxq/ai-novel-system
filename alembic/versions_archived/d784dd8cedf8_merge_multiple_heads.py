@@ -1,4 +1,4 @@
-"""Merge multiple heads
+"""Merge multiple heads.
 
 Revision ID: d784dd8cedf8
 Revises: 117e653b6d9a, 650321fc7ff3

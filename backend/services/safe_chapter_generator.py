@@ -23,7 +23,7 @@ from core.models.generation_task import GenerationTask, TaskType, TaskStatus
 
 
 class ChapterGenerationFailure(Exception):
-    """章节生成失败异常"""
+    """章节生成失败异常."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class ChapterGenerationFailure(Exception):
 
 
 class BatchGenerationInterrupted(Exception):
-    """批量生成中断异常"""
+    """批量生成中断异常."""
 
     def __init__(self, continuous_failures: int, last_failed_chapter: int):
         self.continuous_failures = continuous_failures
@@ -49,7 +49,7 @@ class BatchGenerationInterrupted(Exception):
 
 
 class SafeChapterGenerator:
-    """安全的章节生成器
+    """安全的章节生成器.
 
     实现章节生成失败的安全处理机制
     """
@@ -146,9 +146,7 @@ class SafeChapterGenerator:
             BatchGenerationInterrupted: 批量生成被中断
         """
         total_chapters = to_chapter - from_chapter + 1
-        logger.info(
-            f"🚀 开始批量生成章节：第{from_chapter}-{to_chapter}章，共 {total_chapters} 章"
-        )
+        logger.info(f"🚀 开始批量生成章节：第{from_chapter}-{to_chapter}章，共 {total_chapters} 章")
 
         results = []
         continuous_failures = 0
@@ -235,7 +233,7 @@ class SafeChapterGenerator:
     async def _validate_generation_prerequisites(
         self, novel_id: UUID, chapter_number: int
     ):
-        """验证生成前置条件"""
+        """验证生成前置条件."""
         # 检查小说是否存在
         novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
@@ -256,7 +254,7 @@ class SafeChapterGenerator:
             logger.warning(f"小说 {novel_id} 缺少大纲，但仍然继续生成")
 
     def _validate_generation_result(self, result: Dict[str, Any], chapter_number: int):
-        """验证生成结果"""
+        """验证生成结果."""
         if not result:
             raise ValueError("生成结果为空")
 
@@ -321,7 +319,7 @@ class SafeChapterGenerator:
         logger.debug(f"第{chapter_number}章已保存到数据库 (ID: {chapter.id})")
 
     async def _get_novel(self, novel_id: UUID) -> Optional[Novel]:
-        """获取小说对象"""
+        """获取小说对象."""
         result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         return result.scalar_one_or_none()
 

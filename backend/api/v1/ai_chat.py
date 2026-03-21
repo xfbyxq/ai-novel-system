@@ -1,4 +1,4 @@
-"""AI Chat API 端点"""
+"""AI Chat API 端点."""
 
 import json
 from datetime import datetime, timezone

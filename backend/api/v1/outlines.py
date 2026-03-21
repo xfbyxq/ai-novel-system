@@ -69,9 +69,7 @@ async def get_world_setting(
     world_setting = result.scalar_one_or_none()
 
     if not world_setting:
-        raise HTTPException(
-            status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到")
 
     return world_setting
 
@@ -675,7 +673,7 @@ async def enhance_outline_preview(
     options: EnhancementOptions,
     db: AsyncSession = Depends(get_db),
 ):
-    """预览大纲智能完善结果（不修改数据库）"""
+    """预览大纲智能完善结果（不修改数据库）."""
     try:
         logger.info(f"开始大纲完善预览: novel_id={novel_id}")
 
@@ -691,9 +689,7 @@ async def enhance_outline_preview(
         )
         plot_outline = outline_result.scalar_one_or_none()
         if not plot_outline:
-            raise HTTPException(
-                status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到"
-            )
+            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
         # 获取世界观设定
         world_result = await db.execute(
@@ -809,7 +805,7 @@ async def apply_outline_enhancement(
     enhanced_outline: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """应用大纲优化结果到数据库"""
+    """应用大纲优化结果到数据库."""
     try:
         # 获取原大纲
         plot_outline = await db.execute(
@@ -845,7 +841,7 @@ async def apply_outline_enhancement(
 
 
 def fix_plot_outline_volumes(plot_outline):
-    """修复情节大纲中的卷数据格式，确保volumes中的每个卷都有number字段"""
+    """修复情节大纲中的卷数据格式，确保volumes中的每个卷都有number字段."""
     if plot_outline.volumes:
         fixed_volumes = []
         for vol in plot_outline.volumes:
@@ -865,7 +861,7 @@ def fix_plot_outline_volumes(plot_outline):
 
 
 def model_to_dict(model_instance):
-    """将SQLAlchemy模型实例转换为字典"""
+    """将SQLAlchemy模型实例转换为字典."""
     if model_instance is None:
         return {}
 

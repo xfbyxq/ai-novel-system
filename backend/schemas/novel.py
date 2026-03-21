@@ -1,4 +1,4 @@
-"""小说相关的 Pydantic schemas"""
+"""小说相关的 Pydantic schemas."""
 
 from datetime import datetime
 from typing import Optional
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class NovelCreate(BaseModel):
-    """创建小说的请求模型"""
+    """创建小说的请求模型."""
 
     title: str = Field(..., description="小说标题", examples=["仙侠大陆"])
     genre: str = Field(
@@ -33,7 +33,7 @@ class NovelCreate(BaseModel):
 
 
 class NovelUpdate(BaseModel):
-    """更新小说的请求模型（仅更新提供的字段）"""
+    """更新小说的请求模型（仅更新提供的字段）."""
 
     title: Optional[str] = Field(default=None, description="小说标题")
     genre: Optional[str] = Field(default=None, description="小说类型")
@@ -51,7 +51,7 @@ class NovelUpdate(BaseModel):
 
 
 class NovelResponse(BaseModel):
-    """小说响应模型"""
+    """小说响应模型."""
 
     id: UUID = Field(..., description="小说唯一标识符")
     title: str = Field(..., description="小说标题")
@@ -101,7 +101,7 @@ class NovelResponse(BaseModel):
 
 
 class NovelListResponse(BaseModel):
-    """小说列表响应模型（分页）"""
+    """小说列表响应模型（分页）."""
 
     items: list[NovelResponse] = Field(..., description="小说列表")
     total: int = Field(..., description="符合条件的小说总数")

@@ -1,4 +1,4 @@
-"""Add AI chat session models
+"""Add AI chat session models.
 
 Revision ID: b5dd1dd83814
 Revises: 186700edca0b

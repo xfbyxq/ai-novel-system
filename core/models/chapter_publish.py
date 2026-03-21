@@ -1,4 +1,4 @@
-"""章节发布记录模型"""
+"""章节发布记录模型."""
 
 import enum
 import uuid
@@ -12,7 +12,7 @@ from core.database import Base
 
 
 class PublishStatus(str, enum.Enum):
-    """发布状态"""
+    """发布状态."""
 
     pending = "pending"  # 待发布
     publishing = "publishing"  # 发布中
@@ -21,7 +21,7 @@ class PublishStatus(str, enum.Enum):
 
 
 class ChapterPublish(Base):
-    """章节发布记录"""
+    """章节发布记录."""
 
     __tablename__ = "chapter_publishes"
 

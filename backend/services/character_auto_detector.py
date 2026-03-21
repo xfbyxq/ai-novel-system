@@ -1,4 +1,4 @@
-"""角色自动检测器 - 从章节内容中自动识别并注册新角色
+"""角色自动检测器 - 从章节内容中自动识别并注册新角色.
 
 每章生成后，使用 LLM 从章节内容中提取新出现的角色，
 对比现有角色库进行去重，然后自动注册到数据库。
@@ -22,7 +22,7 @@ from llm.qwen_client import QwenClient
 
 
 class CharacterAutoDetector:
-    """角色自动检测器
+    """角色自动检测器.
 
     核心功能：
     1. 使用 LLM 从章节内容中提取角色信息
@@ -48,7 +48,7 @@ class CharacterAutoDetector:
         chapter_content: str,
         existing_characters: List[Character],
     ) -> List[Character]:
-        """检测并注册新角色（对外入口方法）
+        """检测并注册新角色（对外入口方法）.
 
         整体用 try/except 包裹，绝不抛异常，确保不阻塞章节生成流程。
 
@@ -81,18 +81,14 @@ class CharacterAutoDetector:
             )
 
             if not extracted:
-                logger.info(
-                    f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色"
-                )
+                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色")
                 return []
 
             # 2. 多层去重过滤（使用数据库最新数据）
             new_chars = self._filter_new_characters(extracted, db_characters)
 
             if not new_chars:
-                logger.info(
-                    f"[CharacterAutoDetector] 第{chapter_number}章提取到角色均已存在，无需注册"
-                )
+                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章提取到角色均已存在，无需注册")
                 return []
 
             # 3. 注册新角色到数据库
@@ -109,9 +105,7 @@ class CharacterAutoDetector:
             return registered
 
         except Exception as e:
-            logger.warning(
-                f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}"
-            )
+            logger.warning(f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}")
             return []
 
     async def _extract_characters_from_content(
@@ -120,7 +114,7 @@ class CharacterAutoDetector:
         chapter_number: int,
         existing_character_names: List[str],
     ) -> List[Dict[str, Any]]:
-        """调用 LLM 从章节内容中提取角色信息
+        """调用 LLM 从章节内容中提取角色信息.
 
         Args:
             chapter_content: 章节内容
@@ -175,7 +169,7 @@ class CharacterAutoDetector:
         extracted: List[Dict[str, Any]],
         existing: List[Character],
     ) -> List[Dict[str, Any]]:
-        """四层去重过滤，确保只返回真正的新角色
+        """四层去重过滤，确保只返回真正的新角色.
 
         去重策略：
         1. 精确名字匹配（标准化后）
@@ -246,8 +240,7 @@ class CharacterAutoDetector:
                 if variant_norm in existing_names_normalized:
                     variant_match = True
                     logger.debug(
-                        f"[CharacterAutoDetector] 角色「{name}」的别名"
-                        f"「{variant}」匹配已有角色，跳过"
+                        f"[CharacterAutoDetector] 角色「{name}」的别名" f"「{variant}」匹配已有角色，跳过"
                     )
                     break
                 # 别名也做子串检查
@@ -282,7 +275,7 @@ class CharacterAutoDetector:
         chapter_number: int,
         new_chars: List[Dict[str, Any]],
     ) -> List[Character]:
-        """将新角色批量注册到数据库
+        """将新角色批量注册到数据库.
 
         Args:
             novel_id: 小说 ID
@@ -307,9 +300,7 @@ class CharacterAutoDetector:
                 )
                 existing_result = await self.db.execute(existing_stmt)
                 if existing_result.scalar_one_or_none():
-                    logger.info(
-                        f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册"
-                    )
+                    logger.info(f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册")
                     continue
 
                 # 确定 role_type
@@ -363,7 +354,7 @@ class CharacterAutoDetector:
 
     @staticmethod
     def _normalize_name(name: str) -> str:
-        """标准化角色名字，用于去重比较
+        """标准化角色名字，用于去重比较.
 
         去除空格、标点、常见称呼后缀等。
 
@@ -406,7 +397,7 @@ class CharacterAutoDetector:
 
     @staticmethod
     def _extract_json_array(text: str) -> List[Dict[str, Any]]:
-        """从 LLM 响应中提取 JSON 数组
+        """从 LLM 响应中提取 JSON 数组.
 
         多层策略，兼容各种 LLM 输出格式。
 
@@ -463,7 +454,6 @@ class CharacterAutoDetector:
                         pass
 
         logger.warning(
-            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。"
-            f"文本片段：{text[:100]}..."
+            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。" f"文本片段：{text[:100]}..."
         )
         return []

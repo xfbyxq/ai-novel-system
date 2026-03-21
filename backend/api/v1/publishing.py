@@ -1,4 +1,4 @@
-"""发布系统 API 端点"""
+"""发布系统 API 端点."""
 
 import asyncio
 from typing import Optional
@@ -106,7 +106,7 @@ async def get_platform_account(
     account_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取平台账号详情"""
+    """获取平台账号详情."""
     result = await db.execute(
         select(PlatformAccount).where(PlatformAccount.id == account_id)
     )
@@ -122,7 +122,7 @@ async def update_platform_account(
     account_in: PlatformAccountUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """更新平台账号"""
+    """更新平台账号."""
     service = PublishingService(db)
     account = await service.update_account(
         account_id=account_id,
@@ -272,7 +272,7 @@ async def list_publish_tasks(
     page_size: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取发布任务列表"""
+    """获取发布任务列表."""
     offset = (page - 1) * page_size
 
     query = select(PublishTask)
@@ -305,7 +305,7 @@ async def get_publish_task(
     task_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取发布任务详情"""
+    """获取发布任务详情."""
     result = await db.execute(select(PublishTask).where(PublishTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
@@ -351,9 +351,7 @@ async def cancel_publish_task(
         ),
     )
     if task_status_value in terminal_statuses:
-        raise HTTPException(
-            status_code=400, detail=f"任务已处于终态: {task_status_value}"
-        )
+        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task_status_value}")
 
     task.status = (
         PublishTaskStatus.cancelled.value
@@ -372,7 +370,7 @@ async def get_task_chapter_publishes(
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取发布任务的章节发布记录"""
+    """获取发布任务的章节发布记录."""
     # 检查任务存在
     task_result = await db.execute(select(PublishTask).where(PublishTask.id == task_id))
     if not task_result.scalar_one_or_none():

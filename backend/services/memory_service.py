@@ -1,4 +1,4 @@
-"""小说记忆模块服务 - 高效存储和管理小说相关信息"""
+"""小说记忆模块服务 - 高效存储和管理小说相关信息."""
 
 import hashlib
 import json
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryCache:
-    """内存缓存实现"""
+    """内存缓存实现."""
 
     def __init__(self, max_size: int = 100, expiration_minutes: int = 30):
         self.max_size = max_size
@@ -18,7 +18,7 @@ class MemoryCache:
         self.cache: Dict[str, Dict[str, Any]] = {}
 
     def get(self, key: str) -> Optional[Any]:
-        """获取缓存数据"""
+        """获取缓存数据."""
         if key not in self.cache:
             return None
 
@@ -35,7 +35,7 @@ class MemoryCache:
         return item["data"]
 
     def set(self, key: str, data: Any) -> None:
-        """设置缓存数据"""
+        """设置缓存数据."""
         # 如果缓存已满，删除最不常用的项目
         if len(self.cache) >= self.max_size:
             self._evict_least_used()
@@ -49,12 +49,12 @@ class MemoryCache:
         }
 
     def delete(self, key: str) -> None:
-        """删除缓存数据"""
+        """删除缓存数据."""
         if key in self.cache:
             del self.cache[key]
 
     def _evict_least_used(self) -> None:
-        """删除最不常用的缓存项"""
+        """删除最不常用的缓存项."""
         if not self.cache:
             return
 
@@ -67,19 +67,19 @@ class MemoryCache:
         del self.cache[least_used[0]]
 
     def clear(self) -> None:
-        """清空缓存"""
+        """清空缓存."""
         self.cache.clear()
 
 
 class NovelMemoryService:
-    """小说记忆服务"""
+    """小说记忆服务."""
 
     def __init__(self):
         self.cache = MemoryCache()
         self.version_map: Dict[str, int] = {}  # 小说ID -> 版本号
 
     def _compute_content_hash(self, data: Any) -> str:
-        """计算内容哈希用于变化检测"""
+        """计算内容哈希用于变化检测."""
         if data is None:
             return ""
         try:
@@ -90,7 +90,7 @@ class NovelMemoryService:
             return ""
 
     def _detect_changes(self, novel_data: Dict, current_memory: Dict) -> bool:
-        """深度变化检测 - 检测所有关键字段的变化"""
+        """深度变化检测 - 检测所有关键字段的变化."""
         # 基础字段比较
         basic_fields = ["title", "genre", "synopsis"]
         for field in basic_fields:
@@ -135,12 +135,12 @@ class NovelMemoryService:
         return False
 
     def get_novel_memory(self, novel_id: str) -> Optional[Dict[str, Any]]:
-        """获取小说记忆"""
+        """获取小说记忆."""
         cache_key = f"novel:{novel_id}"
         return self.cache.get(cache_key)
 
     def set_novel_memory(self, novel_id: str, novel_data: Dict[str, Any]) -> bool:
-        """设置小说记忆，返回是否有内容变化"""
+        """设置小说记忆，返回是否有内容变化."""
         cache_key = f"novel:{novel_id}"
 
         # 获取当前记忆
@@ -177,7 +177,7 @@ class NovelMemoryService:
         return has_changes
 
     def update_novel_memory(self, novel_id: str, updated_data: Dict[str, Any]) -> bool:
-        """更新小说记忆（增量更新），返回是否有内容变化"""
+        """更新小说记忆（增量更新），返回是否有内容变化."""
         current_memory = self.get_novel_memory(novel_id)
 
         if current_memory:
@@ -190,7 +190,7 @@ class NovelMemoryService:
         return self.set_novel_memory(novel_id, updated_memory)
 
     def invalidate_novel_memory(self, novel_id: str) -> None:
-        """使小说记忆失效"""
+        """使小说记忆失效."""
         cache_key = f"novel:{novel_id}"
         self.cache.delete(cache_key)
         if novel_id in self.version_map:
@@ -198,11 +198,11 @@ class NovelMemoryService:
         logger.info(f"Invalidated novel memory for {novel_id}")
 
     def get_novel_version(self, novel_id: str) -> int:
-        """获取小说版本号"""
+        """获取小说版本号."""
         return self.version_map.get(novel_id, 0)
 
     def _structure_novel_data(self, novel_data: Dict[str, Any]) -> Dict[str, Any]:
-        """结构化小说数据"""
+        """结构化小说数据."""
         return {
             "base": {
                 "id": novel_data.get("id"),
@@ -227,9 +227,7 @@ class NovelMemoryService:
                 "plot_outline": novel_data.get("plot_outline"),
             },
             "chapters": novel_data.get("chapters", []),
-            "chapter_summaries": novel_data.get(
-                "chapter_summaries", {}
-            ),  # 结构化章节摘要
+            "chapter_summaries": novel_data.get("chapter_summaries", {}),  # 结构化章节摘要
             "character_states": novel_data.get("character_states", {}),  # 角色状态追踪
             "analysis": novel_data.get("analysis", {}),
             "metadata": {
@@ -257,7 +255,7 @@ class NovelMemoryService:
     def _merge_memory(
         self, current: Dict[str, Any], updated: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """合并内存数据"""
+        """合并内存数据."""
         # 合并基本信息
         if "base" in updated:
             current["base"].update(updated["base"])
@@ -293,7 +291,7 @@ class NovelMemoryService:
     # ==================== 章节摘要管理方法 ====================
 
     def _ensure_novel_memory(self, novel_id: str) -> Dict[str, Any]:
-        """确保小说在缓存中存在，不存在则创建最小化条目
+        """确保小说在缓存中存在，不存在则创建最小化条目.
 
         Args:
             novel_id: 小说ID
@@ -320,7 +318,7 @@ class NovelMemoryService:
     def update_chapter_summary(
         self, novel_id: str, chapter_number: int, summary: Dict[str, Any]
     ) -> None:
-        """更新单个章节的结构化摘要
+        """更新单个章节的结构化摘要.
 
         Args:
             novel_id: 小说ID
@@ -339,7 +337,7 @@ class NovelMemoryService:
     def get_chapter_summaries(
         self, novel_id: str, max_chapters: int = 20
     ) -> Dict[str, Dict]:
-        """获取章节摘要
+        """获取章节摘要.
 
         Args:
             novel_id: 小说ID
@@ -366,7 +364,7 @@ class NovelMemoryService:
     def get_chapter_summary(
         self, novel_id: str, chapter_number: int
     ) -> Optional[Dict[str, Any]]:
-        """获取单个章节的摘要
+        """获取单个章节的摘要.
 
         Args:
             novel_id: 小说ID
@@ -383,7 +381,7 @@ class NovelMemoryService:
     def update_character_state(
         self, novel_id: str, character_name: str, state: Dict[str, Any]
     ) -> None:
-        """更新角色状态
+        """更新角色状态.
 
         Args:
             novel_id: 小说ID
@@ -405,7 +403,7 @@ class NovelMemoryService:
         logger.info(f"Updated character '{character_name}' state for novel {novel_id}")
 
     def get_character_states(self, novel_id: str) -> Dict[str, Dict]:
-        """获取所有角色状态
+        """获取所有角色状态.
 
         Args:
             novel_id: 小说ID
@@ -421,7 +419,7 @@ class NovelMemoryService:
     def get_character_state(
         self, novel_id: str, character_name: str
     ) -> Optional[Dict[str, Any]]:
-        """获取单个角色的状态
+        """获取单个角色的状态.
 
         Args:
             novel_id: 小说ID
@@ -439,7 +437,7 @@ _novel_memory_service: Optional[NovelMemoryService] = None
 
 
 def get_novel_memory_service() -> NovelMemoryService:
-    """获取小说记忆服务实例"""
+    """获取小说记忆服务实例."""
     global _novel_memory_service
     if _novel_memory_service is None:
         _novel_memory_service = NovelMemoryService()

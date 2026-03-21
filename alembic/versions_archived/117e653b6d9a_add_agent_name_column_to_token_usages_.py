@@ -1,4 +1,4 @@
-"""add agent_name column to token_usages table (minimal)
+"""add agent_name column to token_usages table (minimal).
 
 Revision ID: 117e653b6d9a
 Revises: 8a5ce9fa2032

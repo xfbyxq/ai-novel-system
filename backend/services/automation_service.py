@@ -1,4 +1,4 @@
-"""自动化服务 - 负责管理自动化工作流"""
+"""自动化服务 - 负责管理自动化工作流."""
 
 import asyncio
 import logging
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class AutomationService:
-    """自动化服务"""
+    """自动化服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -41,7 +41,7 @@ class AutomationService:
         self.agents = {}
 
     async def initialize_agents(self):
-        """初始化所有代理"""
+        """初始化所有代理."""
         # 创建内容策划代理
         self.agents["content_planner"] = ContentPlanningAgent(
             "content_planner",
@@ -85,7 +85,7 @@ class AutomationService:
         novel_id: Optional[UUID] = None,
         config: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
-        """运行自动化小说创建流程
+        """运行自动化小说创建流程.
 
         Args:
             novel_id: 小说ID，如果为None则创建新小说
@@ -166,7 +166,7 @@ class AutomationService:
             }
 
     async def _run_market_analysis(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """运行市场分析"""
+        """运行市场分析."""
         # 返回默认的市场分析结果
         return {
             "market_data_count": 100,
@@ -177,7 +177,7 @@ class AutomationService:
     async def _run_content_planning(
         self, market_analysis: Dict[str, Any], config: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """运行内容策划"""
+        """运行内容策划."""
         # 创建内容策划任务
         task_id = str(uuid4())
         task_data = {
@@ -234,7 +234,7 @@ class AutomationService:
         content_plan: Dict[str, Any],
         config: Dict[str, Any],
     ) -> Novel:
-        """创建或更新小说"""
+        """创建或更新小说."""
         if novel_id:
             # 更新现有小说
             from sqlalchemy import select
@@ -277,7 +277,7 @@ class AutomationService:
         content_plan: Dict[str, Any],
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """运行章节生成"""
+        """运行章节生成."""
         chapters_plan = content_plan.get("chapters_plan", [])
         generated_chapters = []
 
@@ -357,7 +357,7 @@ class AutomationService:
         chapters_result: Dict[str, Any],
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """运行编辑流程"""
+        """运行编辑流程."""
         from sqlalchemy import select
 
         # 获取所有章节
@@ -393,7 +393,7 @@ class AutomationService:
         editing_result: Dict[str, Any],
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """运行发布流程"""
+        """运行发布流程."""
         # 获取平台账号
         from sqlalchemy import select
 
@@ -426,7 +426,7 @@ class AutomationService:
         }
 
     async def get_workflow_status(self, workflow_id: str) -> Dict[str, Any]:
-        """获取工作流状态"""
+        """获取工作流状态."""
         # 实际实现中，这里应该从数据库获取工作流状态
         return {
             "workflow_id": workflow_id,
@@ -438,7 +438,7 @@ class AutomationService:
         self,
         batch_config: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """运行批量自动化任务
+        """运行批量自动化任务.
 
         Args:
             batch_config: 批量配置列表

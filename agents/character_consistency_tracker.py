@@ -45,7 +45,7 @@ class CharacterProfile:
     importance_level: int = 5  # 1-10，主角=10
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = [
             f"## 角色档案：{self.name}",
             f"**核心动机**: {self.core_motivation}",
@@ -68,7 +68,7 @@ class CharacterProfile:
 
     @classmethod
     def from_character_data(cls, character_data: Dict[str, Any]) -> "CharacterProfile":
-        """从角色数据创建档案"""
+        """从角色数据创建档案."""
         # 从现有角色数据中提取信息
         name = character_data.get("name", "")
 
@@ -118,7 +118,7 @@ class CharacterProfile:
 
 @dataclass
 class DecisionRecord:
-    """决策记录"""
+    """决策记录."""
 
     chapter_number: int
     decision: str  # 决策内容
@@ -128,7 +128,7 @@ class DecisionRecord:
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter": self.chapter_number,
             "decision": self.decision,
@@ -140,7 +140,7 @@ class DecisionRecord:
 
 @dataclass
 class BehavioralPattern:
-    """行为模式"""
+    """行为模式."""
 
     pattern_type: str  # "conflict_response", "social_interaction", "decision_making"
     description: str
@@ -148,13 +148,13 @@ class BehavioralPattern:
     consistency_score: float = 1.0  # 一致性评分 (0-1)
 
     def to_prompt(self) -> str:
-        """转换为提示词"""
+        """转换为提示词."""
         return f"{self.pattern_type}: {self.description}"
 
 
 @dataclass
 class ConsistencyValidation:
-    """一致性验证结果"""
+    """一致性验证结果."""
 
     passed: bool = True
     issues: List[Dict[str, Any]] = field(default_factory=list)
@@ -171,7 +171,7 @@ class ConsistencyValidation:
 
     @property
     def overall_score(self) -> float:
-        """计算综合评分"""
+        """计算综合评分."""
         return (
             self.motivation_alignment * 0.35
             + self.code_adherence * 0.30
@@ -180,7 +180,7 @@ class ConsistencyValidation:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "passed": self.passed,
             "overall_score": round(self.overall_score, 2),
@@ -307,7 +307,7 @@ class CharacterConsistencyTracker:
         )
 
     def _update_behavioral_patterns(self, decision: DecisionRecord):
-        """根据新决策更新行为模式"""
+        """根据新决策更新行为模式."""
         # 简化实现：识别决策类型并更新模式
         decision_lower = decision.decision.lower()
 
@@ -431,7 +431,7 @@ class CharacterConsistencyTracker:
         return validation
 
     def _check_motivation_alignment(self, action: str, context: str) -> Dict[str, Any]:
-        """检查行为与核心动机的一致性"""
+        """检查行为与核心动机的一致性."""
         action_lower = action.lower()
         motivation_lower = self.profile.core_motivation.lower()
 
@@ -466,7 +466,7 @@ class CharacterConsistencyTracker:
         }
 
     def _check_code_adherence(self, action: str) -> Dict[str, Any]:
-        """检查行为是否遵守个人准则"""
+        """检查行为是否遵守个人准则."""
         action_lower = action.lower()
         code_lower = self.profile.personal_code.lower()
 
@@ -488,7 +488,7 @@ class CharacterConsistencyTracker:
     def _check_personality_consistency(
         self, action: str, context: str
     ) -> Dict[str, Any]:
-        """检查行为与性格特质的一致性"""
+        """检查行为与性格特质的一致性."""
         score = 0.8  # 基础分
 
         # 根据性格特质检查行为
@@ -515,7 +515,7 @@ class CharacterConsistencyTracker:
     def _check_historical_consistency(
         self, action: str, chapter_number: int
     ) -> Dict[str, Any]:
-        """检查行为与历史决策的一致性"""
+        """检查行为与历史决策的一致性."""
         conflicts = []
         score = 1.0
 
@@ -546,7 +546,7 @@ class CharacterConsistencyTracker:
         }
 
     def _generate_analysis(self, validation: ConsistencyValidation) -> str:
-        """生成详细分析"""
+        """生成详细分析."""
         parts = []
 
         # 动机分析
@@ -578,7 +578,7 @@ class CharacterConsistencyTracker:
         return " ".join(parts)
 
     def _generate_suggestions(self, validation: ConsistencyValidation) -> List[str]:
-        """生成改进建议"""
+        """生成改进建议."""
         suggestions = []
 
         if validation.motivation_alignment < 0.6:
@@ -632,7 +632,7 @@ class CharacterConsistencyTracker:
 """
 
     def _format_decision_history(self) -> str:
-        """格式化决策历史"""
+        """格式化决策历史."""
         if not self.decision_history:
             return "（无历史决策记录）"
 
@@ -646,7 +646,7 @@ class CharacterConsistencyTracker:
         return "\n".join(parts)
 
     def _format_behavioral_patterns(self) -> str:
-        """格式化行为模式"""
+        """格式化行为模式."""
         if not self.behavioral_patterns:
             return "（无明显行为模式）"
 
@@ -657,7 +657,7 @@ class CharacterConsistencyTracker:
         return "\n".join(parts)
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """获取统计信息."""
         if not self.validation_history:
             return {"total_validations": 0, "pass_rate": 0, "average_score": 0}
 
@@ -680,7 +680,7 @@ def create_character_tracker(
     personality_traits: List[str],
     **kwargs,
 ) -> CharacterConsistencyTracker:
-    """便捷函数：创建角色追踪器"""
+    """便捷函数：创建角色追踪器."""
     profile = CharacterProfile(
         name=name,
         core_motivation=core_motivation,
@@ -698,7 +698,7 @@ def validate_character_action(
     chapter_number: int,
     decision_history: Optional[List[Dict[str, Any]]] = None,
 ) -> ConsistencyValidation:
-    """便捷函数：验证角色行为"""
+    """便捷函数：验证角色行为."""
     profile = CharacterProfile.from_character_data(character_data)
     tracker = CharacterConsistencyTracker(profile)
 

@@ -1,4 +1,4 @@
-"""add unique constraint on characters (novel_id, name)
+"""add unique constraint on characters (novel_id, name).
 
 Revision ID: a1b2c3d4e5f6
 Revises: fb6eed83562e
@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """清理重复角色数据，并添加 (novel_id, lower(name)) 唯一索引防止未来重复。"""
+    """清理重复角色数据，并添加 (novel_id, lower(name)) 唯一索引防止未来重复."""
     # 先清理现有重复数据：每组同名角色保留 created_at 最早的记录
     op.execute(sa.text("""
         DELETE FROM characters
@@ -39,5 +39,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """移除角色唯一索引。"""
+    """移除角色唯一索引."""
     op.drop_index("ix_characters_novel_id_name_unique", table_name="characters")

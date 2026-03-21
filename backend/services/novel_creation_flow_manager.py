@@ -24,7 +24,7 @@ from llm.qwen_client import QwenClient
 
 
 class FlowResponse:
-    """流程响应"""
+    """流程响应."""
 
     def __init__(
         self, message: str, context: NovelCreationContext, next_step: CreationFlowStep
@@ -35,7 +35,7 @@ class FlowResponse:
 
 
 class NovelCreationFlowManager:
-    """小说创建对话流程管理器"""
+    """小说创建对话流程管理器."""
 
     def __init__(self, db: AsyncSession, qwen_client: Optional[QwenClient] = None):
         self.db = db
@@ -45,7 +45,7 @@ class NovelCreationFlowManager:
     async def initialize_flow(
         self, session_id: str, scene: NovelDialogueScene = NovelDialogueScene.CREATE
     ) -> NovelCreationFlowState:
-        """初始化创建流程"""
+        """初始化创建流程."""
         # 创建数据库记录
         flow = NovelCreationFlow(session_id=session_id, scene=scene.value)
         self.db.add(flow)
@@ -64,7 +64,7 @@ class NovelCreationFlowManager:
         )
 
     async def process_message(self, session_id: str, user_input: str) -> FlowResponse:
-        """处理用户消息"""
+        """处理用户消息."""
         # 获取或创建上下文
         context = await self._get_or_create_context(session_id)
 
@@ -121,9 +121,9 @@ class NovelCreationFlowManager:
     async def _handle_scene_selection(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理场景选择"""
+        """处理场景选择."""
         # 使用 AI 识别用户意图
-        prompt = f"""分析用户想要进行的操作：
+        prompt = f"""分析用户想要进行的操作：.
 用户输入：{user_input}
 
 返回 JSON:
@@ -164,9 +164,9 @@ class NovelCreationFlowManager:
             return self._get_scene_selection_message()
 
     def _get_scene_selection_message(self) -> FlowResponse:
-        """获取场景选择消息"""
+        """获取场景选择消息."""
         return FlowResponse(
-            message="""您好！我是您的小说创作助手📚
+            message="""您好！我是您的小说创作助手📚.
 
 我可以帮您：
 1️⃣ **创作新小说** - 通过对话引导您完成小说创建
@@ -181,9 +181,9 @@ class NovelCreationFlowManager:
     async def _handle_initial_step(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理初始步骤"""
+        """处理初始步骤."""
         # 使用 AI 分析用户意图，提取小说类型
-        prompt = f"""请分析用户的小说创作意图，提取以下信息：
+        prompt = f"""请分析用户的小说创作意图，提取以下信息：.
 1. 小说类型（如玄幻、科幻、言情、都市、历史等）
 2. 用户提到的任何世界观元素
 3. 用户提到的任何情节或主角信息
@@ -226,7 +226,7 @@ class NovelCreationFlowManager:
         )
 
     def _get_genre_selection_message(self) -> str:
-        """获取类型选择消息"""
+        """获取类型选择消息."""
         return """您好！我是您的小说创作助手。
 
 在开始创作之前，让我先了解一下：您想创作什么类型的小说呢？
@@ -244,7 +244,7 @@ class NovelCreationFlowManager:
     async def _handle_genre_step(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理类型确认步骤"""
+        """处理类型确认步骤."""
         # 检查用户是否确认
         if any(word in user_input for word in ["确认", "确定", "是的", "好的", "对"]):
             context.genre_confirmed = True
@@ -277,9 +277,9 @@ class NovelCreationFlowManager:
     async def _handle_world_setting_step(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理世界观设定步骤"""
+        """处理世界观设定步骤."""
         # 使用 AI 提取世界观信息
-        prompt = f"""请从用户的描述中提取世界观设定的详细信息：
+        prompt = f"""请从用户的描述中提取世界观设定的详细信息：.
 
 用户输入：{user_input}
 
@@ -310,7 +310,7 @@ class NovelCreationFlowManager:
             context.world_setting_confirmed = True
             context.current_step = CreationFlowStep.SYNOPSIS_EXTRACTION.value
 
-            response_message = f"""非常精彩的世界观设定！让我总结一下：
+            response_message = f"""非常精彩的世界观设定！让我总结一下：.
 
 📖 **世界观概览**：
 - 时代：{context.world_setting.era_background or '未设定'}
@@ -332,7 +332,7 @@ class NovelCreationFlowManager:
                 context.world_setting
             )
 
-            response_message = f"""很好的设定基础！为了让世界观更加完整，让我再了解一些细节：
+            response_message = f"""很好的设定基础！为了让世界观更加完整，让我再了解一些细节：.
 
 {missing_elements}
 
@@ -349,9 +349,9 @@ class NovelCreationFlowManager:
     async def _handle_synopsis_step(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理简介提炼步骤"""
+        """处理简介提炼步骤."""
         # 使用 AI 提炼简介
-        prompt = f"""请从用户的描述中提炼小说的核心简介：
+        prompt = f"""请从用户的描述中提炼小说的核心简介：.
 
 用户输入：{user_input}
 小说类型：{context.genre}
@@ -380,7 +380,7 @@ class NovelCreationFlowManager:
         context.current_step = CreationFlowStep.FINAL_CONFIRMATION.value
 
         # 生成小说标题建议
-        title_prompt = f"""根据以下信息，生成 3 个吸引人的小说标题建议：
+        title_prompt = f"""根据以下信息，生成 3 个吸引人的小说标题建议：.
 - 类型：{context.genre}
 - 世界观：{context.world_setting.era_background or ''} {context.world_setting.geographical_environment or ''}
 - 情节：{context.synopsis.main_plot}
@@ -395,7 +395,7 @@ class NovelCreationFlowManager:
         except:
             titles_text = f"《{context.genre}传奇》"
 
-        response_message = f"""太棒了！我已经为您提炼了小说的核心简介：
+        response_message = f"""太棒了！我已经为您提炼了小说的核心简介：.
 
 📖 **故事简介**：
 {context.synopsis.main_plot}
@@ -428,7 +428,7 @@ class NovelCreationFlowManager:
     async def _handle_final_step(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理最终确认步骤"""
+        """处理最终确认步骤."""
         # 检查用户是否确认创建
         if any(word in user_input for word in ["确认", "创建", "好的", "可以", "开始"]):
             context.final_confirmed = True
@@ -470,7 +470,7 @@ class NovelCreationFlowManager:
     def _check_world_setting_completeness(
         self, world_setting: WorldSettingDetails
     ) -> bool:
-        """检查世界观信息完整性"""
+        """检查世界观信息完整性."""
         required_fields = ["era_background", "geographical_environment"]
         filled_fields = [
             field
@@ -482,7 +482,7 @@ class NovelCreationFlowManager:
     def _get_missing_world_setting_elements(
         self, world_setting: WorldSettingDetails
     ) -> str:
-        """获取缺失的世界观元素"""
+        """获取缺失的世界观元素."""
         missing = []
 
         if not world_setting.era_background or world_setting.era_background == "待定":
@@ -495,7 +495,7 @@ class NovelCreationFlowManager:
         return "\n".join(missing) if missing else ""
 
     async def _get_or_create_context(self, session_id: str) -> NovelCreationContext:
-        """获取或创建上下文"""
+        """获取或创建上下文."""
         if session_id in self._context_cache:
             return self._context_cache[session_id]
 
@@ -538,7 +538,7 @@ class NovelCreationFlowManager:
         return NovelCreationContext()
 
     async def _save_flow_state(self, session_id: str, context: NovelCreationContext):
-        """保存流程状态到数据库"""
+        """保存流程状态到数据库."""
         stmt = select(NovelCreationFlow).where(
             NovelCreationFlow.session_id == session_id
         )
@@ -568,7 +568,7 @@ class NovelCreationFlowManager:
     async def _create_novel_from_context(
         self, session_id: str, context: NovelCreationContext
     ) -> str:
-        """从上下文创建小说"""
+        """从上下文创建小说."""
         # 这里调用小说创建服务
         # 简化实现，实际应该调用 NovelService
         import uuid
@@ -591,7 +591,7 @@ class NovelCreationFlowManager:
     async def _handle_modification_request(
         self, user_input: str, context: NovelCreationContext
     ) -> str:
-        """处理修改请求"""
+        """处理修改请求."""
         # 智能识别用户想修改的内容
         if any(word in user_input for word in ["类型", "题材"]):
             context.genre_confirmed = False
@@ -616,11 +616,11 @@ class NovelCreationFlowManager:
     async def _handle_novel_selection(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理小说选择"""
+        """处理小说选择."""
         from backend.services.novel_query_service import NovelQueryService
 
         # 使用 AI 提取小说搜索关键词
-        prompt = f"""从用户输入中提取搜索关键词：
+        prompt = f"""从用户输入中提取搜索关键词：.
 用户输入：{user_input}
 
 返回 JSON:
@@ -683,7 +683,7 @@ class NovelCreationFlowManager:
     async def _handle_content_query(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理内容查询"""
+        """处理内容查询."""
         from backend.services.novel_query_service import NovelQueryService
 
         if not context.selected_novel_id:
@@ -696,7 +696,7 @@ class NovelCreationFlowManager:
         query_service = NovelQueryService(self.db)
 
         # 使用 AI 识别查询目标
-        prompt = f"""分析用户想查询的内容类型：
+        prompt = f"""分析用户想查询的内容类型：.
 用户输入：{user_input}
 
 返回 JSON:
@@ -777,7 +777,7 @@ class NovelCreationFlowManager:
             )
 
     def _format_world_setting_display(self, ws: dict) -> str:
-        """格式化世界观显示"""
+        """格式化世界观显示."""
         if "error" in ws:
             return f"❌ {ws['error']}"
 
@@ -811,7 +811,7 @@ class NovelCreationFlowManager:
         return text.strip()
 
     def _format_characters_display(self, characters: list) -> str:
-        """格式化角色列表显示"""
+        """格式化角色列表显示."""
         if not characters:
             return "暂无角色信息"
 
@@ -829,7 +829,7 @@ class NovelCreationFlowManager:
         return result
 
     def _format_plot_display(self, plot: dict) -> str:
-        """格式化剧情大纲显示"""
+        """格式化剧情大纲显示."""
         if "error" in plot:
             return f"❌ {plot['error']}"
 
@@ -853,7 +853,7 @@ class NovelCreationFlowManager:
         return text
 
     def _format_chapter_list_display(self, chapters: list) -> str:
-        """格式化章节列表显示"""
+        """格式化章节列表显示."""
         if not chapters:
             return "暂无章节"
 
@@ -864,7 +864,7 @@ class NovelCreationFlowManager:
         return result
 
     def _format_chapter_content_display(self, chapter: dict) -> str:
-        """格式化章节内容显示"""
+        """格式化章节内容显示."""
         if "error" in chapter:
             return f"❌ {chapter['error']}"
 
@@ -877,7 +877,7 @@ class NovelCreationFlowManager:
 (内容过长，仅显示前 500 字)"""
 
     def _format_basic_info_display(self, novel: dict) -> str:
-        """格式化基本信息显示"""
+        """格式化基本信息显示."""
         if not novel:
             return "❌ 小说不存在"
 
@@ -901,9 +901,9 @@ class NovelCreationFlowManager:
     async def _handle_revision_target_selection(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理修改目标选择"""
+        """处理修改目标选择."""
         # 使用 AI 识别修改目标
-        prompt = f"""分析用户想修改的内容：
+        prompt = f"""分析用户想修改的内容：.
 用户输入：{user_input}
 
 返回 JSON:
@@ -946,9 +946,9 @@ class NovelCreationFlowManager:
     async def _handle_revision_detail_collection(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理修改详情收集"""
+        """处理修改详情收集."""
         # 使用 AI 提取修改内容
-        prompt = f"""从用户输入中提取修改详情：
+        prompt = f"""从用户输入中提取修改详情：.
 用户输入：{user_input}
 修改目标：{context.revision_target}
 
@@ -985,7 +985,7 @@ class NovelCreationFlowManager:
     async def _handle_revision_confirmation(
         self, session_id: str, user_input: str, context: NovelCreationContext
     ) -> FlowResponse:
-        """处理修改确认"""
+        """处理修改确认."""
         if any(word in user_input for word in ["确认", "好的", "可以", "修改"]):
             # 执行修改
             from backend.services.novel_revision_service import NovelRevisionService
@@ -1046,7 +1046,7 @@ class NovelCreationFlowManager:
             )
 
     def _get_target_display_name(self, target: str) -> str:
-        """获取目标的显示名称"""
+        """获取目标的显示名称."""
         mapping = {
             "world_setting": "世界观设定",
             "character": "角色",
@@ -1056,11 +1056,13 @@ class NovelCreationFlowManager:
         return mapping.get(target, target)
 
     def _generate_revision_preview(self, context: NovelCreationContext) -> str:
-        """生成修改预览"""
+        """生成修改预览."""
         if not context.revision_details:
             return "暂无修改内容"
 
-        preview = f"**修改目标**: {self._get_target_display_name(context.revision_target)}\n\n"
+        preview = (
+            f"**修改目标**: {self._get_target_display_name(context.revision_target)}\n\n"
+        )
 
         for field, value in context.revision_details.items():
             # 字段名映射

@@ -1,4 +1,4 @@
-"""E2E测试配置文件"""
+"""E2E测试配置文件."""
 
 import os
 import pytest
@@ -10,7 +10,7 @@ load_dotenv()
 
 
 def pytest_configure(config):
-    """pytest配置钩子"""
+    """pytest配置钩子."""
     config.addinivalue_line("markers", "ui: mark test as UI test")
     config.addinivalue_line("markers", "smoke: mark test as smoke test")
     config.addinivalue_line("markers", "regression: mark test as regression test")

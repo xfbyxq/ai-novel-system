@@ -1,4 +1,4 @@
-"""大纲迭代优化控制器 - 管理大纲完善过程中的迭代优化"""
+"""大纲迭代优化控制器 - 管理大纲完善过程中的迭代优化."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -10,7 +10,7 @@ from agents.iteration_controller import IterationController, IterationRecord
 
 @dataclass
 class OutlineOptimizationRecord:
-    """大纲优化迭代记录"""
+    """大纲优化迭代记录."""
 
     iteration: int
     quality_score: float
@@ -39,7 +39,7 @@ class OutlineOptimizationRecord:
 
 
 class OutlineIterationController:
-    """大纲迭代优化控制器"""
+    """大纲迭代优化控制器."""
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class OutlineIterationController:
         max_iterations: int = 3,
         cost_limit: Optional[float] = None,
     ):
-        """初始化大纲迭代控制器
+        """初始化大纲迭代控制器。
 
         Args:
             quality_threshold: 质量评分阈值
@@ -74,7 +74,7 @@ class OutlineIterationController:
         iteration: Optional[int] = None,
         cost_delta: float = 0.0,
     ) -> bool:
-        """判断是否需要继续大纲优化迭代
+        """判断是否需要继续大纲优化迭代。
 
         Args:
             quality_score: 当前质量评分
@@ -134,7 +134,7 @@ class OutlineIterationController:
         remaining_issues: List[str],
         cost_delta: float = 0.0,
     ) -> OutlineOptimizationRecord:
-        """记录一轮大纲优化迭代"""
+        """记录一轮大纲优化迭代."""
         self.current_iteration += 1
         self.cumulative_cost += cost_delta
 
@@ -162,7 +162,7 @@ class OutlineIterationController:
         return record
 
     def get_summary(self) -> Dict[str, Any]:
-        """获取优化过程摘要"""
+        """获取优化过程摘要."""
         quality_scores = [r.quality_score for r in self.history]
         consistency_scores = [r.consistency_score for r in self.history]
 
@@ -190,11 +190,11 @@ class OutlineIterationController:
         }
 
     def get_best_outline(self) -> Optional[Dict[str, Any]]:
-        """获取最优大纲版本"""
+        """获取最优大纲版本."""
         return self.best_outline
 
     def reset(self):
-        """重置控制器"""
+        """重置控制器."""
         self.history.clear()
         self.current_iteration = 0
         self.cumulative_cost = 0.0
@@ -209,7 +209,7 @@ class OutlineIterationController:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """迭代优化大纲直到满足质量标准
+        """迭代优化大纲直到满足质量标准。
 
         Args:
             initial_outline: 初始大纲
@@ -308,7 +308,7 @@ class OutlineIterationController:
         consistency_result: Dict[str, Any],
         current_outline: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
-        """生成优化计划"""
+        """生成优化计划."""
         suggestions = []
 
         # 基于质量评估的建议
@@ -359,7 +359,7 @@ class OutlineIterationController:
     async def _apply_optimizations(
         self, outline: Dict[str, Any], suggestions: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """应用优化建议"""
+        """应用优化建议."""
         optimized_outline = outline.copy()
 
         # 简单的优化处理
@@ -383,7 +383,7 @@ class OutlineIterationController:
     def _summarize_changes(
         self, old_outline: Dict[str, Any], new_outline: Dict[str, Any]
     ) -> List[str]:
-        """总结变更内容"""
+        """总结变更内容."""
         changes = []
 
         # 简单比较主要字段
@@ -399,7 +399,7 @@ class OutlineIterationController:
         return changes if changes else ["微调优化"]
 
     def _identify_resolved_issues(self, suggestions: List[Dict[str, Any]]) -> List[str]:
-        """识别已解决的问题"""
+        """识别已解决的问题."""
         resolved = []
         for suggestion in suggestions:
             resolved.append(f"处理了{suggestion['target']}问题")
@@ -408,7 +408,7 @@ class OutlineIterationController:
     def _identify_remaining_issues(
         self, quality_result: Any, consistency_result: Dict[str, Any]
     ) -> List[str]:
-        """识别剩余问题"""
+        """识别剩余问题."""
         remaining = []
 
         # 质量方面的剩余问题

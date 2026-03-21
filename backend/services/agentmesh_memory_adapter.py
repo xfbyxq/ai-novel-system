@@ -31,7 +31,7 @@ class NovelMemoryStorage:
         self._init_tables()
 
     def _get_connection(self) -> sqlite3.Connection:
-        """获取线程本地连接（线程安全）"""
+        """获取线程本地连接（线程安全）."""
         if not hasattr(self._local, "conn") or self._local.conn is None:
             self._local.conn = sqlite3.connect(
                 str(self.db_path), check_same_thread=False, timeout=30.0
@@ -43,12 +43,13 @@ class NovelMemoryStorage:
         return self._local.conn
 
     def _init_tables(self):
-        """初始化数据库表结构"""
+        """初始化数据库表结构."""
         with self._init_lock:
             conn = self._get_connection()
 
             # 章节摘要表
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chapter_summaries (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -64,10 +65,12 @@ class NovelMemoryStorage:
                     updated_at TEXT NOT NULL,
                     UNIQUE(novel_id, chapter_number)
                 )
-            """)
+            """
+            )
 
             # 角色状态表
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS character_states (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -84,10 +87,12 @@ class NovelMemoryStorage:
                     updated_at TEXT NOT NULL,
                     UNIQUE(novel_id, character_name)
                 )
-            """)
+            """
+            )
 
             # 小说元数据表（长期记忆）
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS novel_metadata (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT UNIQUE NOT NULL,
@@ -101,10 +106,12 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # 伏笔追踪表
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS foreshadowing (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -120,10 +127,12 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # 记忆块表（用于语义搜索）
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS memory_chunks (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -135,11 +144,13 @@ class NovelMemoryStorage:
                     token_count INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # FTS5 全文索引（用于关键词搜索）
             try:
-                conn.execute("""
+                conn.execute(
+                    """
                     CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
                     USING fts5(
                         text,
@@ -149,7 +160,8 @@ class NovelMemoryStorage:
                         content='memory_chunks',
                         content_rowid='rowid'
                     )
-                """)
+                """
+                )
             except sqlite3.OperationalError:
                 # FTS5 已存在或不支持，忽略
                 pass
@@ -157,7 +169,8 @@ class NovelMemoryStorage:
             # ── 反思机制表 ──────────────────────────────────────
 
             # 反思记录表（短期反思输出，每次审查循环一条）
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS reflection_entries (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -179,10 +192,12 @@ class NovelMemoryStorage:
                     stagnation_detected INTEGER DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # 跨章节模式表（长期反思输出）
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS chapter_patterns (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -197,10 +212,12 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # 写作经验规则表（长期反思输出，注入到 prompt）
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS writing_lessons (
                     id TEXT PRIMARY KEY,
                     novel_id TEXT NOT NULL,
@@ -216,7 +233,8 @@ class NovelMemoryStorage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-            """)
+            """
+            )
 
             # 创建索引
             conn.execute(
@@ -263,7 +281,7 @@ class NovelMemoryStorage:
             logger.info(f"Initialized novel memory storage at {self.db_path}")
 
     def _compute_hash(self, data: Any) -> str:
-        """计算数据哈希（SHA256）"""
+        """计算数据哈希（SHA256）."""
         if data is None:
             return ""
         try:
@@ -281,7 +299,7 @@ class NovelMemoryStorage:
         summary: Dict[str, Any],
         full_content_hash: str = "",
     ) -> str:
-        """保存章节摘要"""
+        """保存章节摘要."""
         conn = self._get_connection()
         now = datetime.now().isoformat()
 
@@ -369,7 +387,7 @@ class NovelMemoryStorage:
     def get_chapter_summary(
         self, novel_id: str, chapter_number: int
     ) -> Optional[Dict[str, Any]]:
-        """获取单个章节摘要"""
+        """获取单个章节摘要."""
         conn = self._get_connection()
         row = conn.execute(
             "SELECT * FROM chapter_summaries WHERE novel_id = ? AND chapter_number = ?",
@@ -387,7 +405,7 @@ class NovelMemoryStorage:
         end_chapter: Optional[int] = None,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """获取章节摘要列表"""
+        """获取章节摘要列表."""
         conn = self._get_connection()
 
         if end_chapter:
@@ -414,7 +432,7 @@ class NovelMemoryStorage:
     def get_recent_chapter_summaries(
         self, novel_id: str, current_chapter: int, count: int = 5
     ) -> List[Dict[str, Any]]:
-        """获取最近 N 章摘要（用于上下文构建）"""
+        """获取最近 N 章摘要（用于上下文构建）."""
         conn = self._get_connection()
         query = """
             SELECT * FROM chapter_summaries
@@ -430,7 +448,7 @@ class NovelMemoryStorage:
         )
 
     def _row_to_summary_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
-        """将数据库行转换为摘要字典"""
+        """将数据库行转换为摘要字典."""
         return {
             "id": row["id"],
             "novel_id": row["novel_id"],
@@ -451,7 +469,7 @@ class NovelMemoryStorage:
     def _format_summary_for_search(
         self, summary: Dict[str, Any], chapter_number: int
     ) -> str:
-        """格式化摘要用于全文搜索"""
+        """格式化摘要用于全文搜索."""
         parts = [f"第{chapter_number}章"]
 
         if summary.get("key_events"):
@@ -481,7 +499,7 @@ class NovelMemoryStorage:
     def save_character_state(
         self, novel_id: str, character_name: str, state: Dict[str, Any]
     ) -> str:
-        """保存角色状态"""
+        """保存角色状态."""
         conn = self._get_connection()
         now = datetime.now().isoformat()
         state_hash = self._compute_hash(state)
@@ -570,7 +588,7 @@ class NovelMemoryStorage:
     def get_character_state(
         self, novel_id: str, character_name: str
     ) -> Optional[Dict[str, Any]]:
-        """获取单个角色状态"""
+        """获取单个角色状态."""
         conn = self._get_connection()
         row = conn.execute(
             "SELECT * FROM character_states WHERE novel_id = ? AND character_name = ?",
@@ -582,7 +600,7 @@ class NovelMemoryStorage:
         return None
 
     def get_all_character_states(self, novel_id: str) -> Dict[str, Dict[str, Any]]:
-        """获取所有角色状态"""
+        """获取所有角色状态."""
         conn = self._get_connection()
         rows = conn.execute(
             "SELECT * FROM character_states WHERE novel_id = ?", (novel_id,)
@@ -591,7 +609,7 @@ class NovelMemoryStorage:
         return {row["character_name"]: self._row_to_character_dict(row) for row in rows}
 
     def _row_to_character_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
-        """将数据库行转换为角色状态字典"""
+        """将数据库行转换为角色状态字典."""
         return {
             "id": row["id"],
             "novel_id": row["novel_id"],
@@ -613,7 +631,7 @@ class NovelMemoryStorage:
     # ==================== 小说元数据操作（长期记忆） ====================
 
     def save_novel_metadata(self, novel_id: str, metadata: Dict[str, Any]) -> str:
-        """保存小说元数据（长期记忆）"""
+        """保存小说元数据（长期记忆）."""
         conn = self._get_connection()
         now = datetime.now().isoformat()
         metadata_hash = self._compute_hash(metadata)
@@ -685,7 +703,7 @@ class NovelMemoryStorage:
         return record_id
 
     def get_novel_metadata(self, novel_id: str) -> Optional[Dict[str, Any]]:
-        """获取小说元数据"""
+        """获取小说元数据."""
         conn = self._get_connection()
         row = conn.execute(
             "SELECT * FROM novel_metadata WHERE novel_id = ?", (novel_id,)
@@ -721,7 +739,7 @@ class NovelMemoryStorage:
         chapter_number: Optional[int],
         text: str,
     ):
-        """更新记忆块（用于全文搜索）"""
+        """更新记忆块（用于全文搜索）."""
         conn = self._get_connection()
         now = datetime.now().isoformat()
         text_hash = self._compute_hash(text)
@@ -844,7 +862,7 @@ class NovelMemoryStorage:
         source_types: Optional[List[str]] = None,
         limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        """LIKE 搜索回退"""
+        """LIKE 搜索回退."""
         conn = self._get_connection()
 
         # 分词搜索
@@ -900,7 +918,7 @@ class NovelMemoryStorage:
     def get_foreshadowing(
         self, novel_id: str, status: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """查询伏笔列表
+        """查询伏笔列表.
 
         Args:
             novel_id: 小说ID
@@ -953,7 +971,7 @@ class NovelMemoryStorage:
     def get_timeline_events(
         self, novel_id: str, limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """从章节摘要中提取关键事件作为时间线
+        """从章节摘要中提取关键事件作为时间线.
 
         由于没有独立的 timeline 表，直接从 chapter_summaries
         中提取每章的 key_events 作为时间线事件。
@@ -968,7 +986,7 @@ class NovelMemoryStorage:
         conn = self._get_connection()
 
         rows = conn.execute(
-            """SELECT chapter_number, key_events, plot_progress
+            """SELECT chapter_number, key_events, plot_progress.
                FROM chapter_summaries
                WHERE novel_id = ?
                ORDER BY chapter_number DESC
@@ -1014,7 +1032,7 @@ class NovelMemoryStorage:
     # ==================== 工具方法 ====================
 
     def get_statistics(self, novel_id: str) -> Dict[str, Any]:
-        """获取小说记忆统计"""
+        """获取小说记忆统计."""
         conn = self._get_connection()
 
         chapter_count = conn.execute(
@@ -1051,7 +1069,7 @@ class NovelMemoryStorage:
     # ==================== 反思记录操作 ====================
 
     def save_reflection_entry(self, novel_id: str, entry: Dict[str, Any]) -> str:
-        """保存一条短期反思记录"""
+        """保存一条短期反思记录."""
         conn = self._get_connection()
         record_id = str(uuid.uuid4())[:12]
         now = entry.get("created_at", datetime.now().isoformat())
@@ -1100,19 +1118,19 @@ class NovelMemoryStorage:
         loop_type: Optional[str] = None,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """获取反思记录列表"""
+        """获取反思记录列表."""
         conn = self._get_connection()
 
         if loop_type:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries
+                """SELECT * FROM reflection_entries.
                    WHERE novel_id = ? AND loop_type = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, loop_type, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries
+                """SELECT * FROM reflection_entries.
                    WHERE novel_id = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, limit),
@@ -1146,7 +1164,7 @@ class NovelMemoryStorage:
     # ==================== 模式 (Pattern) 操作 ====================
 
     def save_pattern(self, novel_id: str, pattern: Dict[str, Any]) -> str:
-        """保存一条跨章节模式"""
+        """保存一条跨章节模式."""
         conn = self._get_connection()
         record_id = str(uuid.uuid4())[:12]
         now = pattern.get("created_at", datetime.now().isoformat())
@@ -1183,10 +1201,10 @@ class NovelMemoryStorage:
     def get_active_patterns(
         self, novel_id: str, limit: int = 20
     ) -> List[Dict[str, Any]]:
-        """获取活跃的模式列表"""
+        """获取活跃的模式列表."""
         conn = self._get_connection()
         rows = conn.execute(
-            """SELECT * FROM chapter_patterns
+            """SELECT * FROM chapter_patterns.
                WHERE novel_id = ? AND status = 'active'
                ORDER BY confidence DESC, occurrence_count DESC
                LIMIT ?""",
@@ -1208,7 +1226,7 @@ class NovelMemoryStorage:
     # ==================== 经验规则 (Lesson) 操作 ====================
 
     def save_lesson(self, novel_id: str, lesson: Dict[str, Any]) -> str:
-        """保存一条写作经验规则"""
+        """保存一条写作经验规则."""
         conn = self._get_connection()
         record_id = str(uuid.uuid4())[:12]
         now = lesson.get("created_at", datetime.now().isoformat())
@@ -1249,12 +1267,12 @@ class NovelMemoryStorage:
         lesson_type: Optional[str] = None,
         limit: int = 20,
     ) -> List[Dict[str, Any]]:
-        """获取适用的经验规则列表"""
+        """获取适用的经验规则列表."""
         conn = self._get_connection()
 
         if lesson_type:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons
+                """SELECT * FROM writing_lessons.
                    WHERE novel_id = ? AND lesson_type = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",
@@ -1262,7 +1280,7 @@ class NovelMemoryStorage:
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons
+                """SELECT * FROM writing_lessons.
                    WHERE novel_id = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",
@@ -1289,7 +1307,7 @@ class NovelMemoryStorage:
         effectiveness_score: Optional[float] = None,
         status: Optional[str] = None,
     ) -> None:
-        """更新经验规则的效果追踪数据"""
+        """更新经验规则的效果追踪数据."""
         conn = self._get_connection()
         now = datetime.now().isoformat()
 
@@ -1320,7 +1338,7 @@ class NovelMemoryStorage:
         conn.commit()
 
     def close(self):
-        """关闭数据库连接"""
+        """关闭数据库连接."""
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()
             self._local.conn = None
@@ -1409,9 +1427,7 @@ class NovelMemoryAdapter:
                 if state.get("status") and state["status"] != "active":
                     state_text += f"\n- 状态：{state['status']}"
                 if state.get("pending_events"):
-                    state_text += (
-                        f"\n- 待处理事件：{'；'.join(state['pending_events'])}"
-                    )
+                    state_text += f"\n- 待处理事件：{'；'.join(state['pending_events'])}"
                 parts.append(state_text)
 
         return "\n".join(parts) if parts else ""
@@ -1533,7 +1549,7 @@ class NovelMemoryAdapter:
         chapter_number: int,
         updates: Dict[str, Any],
     ):
-        """更新角色状态"""
+        """更新角色状态."""
         # 获取当前状态
         current = self.storage.get_character_state(novel_id, character_name) or {}
 
@@ -1564,11 +1580,11 @@ class NovelMemoryAdapter:
     # ==================== 统计和管理 ====================
 
     def get_statistics(self, novel_id: str) -> Dict[str, Any]:
-        """获取小说记忆统计"""
+        """获取小说记忆统计."""
         return self.storage.get_statistics(novel_id)
 
     def close(self):
-        """关闭适配器"""
+        """关闭适配器."""
         self.storage.close()
 
 
@@ -1577,7 +1593,7 @@ _novel_memory_adapter: Optional[NovelMemoryAdapter] = None
 
 
 def get_novel_memory_adapter() -> NovelMemoryAdapter:
-    """获取小说记忆适配器实例（单例）"""
+    """获取小说记忆适配器实例（单例）."""
     global _novel_memory_adapter
     if _novel_memory_adapter is None:
         _novel_memory_adapter = NovelMemoryAdapter()

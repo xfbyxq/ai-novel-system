@@ -1,4 +1,4 @@
-"""监控服务 - 负责系统监控和自动调优"""
+"""监控服务 - 负责系统监控和自动调优."""
 
 import logging
 import time
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 class MonitoringService:
-    """监控服务"""
+    """监控服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -69,7 +69,7 @@ class MonitoringService:
         self.metrics_history = []
 
     async def get_agent_statuses(self) -> List[Dict[str, Any]]:
-        """获取Agent状态
+        """获取Agent状态.
 
         Returns:
             Agent状态列表
@@ -79,7 +79,7 @@ class MonitoringService:
         return AGENTS
 
     async def get_agent_history(self, agent_id: str) -> List[Dict[str, Any]]:
-        """获取Agent历史任务
+        """获取Agent历史任务.
 
         Args:
             agent_id: Agent ID
@@ -126,7 +126,7 @@ class MonitoringService:
         return history
 
     async def get_system_status(self) -> Dict[str, Any]:
-        """获取系统状态
+        """获取系统状态.
 
         Returns:
             系统状态信息
@@ -191,7 +191,7 @@ class MonitoringService:
         self,
         days: int = 7,
     ) -> Dict[str, Any]:
-        """获取性能指标
+        """获取性能指标.
 
         Args:
             days: 分析天数
@@ -292,7 +292,7 @@ class MonitoringService:
         self,
         days: int = 7,
     ) -> Dict[str, Any]:
-        """获取错误分析
+        """获取错误分析.
 
         Args:
             days: 分析天数
@@ -397,7 +397,7 @@ class MonitoringService:
         return error_analysis
 
     async def get_auto_optimization_suggestions(self) -> Dict[str, Any]:
-        """获取自动调优建议
+        """获取自动调优建议.
 
         Returns:
             自动调优建议
@@ -433,7 +433,7 @@ class MonitoringService:
         return suggestions
 
     async def get_system_health_check(self) -> Dict[str, Any]:
-        """获取系统健康检查
+        """获取系统健康检查.
 
         Returns:
             系统健康检查结果
@@ -467,7 +467,7 @@ class MonitoringService:
         return health_check
 
     async def _check_database_status(self) -> Dict[str, Any]:
-        """检查数据库状态
+        """检查数据库状态.
 
         Returns:
             数据库状态
@@ -487,7 +487,7 @@ class MonitoringService:
             }
 
     async def _get_task_status(self) -> Dict[str, Any]:
-        """获取任务状态
+        """获取任务状态.
 
         Returns:
             任务状态统计
@@ -568,7 +568,7 @@ class MonitoringService:
         disk_percent: float,
         db_status: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """评估系统健康状态
+        """评估系统健康状态.
 
         Args:
             cpu_percent: CPU使用率
@@ -637,7 +637,7 @@ class MonitoringService:
         self,
         system_status: Dict[str, Any],
     ) -> List[str]:
-        """生成系统调优建议
+        """生成系统调优建议.
 
         Args:
             system_status: 系统状态
@@ -669,7 +669,7 @@ class MonitoringService:
         self,
         performance_metrics: Dict[str, Any],
     ) -> List[str]:
-        """生成性能调优建议
+        """生成性能调优建议.
 
         Args:
             performance_metrics: 性能指标
@@ -684,9 +684,7 @@ class MonitoringService:
         estimated_cost = token_usage.get("estimated_cost", 0)
 
         if estimated_cost > 100:
-            suggestions.append(
-                "Token使用成本较高，建议优化提示词和生成参数以减少Token消耗"
-            )
+            suggestions.append("Token使用成本较高，建议优化提示词和生成参数以减少Token消耗")
 
         # 分析任务成功率
         generation_tasks = performance_metrics.get("generation_tasks", {})
@@ -708,7 +706,7 @@ class MonitoringService:
         self,
         error_analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成错误调优建议
+        """生成错误调优建议.
 
         Args:
             error_analysis: 错误分析
@@ -741,7 +739,7 @@ class MonitoringService:
         performance_metrics: Dict[str, Any],
         error_analysis: Dict[str, Any],
     ) -> List[str]:
-        """优先级排序建议
+        """优先级排序建议.
 
         Args:
             system_status: 系统状态
@@ -775,10 +773,7 @@ class MonitoringService:
 
         # 优先处理严重问题
         for suggestion in unique_suggestions:
-            if any(
-                keyword in suggestion
-                for keyword in ["异常", "过高", "失败率", "错误较多"]
-            ):
+            if any(keyword in suggestion for keyword in ["异常", "过高", "失败率", "错误较多"]):
                 priority_suggestions.append(suggestion)
 
         # 然后处理一般建议
@@ -789,7 +784,7 @@ class MonitoringService:
         return priority_suggestions[:10]  # 限制建议数量
 
     def _record_metrics(self, system_status: Dict[str, Any]):
-        """记录指标历史
+        """记录指标历史.
 
         Args:
             system_status: 系统状态
@@ -815,7 +810,7 @@ class MonitoringService:
         self.metrics_history.append(metrics)
 
     def _calculate_success_rate(self, success_count: int, total_count: int) -> float:
-        """计算成功率
+        """计算成功率.
 
         Args:
             success_count: 成功数量
@@ -834,7 +829,7 @@ class MonitoringService:
         failed_publish_tasks: List,
         failed_crawler_tasks: List,
     ) -> List[Dict[str, Any]]:
-        """分析错误模式
+        """分析错误模式.
 
         Args:
             failed_generation_tasks: 失败的生成任务

@@ -1,4 +1,4 @@
-"""Pydantic schemas for the novel system"""
+"""Pydantic schemas for the novel system."""
 
 # Novel schemas
 # Character schemas

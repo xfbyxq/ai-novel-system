@@ -1,4 +1,4 @@
-"""add_batch_writing_task_type
+"""add_batch_writing_task_type.
 
 Revision ID: 40555b81bb5d
 Revises: 5badc20e064a

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""数据去重服务 - 负责处理爬虫数据的去重和增量爬取"""
+"""数据去重服务 - 负责处理爬虫数据的去重和增量爬取."""
 
 import hashlib
 import json
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class DataDeduplicationService:
-    """数据去重服务"""
+    """数据去重服务."""
 
     def __init__(self):
         self.redis_client = redis.from_url(settings.REDIS_URL)
@@ -23,7 +23,7 @@ class DataDeduplicationService:
         self.logger = logger.getChild("data_deduplication")
 
     async def initialize(self):
-        """初始化数据去重服务"""
+        """初始化数据去重服务."""
         try:
             # 测试Redis连接
             await self.redis_client.ping()
@@ -34,7 +34,7 @@ class DataDeduplicationService:
             raise
 
     def calculate_item_hash(self, item: Dict[str, Any]) -> str:
-        """计算数据项的哈希值
+        """计算数据项的哈希值.
 
         Args:
             item: 数据项
@@ -54,7 +54,7 @@ class DataDeduplicationService:
     async def is_duplicate(
         self, platform: str, data_type: str, item: Dict[str, Any]
     ) -> bool:
-        """检查数据项是否重复
+        """检查数据项是否重复.
 
         Args:
             platform: 平台
@@ -83,7 +83,7 @@ class DataDeduplicationService:
         item: Dict[str, Any],
         expiration: int = 86400,
     ):
-        """标记数据项为已处理
+        """标记数据项为已处理.
 
         Args:
             platform: 平台
@@ -104,7 +104,7 @@ class DataDeduplicationService:
     async def batch_check_duplicates(
         self, platform: str, data_type: str, items: List[Dict[str, Any]]
     ) -> List[bool]:
-        """批量检查数据项是否重复
+        """批量检查数据项是否重复.
 
         Args:
             platform: 平台
@@ -132,7 +132,7 @@ class DataDeduplicationService:
         items: List[Dict[str, Any]],
         expiration: int = 86400,
     ):
-        """批量标记数据项为已处理
+        """批量标记数据项为已处理.
 
         Args:
             platform: 平台
@@ -156,7 +156,7 @@ class DataDeduplicationService:
     async def get_last_crawl_time(
         self, platform: str, data_type: str
     ) -> Optional[datetime]:
-        """获取上次爬取时间
+        """获取上次爬取时间.
 
         Args:
             platform: 平台
@@ -177,7 +177,7 @@ class DataDeduplicationService:
             return None
 
     async def update_last_crawl_time(self, platform: str, data_type: str):
-        """更新上次爬取时间
+        """更新上次爬取时间.
 
         Args:
             platform: 平台
@@ -191,7 +191,7 @@ class DataDeduplicationService:
             self.logger.error(f"更新上次爬取时间失败: {e}")
 
     async def cleanup_old_records(self, days: int = 7):
-        """清理旧记录
+        """清理旧记录.
 
         Args:
             days: 保留天数
@@ -237,7 +237,7 @@ class DataDeduplicationService:
             self.logger.error(f"清理旧记录失败: {e}")
 
     async def get_statistics(self) -> Dict[str, Any]:
-        """获取去重统计信息
+        """获取去重统计信息.
 
         Returns:
             统计信息

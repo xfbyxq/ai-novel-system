@@ -1,4 +1,4 @@
-"""Agent 活动记录器 - 用于记录和管理 Agent 的详细活动"""
+"""Agent 活动记录器 - 用于记录和管理 Agent 的详细活动."""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -120,7 +120,7 @@ class AgentActivityRecorder:
         output_data: Dict[str, Any],
         **kwargs,
     ) -> AgentActivity:
-        """记录企划阶段的 Agent 活动"""
+        """记录企划阶段的 Agent 活动."""
         return await self.record_activity(
             novel_id=novel_id,
             task_id=task_id,
@@ -146,7 +146,7 @@ class AgentActivityRecorder:
         raw_output: Optional[str] = None,
         **kwargs,
     ) -> AgentActivity:
-        """记录写作阶段的 Agent 活动"""
+        """记录写作阶段的 Agent 活动."""
         metadata = kwargs.pop("metadata", {})
         metadata["chapter_number"] = chapter_number
 
@@ -178,7 +178,7 @@ class AgentActivityRecorder:
         suggestions: Optional[List[str]] = None,
         **kwargs,
     ) -> AgentActivity:
-        """记录审查活动的 Agent 活动"""
+        """记录审查活动的 Agent 活动."""
         metadata = kwargs.pop("metadata", {})
         metadata.update(
             {
@@ -213,7 +213,7 @@ class AgentActivityRecorder:
         confidence: float,
         **kwargs,
     ) -> AgentActivity:
-        """记录投票活动的 Agent 活动"""
+        """记录投票活动的 Agent 活动."""
         metadata = kwargs.pop("metadata", {})
         metadata.update(
             {
@@ -239,7 +239,7 @@ class AgentActivityRecorder:
     async def get_activities_by_task(
         self, task_id: UUID, limit: int = 100
     ) -> List[AgentActivity]:
-        """获取指定任务的所有 Agent 活动"""
+        """获取指定任务的所有 Agent 活动."""
         result = await self.db.execute(
             select(AgentActivity)
             .where(AgentActivity.task_id == task_id)
@@ -251,7 +251,7 @@ class AgentActivityRecorder:
     async def get_activities_by_novel(
         self, novel_id: UUID, limit: int = 200
     ) -> List[AgentActivity]:
-        """获取指定小说的所有 Agent 活动"""
+        """获取指定小说的所有 Agent 活动."""
         result = await self.db.execute(
             select(AgentActivity)
             .where(AgentActivity.novel_id == novel_id)
@@ -263,7 +263,7 @@ class AgentActivityRecorder:
     async def get_activities_by_agent(
         self, agent_name: str, novel_id: Optional[UUID] = None, limit: int = 100
     ) -> List[AgentActivity]:
-        """获取指定 Agent 的活动记录"""
+        """获取指定 Agent 的活动记录."""
         query = select(AgentActivity).where(AgentActivity.agent_name == agent_name)
 
         if novel_id:
@@ -274,7 +274,7 @@ class AgentActivityRecorder:
         return list(result.scalars().all())
 
     async def get_activity_summary(self, task_id: UUID) -> Dict[str, Any]:
-        """获取任务的活动摘要"""
+        """获取任务的活动摘要."""
         activities = await self.get_activities_by_task(task_id)
 
         if not activities:
@@ -305,5 +305,5 @@ class AgentActivityRecorder:
 
 
 def get_agent_activity_recorder(db: AsyncSession) -> AgentActivityRecorder:
-    """获取 Agent 活动记录器实例"""
+    """获取 Agent 活动记录器实例."""
     return AgentActivityRecorder(db)

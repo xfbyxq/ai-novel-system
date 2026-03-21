@@ -1,4 +1,4 @@
-"""集成API"""
+"""集成API."""
 
 from typing import Any, Dict, Optional
 from uuid import UUID
@@ -18,7 +18,7 @@ async def run_end_to_end_workflow(
     novel_id: Optional[UUID] = Body(None, description="小说ID，如果为None则创建新小说"),
     db: AsyncSession = Depends(get_db),
 ):
-    """运行端到端的自动化小说创作和发布工作流"""
+    """运行端到端的自动化小说创作和发布工作流."""
     service = IntegrationService(db)
     result = await service.run_end_to_end_workflow(
         config=config,
@@ -36,7 +36,7 @@ async def get_workflow_history(
     offset: int = Query(0, description="偏移量"),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取工作流历史记录"""
+    """获取工作流历史记录."""
     service = IntegrationService(db)
     history = await service.get_workflow_history(
         limit=limit,
@@ -53,7 +53,7 @@ async def get_workflow_detail(
     workflow_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取工作流详情"""
+    """获取工作流详情."""
     service = IntegrationService(db)
     detail = await service.get_workflow_detail(workflow_id)
     return {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""自动小说创作流程脚本"""
+"""自动小说创作流程脚本."""
 
 import asyncio
 import logging
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AutoNovelProcess:
-    """自动小说创作流程"""
+    """自动小说创作流程."""
 
     def __init__(self):
         self.scheduler = None
@@ -40,7 +40,7 @@ class AutoNovelProcess:
         self.task_results = {}
 
     async def initialize(self):
-        """初始化系统"""
+        """初始化系统."""
         logger.info("🚀 初始化自动小说创作流程...")
 
         try:
@@ -66,7 +66,7 @@ class AutoNovelProcess:
     async def run_full_process(
         self, genre="玄幻", tags=["系统", "穿越"], platform="qidian"
     ):
-        """运行完整的小说创作流程
+        """运行完整的小说创作流程。
 
         Args:
             genre: 小说类型
@@ -225,7 +225,7 @@ class AutoNovelProcess:
             }
 
     async def wait_for_task_completion(self, task_id, task_name):
-        """等待任务完成
+        """等待任务完成。
 
         Args:
             task_id: 任务ID
@@ -254,7 +254,7 @@ class AutoNovelProcess:
 
 
 async def main():
-    """主函数"""
+    """主函数."""
     auto_process = AutoNovelProcess()
 
     try:

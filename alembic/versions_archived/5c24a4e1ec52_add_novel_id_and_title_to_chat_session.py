@@ -1,4 +1,4 @@
-"""add novel_id and title to chat session
+"""add novel_id and title to chat session.
 
 Revision ID: 5c24a4e1ec52
 Revises: 575f1ce44645

@@ -1,4 +1,4 @@
-"""Agent 活动日志模型 - 记录每个 Agent 的详细活动"""
+"""Agent 活动日志模型 - 记录每个 Agent 的详细活动."""
 
 import uuid
 from datetime import datetime
@@ -133,7 +133,7 @@ class AgentActivity(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "id": str(self.id),
             "novel_id": str(self.novel_id),
@@ -163,7 +163,7 @@ class AgentActivity(Base):
 
     @classmethod
     def from_activity(cls, data: Dict[str, Any]) -> "AgentActivity":
-        """从字典创建实例"""
+        """从字典创建实例."""
         return cls(
             novel_id=data.get("novel_id"),
             task_id=data.get("task_id"),

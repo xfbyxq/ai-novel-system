@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 
 def get_version_from_pyproject() -> str:
-    """从 pyproject.toml 动态读取版本号"""
+    """从 pyproject.toml 动态读取版本号."""
     import re
 
     try:
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     DB_NAME: str = "novel_system"
 
     def model_post_init(self, __context) -> None:
-        """初始化后验证：确保敏感配置已设置"""
+        """初始化后验证：确保敏感配置已设置."""
         if self.DB_PASSWORD is None:
             raise ValueError(
                 "DB_PASSWORD 未设置！请通过环境变量或 .env 文件配置数据库密码。\n"
@@ -43,46 +43,46 @@ class Settings(BaseSettings):
 
     @property
     def DB_HOST(self) -> str:
-        """自动检测是否在Docker环境中"""
+        """自动检测是否在Docker环境中."""
         if os.environ.get("DOCKER_ENV") == "true":
             return "postgres"  # Docker服务名
         return "localhost"  # 本地开发
 
     @property
     def DB_PORT(self) -> int:
-        """自动检测是否在Docker环境中"""
+        """自动检测是否在Docker环境中."""
         if os.environ.get("DOCKER_ENV") == "true":
             return 5432  # Docker内部端口
         return 5434  # 本地开发映射端口
 
     @property
     def DATABASE_URL(self) -> str:
-        """动态构建数据库连接URL"""
+        """动态构建数据库连接URL."""
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
-        """动态构建同步数据库连接URL"""
+        """动态构建同步数据库连接URL."""
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis
     @property
     def REDIS_URL(self) -> str:
-        """自动检测Redis URL"""
+        """自动检测Redis URL."""
         if os.environ.get("DOCKER_ENV") == "true":
             return "redis://redis:6379/0"
         return "redis://localhost:6379/0"
 
     @property
     def CELERY_BROKER_URL(self) -> str:
-        """自动检测Celery Broker URL"""
+        """自动检测Celery Broker URL."""
         if os.environ.get("DOCKER_ENV") == "true":
             return "redis://redis:6379/1"
         return "redis://localhost:6379/1"
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
-        """自动检测Celery Result Backend URL"""
+        """自动检测Celery Result Backend URL."""
         if os.environ.get("DOCKER_ENV") == "true":
             return "redis://redis:6379/2"
         return "redis://localhost:6379/2"
@@ -95,7 +95,7 @@ class Settings(BaseSettings):
 
     @property
     def APP_VERSION(self) -> str:
-        """动态获取应用版本号"""
+        """动态获取应用版本号."""
         return get_version_from_pyproject()
 
     # Encryption (用于加密平台账号凭证)
@@ -158,9 +158,7 @@ class Settings(BaseSettings):
     # --- 角色自动检测 ---
     # 每章生成后自动检测内容中的新角色并注册到角色库
     ENABLE_CHARACTER_AUTO_DETECTION: bool = True
-    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = (
-        0.6  # 置信度阈值，低于此值的角色不注册
-    )
+    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.6  # 置信度阈值，低于此值的角色不注册
     CHARACTER_DETECTION_MAX_CONTENT_LENGTH: int = 6000  # 传入 LLM 的内容最大字符数
 
     # --- 大纲动态更新 ---
@@ -174,12 +172,8 @@ class Settings(BaseSettings):
     # 短期反思：纯 Python 统计，零 LLM 开销
     # 长期反思：每 N 章调用 1 次 LLM 做跨章节模式分析
     ENABLE_REFLECTION: bool = True  # 反思机制总开关
-    ENABLE_REFLECTION_SHORT_TERM: bool = (
-        True  # 短期反思开关（每次审查循环后的统计分析）
-    )
-    ENABLE_REFLECTION_LONG_TERM: bool = (
-        True  # 长期反思开关（跨章节模式分析，需调用 LLM）
-    )
+    ENABLE_REFLECTION_SHORT_TERM: bool = True  # 短期反思开关（每次审查循环后的统计分析）
+    ENABLE_REFLECTION_LONG_TERM: bool = True  # 长期反思开关（跨章节模式分析，需调用 LLM）
     REFLECTION_ANALYSIS_INTERVAL: int = 3  # 长期反思触发间隔（每 N 章分析一次）
     REFLECTION_MIN_CHAPTERS: int = 3  # 启动长期反思所需的最少章节数
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限

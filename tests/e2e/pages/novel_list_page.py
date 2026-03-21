@@ -1,11 +1,11 @@
-"""小说列表页面对象 - 稳定版"""
+"""小说列表页面对象 - 稳定版."""
 
 from typing import List, Optional
 from .base_page import BasePage
 
 
 class NovelListPage(BasePage):
-    """小说列表页面对象"""
+    """小说列表页面对象."""
 
     URL = "/novels"
 
@@ -42,13 +42,13 @@ class NovelListPage(BasePage):
     }
 
     def navigate(self):
-        """导航到小说列表页面"""
+        """导航到小说列表页面."""
         full_url = f"{self.page.base_url}{self.URL}"
         self.page.goto(full_url)
         self.wait_for_load()
 
     def click_create_button(self):
-        """点击创建小说按钮"""
+        """点击创建小说按钮."""
         self.click_element(self.SELECTORS["create_button"])
         # 等待模态框出现
         self.wait_for_element_visible(self.SELECTORS["create_modal"])
@@ -128,7 +128,7 @@ class NovelListPage(BasePage):
                 self.page.locator(".ant-select-dropdown .ant-select-item").first.click()
 
     def submit_create_form(self):
-        """提交创建小说表单"""
+        """提交创建小说表单."""
         # 确保所有下拉选项都已关闭
         self.page.wait_for_timeout(1000)
         self.click_element(self.SELECTORS["submit_button"])
@@ -136,7 +136,7 @@ class NovelListPage(BasePage):
         self.wait_for_element_hidden(self.SELECTORS["loading_spinner"], timeout=15000)
 
     def cancel_create_form(self):
-        """取消创建小说表单"""
+        """取消创建小说表单."""
         self.click_element(self.SELECTORS["cancel_button"])
         self.wait_for_element_hidden(self.SELECTORS["create_modal"])
 
@@ -258,12 +258,12 @@ class NovelListPage(BasePage):
         self.select_option(self.SELECTORS["sort_select"], sort_option)
 
     def go_to_next_page(self):
-        """跳转到下一页"""
+        """跳转到下一页."""
         if self.is_element_enabled(self.SELECTORS["next_page_button"]):
             self.click_element(self.SELECTORS["next_page_button"])
 
     def go_to_prev_page(self):
-        """跳转到上一页"""
+        """跳转到上一页."""
         if self.is_element_enabled(self.SELECTORS["prev_page_button"]):
             self.click_element(self.SELECTORS["prev_page_button"])
 
@@ -286,6 +286,6 @@ class NovelListPage(BasePage):
         self.wait_for_element_visible(self.SELECTORS["novel_cards"], timeout=timeout)
 
     def refresh_novels(self):
-        """刷新小说列表 - 通过页面重新加载实现"""
+        """刷新小说列表 - 通过页面重新加载实现."""
         self.page.reload()
         self.wait_for_novels_loaded()

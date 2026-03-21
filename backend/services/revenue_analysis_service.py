@@ -1,4 +1,4 @@
-"""收益分析服务 - 负责分析收益数据并提供优化建议"""
+"""收益分析服务 - 负责分析收益数据并提供优化建议."""
 
 import logging
 from datetime import date, timedelta
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class RevenueAnalysisService:
-    """收益分析服务"""
+    """收益分析服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -29,7 +29,7 @@ class RevenueAnalysisService:
         novel_id: UUID,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """分析小说的性能数据
+        """分析小说的性能数据.
 
         Args:
             novel_id: 小说ID
@@ -167,7 +167,7 @@ class RevenueAnalysisService:
         platform: str,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """分析平台的性能数据
+        """分析平台的性能数据.
 
         Args:
             platform: 平台名称
@@ -237,9 +237,9 @@ class RevenueAnalysisService:
             )
 
         # 生成优化建议
-        analysis["optimization_suggestions"] = (
-            self._generate_platform_optimization_suggestions(analysis)
-        )
+        analysis[
+            "optimization_suggestions"
+        ] = self._generate_platform_optimization_suggestions(analysis)
 
         return analysis
 
@@ -248,7 +248,7 @@ class RevenueAnalysisService:
         novel_id: UUID,
         days: int = 30,
     ) -> Dict[str, Any]:
-        """生成小说的收益预测
+        """生成小说的收益预测.
 
         Args:
             novel_id: 小说ID
@@ -307,7 +307,7 @@ class RevenueAnalysisService:
         self,
         novel_id: UUID,
     ) -> Dict[str, Any]:
-        """获取内容优化建议
+        """获取内容优化建议.
 
         Args:
             novel_id: 小说ID
@@ -343,9 +343,9 @@ class RevenueAnalysisService:
         }
 
         # 生成内容优化建议
-        analysis["optimization_suggestions"] = (
-            self._generate_content_optimization_suggestions(analysis)
-        )
+        analysis[
+            "optimization_suggestions"
+        ] = self._generate_content_optimization_suggestions(analysis)
 
         return analysis
 
@@ -353,7 +353,7 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成优化建议
+        """生成优化建议.
 
         Args:
             analysis: 分析结果
@@ -397,7 +397,7 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成平台优化建议
+        """生成平台优化建议.
 
         Args:
             analysis: 平台分析结果
@@ -410,27 +410,19 @@ class RevenueAnalysisService:
         # 基于任务成功率的建议
         task_success_rate = analysis.get("task_success_rate", 0)
         if task_success_rate < 80:
-            suggestions.append(
-                f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限"
-            )
+            suggestions.append(f"{analysis['platform']}平台任务成功率较低，建议检查API稳定性和账号权限")
 
         # 基于发布成功率的建议
         publish_success_rate = analysis.get("publish_success_rate", 0)
         if publish_success_rate < 80:
-            suggestions.append(
-                f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机"
-            )
+            suggestions.append(f"{analysis['platform']}平台发布成功率较低，建议优化发布内容格式和时机")
 
         # 基于账号数量的建议
         total_accounts = analysis.get("total_accounts", 0)
         if total_accounts == 0:
-            suggestions.append(
-                f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能"
-            )
+            suggestions.append(f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能")
         elif total_accounts < 2:
-            suggestions.append(
-                f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性"
-            )
+            suggestions.append(f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性")
 
         return suggestions
 
@@ -438,7 +430,7 @@ class RevenueAnalysisService:
         self,
         forecast: Dict[str, Any],
     ) -> List[str]:
-        """生成收益优化建议
+        """生成收益优化建议.
 
         Args:
             forecast: 收益预测
@@ -468,7 +460,7 @@ class RevenueAnalysisService:
         self,
         analysis: Dict[str, Any],
     ) -> List[str]:
-        """生成内容优化建议
+        """生成内容优化建议.
 
         Args:
             analysis: 内容分析结果
@@ -483,9 +475,7 @@ class RevenueAnalysisService:
         if avg_chapter_length < 1500:
             suggestions.append("章节长度偏短，建议增加每章内容以提供更丰富的阅读体验")
         elif avg_chapter_length > 4000:
-            suggestions.append(
-                "章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率"
-            )
+            suggestions.append("章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率")
 
         # 基于类型的建议
         genre = analysis.get("genre", "")

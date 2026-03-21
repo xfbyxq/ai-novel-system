@@ -1,4 +1,4 @@
-"""add novel creation flow table
+"""add novel creation flow table.
 
 Revision ID: 002
 Revises: 186700edca0b

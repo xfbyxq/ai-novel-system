@@ -1,4 +1,4 @@
-"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题
+"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题。
 
 采用热/温/冷/核心四层记忆架构，将上下文保持在恒定 ~8K tokens。
 
@@ -18,7 +18,7 @@ from core.logging_config import logger
 
 @dataclass
 class CompressedContext:
-    """压缩后的上下文结构（增强版）
+    """压缩后的上下文结构（增强版）。
 
     新增关键信息提取层：
     - 伏笔追踪：识别和保留未回收的伏笔
@@ -44,7 +44,7 @@ class CompressedContext:
     total_tokens_estimate: int = 0
 
     def to_prompt(self) -> str:
-        """转换为提示词格式"""
+        """转换为提示词格式."""
         parts = []
 
         if self.core_memory:
@@ -81,7 +81,7 @@ class CompressedContext:
         return "\n\n".join(parts)
 
     def _format_foreshadowing(self, foreshadowing: List[Dict[str, Any]]) -> str:
-        """格式化伏笔信息"""
+        """格式化伏笔信息."""
         lines = []
         for item in foreshadowing[:10]:  # 最多显示 10 个
             chapter = item.get("chapter", "?")
@@ -91,7 +91,7 @@ class CompressedContext:
         return "\n".join(lines)
 
     def _format_character_arcs(self, arcs: List[Dict[str, Any]]) -> str:
-        """格式化角色发展信息"""
+        """格式化角色发展信息."""
         lines = []
         for arc in arcs[:8]:  # 最多显示 8 个角色
             name = arc.get("name", "未知")
@@ -101,7 +101,7 @@ class CompressedContext:
         return "\n".join(lines)
 
     def _format_conflicts(self, conflicts: List[Dict[str, Any]]) -> str:
-        """格式化冲突信息"""
+        """格式化冲突信息."""
         lines = []
         for conflict in conflicts[:5]:  # 最多显示 5 个
             desc = conflict.get("description", "")[:50]
@@ -111,7 +111,7 @@ class CompressedContext:
 
 
 class ContextCompressor:
-    """分层上下文压缩器
+    """分层上下文压缩器。
 
     确保无论小说写到第几章，上下文大小保持在 ~8K tokens。
     """
@@ -147,7 +147,7 @@ class ContextCompressor:
         plot_outline: Any,
         volume_summaries: Optional[Dict[int, str]] = None,
     ) -> CompressedContext:
-        """压缩上下文
+        """压缩上下文。
 
         Args:
             chapter_number: 当前要写的章节号
@@ -210,7 +210,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         chapter_contents: Dict[int, str],
     ) -> List[Dict[str, Any]]:
-        """提取伏笔信息
+        """提取伏笔信息。
 
         Args:
             chapter_number: 当前章节号
@@ -250,7 +250,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         characters: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """追踪角色发展轨迹
+        """追踪角色发展轨迹。
 
         Args:
             chapter_number: 当前章节号
@@ -309,7 +309,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """提取关键事件
+        """提取关键事件。
 
         Args:
             chapter_number: 当前章节号
@@ -359,7 +359,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         plot_outline: Any,
     ) -> List[Dict[str, Any]]:
-        """识别未解决的冲突
+        """识别未解决的冲突。
 
         Args:
             chapter_number: 当前章节号
@@ -400,7 +400,7 @@ class ContextCompressor:
         characters: List[Dict[str, Any]],
         plot_outline: Any,
     ) -> str:
-        """构建核心记忆：世界观 + 主要角色 + 主线"""
+        """构建核心记忆：世界观 + 主要角色 + 主线."""
         parts = []
 
         # 世界观精简
@@ -429,7 +429,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建热记忆：前 2 章完整摘要"""
+        """构建热记忆：前 2 章完整摘要."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         parts = []
 
@@ -448,7 +448,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建温记忆：前 3-10 章关键事件"""
+        """构建温记忆：前 3-10 章关键事件."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         warm_start = max(1, hot_start - self.WARM_CHAPTERS)
         warm_end = hot_start
@@ -484,7 +484,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         volume_summaries: Optional[Dict[int, str]] = None,
     ) -> str:
-        """构建冷记忆：更早章节的卷级摘要"""
+        """构建冷记忆：更早章节的卷级摘要."""
         # 冷记忆起始点：跳过热+温记忆覆盖的章节
         cold_end = max(1, chapter_number - self.HOT_CHAPTERS - self.WARM_CHAPTERS)
 
@@ -527,7 +527,7 @@ class ContextCompressor:
     def _format_chapter_summary(
         self, chapter_number: int, summary: Dict[str, Any]
     ) -> str:
-        """格式化单章摘要"""
+        """格式化单章摘要."""
         parts = [f"第{chapter_number}章"]
 
         # 情节进展
@@ -552,7 +552,7 @@ class ContextCompressor:
         return " | ".join(parts)
 
     def _extract_ending(self, content: str) -> str:
-        """提取章节结尾部分"""
+        """提取章节结尾部分."""
         if not content:
             return ""
 
@@ -566,7 +566,7 @@ class ContextCompressor:
         return ending.strip()
 
     def _compress_world_setting(self, world_setting: Dict[str, Any]) -> str:
-        """压缩世界观设定"""
+        """压缩世界观设定."""
         parts = []
 
         # 世界类型
@@ -597,7 +597,7 @@ class ContextCompressor:
         return "；".join(parts)
 
     def _compress_characters(self, characters: List[Dict[str, Any]]) -> str:
-        """压缩角色信息，只保留主要角色"""
+        """压缩角色信息，只保留主要角色."""
         main_chars = []
 
         for char in characters:
@@ -621,7 +621,7 @@ class ContextCompressor:
         return "、".join(main_chars)
 
     def _compress_plot_outline(self, plot_outline: Any) -> str:
-        """压缩情节大纲"""
+        """压缩情节大纲."""
         if isinstance(plot_outline, str):
             return plot_outline[:200]
 
@@ -661,7 +661,7 @@ def compress_context(
     plot_outline: Any,
     **kwargs,
 ) -> CompressedContext:
-    """便捷函数：压缩上下文"""
+    """便捷函数：压缩上下文."""
     compressor = ContextCompressor(**kwargs)
     return compressor.compress(
         chapter_number=chapter_number,

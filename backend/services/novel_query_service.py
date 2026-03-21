@@ -17,7 +17,7 @@ from core.models.chapter import Chapter
 
 
 class NovelQueryService:
-    """小说查询服务"""
+    """小说查询服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -25,7 +25,7 @@ class NovelQueryService:
     async def search_novels(
         self, keyword: str, limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """搜索小说"""
+        """搜索小说."""
         # 简单实现：搜索标题包含关键词的小说
         stmt = select(Novel).where(Novel.title.ilike(f"%{keyword}%")).limit(limit)
         result = await self.db.execute(stmt)
@@ -44,7 +44,7 @@ class NovelQueryService:
         ]
 
     async def get_novel_by_id(self, novel_id: str) -> Optional[Dict[str, Any]]:
-        """根据 ID 获取小说"""
+        """根据 ID 获取小说."""
         import uuid
 
         try:
@@ -73,7 +73,7 @@ class NovelQueryService:
         }
 
     async def get_world_setting(self, novel_id: str) -> Dict[str, Any]:
-        """获取世界观设定"""
+        """获取世界观设定."""
         import uuid
 
         try:
@@ -102,7 +102,7 @@ class NovelQueryService:
     async def get_characters(
         self, novel_id: str, role_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """获取角色列表"""
+        """获取角色列表."""
         import uuid
 
         try:
@@ -143,7 +143,7 @@ class NovelQueryService:
         ]
 
     async def get_plot_outline(self, novel_id: str) -> Dict[str, Any]:
-        """获取剧情大纲"""
+        """获取剧情大纲."""
         import uuid
 
         try:
@@ -169,7 +169,7 @@ class NovelQueryService:
     async def get_chapter_list(
         self, novel_id: str, limit: int = 20
     ) -> List[Dict[str, Any]]:
-        """获取章节列表"""
+        """获取章节列表."""
         import uuid
 
         try:
@@ -200,7 +200,7 @@ class NovelQueryService:
     async def get_chapter_content(
         self, novel_id: str, chapter_number: int
     ) -> Dict[str, Any]:
-        """获取章节内容"""
+        """获取章节内容."""
         import uuid
 
         try:

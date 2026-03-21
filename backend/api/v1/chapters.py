@@ -21,7 +21,7 @@ from core.models.novel import Novel
 
 
 class BatchDeleteRequest(BaseModel):
-    """批量删除章节请求"""
+    """批量删除章节请求."""
 
     chapter_numbers: list[int] = Field(..., description="要删除的章节号列表")
 

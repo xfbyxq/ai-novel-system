@@ -1,4 +1,4 @@
-"""集成服务 - 负责协调所有模块的工作，实现端到端的自动化流程"""
+"""集成服务 - 负责协调所有模块的工作，实现端到端的自动化流程."""
 
 import logging
 from datetime import datetime
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrationService:
-    """集成服务"""
+    """集成服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -29,7 +29,7 @@ class IntegrationService:
         config: Dict[str, Any] = None,
         novel_id: Optional[UUID] = None,
     ) -> Dict[str, Any]:
-        """运行端到端的自动化小说创作和发布工作流
+        """运行端到端的自动化小说创作和发布工作流.
 
         Args:
             config: 工作流配置
@@ -117,7 +117,7 @@ class IntegrationService:
         novel_id: UUID,
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """运行多平台发布
+        """运行多平台发布.
 
         Args:
             novel_id: 小说ID
@@ -217,9 +217,7 @@ class IntegrationService:
                         continue
 
                     platform_book_id = create_book_task.platform_book_id
-                    logger.info(
-                        f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}"
-                    )
+                    logger.info(f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}")
 
                 # 发布章节
                 from core.models.chapter import Chapter
@@ -308,7 +306,7 @@ class IntegrationService:
         limit: int = 10,
         offset: int = 0,
     ) -> Dict[str, Any]:
-        """获取工作流历史记录
+        """获取工作流历史记录.
 
         Args:
             limit: 限制数量
@@ -328,7 +326,7 @@ class IntegrationService:
         self,
         workflow_id: str,
     ) -> Dict[str, Any]:
-        """获取工作流详情
+        """获取工作流详情.
 
         Args:
             workflow_id: 工作流ID

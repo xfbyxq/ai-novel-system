@@ -10,7 +10,7 @@ from core.database import Base
 
 
 class CharacterNameVersion(Base):
-    """角色名字版本记录"""
+    """角色名字版本记录."""
 
     __tablename__ = "character_name_versions"
 
@@ -31,7 +31,7 @@ class CharacterNameVersion(Base):
 
 
 class CharacterNameVersionService:
-    """角色名字版本管理服务"""
+    """角色名字版本管理服务."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -44,7 +44,7 @@ class CharacterNameVersionService:
         changed_by: str = "system",
         reason: Optional[str] = None,
     ) -> CharacterNameVersion:
-        """创建名字版本记录"""
+        """创建名字版本记录."""
         version = CharacterNameVersion(
             character_id=character_id,
             old_name=old_name,
@@ -62,7 +62,7 @@ class CharacterNameVersionService:
         character_id: uuid.UUID,
         limit: int = 50,
     ) -> list[CharacterNameVersion]:
-        """获取角色名字版本历史"""
+        """获取角色名字版本历史."""
         result = await self.db.execute(
             select(CharacterNameVersion)
             .where(CharacterNameVersion.character_id == character_id)
@@ -76,7 +76,7 @@ class CharacterNameVersionService:
         character_id: uuid.UUID,
         target_time: datetime,
     ) -> Optional[CharacterNameVersion]:
-        """获取指定时间点的名字版本"""
+        """获取指定时间点的名字版本."""
         result = await self.db.execute(
             select(CharacterNameVersion)
             .where(CharacterNameVersion.character_id == character_id)
@@ -91,7 +91,7 @@ class CharacterNameVersionService:
         version_id_1: uuid.UUID,
         version_id_2: uuid.UUID,
     ) -> dict:
-        """对比两个版本的差异"""
+        """对比两个版本的差异."""
         version_1 = await self.db.get(CharacterNameVersion, version_id_1)
         version_2 = await self.db.get(CharacterNameVersion, version_id_2)
 
@@ -127,7 +127,7 @@ class CharacterNameVersionService:
         target_version_id: uuid.UUID,
         reverted_by: str = "system",
     ) -> Optional[CharacterNameVersion]:
-        """回溯到指定版本"""
+        """回溯到指定版本."""
         target_version = await self.db.get(CharacterNameVersion, target_version_id)
         if not target_version:
             return None
@@ -160,7 +160,7 @@ class CharacterNameVersionService:
         self,
         character_id: uuid.UUID,
     ) -> Optional[str]:
-        """获取角色当前名字"""
+        """获取角色当前名字."""
         result = await self.db.execute(
             select(CharacterNameVersion)
             .where(CharacterNameVersion.character_id == character_id)
@@ -176,7 +176,7 @@ class CharacterNameVersionService:
         character_id: uuid.UUID,
         new_name: str,
     ) -> dict:
-        """验证名字变更是否合理"""
+        """验证名字变更是否合理."""
         history = await self.get_version_history(character_id, limit=10)
 
         if not history:

@@ -7,7 +7,7 @@ import uuid
 
 
 class NovelCreationFlow(Base):
-    """小说创建流程数据库模型"""
+    """小说创建流程数据库模型."""
 
     __tablename__ = "novel_creation_flows"
 

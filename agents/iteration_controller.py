@@ -1,4 +1,4 @@
-"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件
+"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件。
 
 支持基于章节类型的动态迭代策略。
 """
@@ -13,7 +13,7 @@ from core.logging_config import logger
 
 
 class ChapterType(str, Enum):
-    """章节类型枚举"""
+    """章节类型枚举."""
 
     CLIMAX = "climax"  # 高潮章节：战斗、揭秘、重大转折
     TRANSITION = "transition"  # 过渡章节：日常、铺垫、信息传递
@@ -25,7 +25,7 @@ class ChapterType(str, Enum):
 
 @dataclass
 class IterationStrategy:
-    """迭代策略配置"""
+    """迭代策略配置."""
 
     max_iterations: int = 3
     quality_threshold: float = 7.5
@@ -34,7 +34,7 @@ class IterationStrategy:
 
 @dataclass
 class IterationRecord:
-    """单轮迭代记录"""
+    """单轮迭代记录."""
 
     iteration: int
     score: float
@@ -63,7 +63,7 @@ class IterationRecord:
 
 
 class IterationController:
-    """控制反馈循环的迭代次数和退出条件
+    """控制反馈循环的迭代次数和退出条件。
 
     支持三种退出条件：
     1. 质量达标（score >= threshold）
@@ -110,7 +110,7 @@ class IterationController:
         custom_strategy: Optional[IterationStrategy] = None,
         cost_limit: Optional[float] = None,
     ):
-        """初始化迭代控制器
+        """初始化迭代控制器。
 
         Args:
             chapter_type: 章节类型
@@ -143,7 +143,7 @@ class IterationController:
         iteration: Optional[int] = None,
         cost_delta: float = 0.0,
     ) -> bool:
-        """判断是否需要继续迭代
+        """判断是否需要继续迭代。
 
         Args:
             score: 当前迭代的质量分数
@@ -193,7 +193,7 @@ class IterationController:
         cost_delta: float = 0.0,
         details: Optional[Dict[str, Any]] = None,
     ) -> IterationRecord:
-        """记录一轮迭代"""
+        """记录一轮迭代."""
         self.current_iteration += 1
         self.cumulative_cost += cost_delta
         record = IterationRecord(
@@ -209,7 +209,7 @@ class IterationController:
         return record
 
     def get_summary(self) -> Dict[str, Any]:
-        """获取迭代摘要"""
+        """获取迭代摘要."""
         scores = [r.score for r in self.history if r.score > 0]
         return {
             "total_iterations": self.current_iteration,
@@ -222,7 +222,7 @@ class IterationController:
         }
 
     def reset(self):
-        """重置控制器（用于下一章）"""
+        """重置控制器（用于下一章）."""
         self.history.clear()
         self.current_iteration = 0
         self.cumulative_cost = 0.0
@@ -233,7 +233,7 @@ class IterationController:
         chapter_title: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> ChapterType:
-        """基于内容自动识别章节类型
+        """基于内容自动识别章节类型。
 
         使用轻量级 LLM 调用识别章节类型，避免额外成本。
 

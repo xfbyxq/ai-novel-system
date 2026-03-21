@@ -1,4 +1,4 @@
-"""自动化API"""
+"""自动化API."""
 
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -18,7 +18,7 @@ async def run_automated_novel_creation(
     config: Dict[str, Any] = Body(default={}, description="配置参数"),
     db: AsyncSession = Depends(get_db),
 ):
-    """运行自动化小说创建流程"""
+    """运行自动化小说创建流程."""
     service = AutomationService(db)
     result = await service.run_automated_novel_creation(
         novel_id=novel_id,
@@ -35,7 +35,7 @@ async def get_workflow_status(
     workflow_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取工作流状态"""
+    """获取工作流状态."""
     service = AutomationService(db)
     status = await service.get_workflow_status(workflow_id)
     return {
@@ -49,7 +49,7 @@ async def run_batch_automation(
     batch_config: List[Dict[str, Any]] = Body(..., description="批量配置列表"),
     db: AsyncSession = Depends(get_db),
 ):
-    """运行批量自动化任务"""
+    """运行批量自动化任务."""
     service = AutomationService(db)
     result = await service.run_batch_automation(batch_config)
     return {
@@ -62,7 +62,7 @@ async def run_batch_automation(
 async def initialize_agents(
     db: AsyncSession = Depends(get_db),
 ):
-    """初始化所有代理"""
+    """初始化所有代理."""
     service = AutomationService(db)
     await service.initialize_agents()
     return {
@@ -77,7 +77,7 @@ async def generate_market_report(
     platforms: List[str] = Query(None, description="包含的平台"),
     db: AsyncSession = Depends(get_db),
 ):
-    """生成市场报告"""
+    """生成市场报告."""
     from backend.services.market_analysis_service import MarketAnalysisService
 
     service = MarketAnalysisService(db)

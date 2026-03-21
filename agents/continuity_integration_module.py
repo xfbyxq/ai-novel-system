@@ -38,7 +38,7 @@ from .prevention_continuity_checker import PreventionContinuityChecker, Preventi
 
 @dataclass
 class ContinuityIntegrationResult:
-    """连贯性集成结果"""
+    """连贯性集成结果."""
 
     chapter_number: int
 
@@ -64,7 +64,7 @@ class ContinuityIntegrationResult:
     suggestions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典."""
         return {
             "chapter_number": self.chapter_number,
             "passed": self.passed,
@@ -145,7 +145,7 @@ class ContinuityIntegrationModule:
         logger.info("ContinuityIntegrationModule initialized successfully")
 
     def _load_volume_outlines(self, novel_data: Dict[str, Any]):
-        """加载卷大纲"""
+        """加载卷大纲."""
         plot_outline = novel_data.get("plot_outline", {})
         if not plot_outline:
             logger.warning("No plot outline found in novel data")
@@ -163,7 +163,7 @@ class ContinuityIntegrationModule:
             )
 
     def _initialize_character_trackers(self, novel_data: Dict[str, Any]):
-        """初始化角色追踪器"""
+        """初始化角色追踪器."""
         characters = novel_data.get("characters", [])
 
         for char_data in characters:
@@ -178,7 +178,7 @@ class ContinuityIntegrationModule:
             logger.info(f"Initialized character tracker for: {name}")
 
     def _initialize_foreshadowings(self, novel_data: Dict[str, Any]):
-        """初始化伏笔"""
+        """初始化伏笔."""
         # 从小说数据中提取已有伏笔
         foreshadowings = novel_data.get("foreshadowings", [])
 
@@ -377,7 +377,7 @@ class ContinuityIntegrationModule:
     def _extract_constraints_from_previous(
         self, previous_chapter: Dict[str, Any]
     ) -> List:
-        """从上一章提取约束"""
+        """从上一章提取约束."""
         from .prevention_continuity_checker import ContinuityConstraint
 
         constraints = []
@@ -414,7 +414,7 @@ class ContinuityIntegrationModule:
         return constraints
 
     def _aggregate_issues_and_suggestions(self, result: ContinuityIntegrationResult):
-        """汇总问题和建议"""
+        """汇总问题和建议."""
         issues = []
         suggestions = set()
 
@@ -481,7 +481,7 @@ class ContinuityIntegrationModule:
         result.suggestions = list(suggestions)
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """获取统计信息."""
         return {
             "theme_guardian": self.theme_guardian.get_statistics(),
             "outline_mapper": {},  # 大纲映射器无统计方法
@@ -498,7 +498,7 @@ class ContinuityIntegrationModule:
 async def create_continuity_module(
     novel_id: str, novel_data: Dict[str, Any]
 ) -> ContinuityIntegrationModule:
-    """便捷函数：创建连贯性模块"""
+    """便捷函数：创建连贯性模块."""
     module = ContinuityIntegrationModule(novel_id, novel_data)
     return module
 
@@ -506,7 +506,7 @@ async def create_continuity_module(
 async def prepare_for_chapter_generation(
     novel_id: str, novel_data: Dict[str, Any], chapter_number: int, **kwargs
 ) -> Dict[str, Any]:
-    """便捷函数：准备章节生成"""
+    """便捷函数：准备章节生成."""
     module = await create_continuity_module(novel_id, novel_data)
     return await module.prepare_chapter_generation(
         chapter_number=chapter_number, **kwargs
