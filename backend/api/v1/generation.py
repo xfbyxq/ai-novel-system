@@ -71,9 +71,7 @@ async def create_generation_task(
                 status_code=400, detail="批量写作必须指定 from_chapter 和 to_chapter"
             )
         if task_in.from_chapter > task_in.to_chapter:
-            raise HTTPException(
-                status_code=400, detail="from_chapter 不能大于 to_chapter"
-            )
+            raise HTTPException(status_code=400, detail="from_chapter 不能大于 to_chapter")
 
     # 创建任务记录
     input_data = task_in.input_data or {}
@@ -155,9 +153,7 @@ async def list_generation_tasks(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    query = (
-        query.offset(offset).limit(page_size).order_by(GenerationTask.created_at.desc())
-    )
+    query = query.offset(offset).limit(page_size).order_by(GenerationTask.created_at.desc())
     result = await db.execute(query)
     tasks = result.scalars().all()
 
@@ -170,9 +166,7 @@ async def get_generation_task(
     db: AsyncSession = Depends(get_db),
 ):
     """获取生成任务状态."""
-    result = await db.execute(
-        select(GenerationTask).where(GenerationTask.id == task_id)
-    )
+    result = await db.execute(select(GenerationTask).where(GenerationTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
@@ -190,9 +184,7 @@ async def cancel_generation_task(
     只能取消处于 pending（等待中）或 running（执行中）状态的任务。
     已完成、已失败或已取消的任务无法再次取消。
     """
-    result = await db.execute(
-        select(GenerationTask).where(GenerationTask.id == task_id)
-    )
+    result = await db.execute(select(GenerationTask).where(GenerationTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
@@ -214,3 +206,81 @@ async def cancel_generation_task(
     )
     await db.commit()
     return {"message": "任务已取消", "task_id": str(task_id)}
+
+
+@router.post("/tasks/{task_id}/resume", response_model=GenerationTaskResponse)
+async def resume_batch_task(
+    task_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """
+    从断点恢复批量写作任务.
+
+    仅适用于 batch_writing 类型且存在断点数据的任务。
+    """
+    result = await db.execute(select(GenerationTask).where(GenerationTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
+
+    if task.task_type != "batch_writing":
+        raise HTTPException(status_code=400, detail="只有批量写作任务可以恢复")
+
+    if not task.checkpoint_data or not task.checkpoint_data.get("can_resume"):
+        raise HTTPException(status_code=400, detail="该任务没有可用的断点数据")
+
+    checkpoint = task.checkpoint_data
+    next_chapter = checkpoint.get("next_chapter")
+    original_to_chapter = checkpoint.get("original_to_chapter")
+    volume_number = checkpoint.get("volume_number", 1)
+
+    if not next_chapter or not original_to_chapter:
+        raise HTTPException(status_code=400, detail="断点数据不完整，无法恢复")
+
+    new_task = GenerationTask(
+        novel_id=task.novel_id,
+        task_type="batch_writing",
+        phase="batch_writing",
+        input_data={
+            "resumed_from_task_id": str(task_id),
+            "from_chapter": next_chapter,
+            "to_chapter": original_to_chapter,
+            "volume_number": volume_number,
+        },
+        status=TaskStatus.pending,
+    )
+    db.add(new_task)
+
+    task.checkpoint_data = {
+        **checkpoint,
+        "resumed_by_task_id": str(new_task.id),
+        "can_resume": False,
+    }
+
+    await db.commit()
+    await db.refresh(new_task)
+
+    async def run_resumed_task():
+        from core.database import async_session_factory
+        from backend.services.generation_service import GenerationService
+
+        async with async_session_factory() as session:
+            service = GenerationService(session)
+            try:
+                await service.run_batch_writing(
+                    novel_id=new_task.novel_id,
+                    task_id=new_task.id,
+                    from_chapter=next_chapter,
+                    to_chapter=original_to_chapter,
+                    volume_number=volume_number,
+                )
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.error(f"恢复任务 {new_task.id} 失败: {e}", exc_info=True)
+
+    background_tasks.add_task(run_resumed_task)
+
+    return new_task
