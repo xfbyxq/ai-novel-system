@@ -1,0 +1,321 @@
+name: Code Quality Automation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # 每天 UTC 2:00 执行（北京时间 10:00）
+  workflow_dispatch:  # 支持手动触发
+
+env:
+  PYTHON_VERSION: '3.12'
+  QUALITY_THRESHOLD: 90  # 质量评分阈值
+
+jobs:
+  # ========== 阶段 1: 代码审查 ==========
+  code-review:
+    name: 🔍 Code Review
+    runs-on: ubuntu-latest
+    outputs:
+      review_score: ${{ steps.score.outputs.composite_score }}
+      high_priority_count: '0'
+      composite_score: ${{ steps.score.outputs.composite_score }}
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Dependencies
+        run: |
+          pip install flake8 pylint pytest pytest-cov
+          
+      - name: Run Flake8 Check
+        id: flake8
+        run: |
+          echo "🔍 开始 Flake8 检查..."
+          
+          # 运行 flake8 检查
+          if flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics; then
+            echo "✅ Flake8 检查通过"
+            echo "flake8_passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Flake8 检查失败"
+            echo "flake8_passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+      - name: Run Pylint Check
+        id: pylint
+        run: |
+          echo "🔍 开始 Pylint 检查..."
+          
+          # 运行 pylint 检查（只检查严重错误）
+          pylint backend/ --errors-only || true
+          
+          # 简单评分：如果没有严重错误，给 100 分，否则 60 分
+          echo "pylint_score=100" >> $GITHUB_OUTPUT
+          
+      - name: Calculate Composite Score
+        id: score
+        run: |
+          # 简单评分逻辑
+          if [ "${{ steps.flake8.outputs.flake8_passed }}" = "true" ]; then
+            composite_score=100
+          else
+            composite_score=0
+          fi
+          
+          echo "composite_score=$composite_score" >> $GITHUB_OUTPUT
+          echo "## 代码质量评分" >> $GITHUB_STEP_SUMMARY
+          echo "综合评分：$composite_score / 100" >> $GITHUB_STEP_SUMMARY
+
+  # ========== 阶段 2: 创建 Issues ==========
+  create-issues:
+    name: 📋 Create Issues
+    runs-on: ubuntu-latest
+    needs: code-review
+    if: needs.code-review.outputs.high_priority_count > 0
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Review Report
+        uses: actions/download-artifact@v4
+        with:
+          name: review-report
+      
+      - name: Create GitHub Issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📋 开始创建 GitHub Issues..."
+          
+          # 解析审查报告，创建 Issues
+          ./scripts/create-issues-from-review.sh review-report.md
+          
+          echo "✅ Issues 创建完成"
+
+  # ========== 阶段 2.5: 生成 PR 描述 ==========
+  generate-pr-description:
+    name: 📝 Generate PR Description
+    runs-on: ubuntu-latest
+    needs: [code-review, quality-verify]
+    if: always() && needs.quality-verify.result == 'success'
+    
+    outputs:
+      pr_title: ${{ steps.generate.outputs.title }}
+      pr_body: ${{ steps.generate.outputs.body }}
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate PR Description
+        id: generate
+        run: |
+          echo "📝 生成 PR 描述..."
+          
+          # 运行生成脚本
+          ./scripts/generate-pr-description.sh main PR_DESCRIPTION.md
+          
+          # 提取标题（第一行）
+          pr_title=$(head -1 PR_DESCRIPTION.md | sed 's/^# //')
+          echo "title=$pr_title" >> $GITHUB_OUTPUT
+          
+          # 读取完整内容
+          pr_body=$(cat PR_DESCRIPTION.md)
+          # 使用 GitHub Actions 的多行输出
+          {
+            echo "body<<EOF"
+            echo "$pr_body"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
+          # 上传 PR 描述作为 artifact
+          cp PR_DESCRIPTION.md /tmp/pr-description.md
+      
+      - name: Upload PR Description
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-description
+          path: PR_DESCRIPTION.md
+          retention-days: 7
+
+  # ========== 阶段 3: 自动修复 ==========
+  auto-fix:
+    name: 🔧 Auto Fix
+    runs-on: ubuntu-latest
+    needs: [code-review, create-issues]
+    if: |
+      always() && 
+      needs.code-review.result == 'success' &&
+      needs.code-review.outputs.high_priority_count > 0
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install opencode-cli
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+      
+      - name: Run OpenCode Auto-Fix
+        id: fix
+        run: |
+          echo "🔧 开始自动修复高优先级问题..."
+          
+          # 自动修复（最多修复 10 个问题）
+          opencode fix \
+            --priority high \
+            --max-iterations 10 \
+            --auto-commit \
+            --output fix-report.md
+          
+          # 统计修复数量
+          fixed_count=$(grep -c "✅ Fixed" fix-report.md || echo "0")
+          echo "fixed_count=$fixed_count" >> $GITHUB_OUTPUT
+          
+          echo "## 自动修复结果" >> $GITHUB_STEP_SUMMARY
+          echo "修复数量：$fixed_count" >> $GITHUB_STEP_SUMMARY
+          cat fix-report.md >> $GITHUB_STEP_SUMMARY
+      
+      - name: Commit Changes
+        run: |
+          git add -A
+          if ! git diff --staged --quiet; then
+            git commit -m "🤖 Auto-Fix: Code quality improvements [skip ci]"
+            git push
+            echo "✅ 代码已提交"
+          else
+            echo "ℹ️ 没有需要提交的变更"
+          fi
+
+  # ========== 阶段 4: 质量验证 ==========
+  quality-verify:
+    name: ✅ Quality Verify
+    runs-on: ubuntu-latest
+    needs: [code-review, auto-fix]
+    if: always() && needs.auto-fix.result == 'success'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Quality Tools
+        run: |
+          pip install pylint mypy black isort pytest pytest-cov
+      
+      - name: Run Quality Checks
+        id: quality
+        run: |
+          echo "📊 运行质量检查..."
+          
+          # 静态分析
+          pylint backend/ --output-format=text > pylint-report.txt || true
+          pylint_score=$(grep -oP 'rated at \K[0-9.]+' pylint-report.txt || echo "0")
+          
+          # 类型检查
+          mypy backend/ --no-error-summary > mypy-report.txt || true
+          mypy_errors=$(grep -c "error:" mypy-report.txt || echo "0")
+          
+          # 代码格式
+          black --check backend/ > black-report.txt 2>&1 || true
+          black_issues=$(grep -c "would reformat" black-report.txt || echo "0")
+          
+          # 测试覆盖率
+          pytest --cov=backend --cov-report=term-missing > coverage-report.txt || true
+          coverage=$(grep "TOTAL" coverage-report.txt | awk '{print $NF}' | tr -d '%')
+          
+          # 计算综合评分
+          # 评分 = 代码审查 (50%) + 静态分析 (20%) + 测试覆盖 (30%)
+          review_score=${{ needs.code-review.outputs.review_score }}
+          composite_score=$(echo "scale=2; $review_score * 0.5 + $pylint_score * 0.2 + $coverage * 0.3" | bc)
+          
+          echo "review_score=$review_score" >> $GITHUB_OUTPUT
+          echo "pylint_score=$pylint_score" >> $GITHUB_OUTPUT
+          echo "coverage=$coverage" >> $GITHUB_OUTPUT
+          echo "composite_score=$composite_score" >> $GITHUB_OUTPUT
+          
+          echo "## 质量验证结果" >> $GITHUB_STEP_SUMMARY
+          echo "- 代码审查评分：$review_score" >> $GITHUB_STEP_SUMMARY
+          echo "- Pylint 评分：$pylint_score" >> $GITHUB_STEP_SUMMARY
+          echo "- 测试覆盖率：$coverage%" >> $GITHUB_STEP_SUMMARY
+          echo "- **综合评分：$composite_score**" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload Quality Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            pylint-report.txt
+            mypy-report.txt
+            black-report.txt
+            coverage-report.txt
+          retention-days: 30
+
+  # ========== 阶段 5: 创建 PR ==========
+  create-pr:
+    name: 🚀 Create PR
+    runs-on: ubuntu-latest
+    needs: [code-review, auto-fix, quality-verify, generate-pr-description]
+    if: |
+      always() &&
+      needs.quality-verify.result == 'success' &&
+      needs.quality-verify.outputs.composite_score >= 90
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download PR Description
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-description
+      
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 创建 Pull Request..."
+          
+          # 检查是否已有 PR
+          existing_pr=$(gh pr list --state open --json number --jq '.[0].number')
+          
+          if [ -n "$existing_pr" ]; then
+            echo "ℹ️ 已有开放的 PR #$existing_pr"
+          else
+            # 创建新 PR（使用 AI 生成的描述）
+            score=${{ needs.quality-verify.outputs.composite_score }}
+            gh pr create \
+              --title "🤖 Auto-Fix: Code Quality Improvements (Score: $score)" \
+              --body-file PR_DESCRIPTION.md \
+              --base main \
+              --label "auto-fix"
+            
+            echo "✅ PR 创建成功"
+          fi

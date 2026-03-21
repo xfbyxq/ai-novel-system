@@ -1,4 +1,4 @@
-"""AI Chat API 端点"""
+"""AI Chat API 端点."""
 
 import json
 from datetime import datetime, timezone
@@ -6,34 +6,38 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.dependencies import get_db
 
+from backend.dependencies import get_db
 from backend.schemas.ai_chat import (
-    AIChatSessionCreate,
-    AIChatSessionResponse,
     AIChatMessageCreate,
     AIChatMessageResponse,
-    NovelParseRequest,
-    NovelParseResponse,
+    AIChatSessionCreate,
+    AIChatSessionResponse,
+    ApplySuggestionRequest,
+    ApplySuggestionResult,
+    ApplySuggestionsRequest,
+    ApplySuggestionsResponse,
+    ChapterListItem,
+    CharacterListItem,
     CrawlerParseRequest,
     CrawlerParseResponse,
     ExtractSuggestionsRequest,
     ExtractSuggestionsResponse,
-    ApplySuggestionRequest,
-    ApplySuggestionsRequest,
-    ApplySuggestionsResponse,
-    RevisionSuggestion,
-    NovelCharactersResponse,
+    MessageResponse,
     NovelChaptersResponse,
-    CharacterListItem,
-    ChapterListItem,
+    NovelCharactersResponse,
+    NovelParseRequest,
+    NovelParseResponse,
+    RevisionSuggestion,
+    SessionDetailResponse,
+    SessionListResponse,
 )
 from backend.services.ai_chat_service import (
-    AiChatService,
-    SCENE_NOVEL_CREATION,
     SCENE_CRAWLER_TASK,
-    SCENE_NOVEL_REVISION,
     SCENE_NOVEL_ANALYSIS,
+    SCENE_NOVEL_CREATION,
+    SCENE_NOVEL_REVISION,
+    AiChatService,
 )
 
 router = APIRouter(prefix="/ai-chat", tags=["ai-chat"])
@@ -56,18 +60,31 @@ async def create_session(
     session_in: AIChatSessionCreate,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """创建新的 AI 对话会话"""
-    if session_in.scene not in [SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK, SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
+    """
+    创建新的 AI 对话会话.
+
+    **支持的场景 (scene)**:
+    - `novel_creation`: 小说创建对话
+    - `crawler_task`: 爬虫任务配置
+    - `novel_revision`: 小说修订建议
+    - `novel_analysis`: 小说内容分析
+    """
+    valid_scenes = [
+        SCENE_NOVEL_CREATION,
+        SCENE_CRAWLER_TASK,
+        SCENE_NOVEL_REVISION,
+        SCENE_NOVEL_ANALYSIS,
+    ]
+    if session_in.scene not in valid_scenes:
         raise HTTPException(
-            status_code=400,
-            detail=f"无效的场景。可选: {SCENE_NOVEL_CREATION}, {SCENE_CRAWLER_TASK}, {SCENE_NOVEL_REVISION}, {SCENE_NOVEL_ANALYSIS}"
+            status_code=400, detail=f"无效的场景。可选: {', '.join(valid_scenes)}"
         )
-    
+
     session = await service.create_session(
         scene=session_in.scene,
         context=session_in.context,
     )
-    
+
     return AIChatSessionResponse(
         session_id=session.session_id,
         scene=session.scene,
@@ -82,13 +99,18 @@ async def send_message(
     message_in: AIChatMessageCreate,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """发送消息并获取 AI 回复"""
+    """
+    发送消息并获取 AI 回复.
+
+    同步接口，等待完整响应返回。如需流式响应，请使用 WebSocket 接口。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         response_text = await service.send_message(session_id, message_in.message)
-        
+
         return AIChatMessageResponse(
             session_id=session_id,
             message=response_text,
@@ -109,43 +131,59 @@ async def websocket_chat(
     session_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """WebSocket 流式对话"""
+    """
+    WebSocket 流式对话.
+
+    **连接方式**: `ws://host/api/v1/ai-chat/ws/{session_id}`
+
+    **客户端发送格式** (JSON):
+    ```json
+    {"message": "用户输入的文本"}
+    ```
+
+    **服务端响应格式** (流式JSON):
+    - 响应中: `{"chunk": "文本片段", "done": false}`
+    - 完成时: `{"chunk": "", "done": true}`
+    - 错误时: `{"error": "错误信息", "done": true}`
+    """
     await websocket.accept()
-    
+
     session = service.get_session(session_id)
     if not session:
         await websocket.send_json({"error": f"会话 {session_id} 不存在"})
         await websocket.close()
         return
-    
+
     try:
         while True:
             data = await websocket.receive_text()
             message_data = json.loads(data)
             user_message = message_data.get("message", "")
-            
+
             if not user_message:
                 continue
-            
+
             await websocket.send_json({"chunk": "", "done": False})
-            
+
             full_response = ""
             try:
-                async for chunk in service.send_message_stream(session_id, user_message):
+                async for chunk in service.send_message_stream(
+                    session_id, user_message
+                ):
                     await websocket.send_json({"chunk": chunk, "done": False})
                     full_response += chunk
-                
+
                 await websocket.send_json({"chunk": "", "done": True})
-                
+
             except Exception as e:
                 await websocket.send_json({"error": str(e), "done": True})
-                
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
         try:
             await websocket.send_json({"error": str(e)})
-        except:
+        except Exception:
             pass
     finally:
         await websocket.close()
@@ -156,7 +194,11 @@ async def parse_novel_intent(
     request: NovelParseRequest,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """解析小说创建意图，将自然语言转换为结构化数据"""
+    """
+    解析小说创建意图.
+
+    将用户的自然语言描述转换为结构化的小说创建参数。
+    """
     try:
         result = await service.parse_novel_intent(request.user_input)
         return NovelParseResponse(**result)
@@ -169,7 +211,11 @@ async def parse_crawler_intent(
     request: CrawlerParseRequest,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """解析爬虫任务意图，将自然语言转换为结构化数据"""
+    """
+    解析爬虫任务意图.
+
+    将用户的自然语言描述转换为结构化的爬虫任务参数。
+    """
     try:
         result = await service.parse_crawler_intent(request.user_input)
         return CrawlerParseResponse(**result)
@@ -177,17 +223,16 @@ async def parse_crawler_intent(
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
 
 
-@router.get("/sessions")
+@router.get("/sessions", response_model=SessionListResponse)
 async def list_sessions(
     scene: Optional[str] = None,
     novel_id: Optional[str] = None,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """获取会话列表
-    
-    Args:
-        scene: 可选的场景过滤
-        novel_id: 可选的小说ID过滤，用于按小说隔离会话
+    """
+    获取会话列表.
+
+    支持按场景和小说ID筛选。
     """
     try:
         sessions = await service.get_sessions(scene, novel_id)
@@ -196,12 +241,16 @@ async def list_sessions(
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
 
 
-@router.get("/sessions/{session_id}")
+@router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_session(
     session_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """获取会话详情"""
+    """
+    获取会话详情.
+
+    返回会话的完整信息，包括所有历史消息。
+    """
     try:
         # 先尝试从内存中获取
         session = service.get_session(session_id)
@@ -211,10 +260,10 @@ async def get_session(
             if session:
                 # 加载到内存
                 service.sessions[session_id] = session
-        
+
         if not session:
             raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
-        
+
         return {
             "session_id": session.session_id,
             "scene": session.scene,
@@ -227,22 +276,26 @@ async def get_session(
         raise HTTPException(status_code=500, detail=f"获取会话失败: {str(e)}")
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete("/sessions/{session_id}", response_model=MessageResponse)
 async def delete_session(
     session_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """删除会话"""
+    """
+    删除会话.
+
+    删除指定会话及其所有消息。
+    """
     try:
         # 从内存中删除
         if session_id in service.sessions:
             del service.sessions[session_id]
-        
+
         # 从数据库删除
         success = await service.delete_session(session_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
-        
+
         return {"message": "会话删除成功"}
     except HTTPException:
         raise
@@ -255,52 +308,55 @@ async def extract_suggestions(
     request: ExtractSuggestionsRequest,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """从AI响应中提取结构化的修订建议"""
+    """
+    从AI响应中提取结构化的修订建议.
+
+    分析AI回复的文本，提取出可以应用到小说数据的具体修改建议。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         # 获取小说信息
         novel_info = await service.get_novel_info(request.novel_id)
         if "error" in novel_info:
             raise HTTPException(status_code=404, detail=novel_info["error"])
-        
+
         # 提取结构化建议
         suggestions = await service.extract_structured_suggestions(
-            request.ai_response,
-            novel_info,
-            request.revision_type
+            request.ai_response, novel_info, request.revision_type
         )
-        
+
         # 转换为响应格式
         suggestion_models = []
         for s in suggestions:
             # 处理 target_id，确保是字符串类型
-            target_id = s.get('target_id')
+            target_id = s.get("target_id")
             if target_id is not None and not isinstance(target_id, str):
                 target_id = str(target_id)
-            
+
             # 处理 suggested_value，确保是字符串类型
-            suggested_value = s.get('suggested_value')
+            suggested_value = s.get("suggested_value")
             if isinstance(suggested_value, list):
                 # 如果是列表，用换行符连接成字符串
-                suggested_value = '\n'.join(str(item) for item in suggested_value)
+                suggested_value = "\n".join(str(item) for item in suggested_value)
             elif suggested_value is not None and not isinstance(suggested_value, str):
                 # 如果是其他类型，转为字符串
                 suggested_value = str(suggested_value)
-            
+
             suggestion_models.append(
                 RevisionSuggestion(
-                    type=s.get('type'),
+                    type=s.get("type"),
                     target_id=target_id,
-                    target_name=s.get('target_name'),
-                    field=s.get('field'),
+                    target_name=s.get("target_name"),
+                    field=s.get("field"),
                     suggested_value=suggested_value,
-                    description=s.get('description', ''),
-                    confidence=s.get('confidence', 0.8)
+                    description=s.get("description", ""),
+                    confidence=s.get("confidence", 0.8),
                 )
             )
-        
+
         return ExtractSuggestionsResponse(suggestions=suggestion_models)
     except HTTPException:
         raise
@@ -309,24 +365,28 @@ async def extract_suggestions(
         raise HTTPException(status_code=500, detail=f"提取建议失败: {str(e)}")
 
 
-@router.post("/apply-suggestion")
+@router.post("/apply-suggestion", response_model=ApplySuggestionResult)
 async def apply_suggestion(
     request: ApplySuggestionRequest,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """应用单个修订建议到数据库"""
+    """
+    应用单个修订建议到数据库.
+
+    将提取的建议直接应用到对应的小说数据。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         result = await service.apply_suggestion_to_database(
-            request.novel_id,
-            request.suggestion.model_dump()
+            request.novel_id, request.suggestion.model_dump()
         )
-        
-        if not result.get('success'):
-            raise HTTPException(status_code=400, detail=result.get('error', '应用失败'))
-        
+
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "应用失败"))
+
         return result
     except HTTPException:
         raise
@@ -340,51 +400,62 @@ async def apply_suggestions_batch(
     request: ApplySuggestionsRequest,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """批量应用修订建议到数据库"""
+    """
+    批量应用修订建议到数据库.
+
+    一次性应用多个修订建议，返回每个建议的应用结果。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         suggestions_dicts = [s.model_dump() for s in request.suggestions]
         result = await service.apply_suggestions_batch(
-            request.novel_id,
-            suggestions_dicts
+            request.novel_id, suggestions_dicts
         )
-        
+
         return ApplySuggestionsResponse(
-            total=result['total'],
-            success_count=result['success_count'],
-            failed_count=result['failed_count'],
-            details=result['details']
+            total=result["total"],
+            success_count=result["success_count"],
+            failed_count=result["failed_count"],
+            details=result["details"],
         )
     except Exception as e:
         logger.error(f"批量应用建议失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"批量应用建议失败: {str(e)}")
 
 
-@router.get("/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse)
+@router.get(
+    "/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse
+)
 async def get_novel_characters_for_revision(
     novel_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """获取小说的角色列表（用于修订时选择角色）"""
+    """
+    获取小说的角色列表（简化版）.
+
+    用于修订建议时选择目标角色，返回精简的角色信息。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         characters = await service.get_novel_characters(novel_id)
-        
+
         character_items = [
             CharacterListItem(
-                id=c['id'],
-                name=c['name'],
-                role_type=c.get('role_type'),
-                personality=c.get('personality'),
-                background=c.get('background')
+                id=c["id"],
+                name=c["name"],
+                role_type=c.get("role_type"),
+                personality=c.get("personality"),
+                background=c.get("background"),
             )
             for c in characters
         ]
-        
+
         return NovelCharactersResponse(characters=character_items)
     except Exception as e:
         logger.error(f"获取角色列表失败: {e}", exc_info=True)
@@ -396,24 +467,29 @@ async def get_novel_chapters_for_revision(
     novel_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
 ):
-    """获取小说的章节列表（用于修订时选择章节）"""
+    """
+    获取小说的章节列表（简化版）.
+
+    用于修订建议时选择目标章节，返回精简的章节信息。
+    """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         chapters = await service.get_novel_chapters(novel_id)
-        
+
         chapter_items = [
             ChapterListItem(
-                id=c['id'],
-                chapter_number=c['chapter_number'],
-                title=c.get('title'),
-                word_count=c.get('word_count', 0),
-                status=c.get('status')
+                id=c["id"],
+                chapter_number=c["chapter_number"],
+                title=c.get("title"),
+                word_count=c.get("word_count", 0),
+                status=c.get("status"),
             )
             for c in chapters
         ]
-        
+
         return NovelChaptersResponse(chapters=chapter_items)
     except Exception as e:
         logger.error(f"获取章节列表失败: {e}", exc_info=True)

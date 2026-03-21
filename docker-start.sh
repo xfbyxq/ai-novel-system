@@ -1,32 +1,28 @@
 #!/bin/bash
 
-# 小说生成系统 Docker 部署启动脚本
+# 小说生成系统 - Docker 启动脚本（带构建）
+# 用法：./docker-start.sh
 
-echo "🚀 开始构建并启动 Docker 容器..."
+# 颜色定义
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# 停止现有容器
-echo "📦 停止现有容器..."
+echo -e "${YELLOW}停止现有容器...${NC}"
 docker-compose down
 
-# 构建并启动所有服务
-echo "🔨 构建镜像并启动服务..."
+echo -e "${YELLOW}构建并启动服务...${NC}"
 docker-compose up -d --build
 
-# 等待服务启动
-echo "⏳ 等待服务启动..."
+echo -e "${YELLOW}等待服务启动...${NC}"
 sleep 10
 
-# 检查服务状态
+echo -e "${GREEN}启动完成！${NC}"
 echo ""
-echo "📊 服务状态："
 docker-compose ps
 
-# 检查后端健康状态
 echo ""
-echo "🔍 检查后端健康状态..."
-curl -s http://localhost:8000/health | jq '.' || echo "后端服务未就绪"
-
-# 显示日志
-echo ""
-echo "📝 查看服务日志（按 Ctrl+C 退出）："
-docker-compose logs -f
+echo -e "${GREEN}服务已启动：${NC}"
+echo "  - 前端：http://localhost:3000"
+echo "  - 后端 API: http://localhost:8000"
+echo "  - API 文档：http://localhost:8000/docs"

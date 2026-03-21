@@ -71,6 +71,7 @@ export default function GenerationHistoryTab({ novelId, onNovelRefresh }: Props)
               if (v === 'planning') return '企划';
               if (v === 'writing') return '单章写作';
               if (v === 'batch_writing') return '批量写作';
+              if (v === 'outline_refinement') return '大纲完善';
               return v;
             },
           },

@@ -1,12 +1,13 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Row, Col, Spin, Empty, Drawer, Descriptions, Typography, Button, Space, Modal, Form, Input, Select, InputNumber, message,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, RocketOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, RocketOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { Character } from '@/api/types';
 import { getCharacters, createCharacter, updateCharacter, deleteCharacter } from '@/api/characters';
 import CharacterCard from '@/components/CharacterCard';
 import { ROLE_TYPE_MAP, GENDER_MAP } from '@/utils/constants';
+import { formatDate } from '@/utils/format';
 import RelationshipGraph from './RelationshipGraph';
 
 interface Props {
@@ -26,6 +27,9 @@ export default function CharactersTab({ novelId }: Props) {
   const [createLoading, setCreateLoading] = useState(false);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  
+  // 添加轮询相关状态
+  const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCharacters = useCallback(async (nid: string) => {
     setLoading(true);
@@ -37,6 +41,21 @@ export default function CharactersTab({ novelId }: Props) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // 刷新数据函数
+  const handleRefresh = useCallback(async () => {
+    await fetchCharacters(novelId);
+    message.success('角色数据已刷新');
+  }, [novelId, fetchCharacters]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -148,11 +167,22 @@ export default function CharactersTab({ novelId }: Props) {
 
   return (
     <div>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={24}>
+          <Space size="large">
+            <Typography.Text strong>角色总数: {characters.length}</Typography.Text>
+            <Typography.Text type="secondary">最后更新: {characters.length > 0 ? formatDate(characters.reduce((latest, char) => new Date(char.updated_at) > new Date(latest) ? char.updated_at : latest, characters[0]?.updated_at || new Date().toISOString())) : '-'}</Typography.Text>
+            <Button size="small" icon={<ReloadOutlined />} onClick={handleRefresh}>刷新数据</Button>
+          </Space>
+        </Col>
+      </Row>
       <Row gutter={16}>
         <Col xs={24} md={10}>
           <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <Typography.Title level={5} style={{ margin: 0 }}>角色列表 ({characters.length})</Typography.Title>
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加角色</Button>
+            <Space>
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加角色</Button>
+            </Space>
           </Space>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {characters.map((c) => (
@@ -172,7 +202,7 @@ export default function CharactersTab({ novelId }: Props) {
         title={editMode ? '编辑角色' : (selected?.name || '角色详情')}
         open={!!selected}
         onClose={handleDrawerClose}
-        width={480}
+        size={480}
         extra={
           !editMode ? (
             <Space>

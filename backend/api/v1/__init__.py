@@ -4,7 +4,17 @@ API v1 router aggregation.
 
 from fastapi import APIRouter
 
-from backend.api.v1 import novels, characters, chapters, outlines, generation, ai_chat, publishing, monitoring
+from backend.api.v1 import (
+    ai_chat,
+    chapters,
+    characters,
+    generation,
+    monitoring,
+    novels,
+    outlines,
+    publishing,
+)
+
 # 注释掉不存在或依赖缺失的模块
 # from backend.api.v1 import crawler, automation, integration, revenue
 

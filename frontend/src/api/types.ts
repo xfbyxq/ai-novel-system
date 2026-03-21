@@ -131,15 +131,79 @@ export interface WorldSetting {
 }
 
 // --- PlotOutline ---
+// --- VolumeInfo (增强版卷信息) ---
+export interface VolumeInfo {
+  number: number;
+  title: string;
+  summary?: string;
+  chapters: number[];  // [start, end]
+  
+  // 核心冲突
+  core_conflict?: string;
+  
+  // 主线事件
+  main_events?: Array<{
+    chapter: number;
+    event: string;
+    impact: string;
+  }>;
+  
+  // 关键转折点
+  key_turning_points?: Array<{
+    chapter: number;
+    event: string;
+    significance: string;
+  }>;
+  
+  // 张力循环
+  tension_cycles?: Array<{
+    chapters: number[];  // [start, end]
+    suppress_events: string[];
+    release_event: string;
+    tension_level?: number;  // 0-10
+  }>;
+  
+  // 情感弧线
+  emotional_arc?: string;
+  
+  // 角色发展弧线
+  character_arcs?: Array<{
+    character_id?: string;
+    arc_description: string;
+    key_moments: number[];  // 关键章节号
+  }>;
+  
+  // 支线情节
+  side_plots?: Array<{
+    name: string;
+    description: string;
+    chapters: number[];  // [start, end]
+  }>;
+  
+  // 伏笔分配
+  foreshadowing?: Array<{
+    description: string;
+    setup_chapter: number;
+    payoff_chapter: number;
+  }>;
+  
+  // 主题
+  themes?: string[];
+  
+  // 字数范围
+  word_count_range?: number[];  // [min, max]
+}
+
 export interface PlotOutline {
   id: string;
   novel_id: string;
   structure_type: string | null;
-  volumes: unknown[] | null;
+  volumes: VolumeInfo[] | null;
   main_plot: Record<string, unknown> | null;
   sub_plots: unknown[] | null;
   key_turning_points: unknown[] | null;
   climax_chapter: number | null;
+  version: number;
   created_at: string;
   updated_at: string;
 }
@@ -148,7 +212,7 @@ export interface PlotOutline {
 export interface GenerationTask {
   id: string;
   novel_id: string;
-  task_type: 'planning' | 'writing' | 'editing' | 'batch_writing';
+  task_type: 'planning' | 'writing' | 'editing' | 'batch_writing' | 'outline_refinement';
   phase: string | null;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   input_data: Record<string, unknown> | null;
@@ -163,7 +227,7 @@ export interface GenerationTask {
 
 export interface GenerationTaskCreate {
   novel_id: string;
-  task_type: 'planning' | 'writing' | 'batch_writing';
+  task_type: 'planning' | 'writing' | 'batch_writing' | 'outline_refinement';
   phase?: string;
   input_data?: Record<string, unknown>;
   // 批量写作专用字段
@@ -348,4 +412,32 @@ export interface PublishPreview {
   total_chapters: number;
   unpublished_count: number;
   chapters: ChapterPreviewItem[];
+}
+
+// 智能完善相关接口
+export interface EnhancementPreviewResponse {
+  original_outline: PlotOutline;
+  enhanced_outline: PlotOutline;
+  quality_comparison: {
+    original_score: number;
+    enhanced_score: number;
+    improvement: number;
+    dimension_improvements: Record<string, number>;
+  };
+  improvements_made: string[];
+  processing_time: number;
+  cost_estimate: number;
+}
+
+export interface OutlineQualityReport {
+  overall_score: number;
+  dimension_scores: Record<string, number>;
+  strengths: string[];
+  weaknesses: string[];
+  improvement_suggestions: Array<{
+    type: string;
+    priority: string;
+    description: string;
+    details: string[];
+  }>;
 }

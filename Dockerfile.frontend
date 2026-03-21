@@ -1,18 +1,27 @@
-FROM node:20-alpine
+FROM m.daocloud.io/docker.io/node:20-alpine
+
+# 接收 build args
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 WORKDIR /app
+
+# 替换为阿里云 apk 镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # 复制 package 文件
 COPY frontend/package*.json ./
 
 # 安装依赖
-RUN npm install
+RUN npm install --registry=${NPM_REGISTRY}
 
 # 复制前端代码
 COPY frontend/ ./
+
+# 复制并设置启动脚本权限
+RUN chmod +x docker-entrypoint.sh
 
 # 暴露端口
 EXPOSE 3000
 
 # 启动命令
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["./docker-entrypoint.sh"]

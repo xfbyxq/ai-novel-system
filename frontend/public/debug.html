@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>调试 apiClient</title>
+</head>
+<body>
+    <h1>apiClient 配置调试</h1>
+    <button onclick="checkConfig()">检查配置</button>
+    <pre id="output"></pre>
+    
+    <script type="module">
+        import apiClient from '/src/api/client.ts';
+        
+        window.checkConfig = function() {
+            const output = document.getElementById('output');
+            output.textContent = JSON.stringify({
+                baseURL: apiClient.defaults.baseURL,
+                timeout: apiClient.defaults.timeout,
+                headers: apiClient.defaults.headers,
+                全部配置: apiClient.defaults
+            }, null, 2);
+        };
+        
+        // 自动执行
+        setTimeout(() => window.checkConfig(), 100);
+    </script>
+</body>
+</html>

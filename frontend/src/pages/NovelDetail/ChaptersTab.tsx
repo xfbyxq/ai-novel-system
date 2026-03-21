@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Tag, Button, Modal, message } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Modal, message, Space, Typography, Tooltip } from 'antd';
+import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { Chapter } from '@/api/types';
 import { getChapters, deleteChapter, batchDeleteChapters } from '@/api/chapters';
+import { getChapterOutlineTask } from '@/api/outlines';
 import StatusBadge from '@/components/StatusBadge';
+import ChapterOutlineTaskModal, { type ChapterTask } from '@/components/ChapterOutlineTaskModal';
 import { formatWordCount, formatDate } from '@/utils/format';
 
 interface Props {
@@ -20,6 +22,9 @@ export default function ChaptersTab({ novelId }: Props) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteChapterInfo, setDeleteChapterInfo] = useState<{ chapterNumber: number; isBatch: boolean } | null>(null);
+  const [chapterTaskModalOpen, setChapterTaskModalOpen] = useState(false);
+  const [currentChapterTask, setCurrentChapterTask] = useState<ChapterTask | null>(null);
+  const [pendingChapterNumber, setPendingChapterNumber] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +38,34 @@ export default function ChaptersTab({ novelId }: Props) {
   }, [novelId, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleGenerateChapter = useCallback(async (chapterNumber: number) => {
+    try {
+      const task = await getChapterOutlineTask(novelId, chapterNumber);
+      setCurrentChapterTask(task);
+      setPendingChapterNumber(chapterNumber);
+      setChapterTaskModalOpen(true);
+    } catch (error) {
+      console.error('Failed to get chapter outline task:', error);
+      message.warning('该章节暂无大纲任务，将直接生成');
+      navigate(`/novels/${novelId}/chapters/${chapterNumber}/edit`);
+    }
+  }, [novelId, navigate]);
+
+  const handleChapterTaskConfirm = useCallback(() => {
+    setChapterTaskModalOpen(false);
+    if (pendingChapterNumber !== null) {
+      navigate(`/novels/${novelId}/chapters/${pendingChapterNumber}/edit`);
+    }
+    setCurrentChapterTask(null);
+    setPendingChapterNumber(null);
+  }, [novelId, pendingChapterNumber, navigate]);
+
+  const handleChapterTaskCancel = useCallback(() => {
+    setChapterTaskModalOpen(false);
+    setCurrentChapterTask(null);
+    setPendingChapterNumber(null);
+  }, []);
 
   const handleDelete = (chapterNumber: number) => {
     setDeleteChapterInfo({ chapterNumber, isBatch: false });
@@ -85,10 +118,43 @@ export default function ChaptersTab({ novelId }: Props) {
     },
   };
 
+  const getOutlineStatusIcon = (chapter: Chapter) => {
+    if (chapter.status === 'published') {
+      return (
+        <Tooltip title="已发布">
+          <CheckCircleOutlined style={{ color: '#52c41a' }} />
+        </Tooltip>
+      );
+    }
+    if (chapter.status === 'reviewing') {
+      return (
+        <Tooltip title="审核中">
+          <CheckCircleOutlined style={{ color: '#1890ff' }} />
+        </Tooltip>
+      );
+    }
+    return (
+      <Tooltip title="待生成">
+        <ClockCircleOutlined style={{ color: '#faad14' }} />
+      </Tooltip>
+    );
+  };
+
   return (
     <>
-      {selectedRowKeys.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Space>
+          <Typography.Text strong>章节列表</Typography.Text>
+          <Tooltip title="章节大纲完成状态">
+            <Space size="small">
+              <CheckCircleOutlined style={{ color: '#52c41a' }} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>已完成</Typography.Text>
+              <ClockCircleOutlined style={{ color: '#faad14' }} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>待生成</Typography.Text>
+            </Space>
+          </Tooltip>
+        </Space>
+        {selectedRowKeys.length > 0 && (
           <Button 
             danger 
             icon={<DeleteOutlined />} 
@@ -96,8 +162,8 @@ export default function ChaptersTab({ novelId }: Props) {
           >
             批量删除 ({selectedRowKeys.length})
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       
       <Table
         dataSource={chapters}
@@ -106,6 +172,12 @@ export default function ChaptersTab({ novelId }: Props) {
         rowSelection={rowSelection}
         pagination={{ current: page, pageSize: 20, total, onChange: setPage }}
         columns={[
+          { 
+            title: '大纲状态', 
+            dataIndex: 'status', 
+            width: 90,
+            render: (_: any, record: Chapter) => getOutlineStatusIcon(record),
+          },
           { title: '章节', dataIndex: 'chapter_number', width: 70, render: (v: number) => `第 ${v} 章` },
           { title: '卷', dataIndex: 'volume_number', width: 60 },
           {
@@ -122,14 +194,24 @@ export default function ChaptersTab({ novelId }: Props) {
           { title: '创建时间', dataIndex: 'created_at', width: 160, render: formatDate },
           {
             title: '操作',
-            width: 80,
+            width: 150,
             render: (_: any, record: Chapter) => (
-              <Button 
-                danger 
-                icon={<DeleteOutlined />} 
-                size="small" 
-                onClick={() => handleDelete(record.chapter_number)}
-              />
+              <Space size="small">
+                <Button 
+                  type="link" 
+                  size="small" 
+                  icon={<EditOutlined />}
+                  onClick={() => navigate(`/novels/${novelId}/chapters/${record.chapter_number}/edit`)}
+                >
+                  编辑
+                </Button>
+                <Button 
+                  danger 
+                  icon={<DeleteOutlined />} 
+                  size="small" 
+                  onClick={() => handleDelete(record.chapter_number)}
+                />
+              </Space>
             ),
           },
         ]}
@@ -151,6 +233,13 @@ export default function ChaptersTab({ novelId }: Props) {
         </p>
         <p style={{ color: '#ff4d4f', marginTop: 8 }}>删除后无法恢复，请谨慎操作。</p>
       </Modal>
+
+      <ChapterOutlineTaskModal
+        open={chapterTaskModalOpen}
+        task={currentChapterTask}
+        onConfirm={handleChapterTaskConfirm}
+        onCancel={handleChapterTaskCancel}
+      />
     </>
   );
 }
