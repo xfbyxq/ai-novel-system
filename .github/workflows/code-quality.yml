@@ -295,7 +295,7 @@ jobs:
     if: |
       always() &&
       needs.quality-verify.result == 'success' &&
-      needs.quality-verify.outputs.composite_score >= env.QUALITY_THRESHOLD
+      needs.quality-verify.outputs.composite_score >= 90
     
     steps:
       - uses: actions/checkout@v4
