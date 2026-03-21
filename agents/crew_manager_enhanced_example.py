@@ -5,6 +5,7 @@ CrewManager 连贯性保障集成示例
 
 注意：这是示例代码，实际集成需要根据现有 CrewManager 的代码结构进行调整。
 """
+import logging
 from typing import Any, Dict, List, Optional
 from agents.continuity_integration_module import ContinuityIntegrationModule
 from agents.enhanced_context_manager import EnhancedContextManager
@@ -13,6 +14,9 @@ from agents.chapter_outline_mapper import ChapterOutlineMapper
 from agents.character_consistency_tracker import CharacterConsistencyTracker
 from agents.foreshadowing_auto_injector import ForeshadowingAutoInjector
 from agents.prevention_continuity_checker import PreventionContinuityChecker
+from tests.continuity_system_test import ContinuityIntegrationResult
+
+logger = logging.getLogger(__name__)
 
 
 class EnhancedCrewManager:
