@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 async def migrate():
     """执行数据库迁移"""
     print("开始数据库迁移...")
-    
+
     async with engine.begin() as conn:
         # 1. 为 novels 表添加 chapter_config 字段
         print("1. 为 novels 表添加 chapter_config 字段...")
@@ -36,7 +36,7 @@ async def migrate():
             print("   ✅ novels.chapter_config 添加成功")
         except Exception as e:
             print(f"   ⚠️  novels.chapter_config 可能已存在：{e}")
-        
+
         # 2. 为 plot_outlines 表添加 main_plot_detailed 字段
         print("2. 为 plot_outlines 表添加 main_plot_detailed 字段...")
         try:
@@ -47,7 +47,7 @@ async def migrate():
             print("   ✅ plot_outlines.main_plot_detailed 添加成功")
         except Exception as e:
             print(f"   ⚠️  plot_outlines.main_plot_detailed 可能已存在：{e}")
-    
+
     print("\n✅ 数据库迁移完成！")
     print("\n新增字段说明：")
     print("- novels.chapter_config: 存储章节配置，支持灵活的章节数设置")
@@ -57,7 +57,7 @@ async def migrate():
 async def rollback():
     """回滚迁移（仅用于测试）"""
     print("开始回滚数据库迁移...")
-    
+
     async with engine.begin() as conn:
         # 1. 删除 novels 表的 chapter_config 字段
         print("1. 删除 novels.chapter_config 字段...")
@@ -69,7 +69,7 @@ async def rollback():
             print("   ✅ novels.chapter_config 已删除")
         except Exception as e:
             print(f"   ⚠️  删除失败：{e}")
-        
+
         # 2. 删除 plot_outlines 表的 main_plot_detailed 字段
         print("2. 删除 plot_outlines.main_plot_detailed 字段...")
         try:
@@ -80,14 +80,14 @@ async def rollback():
             print("   ✅ plot_outlines.main_plot_detailed 已删除")
         except Exception as e:
             print(f"   ⚠️  删除失败：{e}")
-    
+
     print("\n⚠️  数据库迁移已回滚！")
 
 
 async def check_migration_status():
     """检查迁移状态"""
     print("检查数据库迁移状态...")
-    
+
     async with engine.begin() as conn:
         # 检查 novels.chapter_config
         result = await conn.execute(text("""
@@ -100,7 +100,7 @@ async def check_migration_status():
             print(f"✅ novels.chapter_config 存在 (类型：{row[1]})")
         else:
             print("❌ novels.chapter_config 不存在")
-        
+
         # 检查 plot_outlines.main_plot_detailed
         result = await conn.execute(text("""
             SELECT column_name, data_type 
@@ -117,17 +117,17 @@ async def check_migration_status():
 async def main():
     """主函数"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="数据库迁移脚本")
     parser.add_argument(
         "--action",
         choices=["migrate", "rollback", "check"],
         default="migrate",
-        help="执行的操作：migrate(迁移), rollback(回滚), check(检查状态)"
+        help="执行的操作：migrate(迁移), rollback(回滚), check(检查状态)",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.action == "migrate":
         await migrate()
     elif args.action == "rollback":

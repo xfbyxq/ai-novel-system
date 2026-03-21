@@ -13,6 +13,7 @@ router = APIRouter()
 
 # ========== 无需认证的端点 ========== #
 
+
 @router.get("/public")
 async def public_endpoint():
     """
@@ -24,6 +25,7 @@ async def public_endpoint():
 
 
 # ========== 需要认证的端点 ========== #
+
 
 @router.get("/protected")
 async def protected_endpoint(
@@ -50,6 +52,7 @@ async def protected_endpoint(
 
 
 # ========== 批量操作端点（需要认证） ========== #
+
 
 @router.post("/bulk-operation")
 async def bulk_operation(

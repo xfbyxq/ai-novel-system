@@ -23,7 +23,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def verify_api_key(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
 ) -> str:
     """
     Verify API Key for protected endpoints.

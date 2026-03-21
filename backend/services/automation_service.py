@@ -1,4 +1,5 @@
 """自动化服务 - 负责管理自动化工作流"""
+
 import asyncio
 import logging
 from datetime import datetime
@@ -9,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.agent_communicator import AgentCommunicator
 from agents.agent_scheduler import AgentScheduler
-from agents.specific_agents import ContentPlanningAgent, EditingAgent, PublishingAgent, WritingAgent
+from agents.specific_agents import (
+    ContentPlanningAgent,
+    EditingAgent,
+    PublishingAgent,
+    WritingAgent,
+)
 from backend.services.generation_service import GenerationService
 from backend.services.publishing_service import PublishingService
 from core.models.chapter import Chapter
@@ -122,9 +128,7 @@ class AutomationService:
 
             # 5. 编辑阶段
             logger.info("📝 开始编辑阶段")
-            editing_result = await self._run_editing(
-                novel.id, chapters_result, config
-            )
+            editing_result = await self._run_editing(novel.id, chapters_result, config)
 
             # 6. 发布阶段（如果配置了自动发布）
             publish_result = None
@@ -197,15 +201,30 @@ class AutomationService:
 
         # 生成内容策划结果
         return {
-            "novel_title": config.get("novel_title", f"自动生成小说_{datetime.now().strftime('%Y%m%d_%H%M%S')}"),
+            "novel_title": config.get(
+                "novel_title",
+                f"自动生成小说_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            ),
             "genre": config.get("genre", "都市"),
             "tags": config.get("tags", ["热门", "都市", "情感"]),
             "synopsis": "这是一部根据市场分析自动生成的小说",
             "target_audience": "年轻读者",
             "chapters_plan": [
-                {"chapter_number": 1, "title": "第一章 开端", "content_plan": "介绍主角和背景"},
-                {"chapter_number": 2, "title": "第二章 冲突", "content_plan": "引入主要冲突"},
-                {"chapter_number": 3, "title": "第三章 发展", "content_plan": "情节发展"},
+                {
+                    "chapter_number": 1,
+                    "title": "第一章 开端",
+                    "content_plan": "介绍主角和背景",
+                },
+                {
+                    "chapter_number": 2,
+                    "title": "第二章 冲突",
+                    "content_plan": "引入主要冲突",
+                },
+                {
+                    "chapter_number": 3,
+                    "title": "第三章 发展",
+                    "content_plan": "情节发展",
+                },
             ],
         }
 
@@ -219,9 +238,8 @@ class AutomationService:
         if novel_id:
             # 更新现有小说
             from sqlalchemy import select
-            result = await self.db.execute(
-                select(Novel).where(Novel.id == novel_id)
-            )
+
+            result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
             novel = result.scalar_one_or_none()
             if novel:
                 # 更新小说信息
@@ -292,6 +310,7 @@ class AutomationService:
 
             # 获取生成结果
             from sqlalchemy import select
+
             result = await self.db.execute(
                 select(Chapter).where(
                     Chapter.novel_id == novel_id,
@@ -301,24 +320,26 @@ class AutomationService:
             chapter = result.scalar_one_or_none()
 
             if chapter:
-                generated_chapters.append({
-                    "chapter_number": chapter_number,
-                    "chapter_title": chapter_title,
-                    "word_count": chapter.word_count,
-                    "status": chapter.status,
-                })
+                generated_chapters.append(
+                    {
+                        "chapter_number": chapter_number,
+                        "chapter_title": chapter_title,
+                        "word_count": chapter.word_count,
+                        "status": chapter.status,
+                    }
+                )
 
         # 更新小说章节数和字数
         from sqlalchemy import func, select
+
         chapters_result = await self.db.execute(
-            select(func.count(Chapter.id), func.sum(Chapter.word_count))
-            .where(Chapter.novel_id == novel_id)
+            select(func.count(Chapter.id), func.sum(Chapter.word_count)).where(
+                Chapter.novel_id == novel_id
+            )
         )
         chapter_count, total_words = chapters_result.first()
 
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
         if novel:
             novel.chapter_count = chapter_count or 0
@@ -351,11 +372,13 @@ class AutomationService:
             # 实际实现中，这里应该使用EditingAgent
             chapter.status = "edited"
             chapter.updated_at = datetime.now()
-            edited_chapters.append({
-                "chapter_number": chapter.chapter_number,
-                "title": chapter.title,
-                "status": "edited",
-            })
+            edited_chapters.append(
+                {
+                    "chapter_number": chapter.chapter_number,
+                    "title": chapter.title,
+                    "status": "edited",
+                }
+            )
 
         await self.db.commit()
 

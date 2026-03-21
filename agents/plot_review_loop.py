@@ -23,7 +23,6 @@ from agents.base import (
     ReviewLoopConfig,
 )
 
-
 # ── 大纲审查专用提示词 ──────────────────────────────────────────
 
 PLOT_REVIEWER_SYSTEM = """你是一位资深的网络小说情节架构评审专家，专注于大纲设计的完整性、节奏和吸引力。
@@ -300,6 +299,7 @@ class PlotReviewHandler(
 
     def _get_builder_system_prompt(self) -> str:
         from llm.prompt_manager import PromptManager
+
         return PromptManager.PLOT_ARCHITECT_SYSTEM
 
     def _get_reviewer_agent_name(self) -> str:
@@ -357,17 +357,11 @@ class PlotReviewHandler(
 
         structure_analysis = review_data.get("structure_analysis", {})
         structure_text = (
-            self.to_json(structure_analysis)
-            if structure_analysis
-            else "（无）"
+            self.to_json(structure_analysis) if structure_analysis else "（无）"
         )
 
         unused_elements = review_data.get("unused_elements", {})
-        unused_text = (
-            self.to_json(unused_elements)
-            if unused_elements
-            else "（无）"
-        )
+        unused_text = self.to_json(unused_elements) if unused_elements else "（无）"
 
         return PLOT_REVISION_TASK.format(
             score=f"{score:.1f}",

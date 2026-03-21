@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """数据去重服务 - 负责处理爬虫数据的去重和增量爬取"""
+
 import hashlib
 import json
 import logging
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class DataDeduplicationService:
     """数据去重服务"""
+
     def __init__(self):
         self.redis_client = redis.from_url(settings.REDIS_URL)
         self.deduplication_prefix = "crawler:deduplication"
@@ -49,7 +51,9 @@ class DataDeduplicationService:
             self.logger.error(f"计算数据项哈希失败: {e}")
             raise
 
-    async def is_duplicate(self, platform: str, data_type: str, item: Dict[str, Any]) -> bool:
+    async def is_duplicate(
+        self, platform: str, data_type: str, item: Dict[str, Any]
+    ) -> bool:
         """检查数据项是否重复
 
         Args:
@@ -72,7 +76,13 @@ class DataDeduplicationService:
             # 出错时默认返回False，避免误判
             return False
 
-    async def mark_processed(self, platform: str, data_type: str, item: Dict[str, Any], expiration: int = 86400):
+    async def mark_processed(
+        self,
+        platform: str,
+        data_type: str,
+        item: Dict[str, Any],
+        expiration: int = 86400,
+    ):
         """标记数据项为已处理
 
         Args:
@@ -91,7 +101,9 @@ class DataDeduplicationService:
         except Exception as e:
             self.logger.error(f"标记数据项失败: {e}")
 
-    async def batch_check_duplicates(self, platform: str, data_type: str, items: List[Dict[str, Any]]) -> List[bool]:
+    async def batch_check_duplicates(
+        self, platform: str, data_type: str, items: List[Dict[str, Any]]
+    ) -> List[bool]:
         """批量检查数据项是否重复
 
         Args:
@@ -113,7 +125,13 @@ class DataDeduplicationService:
             # 出错时默认返回全False
             return [False] * len(items)
 
-    async def batch_mark_processed(self, platform: str, data_type: str, items: List[Dict[str, Any]], expiration: int = 86400):
+    async def batch_mark_processed(
+        self,
+        platform: str,
+        data_type: str,
+        items: List[Dict[str, Any]],
+        expiration: int = 86400,
+    ):
         """批量标记数据项为已处理
 
         Args:
@@ -135,7 +153,9 @@ class DataDeduplicationService:
         except Exception as e:
             self.logger.error(f"批量标记数据项失败: {e}")
 
-    async def get_last_crawl_time(self, platform: str, data_type: str) -> Optional[datetime]:
+    async def get_last_crawl_time(
+        self, platform: str, data_type: str
+    ) -> Optional[datetime]:
         """获取上次爬取时间
 
         Args:
@@ -185,9 +205,7 @@ class DataDeduplicationService:
 
             while True:
                 cursor, keys = await self.redis_client.scan(
-                    cursor=cursor,
-                    match=f"{self.deduplication_prefix}:*",
-                    count=1000
+                    cursor=cursor, match=f"{self.deduplication_prefix}:*", count=1000
                 )
 
                 for key in keys:
@@ -200,7 +218,9 @@ class DataDeduplicationService:
                             create_time_str = await self.redis_client.get(key)
                             if create_time_str:
                                 try:
-                                    create_time = datetime.fromisoformat(create_time_str)
+                                    create_time = datetime.fromisoformat(
+                                        create_time_str
+                                    )
                                     if (datetime.now() - create_time).days > days:
                                         keys_to_delete.append(key)
                                 except:
@@ -229,9 +249,7 @@ class DataDeduplicationService:
 
             while True:
                 cursor, keys = await self.redis_client.scan(
-                    cursor=cursor,
-                    match=f"{self.deduplication_prefix}:*",
-                    count=1000
+                    cursor=cursor, match=f"{self.deduplication_prefix}:*", count=1000
                 )
 
                 for key in keys:
@@ -257,10 +275,7 @@ class DataDeduplicationService:
                 if cursor == 0:
                     break
 
-            return {
-                "total_records": total_records,
-                "platform_stats": platform_stats
-            }
+            return {"total_records": total_records, "platform_stats": platform_stats}
         except Exception as e:
             self.logger.error(f"获取统计信息失败: {e}")
             return {"total_records": 0, "platform_stats": {}}

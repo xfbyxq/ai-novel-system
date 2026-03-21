@@ -24,7 +24,7 @@ from core.database import Base
 class AgentActivity(Base):
     """
     Agent 活动记录表
-    
+
     记录每个 Agent 在执行过程中的详细活动，包括：
     - 输入数据
     - 输出结果
@@ -32,29 +32,29 @@ class AgentActivity(Base):
     - 成本
     - 元数据（审查轮次、投票详情等）
     """
-    
+
     __tablename__ = "agent_activities"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # 关联信息
     novel_id = Column(
-        UUID(as_uuid=True), 
-        ForeignKey("novels.id", ondelete="CASCADE"), 
+        UUID(as_uuid=True),
+        ForeignKey("novels.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     task_id = Column(
-        UUID(as_uuid=True), 
-        ForeignKey("generation_tasks.id", ondelete="CASCADE"), 
+        UUID(as_uuid=True),
+        ForeignKey("generation_tasks.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
-    
+
     # Agent 信息
     agent_name = Column(String(100), nullable=False, index=True)
     agent_role = Column(String(200), nullable=True)  # Agent 的角色描述
-    
+
     # 活动类型
     activity_type = Column(String(50), nullable=False, index=True)
     # 类型包括：
@@ -78,17 +78,17 @@ class AgentActivity(Base):
     #   - vote_initiation: 投票发起
     #   - vote_cast: 投票执行
     #   - vote_result: 投票结果
-    
+
     # 阶段/步骤信息
     phase = Column(String(50), nullable=True)  # 所属阶段
     step_number = Column(Integer, nullable=True)  # 步骤序号
     iteration_number = Column(Integer, nullable=True)  # 迭代轮次（用于审查循环）
-    
+
     # 输入输出
     input_data = Column(JSONB, default=dict)  # 输入数据
     output_data = Column(JSONB, default=dict)  # 输出结果
     raw_output = Column(Text, nullable=True)  # 原始输出（用于非结构化数据）
-    
+
     # 元数据
     activity_metadata = Column("metadata", JSONB, default=dict)
     # activity_metadata 结构示例：
@@ -105,33 +105,33 @@ class AgentActivity(Base):
     #     "query_content": "...",  # 查询内容
     #     "query_answer": "..."  # 查询答案
     # }
-    
+
     # Token 和成本
     prompt_tokens = Column(Integer, default=0)
     completion_tokens = Column(Integer, default=0)
     total_tokens = Column(Integer, default=0)
     cost = Column(Numeric(10, 6), default=0)  # 使用更多小数位以提高精度
-    
+
     # 状态
     status = Column(String(20), default="success")  # success/failed/retry
     error_message = Column(Text, nullable=True)
     retry_count = Column(Integer, default=0)
-    
+
     # 时间戳
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     # task = relationship("GenerationTask", back_populates="agent_activities")
-    
+
     # Indexes
     __table_args__ = (
-        Index('idx_agent_activities_novel_task', 'novel_id', 'task_id'),
-        Index('idx_agent_activities_type', 'activity_type'),
-        Index('idx_agent_activities_created', 'created_at'),
+        Index("idx_agent_activities_novel_task", "novel_id", "task_id"),
+        Index("idx_agent_activities_type", "activity_type"),
+        Index("idx_agent_activities_created", "created_at"),
     )
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -156,9 +156,11 @@ class AgentActivity(Base):
             "error_message": self.error_message,
             "retry_count": self.retry_count,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
         }
-    
+
     @classmethod
     def from_activity(cls, data: Dict[str, Any]) -> "AgentActivity":
         """从字典创建实例"""

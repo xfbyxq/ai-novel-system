@@ -22,7 +22,9 @@ from core.models.novel import Novel
 
 class BatchDeleteRequest(BaseModel):
     """批量删除章节请求"""
+
     chapter_numbers: list[int] = Field(..., description="要删除的章节号列表")
+
 
 router = APIRouter(prefix="/novels/{novel_id}/chapters", tags=["chapters"])
 
@@ -61,7 +63,9 @@ async def list_chapters(
         query = query.where(Chapter.status == status)
 
     # Get total count
-    count_query = select(func.count()).select_from(Chapter).where(Chapter.novel_id == novel_id)
+    count_query = (
+        select(func.count()).select_from(Chapter).where(Chapter.novel_id == novel_id)
+    )
     if status:
         count_query = count_query.where(Chapter.status == status)
     total_result = await db.execute(count_query)
@@ -100,8 +104,7 @@ async def get_chapter_by_number(
 
     if not chapter:
         raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+            status_code=404, detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
         )
 
     return chapter
@@ -138,8 +141,7 @@ async def update_chapter(
 
     if not chapter:
         raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+            status_code=404, detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
         )
 
     # 记录更新前的字数
@@ -196,8 +198,7 @@ async def delete_chapter(
 
     if not chapters:
         raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
+            status_code=404, detail=f"小说 {novel_id} 的第 {chapter_number} 章未找到"
         )
 
     # 计算被删除章节的字数总和
@@ -239,7 +240,7 @@ async def batch_delete_chapters(
     # 查询要删除的章节
     query = select(Chapter).where(
         Chapter.novel_id == novel_id,
-        Chapter.chapter_number.in_(request.chapter_numbers)
+        Chapter.chapter_number.in_(request.chapter_numbers),
     )
     result = await db.execute(query)
     chapters = result.scalars().all()

@@ -24,7 +24,13 @@ from core.models.generation_task import GenerationTask, TaskType, TaskStatus
 
 class ChapterGenerationFailure(Exception):
     """章节生成失败异常"""
-    def __init__(self, chapter_number: int, reason: str, original_error: Optional[Exception] = None):
+
+    def __init__(
+        self,
+        chapter_number: int,
+        reason: str,
+        original_error: Optional[Exception] = None,
+    ):
         self.chapter_number = chapter_number
         self.reason = reason
         self.original_error = original_error
@@ -33,6 +39,7 @@ class ChapterGenerationFailure(Exception):
 
 class BatchGenerationInterrupted(Exception):
     """批量生成中断异常"""
+
     def __init__(self, continuous_failures: int, last_failed_chapter: int):
         self.continuous_failures = continuous_failures
         self.last_failed_chapter = last_failed_chapter
@@ -52,11 +59,7 @@ class SafeChapterGenerator:
         self.max_continuous_failures = 2  # 连续失败阈值
 
     async def generate_chapter_safely(
-        self,
-        novel_id: UUID,
-        chapter_number: int,
-        generation_func,
-        **kwargs
+        self, novel_id: UUID, chapter_number: int, generation_func, **kwargs
     ) -> Dict[str, Any]:
         """
         安全生成单个章节
@@ -80,13 +83,17 @@ class SafeChapterGenerator:
             await self._validate_generation_prerequisites(novel_id, chapter_number)
 
             # 2. 执行章节生成
-            generation_result = await generation_func(novel_id, chapter_number, **kwargs)
+            generation_result = await generation_func(
+                novel_id, chapter_number, **kwargs
+            )
 
             # 3. 验证生成结果
             self._validate_generation_result(generation_result, chapter_number)
 
             # 4. 保存章节到数据库（独立事务）
-            await self._save_chapter_independently(novel_id, chapter_number, generation_result)
+            await self._save_chapter_independently(
+                novel_id, chapter_number, generation_result
+            )
 
             # 5. 记录成功日志
             word_count = len(generation_result.get("final_content", ""))
@@ -109,9 +116,7 @@ class SafeChapterGenerator:
             # 其他异常转换为章节生成失败异常
             logger.error(f"❌ 第{chapter_number}章生成异常：{e}")
             raise ChapterGenerationFailure(
-                chapter_number=chapter_number,
-                reason=str(e),
-                original_error=e
+                chapter_number=chapter_number, reason=str(e), original_error=e
             )
 
     async def generate_batch_safely(
@@ -121,7 +126,7 @@ class SafeChapterGenerator:
         to_chapter: int,
         generation_func,
         task_id: Optional[UUID] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         安全批量生成章节
@@ -158,7 +163,7 @@ class SafeChapterGenerator:
                         novel_id=novel_id,
                         chapter_number=chapter_num,
                         generation_func=generation_func,
-                        **kwargs
+                        **kwargs,
                     )
 
                     results.append(result)
@@ -169,11 +174,13 @@ class SafeChapterGenerator:
                     # 章节生成失败
                     logger.error(f"❌ 第{chapter_num}章生成失败：{e.reason}")
 
-                    results.append({
-                        "status": "failed",
-                        "chapter_number": chapter_num,
-                        "error": e.reason,
-                    })
+                    results.append(
+                        {
+                            "status": "failed",
+                            "chapter_number": chapter_num,
+                            "error": e.reason,
+                        }
+                    )
                     failed_chapters.append(chapter_num)
                     continuous_failures += 1
 
@@ -185,14 +192,16 @@ class SafeChapterGenerator:
                         )
 
                         # 记录剩余未生成的章节
-                        remaining_chapters = list(range(chapter_num + 1, to_chapter + 1))
+                        remaining_chapters = list(
+                            range(chapter_num + 1, to_chapter + 1)
+                        )
                         if remaining_chapters:
                             logger.warning(f"剩余未生成章节：{remaining_chapters}")
 
                         # 抛出中断异常
                         raise BatchGenerationInterrupted(
                             continuous_failures=continuous_failures,
-                            last_failed_chapter=chapter_num
+                            last_failed_chapter=chapter_num,
                         )
 
             # 批量生成完成
@@ -224,15 +233,11 @@ class SafeChapterGenerator:
             }
 
     async def _validate_generation_prerequisites(
-        self,
-        novel_id: UUID,
-        chapter_number: int
+        self, novel_id: UUID, chapter_number: int
     ):
         """验证生成前置条件"""
         # 检查小说是否存在
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
         if not novel:
             raise ValueError(f"小说 {novel_id} 不存在")
@@ -240,8 +245,7 @@ class SafeChapterGenerator:
         # 检查章节是否已存在
         existing_chapter = await self.db.execute(
             select(Chapter).where(
-                Chapter.novel_id == novel_id,
-                Chapter.chapter_number == chapter_number
+                Chapter.novel_id == novel_id, Chapter.chapter_number == chapter_number
             )
         )
         if existing_chapter.scalar_one_or_none():
@@ -251,11 +255,7 @@ class SafeChapterGenerator:
         if not novel.plot_outline:
             logger.warning(f"小说 {novel_id} 缺少大纲，但仍然继续生成")
 
-    def _validate_generation_result(
-        self,
-        result: Dict[str, Any],
-        chapter_number: int
-    ):
+    def _validate_generation_result(self, result: Dict[str, Any], chapter_number: int):
         """验证生成结果"""
         if not result:
             raise ValueError("生成结果为空")
@@ -268,10 +268,7 @@ class SafeChapterGenerator:
             logger.warning(f"第{chapter_number}章字数过少：{len(final_content)}")
 
     async def _save_chapter_independently(
-        self,
-        novel_id: UUID,
-        chapter_number: int,
-        generation_result: Dict[str, Any]
+        self, novel_id: UUID, chapter_number: int, generation_result: Dict[str, Any]
     ):
         """
         独立保存章节到数据库
@@ -294,7 +291,9 @@ class SafeChapterGenerator:
             plot_points=chapter_plan.get("plot_points", []),
             foreshadowing=chapter_plan.get("foreshadowing", []),
             quality_score=generation_result.get("quality_score", 0),
-            continuity_issues=generation_result.get("continuity_report", {}).get("issues", []),
+            continuity_issues=generation_result.get("continuity_report", {}).get(
+                "issues", []
+            ),
             detailed_outline=generation_result.get("detailed_outline", {}),
         )
 
@@ -309,7 +308,9 @@ class SafeChapterGenerator:
             # 更新 token 成本
             cost = generation_result.get("cost", 0)
             if cost:
-                novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost))
+                novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+                    str(cost)
+                )
 
         # 立即提交事务
         await self.db.commit()
@@ -321,18 +322,12 @@ class SafeChapterGenerator:
 
     async def _get_novel(self, novel_id: UUID) -> Optional[Novel]:
         """获取小说对象"""
-        result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         return result.scalar_one_or_none()
 
 
 async def safe_generate_single_chapter(
-    db: AsyncSession,
-    novel_id: UUID,
-    chapter_number: int,
-    generation_func,
-    **kwargs
+    db: AsyncSession, novel_id: UUID, chapter_number: int, generation_func, **kwargs
 ) -> Dict[str, Any]:
     """
     安全生成单个章节的便捷函数
@@ -352,7 +347,7 @@ async def safe_generate_single_chapter(
         novel_id=novel_id,
         chapter_number=chapter_number,
         generation_func=generation_func,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -363,7 +358,7 @@ async def safe_generate_batch_chapters(
     to_chapter: int,
     generation_func,
     task_id: Optional[UUID] = None,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     安全批量生成章节的便捷函数
@@ -387,5 +382,5 @@ async def safe_generate_batch_chapters(
         to_chapter=to_chapter,
         generation_func=generation_func,
         task_id=task_id,
-        **kwargs
+        **kwargs,
     )

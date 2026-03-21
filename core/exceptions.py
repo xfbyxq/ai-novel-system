@@ -15,9 +15,11 @@ class NotFoundError(NovelSystemError):
 
 class GenerationError(NovelSystemError):
     """Error during novel generation."""
+
     pass
 
 
 class LLMError(NovelSystemError):
     """Error communicating with LLM API."""
+
     pass

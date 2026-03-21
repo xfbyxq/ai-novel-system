@@ -7,6 +7,7 @@
 4. 验证章节大纲一致性
 5. 管理大纲版本历史
 """
+
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -42,9 +43,7 @@ class OutlineService:
         self.cost_tracker = CostTracker()
 
     async def generate_complete_outline(
-        self,
-        novel_id: UUID,
-        world_setting_data: Dict[str, Any]
+        self, novel_id: UUID, world_setting_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         生成完整大纲
@@ -77,8 +76,7 @@ class OutlineService:
 
         # 2. 构建 LLM 提示词
         prompt = self._build_outline_generation_prompt(
-            novel=novel,
-            world_setting=world_setting_data
+            novel=novel, world_setting=world_setting_data
         )
 
         # 3. 调用 LLM 生成大纲
@@ -113,9 +111,7 @@ class OutlineService:
             raise
 
     def _build_outline_generation_prompt(
-        self,
-        novel: Novel,
-        world_setting: Dict[str, Any]
+        self, novel: Novel, world_setting: Dict[str, Any]
     ) -> str:
         """构建大纲生成提示词"""
         world_name = world_setting.get("world_name", "未命名世界")
@@ -288,11 +284,15 @@ class OutlineService:
 
         if existing_outline:
             # 更新现有大纲
-            existing_outline.structure_type = outline_data.get("structure_type", "三幕式")
+            existing_outline.structure_type = outline_data.get(
+                "structure_type", "三幕式"
+            )
             existing_outline.volumes = outline_data.get("volumes", [])
             existing_outline.main_plot = outline_data.get("main_plot", {})
             existing_outline.sub_plots = outline_data.get("sub_plots", [])
-            existing_outline.key_turning_points = outline_data.get("key_turning_points", [])
+            existing_outline.key_turning_points = outline_data.get(
+                "key_turning_points", []
+            )
             existing_outline.climax_chapter = outline_data.get("climax_chapter")
             existing_outline.raw_content = json.dumps(outline_data, ensure_ascii=False)
             existing_outline.updated_at = datetime.now(timezone.utc)
@@ -318,7 +318,7 @@ class OutlineService:
         self,
         novel_id: UUID,
         outline_data: Dict[str, Any],
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         分解大纲为章节配置
@@ -390,7 +390,7 @@ class OutlineService:
                     auto_split=auto_split,
                     end_ch=end_ch,
                     climax_chapter=global_climax_chapter,
-                    volume_is_climax=volume.get("is_climax", False)
+                    volume_is_climax=volume.get("is_climax", False),
                 )
                 volume_chapter_configs.append(chapter_config)
 
@@ -427,7 +427,7 @@ class OutlineService:
         auto_split: bool = True,
         end_ch: int = 0,
         climax_chapter: Optional[int] = None,
-        volume_is_climax: bool = False
+        volume_is_climax: bool = False,
     ) -> Dict[str, Any]:
         """生成单章配置"""
         # 1. 找到当前章所属的张力循环
@@ -479,7 +479,9 @@ class OutlineService:
         # 4. 根据张力循环位置分配事件
         if current_cycle:
             if cycle_position == "suppress":
-                config["mandatory_events"] = current_cycle.get("suppress_events", [])[:2]
+                config["mandatory_events"] = current_cycle.get("suppress_events", [])[
+                    :2
+                ]
                 config["emotional_tone"] = "压抑、挫折、积累"
             elif cycle_position == "release":
                 config["mandatory_events"] = [current_cycle.get("release_event", "")]
@@ -504,15 +506,18 @@ class OutlineService:
             if len(cycle_chapters) == 2 and chapter_number == cycle_chapters[1]:
                 config["is_climax"] = True
         # 优先级4：卷末章且卷摘要包含高潮关键词
-        elif end_ch > 0 and chapter_number == end_ch and volume_summary and "高潮" in volume_summary:
+        elif (
+            end_ch > 0
+            and chapter_number == end_ch
+            and volume_summary
+            and "高潮" in volume_summary
+        ):
             config["is_climax"] = True
 
         return config
 
     async def get_chapter_outline_task(
-        self,
-        novel_id: UUID,
-        chapter_number: int
+        self, novel_id: UUID, chapter_number: int
     ) -> Dict[str, Any]:
         """
         获取章节大纲任务
@@ -526,7 +531,9 @@ class OutlineService:
         Returns:
             章节大纲任务数据
         """
-        logger.info(f"Getting chapter outline task for chapter {chapter_number}, novel {novel_id}")
+        logger.info(
+            f"Getting chapter outline task for chapter {chapter_number}, novel {novel_id}"
+        )
 
         # 1. 加载大纲
         result = await self.db.execute(
@@ -574,7 +581,7 @@ class OutlineService:
             volume_number=volume_number,
             tension_cycles=tension_cycles,
             key_events=key_events,
-            volume_summary=current_volume.get("summary", "")
+            volume_summary=current_volume.get("summary", ""),
         )
 
         # 5. 添加卷信息
@@ -586,10 +593,7 @@ class OutlineService:
         return task_data
 
     async def validate_chapter_outline(
-        self,
-        novel_id: UUID,
-        chapter_number: int,
-        chapter_plan: Dict[str, Any]
+        self, novel_id: UUID, chapter_number: int, chapter_plan: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         验证章节大纲一致性
@@ -604,7 +608,9 @@ class OutlineService:
         Returns:
             验证报告
         """
-        logger.info(f"Validating chapter outline for chapter {chapter_number}, novel {novel_id}")
+        logger.info(
+            f"Validating chapter outline for chapter {chapter_number}, novel {novel_id}"
+        )
 
         # 1. 获取章节大纲任务
         task_data = await self.get_chapter_outline_task(novel_id, chapter_number)
@@ -676,7 +682,7 @@ class OutlineService:
         novel_id: UUID,
         field_name: str,
         context: Dict[str, Any],
-        hints: Optional[str] = None
+        hints: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         为大纲字段生成AI建议
@@ -690,7 +696,9 @@ class OutlineService:
         Returns:
             包含建议的字典
         """
-        logger.info(f"Generating AI suggestion for field '{field_name}', novel {novel_id}")
+        logger.info(
+            f"Generating AI suggestion for field '{field_name}', novel {novel_id}"
+        )
 
         # 字段特定的生成逻辑
         field_prompts = {
@@ -703,8 +711,7 @@ class OutlineService:
         }
 
         prompt_template = field_prompts.get(
-            field_name,
-            f"为大纲的 '{field_name}' 字段生成建议"
+            field_name, f"为大纲的 '{field_name}' 字段生成建议"
         )
 
         # 构建上下文描述
@@ -755,7 +762,7 @@ class OutlineService:
         field_name: str,
         context: Dict[str, Any],
         hints: Optional[str],
-        prompt_template: str
+        prompt_template: str,
     ) -> str:
         """为特定字段生成建议"""
 
@@ -792,13 +799,19 @@ class OutlineService:
 
             for i in range(volumes_count):
                 start_ch = i * chapters_per_volume + 1
-                end_ch = (i + 1) * chapters_per_volume if i < volumes_count - 1 else estimated_chapters
-                volumes.append({
-                    "number": i + 1,
-                    "title": f"第{i + 1}卷",
-                    "chapters": [start_ch, end_ch],
-                    "summary": ""
-                })
+                end_ch = (
+                    (i + 1) * chapters_per_volume
+                    if i < volumes_count - 1
+                    else estimated_chapters
+                )
+                volumes.append(
+                    {
+                        "number": i + 1,
+                        "title": f"第{i + 1}卷",
+                        "chapters": [start_ch, end_ch],
+                        "summary": "",
+                    }
+                )
 
             return json.dumps(volumes, ensure_ascii=False)
 
@@ -806,12 +819,15 @@ class OutlineService:
             world_name = world.get("world_name", "这个世界")
             world_type = world.get("world_type", "奇幻")
 
-            return json.dumps({
-                "setup": f"主角在{world_name}中成长，展现{world_type}世界的独特魅力",
-                "conflict": "主角面临重大挑战，遭遇强敌或困境",
-                "climax": "主角突破自我，战胜最强敌人",
-                "resolution": "故事结局，主角达成目标或开启新篇章"
-            }, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "setup": f"主角在{world_name}中成长，展现{world_type}世界的独特魅力",
+                    "conflict": "主角面临重大挑战，遭遇强敌或困境",
+                    "climax": "主角突破自我，战胜最强敌人",
+                    "resolution": "故事结局，主角达成目标或开启新篇章",
+                },
+                ensure_ascii=False,
+            )
 
         elif field_name == "sub_plots":
             characters = context.get("characters", [])
@@ -819,11 +835,13 @@ class OutlineService:
 
             for char in characters[:3]:
                 if char.get("name"):
-                    sub_plots.append({
-                        "name": f"{char['name']}成长线",
-                        "characters": [char["name"]],
-                        "arc": "角色成长与蜕变"
-                    })
+                    sub_plots.append(
+                        {
+                            "name": f"{char['name']}成长线",
+                            "characters": [char["name"]],
+                            "arc": "角色成长与蜕变",
+                        }
+                    )
 
             return json.dumps(sub_plots, ensure_ascii=False)
 
@@ -831,19 +849,31 @@ class OutlineService:
             target_words = novel.get("target_word_count", 100000)
             estimated_chapters = target_words // 3000
 
-            return json.dumps([
-                {"chapter": estimated_chapters // 4, "event": "主角觉醒", "impact": "获得核心能力"},
-                {"chapter": estimated_chapters // 2, "event": "重大挫折", "impact": "实力受损"},
-                {"chapter": int(estimated_chapters * 0.75), "event": "突破瓶颈", "impact": "实力飞跃"},
-            ], ensure_ascii=False)
+            return json.dumps(
+                [
+                    {
+                        "chapter": estimated_chapters // 4,
+                        "event": "主角觉醒",
+                        "impact": "获得核心能力",
+                    },
+                    {
+                        "chapter": estimated_chapters // 2,
+                        "event": "重大挫折",
+                        "impact": "实力受损",
+                    },
+                    {
+                        "chapter": int(estimated_chapters * 0.75),
+                        "event": "突破瓶颈",
+                        "impact": "实力飞跃",
+                    },
+                ],
+                ensure_ascii=False,
+            )
 
         else:
             return f"请根据{prompt_template}填写此字段"
 
-    async def get_outline_versions(
-        self,
-        novel_id: UUID
-    ) -> List[Dict[str, Any]]:
+    async def get_outline_versions(self, novel_id: UUID) -> List[Dict[str, Any]]:
         """
         获取大纲版本历史
 
@@ -914,13 +944,13 @@ class OutlineService:
             self.db.add(token_usage)
 
         # 更新小说成本
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
 
         if novel:
-            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+                str(cost_summary["total_cost"])
+            )
 
         await self.db.commit()
 

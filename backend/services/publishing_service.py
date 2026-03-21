@@ -1,4 +1,5 @@
 """发布服务 - 负责管理发布任务和平台账号"""
+
 import asyncio
 import logging
 from datetime import datetime
@@ -83,7 +84,9 @@ class PublishingService:
 
         if password or extra_credentials:
             # 解密现有凭证
-            current_credentials = self.encryption.decrypt_dict(account.encrypted_credentials)
+            current_credentials = self.encryption.decrypt_dict(
+                account.encrypted_credentials
+            )
 
             if password:
                 current_credentials["password"] = password
@@ -91,7 +94,9 @@ class PublishingService:
                 current_credentials.update(extra_credentials)
 
             # 重新加密
-            account.encrypted_credentials = self.encryption.encrypt_dict(current_credentials)
+            account.encrypted_credentials = self.encryption.encrypt_dict(
+                current_credentials
+            )
 
         if status:
             account.status = AccountStatus(status)
@@ -207,8 +212,6 @@ class PublishingService:
             task.completed_at = datetime.now()
             await self.db.commit()
 
-
-
     async def get_publish_preview(
         self,
         novel_id: UUID,
@@ -217,9 +220,7 @@ class PublishingService:
     ) -> dict:
         """获取发布预览"""
         # 获取小说
-        novel_result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = novel_result.scalar_one_or_none()
         if not novel:
             return {"error": "小说不存在"}
@@ -256,14 +257,22 @@ class PublishingService:
                 unpublished_count += 1
 
             pub_record = published_chapters.get(chapter.id)
-            chapter_previews.append({
-                "chapter_number": chapter.chapter_number,
-                "title": chapter.title or f"第{chapter.chapter_number}章",
-                "word_count": chapter.word_count,
-                "status": chapter.status.value if hasattr(chapter.status, 'value') else str(chapter.status),
-                "is_published": is_published,
-                "published_at": pub_record.published_at.isoformat() if pub_record else None,
-            })
+            chapter_previews.append(
+                {
+                    "chapter_number": chapter.chapter_number,
+                    "title": chapter.title or f"第{chapter.chapter_number}章",
+                    "word_count": chapter.word_count,
+                    "status": (
+                        chapter.status.value
+                        if hasattr(chapter.status, "value")
+                        else str(chapter.status)
+                    ),
+                    "is_published": is_published,
+                    "published_at": (
+                        pub_record.published_at.isoformat() if pub_record else None
+                    ),
+                }
+            )
 
         return {
             "novel_id": str(novel_id),

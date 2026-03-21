@@ -70,13 +70,14 @@ async def create_session(
     - `novel_analysis`: 小说内容分析
     """
     valid_scenes = [
-        SCENE_NOVEL_CREATION, SCENE_CRAWLER_TASK,
-        SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS
+        SCENE_NOVEL_CREATION,
+        SCENE_CRAWLER_TASK,
+        SCENE_NOVEL_REVISION,
+        SCENE_NOVEL_ANALYSIS,
     ]
     if session_in.scene not in valid_scenes:
         raise HTTPException(
-            status_code=400,
-            detail=f"无效的场景。可选: {', '.join(valid_scenes)}"
+            status_code=400, detail=f"无效的场景。可选: {', '.join(valid_scenes)}"
         )
 
     session = await service.create_session(
@@ -104,6 +105,7 @@ async def send_message(
     同步接口，等待完整响应返回。如需流式响应，请使用 WebSocket 接口。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -165,7 +167,9 @@ async def websocket_chat(
 
             full_response = ""
             try:
-                async for chunk in service.send_message_stream(session_id, user_message):
+                async for chunk in service.send_message_stream(
+                    session_id, user_message
+                ):
                     await websocket.send_json({"chunk": chunk, "done": False})
                     full_response += chunk
 
@@ -310,6 +314,7 @@ async def extract_suggestions(
     分析AI回复的文本，提取出可以应用到小说数据的具体修改建议。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -320,37 +325,35 @@ async def extract_suggestions(
 
         # 提取结构化建议
         suggestions = await service.extract_structured_suggestions(
-            request.ai_response,
-            novel_info,
-            request.revision_type
+            request.ai_response, novel_info, request.revision_type
         )
 
         # 转换为响应格式
         suggestion_models = []
         for s in suggestions:
             # 处理 target_id，确保是字符串类型
-            target_id = s.get('target_id')
+            target_id = s.get("target_id")
             if target_id is not None and not isinstance(target_id, str):
                 target_id = str(target_id)
 
             # 处理 suggested_value，确保是字符串类型
-            suggested_value = s.get('suggested_value')
+            suggested_value = s.get("suggested_value")
             if isinstance(suggested_value, list):
                 # 如果是列表，用换行符连接成字符串
-                suggested_value = '\n'.join(str(item) for item in suggested_value)
+                suggested_value = "\n".join(str(item) for item in suggested_value)
             elif suggested_value is not None and not isinstance(suggested_value, str):
                 # 如果是其他类型，转为字符串
                 suggested_value = str(suggested_value)
 
             suggestion_models.append(
                 RevisionSuggestion(
-                    type=s.get('type'),
+                    type=s.get("type"),
                     target_id=target_id,
-                    target_name=s.get('target_name'),
-                    field=s.get('field'),
+                    target_name=s.get("target_name"),
+                    field=s.get("field"),
                     suggested_value=suggested_value,
-                    description=s.get('description', ''),
-                    confidence=s.get('confidence', 0.8)
+                    description=s.get("description", ""),
+                    confidence=s.get("confidence", 0.8),
                 )
             )
 
@@ -373,16 +376,16 @@ async def apply_suggestion(
     将提取的建议直接应用到对应的小说数据。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
         result = await service.apply_suggestion_to_database(
-            request.novel_id,
-            request.suggestion.model_dump()
+            request.novel_id, request.suggestion.model_dump()
         )
 
-        if not result.get('success'):
-            raise HTTPException(status_code=400, detail=result.get('error', '应用失败'))
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "应用失败"))
 
         return result
     except HTTPException:
@@ -403,27 +406,29 @@ async def apply_suggestions_batch(
     一次性应用多个修订建议，返回每个建议的应用结果。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
         suggestions_dicts = [s.model_dump() for s in request.suggestions]
         result = await service.apply_suggestions_batch(
-            request.novel_id,
-            suggestions_dicts
+            request.novel_id, suggestions_dicts
         )
 
         return ApplySuggestionsResponse(
-            total=result['total'],
-            success_count=result['success_count'],
-            failed_count=result['failed_count'],
-            details=result['details']
+            total=result["total"],
+            success_count=result["success_count"],
+            failed_count=result["failed_count"],
+            details=result["details"],
         )
     except Exception as e:
         logger.error(f"批量应用建议失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"批量应用建议失败: {str(e)}")
 
 
-@router.get("/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse)
+@router.get(
+    "/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse
+)
 async def get_novel_characters_for_revision(
     novel_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
@@ -434,6 +439,7 @@ async def get_novel_characters_for_revision(
     用于修订建议时选择目标角色，返回精简的角色信息。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -441,11 +447,11 @@ async def get_novel_characters_for_revision(
 
         character_items = [
             CharacterListItem(
-                id=c['id'],
-                name=c['name'],
-                role_type=c.get('role_type'),
-                personality=c.get('personality'),
-                background=c.get('background')
+                id=c["id"],
+                name=c["name"],
+                role_type=c.get("role_type"),
+                personality=c.get("personality"),
+                background=c.get("background"),
             )
             for c in characters
         ]
@@ -467,6 +473,7 @@ async def get_novel_chapters_for_revision(
     用于修订建议时选择目标章节，返回精简的章节信息。
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -474,11 +481,11 @@ async def get_novel_chapters_for_revision(
 
         chapter_items = [
             ChapterListItem(
-                id=c['id'],
-                chapter_number=c['chapter_number'],
-                title=c.get('title'),
-                word_count=c.get('word_count', 0),
-                status=c.get('status')
+                id=c["id"],
+                chapter_number=c["chapter_number"],
+                title=c.get("title"),
+                word_count=c.get("word_count", 0),
+                status=c.get("status"),
             )
             for c in chapters
         ]

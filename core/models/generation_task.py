@@ -29,7 +29,9 @@ class GenerationTask(Base):
     __tablename__ = "generation_tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    novel_id = Column(UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
+    novel_id = Column(
+        UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False
+    )
     task_type = Column(String(50), nullable=False)
     status = Column(String(50), default="pending")
     phase = Column(String(50), nullable=True)
@@ -44,4 +46,6 @@ class GenerationTask(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     novel = relationship("Novel", back_populates="generation_tasks")
-    token_usages = relationship("TokenUsage", back_populates="task", cascade="all, delete-orphan")
+    token_usages = relationship(
+        "TokenUsage", back_populates="task", cascade="all, delete-orphan"
+    )

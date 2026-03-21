@@ -33,7 +33,7 @@ class CacheService:
 
     def __init__(self):
         """初始化 Redis 客户端（仅在首次创建时）"""
-        if not hasattr(self, '_initialized'):
+        if not hasattr(self, "_initialized"):
             self._client = redis.from_url(settings.REDIS_URL, decode_responses=True)
             self._initialized = True
 
@@ -130,7 +130,9 @@ class CacheService:
         data = await self.get(f"generation:{task_id}")
         return json.loads(data) if data else None
 
-    async def set_generation_result(self, task_id: str, result: dict, ttl: int = 300) -> bool:
+    async def set_generation_result(
+        self, task_id: str, result: dict, ttl: int = 300
+    ) -> bool:
         """
         设置生成结果缓存(默认5分钟)
 
@@ -158,7 +160,9 @@ class CacheService:
 
     # ========== Agent输出缓存 ========== #
 
-    async def get_agent_output(self, agent_name: str, novel_id: int, version: int = 1) -> Optional[dict]:
+    async def get_agent_output(
+        self, agent_name: str, novel_id: int, version: int = 1
+    ) -> Optional[dict]:
         """
         获取Agent输出缓存
 
@@ -174,7 +178,14 @@ class CacheService:
         data = await self.get(key)
         return json.loads(data) if data else None
 
-    async def set_agent_output(self, agent_name: str, novel_id: int, version: int, output: dict, ttl: int = 3600) -> bool:
+    async def set_agent_output(
+        self,
+        agent_name: str,
+        novel_id: int,
+        version: int,
+        output: dict,
+        ttl: int = 3600,
+    ) -> bool:
         """
         设置Agent输出缓存(默认1小时)
 
@@ -191,7 +202,9 @@ class CacheService:
         key = f"agent:{agent_name}:novel:{novel_id}:v{version}"
         return await self.set(key, json.dumps(output), ttl)
 
-    async def delete_agent_output(self, agent_name: str, novel_id: int, version: int = 1) -> bool:
+    async def delete_agent_output(
+        self, agent_name: str, novel_id: int, version: int = 1
+    ) -> bool:
         """
         删除Agent输出缓存
 
@@ -208,7 +221,9 @@ class CacheService:
 
     # ========== 章节内容缓存 ========== #
 
-    async def get_chapter_content(self, novel_id: int, chapter_number: int) -> Optional[str]:
+    async def get_chapter_content(
+        self, novel_id: int, chapter_number: int
+    ) -> Optional[str]:
         """
         获取章节内容缓存
 
@@ -222,7 +237,9 @@ class CacheService:
         key = f"chapter:{novel_id}:{chapter_number}:content"
         return await self.get(key)
 
-    async def set_chapter_content(self, novel_id: int, chapter_number: int, content: str, ttl: int = 7200) -> bool:
+    async def set_chapter_content(
+        self, novel_id: int, chapter_number: int, content: str, ttl: int = 7200
+    ) -> bool:
         """
         设置章节内容缓存(默认2小时)
 
@@ -268,7 +285,9 @@ class CacheService:
         data = await self.get(key)
         return json.loads(data) if data else None
 
-    async def set_dashboard_stats(self, user_id: int, stats: dict, ttl: int = 300) -> bool:
+    async def set_dashboard_stats(
+        self, user_id: int, stats: dict, ttl: int = 300
+    ) -> bool:
         """
         设置仪表盘统计数据缓存(默认5分钟)
 

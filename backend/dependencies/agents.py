@@ -1,4 +1,5 @@
 """Agent依赖注入容器"""
+
 from typing import Optional
 from functools import lru_cache
 
@@ -38,8 +39,7 @@ class AgentDependencies:
         """获取Crew管理器实例"""
         if self._crew_manager is None:
             self._crew_manager = NovelCrewManager(
-                qwen_client=self.qwen_client,
-                cost_tracker=self.cost_tracker
+                qwen_client=self.qwen_client, cost_tracker=self.cost_tracker
             )
         return self._crew_manager
 
@@ -48,8 +48,7 @@ class AgentDependencies:
         """获取大纲细化器实例"""
         if self._outline_refiner is None:
             self._outline_refiner = OutlineRefiner(
-                client=self.qwen_client,
-                cost_tracker=self.cost_tracker
+                client=self.qwen_client, cost_tracker=self.cost_tracker
             )
         return self._outline_refiner
 
@@ -58,8 +57,7 @@ class AgentDependencies:
         """获取大纲质量评估器实例"""
         if self._outline_evaluator is None:
             self._outline_evaluator = OutlineQualityEvaluator(
-                client=self.qwen_client,
-                cost_tracker=self.cost_tracker
+                client=self.qwen_client, cost_tracker=self.cost_tracker
             )
         return self._outline_evaluator
 

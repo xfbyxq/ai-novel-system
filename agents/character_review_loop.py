@@ -22,7 +22,6 @@ from agents.base import (
     ReviewLoopConfig,
 )
 
-
 # ── 角色审查专用提示词 ──────────────────────────────────────────
 
 CHARACTER_REVIEWER_SYSTEM = """你是一位资深的网络小说角色评审专家，专注于角色设计的深度和质量。
@@ -174,7 +173,9 @@ CHARACTER_REVISION_TASK = """你之前设计的角色经过专家评审，需要
 
 
 class CharacterReviewHandler(
-    BaseReviewLoopHandler[List[Dict[str, Any]], CharacterReviewResult, CharacterQualityReport]
+    BaseReviewLoopHandler[
+        List[Dict[str, Any]], CharacterReviewResult, CharacterQualityReport
+    ]
 ):
     """角色设计审查循环处理器
 
@@ -239,7 +240,9 @@ class CharacterReviewHandler(
     def _create_result(self) -> CharacterReviewResult:
         return CharacterReviewResult()
 
-    def _create_quality_report(self, review_data: Dict[str, Any]) -> CharacterQualityReport:
+    def _create_quality_report(
+        self, review_data: Dict[str, Any]
+    ) -> CharacterQualityReport:
         return CharacterQualityReport.from_llm_response(
             review_data,
             quality_threshold=self.quality_threshold,
@@ -250,6 +253,7 @@ class CharacterReviewHandler(
 
     def _get_builder_system_prompt(self) -> str:
         from llm.prompt_manager import PromptManager
+
         return PromptManager.CHARACTER_DESIGNER_SYSTEM
 
     def _get_reviewer_agent_name(self) -> str:

@@ -7,7 +7,6 @@ from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-
 QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询请求。
 
 查询问题：
@@ -30,7 +29,10 @@ class AgentQueryService:
 
     # 支持的查询目标及其角色描述
     ROLE_MAP = {
-        "world": ("世界观架构师", "你精通小说世界观体系，包括力量体系、地理、势力和历史设定。"),
+        "world": (
+            "世界观架构师",
+            "你精通小说世界观体系，包括力量体系、地理、势力和历史设定。",
+        ),
         "character": ("角色设计师", "你精通角色设定，包括性格、背景、能力和人物关系。"),
         "plot": ("情节架构师", "你精通情节规划，包括主线支线、伏笔和转折设计。"),
     }

@@ -6,6 +6,7 @@
 3. 生成带张力循环的卷大纲
 4. 确保结局连贯性
 """
+
 import json
 from typing import Any, Dict, List, Optional
 
@@ -17,46 +18,50 @@ from core.logging_config import logger
 
 class OutlineRefiner:
     """大纲细化 Agent"""
-    
-    def __init__(self, client: Optional[QwenClient] = None, cost_tracker: Optional[CostTracker] = None):
+
+    def __init__(
+        self,
+        client: Optional[QwenClient] = None,
+        cost_tracker: Optional[CostTracker] = None,
+    ):
         """初始化大纲细化 Agent
-        
+
         Args:
             client: LLM 客户端
             cost_tracker: 成本跟踪器
         """
         self.client = client or QwenClient()
         self.cost_tracker = cost_tracker or CostTracker()
-    
+
     async def refine_complete_outline(
         self,
         world_setting_data: Dict[str, Any],
         genre: str,
         tags: List[str],
-        total_chapters: int = 100
+        total_chapters: int = 100,
     ) -> Dict[str, Any]:
         """细化完整大纲
-        
+
         基于世界观设定，生成包含主线、支线、卷大纲的完整大纲
-        
+
         Args:
             world_setting_data: 世界观设定数据
             genre: 小说类型
             tags: 标签列表
             total_chapters: 总章节数
-        
+
         Returns:
             完整大纲数据
         """
         logger.info("开始细化完整大纲")
-        
+
         prompt = self._build_refine_outline_prompt(
             world_setting_data=world_setting_data,
             genre=genre,
             tags=tags,
-            total_chapters=total_chapters
+            total_chapters=total_chapters,
         )
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -64,42 +69,43 @@ class OutlineRefiner:
                 temperature=0.7,
                 max_tokens=8192,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_refiner",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             outline_data = self._parse_outline_response(response["content"])
-            
-            logger.info(f"大纲细化完成，生成{len(outline_data.get('volumes', []))}卷内容")
-            
+
+            logger.info(
+                f"大纲细化完成，生成{len(outline_data.get('volumes', []))}卷内容"
+            )
+
             return outline_data
-            
+
         except Exception as e:
             logger.error(f"大纲细化失败：{e}")
             raise
-    
+
     async def generate_main_plot_detailed(
-        self,
-        world_setting_data: Dict[str, Any]
+        self, world_setting_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """生成详细主线剧情
-        
+
         基于世界观设定，生成包含起承转合的详细主线
-        
+
         Args:
             world_setting_data: 世界观设定数据
-        
+
         Returns:
             主线剧情数据
         """
         logger.info("开始生成详细主线剧情")
-        
+
         prompt = self._build_main_plot_prompt(world_setting_data)
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -107,50 +113,48 @@ class OutlineRefiner:
                 temperature=0.7,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_refiner_main_plot",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             main_plot = self._parse_main_plot_response(response["content"])
-            
+
             logger.info("主线剧情生成完成")
-            
+
             return main_plot
-            
+
         except Exception as e:
             logger.error(f"主线剧情生成失败：{e}")
             raise
-    
+
     async def generate_volumes_with_tension_cycles(
         self,
         genre: str,
         total_chapters: int,
-        main_plot: Optional[Dict[str, Any]] = None
+        main_plot: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """生成带张力循环的卷大纲
-        
+
         根据小说类型和长度，生成包含欲扬先抑循环的卷大纲
-        
+
         Args:
             genre: 小说类型
             total_chapters: 总章节数
             main_plot: 主线剧情（可选）
-        
+
         Returns:
             卷大纲列表
         """
         logger.info("开始生成带张力循环的卷大纲")
-        
+
         prompt = self._build_volumes_prompt(
-            genre=genre,
-            total_chapters=total_chapters,
-            main_plot=main_plot
+            genre=genre, total_chapters=total_chapters, main_plot=main_plot
         )
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -158,44 +162,42 @@ class OutlineRefiner:
                 temperature=0.7,
                 max_tokens=8192,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_refiner_volumes",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             volumes = self._parse_volumes_response(response["content"])
-            
+
             logger.info(f"卷大纲生成完成，共{len(volumes)}卷")
-            
+
             return volumes
-            
+
         except Exception as e:
             logger.error(f"卷大纲生成失败：{e}")
             raise
-    
+
     async def ensure_ending_coherence(
-        self,
-        main_plot: Dict[str, Any],
-        volumes: List[Dict[str, Any]]
+        self, main_plot: Dict[str, Any], volumes: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """确保结局连贯性
-        
+
         检查主线剧情和卷大纲的结局部分，确保逻辑连贯
-        
+
         Args:
             main_plot: 主线剧情
             volumes: 卷大纲列表
-        
+
         Returns:
             包含连贯性检查和修正建议的报告
         """
         logger.info("开始检查结局连贯性")
-        
+
         prompt = self._build_coherence_prompt(main_plot, volumes)
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -203,37 +205,39 @@ class OutlineRefiner:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_refiner_coherence",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             coherence_report = self._parse_coherence_response(response["content"])
-            
-            logger.info(f"结局连贯性检查完成，评分：{coherence_report.get('coherence_score', 0)}")
-            
+
+            logger.info(
+                f"结局连贯性检查完成，评分：{coherence_report.get('coherence_score', 0)}"
+            )
+
             return coherence_report
-            
+
         except Exception as e:
             logger.error(f"结局连贯性检查失败：{e}")
             raise
-    
+
     def _build_refine_outline_prompt(
         self,
         world_setting_data: Dict[str, Any],
         genre: str,
         tags: List[str],
-        total_chapters: int
+        total_chapters: int,
     ) -> str:
         """构建大纲细化提示词"""
         world_name = world_setting_data.get("world_name", "未命名世界")
         world_type = world_setting_data.get("world_type", "未知类型")
         power_system = world_setting_data.get("power_system", {})
         factions = world_setting_data.get("factions", [])
-        
+
         prompt = f"""
 # 任务：生成完整的小说大纲
 
@@ -348,13 +352,13 @@ class OutlineRefiner:
 4. 支线剧情应与主线交织
 """
         return prompt
-    
+
     def _build_main_plot_prompt(self, world_setting_data: Dict[str, Any]) -> str:
         """构建主线剧情提示词"""
         world_name = world_setting_data.get("world_name", "未命名世界")
         world_type = world_setting_data.get("world_type", "未知类型")
         power_system = world_setting_data.get("power_system", {})
-        
+
         prompt = f"""
 # 任务：生成详细主线剧情
 
@@ -425,18 +429,20 @@ class OutlineRefiner:
 }}
 """
         return prompt
-    
+
     def _build_volumes_prompt(
         self,
         genre: str,
         total_chapters: int,
-        main_plot: Optional[Dict[str, Any]] = None
+        main_plot: Optional[Dict[str, Any]] = None,
     ) -> str:
         """构建卷大纲提示词"""
-        main_plot_str = json.dumps(main_plot, ensure_ascii=False) if main_plot else "暂无主线剧情"
-        
+        main_plot_str = (
+            json.dumps(main_plot, ensure_ascii=False) if main_plot else "暂无主线剧情"
+        )
+
         num_volumes = max(3, min(5, total_chapters // 20))
-        
+
         prompt = f"""
 # 任务：生成带张力循环的卷大纲
 
@@ -514,16 +520,14 @@ class OutlineRefiner:
 3. 关键事件应推动剧情发展
 """
         return prompt
-    
+
     def _build_coherence_prompt(
-        self,
-        main_plot: Dict[str, Any],
-        volumes: List[Dict[str, Any]]
+        self, main_plot: Dict[str, Any], volumes: List[Dict[str, Any]]
     ) -> str:
         """构建连贯性检查提示词"""
         main_plot_str = json.dumps(main_plot, ensure_ascii=False)
         volumes_str = json.dumps(volumes, ensure_ascii=False)
-        
+
         prompt = f"""
 # 任务：检查结局连贯性
 
@@ -597,28 +601,28 @@ class OutlineRefiner:
 }}
 """
         return prompt
-    
+
     def _parse_outline_response(self, content: str) -> Dict[str, Any]:
         """解析大纲响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             outline_data = json.loads(content)
-            
+
             required_fields = ["structure_type", "main_plot", "volumes"]
             for field in required_fields:
                 if field not in outline_data:
                     logger.warning(f"Missing required field: {field}")
                     outline_data[field] = {} if field in ["main_plot"] else []
-            
+
             return outline_data
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析大纲响应失败：{e}")
             return {
@@ -629,20 +633,20 @@ class OutlineRefiner:
                 "key_turning_points": [],
                 "climax_chapter": None,
             }
-    
+
     def _parse_main_plot_response(self, content: str) -> Dict[str, Any]:
         """解析主线剧情响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             return json.loads(content)
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析主线剧情响应失败：{e}")
             return {
@@ -652,48 +656,48 @@ class OutlineRefiner:
                 "climax": {},
                 "resolution": {},
             }
-    
+
     def _parse_volumes_response(self, content: str) -> List[Dict[str, Any]]:
         """解析卷大纲响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             volumes = json.loads(content)
-            
+
             if not isinstance(volumes, list):
                 logger.warning("卷大纲应为列表格式")
                 return []
-            
+
             return volumes
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析卷大纲响应失败：{e}")
             return []
-    
+
     def _parse_coherence_response(self, content: str) -> Dict[str, Any]:
         """解析连贯性检查响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             report = json.loads(content)
-            
+
             if "coherence_score" not in report:
                 report["coherence_score"] = 5.0
-            
+
             return report
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析连贯性检查响应失败：{e}")
             return {

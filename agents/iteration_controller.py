@@ -14,6 +14,7 @@ from core.logging_config import logger
 
 class ChapterType(str, Enum):
     """章节类型枚举"""
+
     CLIMAX = "climax"  # 高潮章节：战斗、揭秘、重大转折
     TRANSITION = "transition"  # 过渡章节：日常、铺垫、信息传递
     SETUP = "setup"  # 铺垫章节：世界观构建、角色引入
@@ -25,6 +26,7 @@ class ChapterType(str, Enum):
 @dataclass
 class IterationStrategy:
     """迭代策略配置"""
+
     max_iterations: int = 3
     quality_threshold: float = 7.5
     cost_weight: float = 0.5  # 成本敏感度 (0.0-1.0)
@@ -67,7 +69,7 @@ class IterationController:
     1. 质量达标（score >= threshold）
     2. 达到最大迭代次数
     3. 成本超限
-    
+
     支持基于章节类型的动态策略：
     - climax: 5 次迭代，8.5 分阈值（质量优先）
     - transition: 2 次迭代，7.0 分阈值（效率优先）
@@ -81,32 +83,24 @@ class IterationController:
         ChapterType.CLIMAX: IterationStrategy(
             max_iterations=5,
             quality_threshold=8.5,
-            cost_weight=0.3  # 低成本敏感度，质量优先
+            cost_weight=0.3,  # 低成本敏感度，质量优先
         ),
         ChapterType.CHARACTER: IterationStrategy(
-            max_iterations=4,
-            quality_threshold=8.0,
-            cost_weight=0.4
+            max_iterations=4, quality_threshold=8.0, cost_weight=0.4
         ),
         ChapterType.SETUP: IterationStrategy(
-            max_iterations=4,
-            quality_threshold=8.0,
-            cost_weight=0.5
+            max_iterations=4, quality_threshold=8.0, cost_weight=0.5
         ),
         ChapterType.WORLD_BUILDING: IterationStrategy(
-            max_iterations=3,
-            quality_threshold=7.5,
-            cost_weight=0.6
+            max_iterations=3, quality_threshold=7.5, cost_weight=0.6
         ),
         ChapterType.TRANSITION: IterationStrategy(
             max_iterations=2,
             quality_threshold=7.0,
-            cost_weight=0.8  # 高成本敏感度，效率优先
+            cost_weight=0.8,  # 高成本敏感度，效率优先
         ),
         ChapterType.NORMAL: IterationStrategy(
-            max_iterations=3,
-            quality_threshold=7.5,
-            cost_weight=0.5
+            max_iterations=3, quality_threshold=7.5, cost_weight=0.5
         ),
     }
 

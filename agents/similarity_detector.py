@@ -154,13 +154,11 @@ class SimilarityDetector:
             return set()
 
         return {
-            clean[i: i + self.NGRAM_SIZE]
+            clean[i : i + self.NGRAM_SIZE]
             for i in range(len(clean) - self.NGRAM_SIZE + 1)
         }
 
-    def _sentence_overlap(
-        self, text_a: str, text_b: str
-    ) -> Tuple[float, List[str]]:
+    def _sentence_overlap(self, text_a: str, text_b: str) -> Tuple[float, List[str]]:
         """检测句子级别的重叠"""
         sentences_a = self._split_sentences(text_a)
         sentences_b = self._split_sentences(text_b)
@@ -170,9 +168,7 @@ class SimilarityDetector:
 
         # 构建 B 的句子集合（去除短句）
         set_b = set(
-            s.strip()
-            for s in sentences_b
-            if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
+            s.strip() for s in sentences_b if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
         )
 
         duplicates = []
@@ -184,9 +180,7 @@ class SimilarityDetector:
                 duplicates.append(s)
 
         total_valid = sum(
-            1
-            for s in sentences_a
-            if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
+            1 for s in sentences_a if len(s.strip()) >= self.MIN_SENTENCE_LENGTH
         )
 
         overlap_ratio = len(duplicates) / total_valid if total_valid > 0 else 0.0

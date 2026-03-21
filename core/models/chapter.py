@@ -19,7 +19,9 @@ class Chapter(Base):
     __tablename__ = "chapters"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    novel_id = Column(UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
+    novel_id = Column(
+        UUID(as_uuid=True), ForeignKey("novels.id", ondelete="CASCADE"), nullable=False
+    )
     chapter_number = Column(Integer, nullable=False)
     volume_number = Column(Integer, default=1)
     title = Column(String(200), nullable=True)
@@ -37,7 +39,9 @@ class Chapter(Base):
     outline_validation = Column(JSONB, default=dict)  # 大纲验证结果
     outline_version = Column(String(50), nullable=True)  # 使用的大纲版本号
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     novel = relationship("Novel", back_populates="chapters")

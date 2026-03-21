@@ -5,15 +5,15 @@ Revises: fb6eed83562e
 Create Date: 2026-03-20 14:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, Sequence[str], None] = 'fb6eed83562e'
+revision: str = "a1b2c3d4e5f6"
+down_revision: Union[str, Sequence[str], None] = "fb6eed83562e"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -30,12 +30,14 @@ def upgrade() -> None:
         )
     """))
     # 添加唯一索引（不区分大小写）
-    op.execute(sa.text(
-        "CREATE UNIQUE INDEX ix_characters_novel_id_name_unique "
-        "ON characters (novel_id, lower(name))"
-    ))
+    op.execute(
+        sa.text(
+            "CREATE UNIQUE INDEX ix_characters_novel_id_name_unique "
+            "ON characters (novel_id, lower(name))"
+        )
+    )
 
 
 def downgrade() -> None:
     """移除角色唯一索引。"""
-    op.drop_index('ix_characters_novel_id_name_unique', table_name='characters')
+    op.drop_index("ix_characters_novel_id_name_unique", table_name="characters")

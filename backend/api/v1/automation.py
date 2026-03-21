@@ -1,4 +1,5 @@
 """自动化API"""
+
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -78,6 +79,7 @@ async def generate_market_report(
 ):
     """生成市场报告"""
     from backend.services.market_analysis_service import MarketAnalysisService
+
     service = MarketAnalysisService(db)
     report = await service.generate_market_report(
         days=days,

@@ -11,10 +11,15 @@ from core.database import Base
 
 class CharacterNameVersion(Base):
     """角色名字版本记录"""
+
     __tablename__ = "character_name_versions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    character_id = Column(UUID(as_uuid=True), ForeignKey("characters.id", ondelete="CASCADE"), nullable=False)
+    character_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("characters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     old_name = Column(String(100), nullable=False)
     new_name = Column(String(100), nullable=False)
     changed_at = Column(DateTime(timezone=True), server_default=func.now())

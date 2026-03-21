@@ -41,7 +41,11 @@ async def list_characters(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get characters
-    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
+    query = (
+        select(Character)
+        .where(Character.novel_id == novel_id)
+        .order_by(Character.created_at)
+    )
     result = await db.execute(query)
     characters = result.scalars().all()
 
@@ -120,7 +124,11 @@ async def get_character_relationships(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get all characters
-    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
+    query = (
+        select(Character)
+        .where(Character.novel_id == novel_id)
+        .order_by(Character.created_at)
+    )
     result = await db.execute(query)
     all_characters = result.scalars().all()
 
@@ -156,11 +164,13 @@ async def get_character_relationships(
                 # Convert target name to UUID (strip whitespace)
                 target_id = name_to_id.get(target_name.strip())
                 if target_id:  # Only add edge if target character exists
-                    edges.append({
-                        "source": str(char.id),
-                        "target": target_id,
-                        "label": relationship_type,
-                    })
+                    edges.append(
+                        {
+                            "source": str(char.id),
+                            "target": target_id,
+                            "label": relationship_type,
+                        }
+                    )
 
     return CharacterRelationshipResponse(nodes=nodes, edges=edges)
 
@@ -397,7 +407,9 @@ async def revert_character_name_version(
     )
 
     if not reverted_version:
-        raise HTTPException(status_code=404, detail=f"目标版本 {target_version_id} 未找到")
+        raise HTTPException(
+            status_code=404, detail=f"目标版本 {target_version_id} 未找到"
+        )
 
     return {
         "id": str(reverted_version.id),

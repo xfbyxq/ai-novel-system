@@ -9,7 +9,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db
-from backend.schemas.common import DeleteResponse, TaskCancelResponse, VerifyAccountResponse
+from backend.schemas.common import (
+    DeleteResponse,
+    TaskCancelResponse,
+    VerifyAccountResponse,
+)
 from core.utils.enum_utils import safe_enum_value
 from backend.schemas.publishing import (
     ChapterPreviewItem,
@@ -35,6 +39,7 @@ router = APIRouter(prefix="/publishing", tags=["publishing"])
 # ============================================================
 # 平台账号管理
 # ============================================================
+
 
 @router.post("/accounts", response_model=PlatformAccountResponse, status_code=201)
 async def create_platform_account(
@@ -85,7 +90,11 @@ async def list_platform_accounts(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    query = query.offset(offset).limit(page_size).order_by(PlatformAccount.created_at.desc())
+    query = (
+        query.offset(offset)
+        .limit(page_size)
+        .order_by(PlatformAccount.created_at.desc())
+    )
     result = await db.execute(query)
     accounts = result.scalars().all()
 
@@ -171,6 +180,7 @@ async def verify_platform_account(
 # 发布任务管理
 # ============================================================
 
+
 @router.post("/tasks", response_model=PublishTaskResponse, status_code=201)
 async def create_publish_task(
     task_in: PublishTaskCreate,
@@ -188,8 +198,7 @@ async def create_publish_task(
     valid_types = [t.value for t in PublishType]
     if task_in.publish_type not in valid_types:
         raise HTTPException(
-            status_code=400,
-            detail=f"无效的发布类型。可选: {', '.join(valid_types)}"
+            status_code=400, detail=f"无效的发布类型。可选: {', '.join(valid_types)}"
         )
 
     # 验证账号存在
@@ -214,11 +223,14 @@ async def create_publish_task(
     if task_in.publish_type in ["publish_chapter", "batch_publish"]:
         # 查找已有的 platform_book_id
         existing_task = await db.execute(
-            select(PublishTask).where(
+            select(PublishTask)
+            .where(
                 PublishTask.novel_id == task_in.novel_id,
                 PublishTask.account_id == task_in.account_id,
                 PublishTask.platform_book_id.isnot(None),
-            ).order_by(PublishTask.created_at.desc()).limit(1)
+            )
+            .order_by(PublishTask.created_at.desc())
+            .limit(1)
         )
         existing = existing_task.scalar_one_or_none()
         platform_book_id = existing.platform_book_id if existing else None
@@ -241,6 +253,7 @@ async def create_publish_task(
     # 异步执行任务
     async def _run_task():
         from core.database import async_session_factory
+
         async with async_session_factory() as session:
             service = PublishingService(session)
             await service.run_publish_task(task.id)
@@ -278,7 +291,9 @@ async def list_publish_tasks(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    query = query.offset(offset).limit(page_size).order_by(PublishTask.created_at.desc())
+    query = (
+        query.offset(offset).limit(page_size).order_by(PublishTask.created_at.desc())
+    )
     result = await db.execute(query)
     tasks = result.scalars().all()
 
@@ -291,9 +306,7 @@ async def get_publish_task(
     db: AsyncSession = Depends(get_db),
 ):
     """获取发布任务详情"""
-    result = await db.execute(
-        select(PublishTask).where(PublishTask.id == task_id)
-    )
+    result = await db.execute(select(PublishTask).where(PublishTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
@@ -310,25 +323,43 @@ async def cancel_publish_task(
 
     只能取消处于 pending 或 running 状态的任务。
     """
-    result = await db.execute(
-        select(PublishTask).where(PublishTask.id == task_id)
-    )
+    result = await db.execute(select(PublishTask).where(PublishTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
 
     # 获取状态值（支持String列和Enum）
-    task_status_value = task.status.value if hasattr(task.status, 'value') else task.status
+    task_status_value = (
+        task.status.value if hasattr(task.status, "value") else task.status
+    )
 
     terminal_statuses = (
-        PublishTaskStatus.completed.value if hasattr(PublishTaskStatus.completed, 'value') else PublishTaskStatus.completed,
-        PublishTaskStatus.failed.value if hasattr(PublishTaskStatus.failed, 'value') else PublishTaskStatus.failed,
-        PublishTaskStatus.cancelled.value if hasattr(PublishTaskStatus.cancelled, 'value') else PublishTaskStatus.cancelled
+        (
+            PublishTaskStatus.completed.value
+            if hasattr(PublishTaskStatus.completed, "value")
+            else PublishTaskStatus.completed
+        ),
+        (
+            PublishTaskStatus.failed.value
+            if hasattr(PublishTaskStatus.failed, "value")
+            else PublishTaskStatus.failed
+        ),
+        (
+            PublishTaskStatus.cancelled.value
+            if hasattr(PublishTaskStatus.cancelled, "value")
+            else PublishTaskStatus.cancelled
+        ),
     )
     if task_status_value in terminal_statuses:
-        raise HTTPException(status_code=400, detail=f"任务已处于终态: {task_status_value}")
+        raise HTTPException(
+            status_code=400, detail=f"任务已处于终态: {task_status_value}"
+        )
 
-    task.status = PublishTaskStatus.cancelled.value if hasattr(PublishTaskStatus.cancelled, 'value') else PublishTaskStatus.cancelled
+    task.status = (
+        PublishTaskStatus.cancelled.value
+        if hasattr(PublishTaskStatus.cancelled, "value")
+        else PublishTaskStatus.cancelled
+    )
     await db.commit()
     return {"message": "任务已取消", "task_id": str(task_id)}
 
@@ -343,17 +374,17 @@ async def get_task_chapter_publishes(
 ):
     """获取发布任务的章节发布记录"""
     # 检查任务存在
-    task_result = await db.execute(
-        select(PublishTask).where(PublishTask.id == task_id)
-    )
+    task_result = await db.execute(select(PublishTask).where(PublishTask.id == task_id))
     if not task_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 未找到")
 
     offset = (page - 1) * page_size
 
     query = select(ChapterPublish).where(ChapterPublish.publish_task_id == task_id)
-    count_query = select(func.count()).select_from(ChapterPublish).where(
-        ChapterPublish.publish_task_id == task_id
+    count_query = (
+        select(func.count())
+        .select_from(ChapterPublish)
+        .where(ChapterPublish.publish_task_id == task_id)
     )
 
     if status:
@@ -363,7 +394,9 @@ async def get_task_chapter_publishes(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    query = query.offset(offset).limit(page_size).order_by(ChapterPublish.chapter_number)
+    query = (
+        query.offset(offset).limit(page_size).order_by(ChapterPublish.chapter_number)
+    )
     result = await db.execute(query)
     records = result.scalars().all()
 
@@ -373,6 +406,7 @@ async def get_task_chapter_publishes(
 # ============================================================
 # 发布预览
 # ============================================================
+
 
 @router.post("/preview", response_model=PublishPreviewResponse)
 async def get_publish_preview(

@@ -21,7 +21,7 @@ from core.database import engine
 async def migrate():
     """执行数据库迁移"""
     print("开始创建 agent_activities 表...")
-    
+
     async with engine.begin() as conn:
         # 创建 agent_activities 表
         print("1. 创建 agent_activities 表...")
@@ -56,7 +56,7 @@ async def migrate():
             print("   ✅ agent_activities 表创建成功")
         except Exception as e:
             print(f"   ⚠️  agent_activities 表可能已存在：{e}")
-        
+
         # 创建索引
         print("2. 创建索引...")
         try:
@@ -68,7 +68,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_novel_id 索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_novel_id 索引可能已存在：{e}")
-        
+
         try:
             # task_id 索引
             await conn.execute(text("""
@@ -78,7 +78,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_task_id 索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_task_id 索引可能已存在：{e}")
-        
+
         try:
             # agent_name 索引
             await conn.execute(text("""
@@ -88,7 +88,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_agent_name 索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_agent_name 索引可能已存在：{e}")
-        
+
         try:
             # activity_type 索引
             await conn.execute(text("""
@@ -98,7 +98,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_activity_type 索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_activity_type 索引可能已存在：{e}")
-        
+
         try:
             # 复合索引
             await conn.execute(text("""
@@ -108,7 +108,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_novel_task 复合索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_novel_task 复合索引可能已存在：{e}")
-        
+
         try:
             # created_at 索引
             await conn.execute(text("""
@@ -118,7 +118,7 @@ async def migrate():
             print("   ✅ idx_agent_activities_created 索引创建成功")
         except Exception as e:
             print(f"   ⚠️  idx_agent_activities_created 索引可能已存在：{e}")
-        
+
         # 更新 generation_tasks 表的 agent_logs 字段注释
         print("3. 更新 generation_tasks 表注释...")
         try:
@@ -129,10 +129,12 @@ async def migrate():
             print("   ✅ generation_tasks.agent_logs 注释更新成功")
         except Exception as e:
             print(f"   ⚠️  注释更新失败：{e}")
-    
+
     print("\n✅ 数据库迁移完成！")
     print("\n新增表说明：")
-    print("- agent_activities: 记录每个 Agent 的详细活动，包括输入输出、Token 使用、成本等")
+    print(
+        "- agent_activities: 记录每个 Agent 的详细活动，包括输入输出、Token 使用、成本等"
+    )
     print("\n索引说明：")
     print("- idx_agent_activities_novel_id: 按小说 ID 查询")
     print("- idx_agent_activities_task_id: 按任务 ID 查询")
@@ -145,7 +147,7 @@ async def migrate():
 async def rollback():
     """回滚迁移（仅用于测试）"""
     print("开始回滚数据库迁移...")
-    
+
     async with engine.begin() as conn:
         # 删除 agent_activities 表
         print("1. 删除 agent_activities 表...")
@@ -156,14 +158,14 @@ async def rollback():
             print("   ✅ agent_activities 表已删除")
         except Exception as e:
             print(f"   ⚠️  删除失败：{e}")
-    
+
     print("\n⚠️  数据库迁移已回滚！")
 
 
 async def check_migration_status():
     """检查迁移状态"""
     print("检查数据库迁移状态...")
-    
+
     async with engine.begin() as conn:
         # 检查 agent_activities 表
         result = await conn.execute(text("""
@@ -175,7 +177,7 @@ async def check_migration_status():
         row = result.fetchone()
         if row:
             print("✅ agent_activities 表存在")
-            
+
             # 检查记录数
             count_result = await conn.execute(text("""
                 SELECT COUNT(*) FROM agent_activities
@@ -184,7 +186,7 @@ async def check_migration_status():
             print(f"   当前记录数：{count}")
         else:
             print("❌ agent_activities 表不存在")
-        
+
         # 检查索引
         result = await conn.execute(text("""
             SELECT indexname 
@@ -203,17 +205,19 @@ async def check_migration_status():
 async def main():
     """主函数"""
     import argparse
-    
-    parser = argparse.ArgumentParser(description="数据库迁移脚本：创建 agent_activities 表")
+
+    parser = argparse.ArgumentParser(
+        description="数据库迁移脚本：创建 agent_activities 表"
+    )
     parser.add_argument(
         "--action",
         choices=["migrate", "rollback", "check"],
         default="migrate",
-        help="执行的操作：migrate(迁移), rollback(回滚), check(检查状态)"
+        help="执行的操作：migrate(迁移), rollback(回滚), check(检查状态)",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.action == "migrate":
         await migrate()
     elif args.action == "rollback":

@@ -97,10 +97,7 @@ class CharacterDataSyncService:
                 "error": str(e),
             }
 
-    async def sync_all_characters(
-        self,
-        novel_id: UUID
-    ) -> Dict[str, Any]:
+    async def sync_all_characters(self, novel_id: UUID) -> Dict[str, Any]:
         """
         同步小说中所有角色数据
 
@@ -164,9 +161,7 @@ class CharacterDataSyncService:
             }
 
     async def validate_character_consistency(
-        self,
-        novel_id: UUID,
-        character_name: str
+        self, novel_id: UUID, character_name: str
     ) -> Dict[str, Any]:
         """
         验证角色数据一致性
@@ -183,10 +178,8 @@ class CharacterDataSyncService:
         try:
             # 获取角色设定
             character_result = await self.db.execute(
-                select(Character)
-                .where(
-                    Character.novel_id == novel_id,
-                    Character.name == character_name
+                select(Character).where(
+                    Character.novel_id == novel_id, Character.name == character_name
                 )
             )
             character = character_result.scalar_one_or_none()
@@ -208,24 +201,28 @@ class CharacterDataSyncService:
             # 检查名字变体
             name_variants = chapter_usage.get("name_variants", [])
             if name_variants and character_name not in name_variants:
-                issues.append({
-                    "type": "name_inconsistency",
-                    "description": f"章节中使用了不同的名字变体：{name_variants}",
-                    "severity": "high",
-                })
+                issues.append(
+                    {
+                        "type": "name_inconsistency",
+                        "description": f"章节中使用了不同的名字变体：{name_variants}",
+                        "severity": "high",
+                    }
+                )
 
             # 检查属性一致性
             chapter_attributes = chapter_usage.get("attributes", {})
             for attr, value in chapter_attributes.items():
                 db_value = getattr(character, attr, None)
                 if db_value and db_value != value:
-                    issues.append({
-                        "type": "attribute_mismatch",
-                        "attribute": attr,
-                        "database_value": db_value,
-                        "chapter_value": value,
-                        "severity": "medium",
-                    })
+                    issues.append(
+                        {
+                            "type": "attribute_mismatch",
+                            "attribute": attr,
+                            "database_value": db_value,
+                            "chapter_value": value,
+                            "severity": "medium",
+                        }
+                    )
 
             if not issues:
                 logger.info(f"✅ 角色数据一致：{character_name}")
@@ -234,9 +231,7 @@ class CharacterDataSyncService:
                     "issues": [],
                 }
             else:
-                logger.warning(
-                    f"⚠️ 发现 {len(issues)} 个一致性问题：{character_name}"
-                )
+                logger.warning(f"⚠️ 发现 {len(issues)} 个一致性问题：{character_name}")
                 return {
                     "status": "inconsistent",
                     "issues": issues,
@@ -250,24 +245,18 @@ class CharacterDataSyncService:
             }
 
     async def _get_character(
-        self,
-        character_id: UUID,
-        novel_id: UUID
+        self, character_id: UUID, novel_id: UUID
     ) -> Optional[Character]:
         """获取角色对象"""
         result = await self.db.execute(
-            select(Character)
-            .where(
-                Character.id == character_id,
-                Character.novel_id == novel_id
+            select(Character).where(
+                Character.id == character_id, Character.novel_id == novel_id
             )
         )
         return result.scalar_one_or_none()
 
     async def _get_character_usage_from_chapters(
-        self,
-        novel_id: UUID,
-        character_name: str
+        self, novel_id: UUID, character_name: str
     ) -> Dict[str, Any]:
         """从章节中提取角色使用数据"""
         # 获取所有章节
@@ -288,10 +277,12 @@ class CharacterDataSyncService:
 
             # 查找角色名字出现
             if character_name in content:
-                appearances.append({
-                    "chapter_number": chapter.chapter_number,
-                    "word_count": content.count(character_name),
-                })
+                appearances.append(
+                    {
+                        "chapter_number": chapter.chapter_number,
+                        "word_count": content.count(character_name),
+                    }
+                )
 
             # 查找可能的名字变体（简单实现）
             # TODO: 使用更智能的 NLP 方法
@@ -308,10 +299,7 @@ class CharacterDataSyncService:
         }
 
     async def _analyze_differences(
-        self,
-        character: Character,
-        chapter_usage: Dict[str, Any],
-        source_type: str
+        self, character: Character, chapter_usage: Dict[str, Any], source_type: str
     ) -> List[Dict[str, Any]]:
         """分析数据库与章节使用之间的差异"""
         differences = []
@@ -321,21 +309,20 @@ class CharacterDataSyncService:
         if name_variants and character.name not in name_variants:
             # 章节中使用的名字与数据库不同
             most_common = name_variants[0]  # 简化：使用第一个
-            differences.append({
-                "type": "name_mismatch",
-                "database_value": character.name,
-                "chapter_value": most_common,
-                "severity": "high",
-                "suggestion": f"更新数据库名字为 '{most_common}'",
-            })
+            differences.append(
+                {
+                    "type": "name_mismatch",
+                    "database_value": character.name,
+                    "chapter_value": most_common,
+                    "severity": "high",
+                    "suggestion": f"更新数据库名字为 '{most_common}'",
+                }
+            )
 
         return differences
 
     async def _apply_sync_fixes(
-        self,
-        character: Character,
-        differences: List[Dict[str, Any]],
-        source_type: str
+        self, character: Character, differences: List[Dict[str, Any]], source_type: str
     ) -> Dict[str, Any]:
         """应用同步修复"""
         if not differences:
@@ -347,9 +334,7 @@ class CharacterDataSyncService:
                 if diff["type"] == "name_mismatch" and diff["severity"] == "high":
                     # 高优先级的名字不匹配，以章节为准
                     new_name = diff["chapter_value"]
-                    logger.info(
-                        f"🔄 更新角色名字：{character.name} → {new_name}"
-                    )
+                    logger.info(f"🔄 更新角色名字：{character.name} → {new_name}")
 
                     await self.db.execute(
                         update(Character)
@@ -378,16 +363,18 @@ class CharacterDataSyncService:
         character_id: UUID,
         character_name: str,
         differences: List[Dict[str, Any]],
-        result: Dict[str, Any]
+        result: Dict[str, Any],
     ):
         """记录同步历史"""
-        self.sync_history.append({
-            "timestamp": datetime.now(timezone.utc),
-            "character_id": character_id,
-            "character_name": character_name,
-            "differences": differences,
-            "result": result,
-        })
+        self.sync_history.append(
+            {
+                "timestamp": datetime.now(timezone.utc),
+                "character_id": character_id,
+                "character_name": character_name,
+                "differences": differences,
+                "result": result,
+            }
+        )
 
     def get_sync_history(self) -> List[Dict[str, Any]]:
         """获取同步历史"""

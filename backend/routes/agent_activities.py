@@ -231,6 +231,7 @@ async def get_agent_statistics(
         "activity_type_distribution": activity_type_counts,
         "success_rate": (
             sum(1 for a in activities if a.status == "success") / len(activities) * 100
-            if activities else 0
+            if activities
+            else 0
         ),
     }

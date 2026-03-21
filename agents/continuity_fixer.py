@@ -18,7 +18,7 @@ from llm.qwen_client import QwenClient
 
 class ContinuityFixerAgent:
     """连续性问题修复Agent
-    
+
     当连续性审查员发现严重问题时，自动修复章节内容。
     采用最小修改原则，仅修复指出的问题，保留原文风格。
     """
@@ -58,7 +58,7 @@ class ContinuityFixerAgent:
 
     def __init__(self, qwen_client: QwenClient, cost_tracker: CostTracker):
         """初始化修复Agent
-        
+
         Args:
             qwen_client: 通义千问客户端
             cost_tracker: 成本追踪器
@@ -68,10 +68,10 @@ class ContinuityFixerAgent:
 
     async def should_fix(self, continuity_report: Dict[str, Any]) -> bool:
         """判断是否需要修复
-        
+
         Args:
             continuity_report: 连续性审查报告
-            
+
         Returns:
             是否需要修复
         """
@@ -81,7 +81,8 @@ class ContinuityFixerAgent:
 
         # 检查是否有严重问题
         critical_count = sum(
-            1 for issue in issues
+            1
+            for issue in issues
             if issue.get("severity") in ["critical", "high", "严重", "高"]
         )
 
@@ -90,10 +91,10 @@ class ContinuityFixerAgent:
 
     def _format_issues(self, issues: List[Dict[str, Any]]) -> str:
         """格式化问题列表
-        
+
         Args:
             issues: 问题列表
-            
+
         Returns:
             格式化的问题描述
         """
@@ -117,34 +118,32 @@ class ContinuityFixerAgent:
 
         return "\n\n".join(formatted)
 
-    def _filter_critical_issues(self, issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _filter_critical_issues(
+        self, issues: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """筛选需要修复的严重问题
-        
+
         Args:
             issues: 所有问题列表
-            
+
         Returns:
             需要修复的问题列表
         """
         critical_severities = ["critical", "high", "严重", "高", "中"]
         return [
-            issue for issue in issues
-            if issue.get("severity") in critical_severities
+            issue for issue in issues if issue.get("severity") in critical_severities
         ]
 
     async def fix_issues(
-        self,
-        content: str,
-        continuity_report: Dict[str, Any],
-        context: str = ""
+        self, content: str, continuity_report: Dict[str, Any], context: str = ""
     ) -> Dict[str, Any]:
         """修复连续性问题
-        
+
         Args:
             content: 原始章节内容
             continuity_report: 连续性审查报告
             context: 相关上下文信息（角色设定、世界观等）
-            
+
         Returns:
             修复结果，包含:
             - fixed_content: 修复后的内容
@@ -158,11 +157,7 @@ class ContinuityFixerAgent:
 
         if not critical_issues:
             logger.info("无严重问题需要修复")
-            return {
-                "fixed_content": content,
-                "fixed_issues": [],
-                "unchanged": True
-            }
+            return {"fixed_content": content, "fixed_issues": [], "unchanged": True}
 
         logger.info(f"🔧 开始修复 {len(critical_issues)} 个连续性问题")
 
@@ -172,7 +167,7 @@ class ContinuityFixerAgent:
         task_prompt = self.FIX_TASK_TEMPLATE.format(
             original_content=content,
             issues=issues_text,
-            context=context or "（无额外上下文）"
+            context=context or "（无额外上下文）",
         )
 
         try:
@@ -201,7 +196,7 @@ class ContinuityFixerAgent:
                     "fixed_content": content,
                     "fixed_issues": [],
                     "unchanged": True,
-                    "error": "修复结果验证失败"
+                    "error": "修复结果验证失败",
                 }
 
             logger.info(f"✅ 连续性问题修复完成，修复了 {len(critical_issues)} 个问题")
@@ -209,7 +204,7 @@ class ContinuityFixerAgent:
             return {
                 "fixed_content": fixed_content,
                 "fixed_issues": critical_issues,
-                "unchanged": False
+                "unchanged": False,
             }
 
         except Exception as e:
@@ -218,22 +213,19 @@ class ContinuityFixerAgent:
                 "fixed_content": content,
                 "fixed_issues": [],
                 "unchanged": True,
-                "error": str(e)
+                "error": str(e),
             }
 
     async def fix_specific_issue(
-        self,
-        content: str,
-        issue: Dict[str, Any],
-        context: str = ""
+        self, content: str, issue: Dict[str, Any], context: str = ""
     ) -> str:
         """修复单个特定问题
-        
+
         Args:
             content: 原始内容
             issue: 问题描述
             context: 上下文信息
-            
+
         Returns:
             修复后的内容
         """
@@ -277,7 +269,7 @@ class ContinuityFixerAgent:
 
 class ContinuityFixerPipeline:
     """连续性修复流水线
-    
+
     集成到章节生成流程中，在连续性检查后自动修复问题。
     """
 
@@ -290,16 +282,16 @@ class ContinuityFixerPipeline:
         content: str,
         continuity_report: Dict[str, Any],
         context: str = "",
-        chapter_number: int = 0
+        chapter_number: int = 0,
     ) -> Dict[str, Any]:
         """处理章节内容，必要时进行修复
-        
+
         Args:
             content: 章节内容
             continuity_report: 连续性审查报告
             context: 上下文信息
             chapter_number: 章节号
-            
+
         Returns:
             处理结果
         """
@@ -310,7 +302,7 @@ class ContinuityFixerPipeline:
                 "content": content,
                 "fixed": False,
                 "attempts": 0,
-                "quality_score": continuity_report.get("quality_score", 0)
+                "quality_score": continuity_report.get("quality_score", 0),
             }
 
         # 尝试修复
@@ -318,19 +310,23 @@ class ContinuityFixerPipeline:
         fix_history = []
 
         for attempt in range(self.max_fix_attempts):
-            logger.info(f"第{chapter_number}章修复尝试 {attempt + 1}/{self.max_fix_attempts}")
+            logger.info(
+                f"第{chapter_number}章修复尝试 {attempt + 1}/{self.max_fix_attempts}"
+            )
 
             fix_result = await self.fixer.fix_issues(
                 content=current_content,
                 continuity_report=continuity_report,
-                context=context
+                context=context,
             )
 
-            fix_history.append({
-                "attempt": attempt + 1,
-                "fixed_issues": len(fix_result.get("fixed_issues", [])),
-                "unchanged": fix_result.get("unchanged", True)
-            })
+            fix_history.append(
+                {
+                    "attempt": attempt + 1,
+                    "fixed_issues": len(fix_result.get("fixed_issues", [])),
+                    "unchanged": fix_result.get("unchanged", True),
+                }
+            )
 
             if fix_result.get("unchanged"):
                 break
@@ -346,5 +342,5 @@ class ContinuityFixerPipeline:
             "fixed": not fix_result.get("unchanged", True),
             "attempts": len(fix_history),
             "fix_history": fix_history,
-            "quality_score": continuity_report.get("quality_score", 0)
+            "quality_score": continuity_report.get("quality_score", 0),
         }

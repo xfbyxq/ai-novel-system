@@ -70,8 +70,7 @@ async def get_world_setting(
 
     if not world_setting:
         raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的世界观设定未找到"
+            status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到"
         )
 
     return world_setting
@@ -104,8 +103,7 @@ async def update_world_setting(
             raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
         world_setting = WorldSetting(
-            novel_id=novel_id,
-            **world_setting_in.model_dump(exclude_unset=True)
+            novel_id=novel_id, **world_setting_in.model_dump(exclude_unset=True)
         )
         db.add(world_setting)
     else:
@@ -143,10 +141,7 @@ async def get_plot_outline(
     plot_outline = result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的情节大纲未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
@@ -181,8 +176,7 @@ async def update_plot_outline(
             raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
         plot_outline = PlotOutline(
-            novel_id=novel_id,
-            **plot_outline_in.model_dump(exclude_unset=True)
+            novel_id=novel_id, **plot_outline_in.model_dump(exclude_unset=True)
         )
         db.add(plot_outline)
     else:
@@ -227,7 +221,7 @@ async def generate_complete_outline(
     if existing_outline:
         raise HTTPException(
             status_code=409,
-            detail=f"小说 {novel_id} 已存在大纲，请先删除或更新现有大纲"
+            detail=f"小说 {novel_id} 已存在大纲，请先删除或更新现有大纲",
         )
 
     # TODO: 调用 AI Agent 生成大纲
@@ -277,16 +271,13 @@ async def decompose_outline_to_chapters(
     plot_outline = outline_result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的情节大纲未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
     # Validate chapter range
     if request.chapter_start < 1 or request.chapter_end < request.chapter_start:
         raise HTTPException(
             status_code=400,
-            detail="章节范围无效，chapter_start 必须 >= 1 且 chapter_end >= chapter_start"
+            detail="章节范围无效，chapter_start 必须 >= 1 且 chapter_end >= chapter_start",
         )
 
     # 调用服务层进行大纲分解
@@ -308,7 +299,7 @@ async def decompose_outline_to_chapters(
         config={
             "volume_number": request.volume_number,
             "auto_split": True,
-        }
+        },
     )
 
     # 持久化到章节表
@@ -322,8 +313,7 @@ async def decompose_outline_to_chapters(
 
         # 查找或创建章节
         existing_chapter_query = select(Chapter).where(
-            Chapter.novel_id == novel_id,
-            Chapter.chapter_number == chapter_num
+            Chapter.novel_id == novel_id, Chapter.chapter_number == chapter_num
         )
         existing_result = await db.execute(existing_chapter_query)
         existing_chapter = existing_result.scalar_one_or_none()
@@ -331,15 +321,21 @@ async def decompose_outline_to_chapters(
         if existing_chapter:
             # 更新现有章节
             existing_chapter.outline_task = chapter_config
-            existing_chapter.volume_number = chapter_config.get("volume_number", request.volume_number)
-            existing_chapter.outline_version = f"v{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            existing_chapter.volume_number = chapter_config.get(
+                "volume_number", request.volume_number
+            )
+            existing_chapter.outline_version = (
+                f"v{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
             persisted_chapters.append(existing_chapter)
         else:
             # 创建新章节
             new_chapter = Chapter(
                 novel_id=novel_id,
                 chapter_number=chapter_num,
-                volume_number=chapter_config.get("volume_number", request.volume_number),
+                volume_number=chapter_config.get(
+                    "volume_number", request.volume_number
+                ),
                 outline_task=chapter_config,
                 outline_version=f"v{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 title=f"第{chapter_num}章",
@@ -353,19 +349,18 @@ async def decompose_outline_to_chapters(
 
     return {
         "novel_id": str(novel_id),
-        "chapter_range": {
-            "start": request.chapter_start,
-            "end": request.chapter_end
-        },
+        "chapter_range": {"start": request.chapter_start, "end": request.chapter_end},
         "volume_number": request.volume_number,
         "decomposition_level": request.decomposition_level,
         "chapters": chapter_configs,
         "persisted_count": len(persisted_chapters),
-        "decomposed_at": datetime.now()
+        "decomposed_at": datetime.now(),
     }
 
 
-@router.get("/chapters/{chapter_number}/outline-task", response_model=ChapterOutlineTaskResponse)
+@router.get(
+    "/chapters/{chapter_number}/outline-task", response_model=ChapterOutlineTaskResponse
+)
 async def get_chapter_outline_task(
     novel_id: UUID,
     chapter_number: int,
@@ -389,16 +384,14 @@ async def get_chapter_outline_task(
 
     # Check if chapter exists
     chapter_query = select(Chapter).where(
-        Chapter.novel_id == novel_id,
-        Chapter.chapter_number == chapter_number
+        Chapter.novel_id == novel_id, Chapter.chapter_number == chapter_number
     )
     chapter_result = await db.execute(chapter_query)
     chapter = chapter_result.scalar_one_or_none()
 
     if not chapter:
         raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的第{chapter_number}章未找到"
+            status_code=404, detail=f"小说 {novel_id} 的第{chapter_number}章未找到"
         )
 
     # Return chapter outline task
@@ -414,11 +407,14 @@ async def get_chapter_outline_task(
         foreshadowing_requirements=outline_task.get("foreshadowing_requirements", []),
         consistency_checks=outline_task.get("consistency_checks", []),
         created_at=chapter.created_at,
-        updated_at=chapter.updated_at
+        updated_at=chapter.updated_at,
     )
 
 
-@router.post("/chapters/{chapter_number}/validate-outline", response_model=OutlineValidationResponse)
+@router.post(
+    "/chapters/{chapter_number}/validate-outline",
+    response_model=OutlineValidationResponse,
+)
 async def validate_chapter_outline(
     novel_id: UUID,
     chapter_number: int,
@@ -444,18 +440,13 @@ async def validate_chapter_outline(
     plot_outline = outline_result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的情节大纲未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
     # 调用服务层进行验证
     outline_service = OutlineService(db)
 
     validation_report = await outline_service.validate_chapter_outline(
-        novel_id,
-        chapter_number,
-        request.chapter_outline or {}
+        novel_id, chapter_number, request.chapter_outline or {}
     )
 
     # 构建验证结果
@@ -469,12 +460,14 @@ async def validate_chapter_outline(
     issues = []
     missing_events = validation_report.get("completion", {}).get("missing_events", [])
     for event in missing_events:
-        issues.append({
-            "type": "missing_event",
-            "severity": "warning",
-            "message": f"缺失事件：{event}",
-            "event": event
-        })
+        issues.append(
+            {
+                "type": "missing_event",
+                "severity": "warning",
+                "message": f"缺失事件：{event}",
+                "event": event,
+            }
+        )
 
     return OutlineValidationResponse(
         is_valid=validation_report.get("passed", False),
@@ -482,7 +475,7 @@ async def validate_chapter_outline(
         issues=issues,
         suggestions=validation_report.get("suggestions", []),
         consistency_score=validation_report.get("quality_score", 0) / 10,
-        validated_at=datetime.now()
+        validated_at=datetime.now(),
     )
 
 
@@ -559,7 +552,7 @@ async def ai_assist_outline_field(
         novel_id=novel_id,
         field_name=request.field_name,
         context=context,
-        hints=request.additional_hints
+        hints=request.additional_hints,
     )
 
     return AIAssistResponse(
@@ -568,7 +561,7 @@ async def ai_assist_outline_field(
         confidence=suggestion_result.get("confidence"),
         alternatives=suggestion_result.get("alternatives"),
         reasoning=suggestion_result.get("reasoning"),
-        generated_at=datetime.now()
+        generated_at=datetime.now(),
     )
 
 
@@ -596,10 +589,7 @@ async def get_outline_versions(
     plot_outline = outline_result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(
-            status_code=404,
-            detail=f"小说 {novel_id} 的情节大纲未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
     # TODO: 从版本历史表中获取版本信息
     # 目前返回一个示例版本列表
@@ -610,14 +600,10 @@ async def get_outline_versions(
             novel_id=novel_id,
             version_number=1,
             change_summary="初始版本",
-            changes={
-                "structure_type": "创建",
-                "volumes": "创建",
-                "main_plot": "创建"
-            },
+            changes={"structure_type": "创建", "volumes": "创建", "main_plot": "创建"},
             created_by="system",
             created_at=plot_outline.created_at,
-            is_current=True
+            is_current=True,
         )
     ]
 
@@ -654,8 +640,7 @@ async def update_plot_outline_with_version(
             raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
         plot_outline = PlotOutline(
-            novel_id=novel_id,
-            **plot_outline_in.model_dump(exclude_unset=True)
+            novel_id=novel_id, **plot_outline_in.model_dump(exclude_unset=True)
         )
         db.add(plot_outline)
     else:
@@ -681,6 +666,8 @@ async def update_plot_outline_with_version(
     plot_outline = fix_plot_outline_volumes(plot_outline)
 
     return plot_outline
+
+
 @router.post("/outline/enhance-preview", response_model=EnhancementPreviewResponse)
 async def enhance_outline_preview(
     *,
@@ -704,7 +691,9 @@ async def enhance_outline_preview(
         )
         plot_outline = outline_result.scalar_one_or_none()
         if not plot_outline:
-            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
+            raise HTTPException(
+                status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到"
+            )
 
         # 获取世界观设定
         world_result = await db.execute(
@@ -720,6 +709,7 @@ async def enhance_outline_preview(
 
         # 初始化Agent管理器
         from backend.dependencies.agents import get_crew_manager, get_outline_evaluator
+
         crew_manager = get_crew_manager()
         evaluator = get_outline_evaluator()
 
@@ -731,22 +721,28 @@ async def enhance_outline_preview(
         enhancement_result = await crew_manager.refine_outline_comprehensive(
             outline=initial_outline,
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=[model_to_dict(char) for char in characters] if characters else [],
+            characters=(
+                [model_to_dict(char) for char in characters] if characters else []
+            ),
             options=options.dict(),
-            max_rounds=options.max_iterations
+            max_rounds=options.max_iterations,
         )
 
         # 评估质量对比
         original_quality = await evaluator.evaluate_outline_comprehensively(
             outline=model_to_dict(plot_outline),
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=[model_to_dict(char) for char in characters] if characters else []
+            characters=(
+                [model_to_dict(char) for char in characters] if characters else []
+            ),
         )
 
         enhanced_quality = await evaluator.evaluate_outline_comprehensively(
             outline=enhancement_result["enhancement_result"]["enhanced_outline"],
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=[model_to_dict(char) for char in characters] if characters else []
+            characters=(
+                [model_to_dict(char) for char in characters] if characters else []
+            ),
         )
 
         processing_time = time.time() - start_time
@@ -754,17 +750,27 @@ async def enhance_outline_preview(
 
         # 修复原始和增强大纲中的卷数据格式
         fixed_original_outline = initial_outline.copy() if initial_outline else {}
-        if 'volumes' in fixed_original_outline and fixed_original_outline['volumes']:
-            fixed_original_outline['volumes'] = [
-                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)}
-                for idx, vol in enumerate(fixed_original_outline['volumes'])
+        if "volumes" in fixed_original_outline and fixed_original_outline["volumes"]:
+            fixed_original_outline["volumes"] = [
+                (
+                    vol.copy()
+                    if "number" in vol
+                    else {**vol, "number": vol.get("volume_num", idx + 1)}
+                )
+                for idx, vol in enumerate(fixed_original_outline["volumes"])
             ]
 
-        fixed_enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"].copy()
-        if 'volumes' in fixed_enhanced_outline and fixed_enhanced_outline['volumes']:
-            fixed_enhanced_outline['volumes'] = [
-                vol.copy() if 'number' in vol else {**vol, 'number': vol.get('volume_num', idx+1)}
-                for idx, vol in enumerate(fixed_enhanced_outline['volumes'])
+        fixed_enhanced_outline = enhancement_result["enhancement_result"][
+            "enhanced_outline"
+        ].copy()
+        if "volumes" in fixed_enhanced_outline and fixed_enhanced_outline["volumes"]:
+            fixed_enhanced_outline["volumes"] = [
+                (
+                    vol.copy()
+                    if "number" in vol
+                    else {**vol, "number": vol.get("volume_num", idx + 1)}
+                )
+                for idx, vol in enumerate(fixed_enhanced_outline["volumes"])
             ]
 
         return EnhancementPreviewResponse(
@@ -773,15 +779,21 @@ async def enhance_outline_preview(
             quality_comparison={
                 "original_score": original_quality.overall_score,
                 "enhanced_score": enhanced_quality.overall_score,
-                "improvement": enhanced_quality.overall_score - original_quality.overall_score,
+                "improvement": enhanced_quality.overall_score
+                - original_quality.overall_score,
                 "dimension_improvements": {
-                    dim: enhanced_quality.dimension_scores[dim] - original_quality.dimension_scores[dim]
+                    dim: enhanced_quality.dimension_scores[dim]
+                    - original_quality.dimension_scores[dim]
                     for dim in original_quality.dimension_scores.keys()
-                }
+                },
             },
-            improvements_made=enhancement_result["enhancement_result"].get("improvements_made", [])[:3],  # 限制改进数量
+            improvements_made=enhancement_result["enhancement_result"].get(
+                "improvements_made", []
+            )[
+                :3
+            ],  # 限制改进数量
             processing_time=processing_time,
-            cost_estimate=cost_estimate
+            cost_estimate=cost_estimate,
         )
 
     except Exception as e:
@@ -801,7 +813,9 @@ async def apply_outline_enhancement(
     try:
         # 获取原大纲
         plot_outline = await db.execute(
-            select(PlotOutline).where(PlotOutline.id == outline_id, PlotOutline.novel_id == novel_id)
+            select(PlotOutline).where(
+                PlotOutline.id == outline_id, PlotOutline.novel_id == novel_id
+            )
         )
         plot_outline = plot_outline.scalar_one_or_none()
 
@@ -809,12 +823,12 @@ async def apply_outline_enhancement(
             raise HTTPException(status_code=404, detail=f"大纲 {outline_id} 未找到")
 
         # 更新大纲内容
-        if 'main_plot' in enhanced_outline:
-            plot_outline.main_plot = enhanced_outline['main_plot']
-        if 'sub_plots' in enhanced_outline:
-            plot_outline.sub_plots = enhanced_outline['sub_plots']
-        if 'key_turning_points' in enhanced_outline:
-            plot_outline.key_turning_points = enhanced_outline['key_turning_points']
+        if "main_plot" in enhanced_outline:
+            plot_outline.main_plot = enhanced_outline["main_plot"]
+        if "sub_plots" in enhanced_outline:
+            plot_outline.sub_plots = enhanced_outline["sub_plots"]
+        if "key_turning_points" in enhanced_outline:
+            plot_outline.key_turning_points = enhanced_outline["key_turning_points"]
 
         # 创建新版本
         # TODO: 实现版本控制功能
@@ -836,18 +850,19 @@ def fix_plot_outline_volumes(plot_outline):
         fixed_volumes = []
         for vol in plot_outline.volumes:
             # 如果没有number字段但有volume_num字段，则复制volume_num作为number
-            if 'number' not in vol and 'volume_num' in vol:
+            if "number" not in vol and "volume_num" in vol:
                 vol_copy = vol.copy()
-                vol_copy['number'] = vol_copy['volume_num']
+                vol_copy["number"] = vol_copy["volume_num"]
                 fixed_volumes.append(vol_copy)
             else:
                 # 如果既有volume_num又有number，保持number优先
                 vol_copy = vol.copy()
-                if 'volume_num' in vol_copy and 'number' not in vol_copy:
-                    vol_copy['number'] = vol_copy['volume_num']
+                if "volume_num" in vol_copy and "number" not in vol_copy:
+                    vol_copy["number"] = vol_copy["volume_num"]
                 fixed_volumes.append(vol_copy)
         plot_outline.volumes = fixed_volumes
     return plot_outline
+
 
 def model_to_dict(model_instance):
     """将SQLAlchemy模型实例转换为字典"""
@@ -859,10 +874,10 @@ def model_to_dict(model_instance):
     for column in model_instance.__table__.columns:
         value = getattr(model_instance, column.name)
         # 处理UUID类型
-        if hasattr(value, 'hex'):
+        if hasattr(value, "hex"):
             value = value.hex
         # 处理datetime类型
-        elif hasattr(value, 'isoformat'):
+        elif hasattr(value, "isoformat"):
             value = value.isoformat()
         result[column.name] = value
 

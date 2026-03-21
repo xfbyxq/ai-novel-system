@@ -72,7 +72,11 @@ class CostTracker:
                     "query": Decimal("0"),
                     "vote": Decimal("0"),
                 }
-            category_key = cost_category if cost_category in self.chapter_costs[chapter_number] else "base"
+            category_key = (
+                cost_category
+                if cost_category in self.chapter_costs[chapter_number]
+                else "base"
+            )
             self.chapter_costs[chapter_number][category_key] += cost
 
         logger.info(

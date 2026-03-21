@@ -1,4 +1,5 @@
 """全局测试 fixtures"""
+
 import asyncio
 import os
 import random
@@ -9,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from backend.config import settings
 from core.database import Base
-
 
 # ---------------------------------------------------------------------------
 # 数据库 fixtures（集成测试用）
@@ -75,6 +75,7 @@ async def test_client(db_session):
 # ---------------------------------------------------------------------------
 # 真实 HTTP 客户端（场景测试用）
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 async def real_http_client():

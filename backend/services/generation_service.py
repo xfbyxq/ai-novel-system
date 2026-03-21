@@ -81,9 +81,7 @@ class GenerationService:
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行企划阶段并保存结果到数据库。"""
         # 加载小说
-        result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = result.scalar_one_or_none()
         if not novel:
             raise ValueError(f"小说 {novel_id} 不存在")
@@ -95,13 +93,15 @@ class GenerationService:
                 GenerationTask.novel_id == novel_id,
                 GenerationTask.task_type == "planning",
                 GenerationTask.id != task_id,  # 排除当前任务本身
-                GenerationTask.status.in_(["pending", "running"])
+                GenerationTask.status.in_(["pending", "running"]),
             )
             .order_by(GenerationTask.created_at.desc())
         )
         existing_task = existing_result.scalar_one_or_none()
         if existing_task:
-            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
+            raise ValueError(
+                f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})"
+            )
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -117,7 +117,7 @@ class GenerationService:
                 phase="planning",
                 input_data={},
                 status=TaskStatus.running,
-                started_at=datetime.now(timezone.utc)
+                started_at=datetime.now(timezone.utc),
             )
             self.db.add(task)
         else:
@@ -137,14 +137,25 @@ class GenerationService:
                 genre=novel.genre,
                 tags=novel.tags or [],
                 context=novel.synopsis or "",
-                length_type=novel.length_type if novel.length_type and novel.length_type != "medium" else "medium",
+                length_type=(
+                    novel.length_type
+                    if novel.length_type and novel.length_type != "medium"
+                    else "medium"
+                ),
             )
 
             # 删除旧的企划数据（如果存在），以便重新生成
             from sqlalchemy import delete
-            await self.db.execute(delete(WorldSetting).where(WorldSetting.novel_id == novel_id))
-            await self.db.execute(delete(Character).where(Character.novel_id == novel_id))
-            await self.db.execute(delete(PlotOutline).where(PlotOutline.novel_id == novel_id))
+
+            await self.db.execute(
+                delete(WorldSetting).where(WorldSetting.novel_id == novel_id)
+            )
+            await self.db.execute(
+                delete(Character).where(Character.novel_id == novel_id)
+            )
+            await self.db.execute(
+                delete(PlotOutline).where(PlotOutline.novel_id == novel_id)
+            )
             await self.db.flush()
 
             # 保存世界观设定（LLM 可能返回非标准结构）
@@ -191,7 +202,7 @@ class GenerationService:
                 if age_value is not None:
                     if isinstance(age_value, str):
                         # 尝试从字符串中提取数字
-                        numbers = re.findall(r'\d+', str(age_value))
+                        numbers = re.findall(r"\d+", str(age_value))
                         if numbers:
                             age_value = int(numbers[0])  # 取第一个数字
                         else:
@@ -254,8 +265,7 @@ class GenerationService:
 
             # 初始化持久化记忆（长期记忆：世界观、角色、大纲）
             await self._initialize_novel_persistent_memory(
-                novel_id=novel_id,
-                planning_result=planning_result
+                novel_id=novel_id, planning_result=planning_result
             )
 
             # 保存 token 使用记录
@@ -285,18 +295,23 @@ class GenerationService:
 
             # 更新小说 token 成本
             from decimal import Decimal
-            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+
+            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+                str(cost_summary["total_cost"])
+            )
 
             await self.db.commit()
 
-            logger.info(f"企划阶段完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
+            logger.info(
+                f"企划阶段完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}"
+            )
 
             # 记录企划阶段的 Agent 活动摘要
             await self._record_planning_activities(
                 novel_id=novel_id,
                 task_id=task_id,
                 planning_result=planning_result,
-                cost_summary=cost_summary
+                cost_summary=cost_summary,
             )
 
             return planning_result
@@ -322,9 +337,7 @@ class GenerationService:
         from sqlalchemy import select
 
         # 加载小说和相关数据
-        result = await self.db.execute(
-            select(Novel).where(Novel.id == novel_id)
-        )
+        result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
         novel = result.scalar_one_or_none()
         if not novel:
             raise ValueError(f"小说 {novel_id} 不存在")
@@ -336,14 +349,16 @@ class GenerationService:
                 GenerationTask.novel_id == novel_id,
                 GenerationTask.task_type == "outline_refinement",
                 GenerationTask.id != task_id,  # 排除当前任务本身
-                GenerationTask.status.in_(["pending", "running"])
+                GenerationTask.status.in_(["pending", "running"]),
             )
             .order_by(GenerationTask.created_at.desc())
         )
         existing_tasks = existing_result.scalars().all()
         if existing_tasks:
             existing_task = existing_tasks[0]  # 取最新的一条
-            raise ValueError(f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})")
+            raise ValueError(
+                f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})"
+            )
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -386,30 +401,48 @@ class GenerationService:
                 "main_plot_detailed": outline.main_plot_detailed or {},
                 "sub_plots": outline.sub_plots or [],
                 "key_turning_points": outline.key_turning_points or [],
-                "climax_chapter": outline.climax_chapter
+                "climax_chapter": outline.climax_chapter,
             }
 
             # 确保outline_data是字典类型
             if not isinstance(outline_data, dict):
-                logger.error(f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}")
-                raise ValueError(f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}")
+                logger.error(
+                    f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}"
+                )
+                raise ValueError(
+                    f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}"
+                )
 
-            world_data = {
-                "world_name": world_setting.world_name if world_setting else "",
-                "world_type": world_setting.world_type if world_setting else "",
-                "power_system": world_setting.power_system if world_setting else {},
-                "geography": world_setting.geography if world_setting else {},
-                "factions": world_setting.factions if world_setting else [],
-                "rules": world_setting.rules if world_setting else [],
-                "timeline": world_setting.timeline if world_setting else [],
-                "special_elements": world_setting.special_elements if world_setting else []
-            } if world_setting else {}
+            world_data = (
+                {
+                    "world_name": world_setting.world_name if world_setting else "",
+                    "world_type": world_setting.world_type if world_setting else "",
+                    "power_system": world_setting.power_system if world_setting else {},
+                    "geography": world_setting.geography if world_setting else {},
+                    "factions": world_setting.factions if world_setting else [],
+                    "rules": world_setting.rules if world_setting else [],
+                    "timeline": world_setting.timeline if world_setting else [],
+                    "special_elements": (
+                        world_setting.special_elements if world_setting else []
+                    ),
+                }
+                if world_setting
+                else {}
+            )
 
             characters_data = [
                 {
                     "name": char.name,
-                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type),
-                    "gender": char.gender.value if char.gender and hasattr(char.gender, 'value') else (str(char.gender) if char.gender else None),
+                    "role_type": (
+                        char.role_type.value
+                        if hasattr(char.role_type, "value")
+                        else str(char.role_type)
+                    ),
+                    "gender": (
+                        char.gender.value
+                        if char.gender and hasattr(char.gender, "value")
+                        else (str(char.gender) if char.gender else None)
+                    ),
                     "age": char.age,
                     "appearance": char.appearance,
                     "personality": char.personality,
@@ -417,17 +450,20 @@ class GenerationService:
                     "goals": char.goals,
                     "abilities": char.abilities or {},
                     "relationships": char.relationships or {},
-                    "growth_arc": char.growth_arc or {}
+                    "growth_arc": char.growth_arc or {},
                 }
                 for char in characters
             ]
 
             # 获取完善选项
-            options = task.input_data.get("options", {
-                "max_iterations": 3,
-                "quality_threshold": 8.0,
-                "preserve_user_edits": True
-            })
+            options = task.input_data.get(
+                "options",
+                {
+                    "max_iterations": 3,
+                    "quality_threshold": 8.0,
+                    "preserve_user_edits": True,
+                },
+            )
 
             # 初始化Agent调度器
             await self.dispatcher.initialize()
@@ -442,7 +478,7 @@ class GenerationService:
                 world_setting=world_data,
                 characters=characters_data,
                 options=options,
-                max_rounds=options.get("max_iterations", 3)
+                max_rounds=options.get("max_iterations", 3),
             )
 
             # 调试：检查返回数据格式
@@ -450,18 +486,28 @@ class GenerationService:
             logger.info(f"enhancement_result内容: {enhancement_result}")
 
             if "enhancement_result" in enhancement_result:
-                enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
+                enhanced_outline = enhancement_result["enhancement_result"][
+                    "enhanced_outline"
+                ]
                 logger.info(f"enhanced_outline类型: {type(enhanced_outline)}")
                 logger.info(f"enhanced_outline内容: {enhanced_outline}")
 
             # 保存完善结果到任务输出
             task_output = {
                 "original_outline": outline_data,
-                "enhanced_outline": enhancement_result["enhancement_result"]["enhanced_outline"],
-                "improvements_made": enhancement_result["enhancement_result"]["improvements_made"],
-                "round_history": enhancement_result["enhancement_result"]["round_history"],
-                "total_rounds": enhancement_result["enhancement_result"]["total_rounds"],
-                "quality_comparison": {}  # 可以在这里添加质量对比逻辑
+                "enhanced_outline": enhancement_result["enhancement_result"][
+                    "enhanced_outline"
+                ],
+                "improvements_made": enhancement_result["enhancement_result"][
+                    "improvements_made"
+                ],
+                "round_history": enhancement_result["enhancement_result"][
+                    "round_history"
+                ],
+                "total_rounds": enhancement_result["enhancement_result"][
+                    "total_rounds"
+                ],
+                "quality_comparison": {},  # 可以在这里添加质量对比逻辑
             }
 
             # 保存 token 使用记录
@@ -486,24 +532,37 @@ class GenerationService:
             task.cost = cost_summary["total_cost"]
 
             # 自动应用增强结果到大纲表
-            enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
+            enhanced_outline = enhancement_result["enhancement_result"][
+                "enhanced_outline"
+            ]
             if enhanced_outline and isinstance(enhanced_outline, dict):
                 # 更新PlotOutline表中的数据
                 outline.main_plot = enhanced_outline.get("main_plot", outline.main_plot)
-                outline.main_plot_detailed = enhanced_outline.get("main_plot_detailed", outline.main_plot_detailed)
+                outline.main_plot_detailed = enhanced_outline.get(
+                    "main_plot_detailed", outline.main_plot_detailed
+                )
                 outline.sub_plots = enhanced_outline.get("sub_plots", outline.sub_plots)
-                outline.key_turning_points = enhanced_outline.get("key_turning_points", outline.key_turning_points)
+                outline.key_turning_points = enhanced_outline.get(
+                    "key_turning_points", outline.key_turning_points
+                )
                 outline.volumes = enhanced_outline.get("volumes", outline.volumes)
-                outline.structure_type = enhanced_outline.get("structure_type", outline.structure_type)
+                outline.structure_type = enhanced_outline.get(
+                    "structure_type", outline.structure_type
+                )
                 logger.info("已自动应用大纲增强结果到数据库")
 
             # 更新小说 token 成本
             from decimal import Decimal
-            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+
+            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+                str(cost_summary["total_cost"])
+            )
 
             await self.db.commit()
 
-            logger.info(f"大纲完善任务完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}")
+            logger.info(
+                f"大纲完善任务完成，总消耗 {cost_summary['total_tokens']} tokens, 成本 ¥{cost_summary['total_cost']:.4f}"
+            )
 
             return task_output
 
@@ -556,7 +615,7 @@ class GenerationService:
                 phase="planning",
                 input_data={},
                 status=TaskStatus.running,
-                started_at=datetime.now(timezone.utc)
+                started_at=datetime.now(timezone.utc),
             )
             self.db.add(task)
         else:
@@ -580,13 +639,19 @@ class GenerationService:
 
             characters_list = []
             for char in novel.characters:
-                characters_list.append({
-                    "name": char.name,
-                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
-                    "personality": char.personality or "",
-                    "background": char.background or "",
-                    "abilities": char.abilities or {},
-                })
+                characters_list.append(
+                    {
+                        "name": char.name,
+                        "role_type": (
+                            char.role_type.value
+                            if hasattr(char.role_type, "value")
+                            else str(char.role_type or "minor")
+                        ),
+                        "personality": char.personality or "",
+                        "background": char.background or "",
+                        "abilities": char.abilities or {},
+                    }
+                )
 
             plot_outline_dict = {}
             if novel.plot_outline:
@@ -601,19 +666,21 @@ class GenerationService:
 
             # 构建前几章摘要（优先使用持久化记忆，回退到内存缓存）
             previous_summary = await self._build_previous_context_enhanced(
-                novel_id=novel_id,
-                novel=novel,
-                chapter_number=chapter_number
+                novel_id=novel_id, novel=novel, chapter_number=chapter_number
             )
 
             # 获取角色状态（优先从持久化记忆获取）
-            character_states_dict = self.persistent_memory.storage.get_all_character_states(str(novel_id))
+            character_states_dict = (
+                self.persistent_memory.storage.get_all_character_states(str(novel_id))
+            )
             if character_states_dict:
                 # 将字典格式转换为字符串格式（用于提示词）
                 character_states = self._format_character_states(character_states_dict)
             else:
                 # 回退到内存缓存
-                character_states = self.memory_service.get_character_states(str(novel_id))
+                character_states = self.memory_service.get_character_states(
+                    str(novel_id)
+                )
 
             novel_data = {
                 "title": novel.title,
@@ -625,21 +692,22 @@ class GenerationService:
 
             # 确保内存缓存中有小说记忆（供 update_chapter_summary 等方法使用）
             if not self.memory_service.get_novel_memory(str(novel_id)):
-                self.memory_service.set_novel_memory(str(novel_id), {
-                    "id": str(novel_id),
-                    "title": novel.title,
-                    "genre": novel.genre,
-                    "world_setting": world_setting_dict,
-                    "characters": characters_list,
-                    "plot_outline": plot_outline_dict,
-                    "synopsis": novel.synopsis or "",
-                })
+                self.memory_service.set_novel_memory(
+                    str(novel_id),
+                    {
+                        "id": str(novel_id),
+                        "title": novel.title,
+                        "genre": novel.genre,
+                        "world_setting": world_setting_dict,
+                        "characters": characters_list,
+                        "plot_outline": plot_outline_dict,
+                        "synopsis": novel.synopsis or "",
+                    },
+                )
 
             # 获取或创建 TeamContext
             team_context = self._get_or_create_team_context(
-                novel_id=str(novel_id),
-                novel_title=novel.title,
-                novel_data=novel_data
+                novel_id=str(novel_id), novel_title=novel.title, novel_data=novel_data
             )
 
             # 初始化Agent调度器
@@ -654,13 +722,17 @@ class GenerationService:
             # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
             if chapter_number > 1:
                 prev_chapter = next(
-                    (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
-                    None
+                    (
+                        ch
+                        for ch in novel.chapters
+                        if ch.chapter_number == chapter_number - 1
+                    ),
+                    None,
                 )
                 if prev_chapter and prev_chapter.detailed_outline:
-                    self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
-                        prev_chapter.detailed_outline
-                    )
+                    self.dispatcher.crew_manager._chapter_detailed_outlines[
+                        chapter_number - 1
+                    ] = prev_chapter.detailed_outline
 
             # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
@@ -705,7 +777,9 @@ class GenerationService:
                 plot_points=chapter_plan.get("plot_points", []),
                 foreshadowing=chapter_plan.get("foreshadowing", []),
                 quality_score=writing_result.get("quality_score", 0),
-                continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+                continuity_issues=writing_result.get("continuity_report", {}).get(
+                    "issues", []
+                ),
                 detailed_outline=writing_result.get("detailed_outline", {}),
             )
             self.db.add(chapter)
@@ -714,35 +788,44 @@ class GenerationService:
             chapter_summary = self._extract_chapter_summary(
                 content=final_content,
                 chapter_plan=chapter_plan,
-                chapter_number=chapter_number
+                chapter_number=chapter_number,
             )
-            self.memory_service.update_chapter_summary(str(novel_id), chapter_number, chapter_summary)
+            self.memory_service.update_chapter_summary(
+                str(novel_id), chapter_number, chapter_summary
+            )
 
             # 同时保存到持久化记忆系统
             await self.persistent_memory.save_chapter_memory(
                 novel_id=str(novel_id),
                 chapter_number=chapter_number,
                 content=final_content,
-                summary=chapter_summary
+                summary=chapter_summary,
             )
 
             # 更新角色状态（如果 writing_result 中包含角色更新信息）
             character_updates = writing_result.get("character_updates", {})
             for char_name, state in character_updates.items():
-                self.memory_service.update_character_state(str(novel_id), char_name, state)
+                self.memory_service.update_character_state(
+                    str(novel_id), char_name, state
+                )
                 # 同时更新持久化记忆
                 await self.persistent_memory.update_character_state(
                     novel_id=str(novel_id),
                     character_name=char_name,
                     chapter_number=chapter_number,
-                    updates=state
+                    updates=state,
                 )
 
             # ===== 新增：角色自动检测 =====
             if settings.ENABLE_CHARACTER_AUTO_DETECTION:
                 try:
-                    from backend.services.character_auto_detector import CharacterAutoDetector
-                    detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
+                    from backend.services.character_auto_detector import (
+                        CharacterAutoDetector,
+                    )
+
+                    detector = CharacterAutoDetector(
+                        self.db, self.client, self.cost_tracker
+                    )
                     new_characters = await detector.detect_and_register_new_characters(
                         novel_id=novel_id,
                         chapter_number=chapter_number,
@@ -790,7 +873,10 @@ class GenerationService:
                 task.cost = cost_summary["total_cost"]
 
             from decimal import Decimal
-            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+
+            novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+                str(cost_summary["total_cost"])
+            )
 
             await self.db.commit()
 
@@ -802,7 +888,11 @@ class GenerationService:
                 )
                 # 更新最后活跃时间
                 self._last_active_time[novel_id_str] = datetime.now()
-                if self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL == 0:
+                if (
+                    self._chapter_write_counter[novel_id_str]
+                    % settings.OUTLINE_UPDATE_INTERVAL
+                    == 0
+                ):
                     await self._try_dynamic_outline_update(novel_id, chapter_number)
             # ===== 大纲动态更新触发结束 =====
 
@@ -844,7 +934,7 @@ class GenerationService:
                 phase="planning",
                 input_data={},
                 status=TaskStatus.running,
-                started_at=datetime.now(timezone.utc)
+                started_at=datetime.now(timezone.utc),
             )
             self.db.add(task)
         else:
@@ -896,13 +986,19 @@ class GenerationService:
 
             characters_list = []
             for char in novel.characters:
-                characters_list.append({
-                    "name": char.name,
-                    "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
-                    "personality": char.personality or "",
-                    "background": char.background or "",
-                    "abilities": char.abilities or {},
-                })
+                characters_list.append(
+                    {
+                        "name": char.name,
+                        "role_type": (
+                            char.role_type.value
+                            if hasattr(char.role_type, "value")
+                            else str(char.role_type or "minor")
+                        ),
+                        "personality": char.personality or "",
+                        "background": char.background or "",
+                        "abilities": char.abilities or {},
+                    }
+                )
 
             plot_outline_dict = {}
             if novel.plot_outline:
@@ -936,7 +1032,7 @@ class GenerationService:
                         novel_id=novel_id,
                         task_id=task_id,
                         chapter_number=chapter_num,
-                        volume_number=volume_number
+                        volume_number=volume_number,
                     )
                     all_results.append(result)
                     continuous_failures = 0  # 重置连续失败计数
@@ -955,13 +1051,17 @@ class GenerationService:
                         )
                         batch_interrupted = True
                         # 记录剩余未生成的章节
-                        remaining_chapters = list(range(chapter_num + 1, to_chapter + 1))
+                        remaining_chapters = list(
+                            range(chapter_num + 1, to_chapter + 1)
+                        )
                         if remaining_chapters:
                             logger.warning(f"剩余未生成章节: {remaining_chapters}")
                         break
 
             completed_chapters = len([r for r in all_results if "error" not in r])
-            skipped_chapters = to_chapter - from_chapter + 1 - len(all_results)  # 因中断而跳过的章节数
+            skipped_chapters = (
+                to_chapter - from_chapter + 1 - len(all_results)
+            )  # 因中断而跳过的章节数
 
             # 更新任务进度
             if task:
@@ -997,7 +1097,9 @@ class GenerationService:
                 task.completed_at = datetime.now(timezone.utc)
 
                 # 构建摘要信息
-                summary = f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
+                summary = (
+                    f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
+                )
                 if batch_interrupted:
                     summary += f"，因连续失败中断（跳过 {skipped_chapters} 章）"
 
@@ -1014,7 +1116,9 @@ class GenerationService:
 
                 # 构建错误信息
                 if batch_interrupted:
-                    task.error_message = f"连续{max_continuous_failures}章生成失败，批量任务已中断"
+                    task.error_message = (
+                        f"连续{max_continuous_failures}章生成失败，批量任务已中断"
+                    )
                 elif failed_chapters_list > 0:
                     task.error_message = f"{failed_chapters_list} 章生成失败"
                 else:
@@ -1082,13 +1186,19 @@ class GenerationService:
 
         characters_list = []
         for char in novel.characters:
-            characters_list.append({
-                "name": char.name,
-                "role_type": char.role_type.value if hasattr(char.role_type, 'value') else str(char.role_type or "minor"),
-                "personality": char.personality or "",
-                "background": char.background or "",
-                "abilities": char.abilities or {},
-            })
+            characters_list.append(
+                {
+                    "name": char.name,
+                    "role_type": (
+                        char.role_type.value
+                        if hasattr(char.role_type, "value")
+                        else str(char.role_type or "minor")
+                    ),
+                    "personality": char.personality or "",
+                    "background": char.background or "",
+                    "abilities": char.abilities or {},
+                }
+            )
 
         plot_outline_dict = {}
         if novel.plot_outline:
@@ -1103,9 +1213,7 @@ class GenerationService:
 
         # 构建前几章摘要（使用增强的结构化摘要）
         previous_summary = self._build_previous_context(
-            novel_id=novel_id,
-            novel=novel,
-            chapter_number=chapter_number
+            novel_id=novel_id, novel=novel, chapter_number=chapter_number
         )
 
         # 获取角色状态
@@ -1125,13 +1233,17 @@ class GenerationService:
         # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
         if chapter_number > 1:
             prev_chapter = next(
-                (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
-                None
+                (
+                    ch
+                    for ch in novel.chapters
+                    if ch.chapter_number == chapter_number - 1
+                ),
+                None,
             )
             if prev_chapter and prev_chapter.detailed_outline:
-                self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
-                    prev_chapter.detailed_outline
-                )
+                self.dispatcher.crew_manager._chapter_detailed_outlines[
+                    chapter_number - 1
+                ] = prev_chapter.detailed_outline
 
         # 执行写作阶段
         self.cost_tracker.reset()
@@ -1162,7 +1274,9 @@ class GenerationService:
             plot_points=chapter_plan.get("plot_points", []),
             foreshadowing=chapter_plan.get("foreshadowing", []),
             quality_score=writing_result.get("quality_score", 0),
-            continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+            continuity_issues=writing_result.get("continuity_report", {}).get(
+                "issues", []
+            ),
             detailed_outline=writing_result.get("detailed_outline", {}),
         )
         self.db.add(chapter)
@@ -1171,15 +1285,22 @@ class GenerationService:
         chapter_summary = self._extract_chapter_summary(
             content=final_content,
             chapter_plan=chapter_plan,
-            chapter_number=chapter_number
+            chapter_number=chapter_number,
         )
-        self.memory_service.update_chapter_summary(str(novel_id), chapter_number, chapter_summary)
+        self.memory_service.update_chapter_summary(
+            str(novel_id), chapter_number, chapter_summary
+        )
 
         # ===== 新增：角色自动检测 =====
         if settings.ENABLE_CHARACTER_AUTO_DETECTION:
             try:
-                from backend.services.character_auto_detector import CharacterAutoDetector
-                detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
+                from backend.services.character_auto_detector import (
+                    CharacterAutoDetector,
+                )
+
+                detector = CharacterAutoDetector(
+                    self.db, self.client, self.cost_tracker
+                )
                 new_characters = await detector.detect_and_register_new_characters(
                     novel_id=novel_id,
                     chapter_number=chapter_number,
@@ -1203,7 +1324,10 @@ class GenerationService:
         # 更新 token 成本
         cost_summary = self.cost_tracker.get_summary()
         from decimal import Decimal
-        novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(str(cost_summary["total_cost"]))
+
+        novel.token_cost = (novel.token_cost or Decimal("0")) + Decimal(
+            str(cost_summary["total_cost"])
+        )
 
         await self.db.commit()
 
@@ -1215,7 +1339,11 @@ class GenerationService:
             )
             # 更新最后活跃时间
             self._last_active_time[novel_id_str] = datetime.now()
-            if self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL == 0:
+            if (
+                self._chapter_write_counter[novel_id_str]
+                % settings.OUTLINE_UPDATE_INTERVAL
+                == 0
+            ):
                 await self._try_dynamic_outline_update(novel_id, chapter_number)
         # ===== 大纲动态更新触发结束 =====
 
@@ -1294,7 +1422,11 @@ class GenerationService:
             characters_list = [
                 {
                     "name": c.name,
-                    "role_type": c.role_type.value if hasattr(c.role_type, "value") else str(c.role_type or "minor"),
+                    "role_type": (
+                        c.role_type.value
+                        if hasattr(c.role_type, "value")
+                        else str(c.role_type or "minor")
+                    ),
                     "personality": c.personality or "",
                 }
                 for c in novel.characters
@@ -1359,7 +1491,9 @@ class GenerationService:
             self._last_active_time.pop(novel_id, None)
             logger.debug(f"清理过期计数器: {novel_id}")
 
-    def _build_previous_context(self, novel_id: UUID, novel: Novel, chapter_number: int) -> str:
+    def _build_previous_context(
+        self, novel_id: UUID, novel: Novel, chapter_number: int
+    ) -> str:
         """构建结构化的前置章节上下文
 
         优先使用记忆系统中的结构化摘要，回退到智能截取。
@@ -1382,41 +1516,47 @@ class GenerationService:
                 if ch_num_str in summaries:
                     # 使用结构化摘要
                     summary = summaries[ch_num_str]
-                    previous_context += f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
+                    previous_context += (
+                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
+                    )
 
-                    key_events = summary.get('key_events', [])
+                    key_events = summary.get("key_events", [])
                     if key_events:
                         if isinstance(key_events, list):
                             previous_context += f"**主要事件**: {', '.join(str(e) for e in key_events[:5])}\n"
                         else:
                             previous_context += f"**主要事件**: {key_events}\n"
 
-                    char_changes = summary.get('character_changes', '')
+                    char_changes = summary.get("character_changes", "")
                     if char_changes:
                         previous_context += f"**角色变化**: {char_changes}\n"
 
-                    plot_progress = summary.get('plot_progress', '')
+                    plot_progress = summary.get("plot_progress", "")
                     if plot_progress:
                         # 限制情节摘要长度
                         if len(plot_progress) > 300:
                             plot_progress = plot_progress[:300] + "..."
                         previous_context += f"**情节推进**: {plot_progress}\n"
 
-                    foreshadowing = summary.get('foreshadowing', [])
+                    foreshadowing = summary.get("foreshadowing", [])
                     if foreshadowing:
                         if isinstance(foreshadowing, list) and foreshadowing:
                             previous_context += f"**伏笔**: {', '.join(str(f) for f in foreshadowing[:3])}\n"
                 else:
                     # 回退到智能截取（取前500字，找到完整句子边界）
                     content = ch.content[:500]
-                    last_period = content.rfind('。')
+                    last_period = content.rfind("。")
                     if last_period > 300:
-                        content = content[:last_period + 1]
-                    previous_context += f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n{content}\n"
+                        content = content[: last_period + 1]
+                    previous_context += (
+                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n{content}\n"
+                    )
 
         return previous_context
 
-    def _extract_chapter_summary(self, content: str, chapter_plan: dict, chapter_number: int) -> dict:
+    def _extract_chapter_summary(
+        self, content: str, chapter_plan: dict, chapter_number: int
+    ) -> dict:
         """从章节内容提取结构化摘要
 
         Args:
@@ -1433,25 +1573,27 @@ class GenerationService:
             # 取内容前200字作为情节摘要
             plot_progress = content[:200]
             # 尝试找到完整句子
-            last_period = plot_progress.rfind('。')
+            last_period = plot_progress.rfind("。")
             if last_period > 100:
-                plot_progress = plot_progress[:last_period + 1]
+                plot_progress = plot_progress[: last_period + 1]
 
         # 提取结尾状态（最后100字）
         ending_state = ""
         if content and len(content) > 100:
             ending_state = content[-100:]
             # 尝试从句子开头开始
-            first_period = ending_state.find('。')
+            first_period = ending_state.find("。")
             if first_period > 0 and first_period < 50:
-                ending_state = ending_state[first_period + 1:]
+                ending_state = ending_state[first_period + 1 :]
         elif content:
             ending_state = content
 
         return {
             "chapter_number": chapter_number,
             "title": chapter_plan.get("title", f"第{chapter_number}章"),
-            "key_events": chapter_plan.get("plot_points", [])[:5],  # 主要事件（最多5个）
+            "key_events": chapter_plan.get("plot_points", [])[
+                :5
+            ],  # 主要事件（最多5个）
             "character_changes": self._extract_character_mentions(content),  # 角色变化
             "plot_progress": plot_progress,  # 情节摘要
             "foreshadowing": chapter_plan.get("foreshadowing", []),  # 伏笔
@@ -1473,16 +1615,16 @@ class GenerationService:
         parts = []
         for name, state in states_dict.items():
             info = [f"**{name}**"]
-            if state.get('current_location'):
+            if state.get("current_location"):
                 info.append(f"  - 位置: {state['current_location']}")
-            if state.get('cultivation_level'):
+            if state.get("cultivation_level"):
                 info.append(f"  - 修为: {state['cultivation_level']}")
-            if state.get('emotional_state'):
+            if state.get("emotional_state"):
                 info.append(f"  - 情绪: {state['emotional_state']}")
-            if state.get('status') and state['status'] != 'active':
+            if state.get("status") and state["status"] != "active":
                 info.append(f"  - 状态: {state['status']}")
-            if state.get('pending_events'):
-                events = state['pending_events']
+            if state.get("pending_events"):
+                events = state["pending_events"]
                 if isinstance(events, list) and events:
                     info.append(f"  - 待办: {', '.join(str(e) for e in events[:3])}")
             parts.append("\n".join(info))
@@ -1506,8 +1648,18 @@ class GenerationService:
 
         # 简化实现：检测常见的状态变化关键词
         change_keywords = [
-            "突破", "晋升", "受伤", "死亡", "离开", "加入",
-            "觉醒", "领悟", "失去", "获得", "决定", "背叛"
+            "突破",
+            "晋升",
+            "受伤",
+            "死亡",
+            "离开",
+            "加入",
+            "觉醒",
+            "领悟",
+            "失去",
+            "获得",
+            "决定",
+            "背叛",
         ]
 
         found_changes = []
@@ -1515,8 +1667,8 @@ class GenerationService:
             if keyword in content:
                 # 找到关键词所在的句子
                 idx = content.find(keyword)
-                start = max(0, content.rfind('。', 0, idx) + 1)
-                end = content.find('。', idx)
+                start = max(0, content.rfind("。", 0, idx) + 1)
+                end = content.find("。", idx)
                 if end == -1:
                     end = min(len(content), idx + 50)
                 else:
@@ -1533,10 +1685,7 @@ class GenerationService:
     # ==================== 新增：持久化记忆集成方法 ====================
 
     def _get_or_create_team_context(
-        self,
-        novel_id: str,
-        novel_title: str,
-        novel_data: dict
+        self, novel_id: str, novel_title: str, novel_data: dict
     ) -> NovelTeamContext:
         """获取或创建小说的 TeamContext
 
@@ -1563,9 +1712,7 @@ class GenerationService:
         return self._team_contexts[novel_id]
 
     async def _initialize_novel_persistent_memory(
-        self,
-        novel_id: UUID,
-        planning_result: dict
+        self, novel_id: UUID, planning_result: dict
     ):
         """初始化小说的持久化长期记忆
 
@@ -1592,17 +1739,14 @@ class GenerationService:
                 "synopsis": topic_analysis.get("synopsis", ""),
                 "world_setting": world_setting,
                 "characters": characters,
-                "plot_outline": plot_outline
-            }
+                "plot_outline": plot_outline,
+            },
         )
 
         logger.info(f"Initialized persistent memory for novel {novel_id}")
 
     async def _build_previous_context_enhanced(
-        self,
-        novel_id: UUID,
-        novel: Novel,
-        chapter_number: int
+        self, novel_id: UUID, novel: Novel, chapter_number: int
     ) -> str:
         """构建增强的前置章节上下文
 
@@ -1621,12 +1765,12 @@ class GenerationService:
         # 1. 首先尝试从持久化记忆获取上下文
         try:
             persistent_context = await self.persistent_memory.get_chapter_context(
-                novel_id=novel_id_str,
-                chapter_number=chapter_number,
-                context_chapters=5
+                novel_id=novel_id_str, chapter_number=chapter_number, context_chapters=5
             )
             if persistent_context:
-                logger.debug(f"Using persistent memory context for chapter {chapter_number}")
+                logger.debug(
+                    f"Using persistent memory context for chapter {chapter_number}"
+                )
                 return persistent_context
         except Exception as e:
             logger.warning(f"Failed to get persistent memory context: {e}")
@@ -1635,11 +1779,7 @@ class GenerationService:
         return self._build_previous_context(novel_id, novel, chapter_number)
 
     async def _record_planning_activities(
-        self,
-        novel_id: UUID,
-        task_id: UUID,
-        planning_result: dict,
-        cost_summary: dict
+        self, novel_id: UUID, task_id: UUID, planning_result: dict, cost_summary: dict
     ):
         """记录企划阶段的 Agent 活动摘要
 
@@ -1672,7 +1812,9 @@ class GenerationService:
                     agent_name="世界观架构师",
                     agent_role="世界观体系构建",
                     activity_subtype="world_building",
-                    input_data={"topic_analysis": planning_result.get("topic_analysis")},
+                    input_data={
+                        "topic_analysis": planning_result.get("topic_analysis")
+                    },
                     output_data=planning_result.get("world_setting", {}),
                 )
 
@@ -1685,7 +1827,9 @@ class GenerationService:
                     agent_role="主要角色设计",
                     activity_subtype="character_design",
                     input_data={"world_setting": planning_result.get("world_setting")},
-                    output_data={"characters_count": len(planning_result.get("characters", []))},
+                    output_data={
+                        "characters_count": len(planning_result.get("characters", []))
+                    },
                 )
 
             # 记录情节架构活动
@@ -1698,15 +1842,18 @@ class GenerationService:
                     activity_subtype="plot_architecture",
                     input_data={
                         "world_setting": planning_result.get("world_setting"),
-                        "characters": planning_result.get("characters")
+                        "characters": planning_result.get("characters"),
                     },
                     output_data={
-                        "structure_type": planning_result.get("plot_outline", {}).get("structure_type"),
-                        "volumes_count": len(planning_result.get("plot_outline", {}).get("volumes", []))
+                        "structure_type": planning_result.get("plot_outline", {}).get(
+                            "structure_type"
+                        ),
+                        "volumes_count": len(
+                            planning_result.get("plot_outline", {}).get("volumes", [])
+                        ),
                     },
                 )
 
             logger.info(f"✅ 企划阶段 Agent 活动记录完成")
         except Exception as e:
             logger.error(f"记录企划阶段 Agent 活动失败：{e}")
-

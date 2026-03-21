@@ -53,9 +53,7 @@ async def find_duplicates(db: AsyncSession) -> dict[str, list[Character]]:
     return {k: v for k, v in groups.items() if len(v) > 1}
 
 
-async def merge_relationships(
-    primary: Character, duplicates: list[Character]
-) -> bool:
+async def merge_relationships(primary: Character, duplicates: list[Character]) -> bool:
     """将重复角色的 relationships 合并到主记录。
 
     Returns:
@@ -133,17 +131,21 @@ async def cleanup(apply: bool = False) -> None:
         echo=False,
         connect_args={"ssl": False},
     )
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with session_factory() as db:
         # 先检查 characters 表是否存在
         try:
-            check_result = await db.execute(text(
-                "SELECT EXISTS ("
-                "  SELECT FROM information_schema.tables "
-                "  WHERE table_schema = 'public' AND table_name = 'characters'"
-                ")"
-            ))
+            check_result = await db.execute(
+                text(
+                    "SELECT EXISTS ("
+                    "  SELECT FROM information_schema.tables "
+                    "  WHERE table_schema = 'public' AND table_name = 'characters'"
+                    ")"
+                )
+            )
             table_exists = check_result.scalar()
         except Exception:
             table_exists = False
@@ -166,7 +168,9 @@ async def cleanup(apply: bool = False) -> None:
         print(f"\n{'='*60}")
         print(f"角色去重清理报告")
         print(f"{'='*60}")
-        print(f"发现 {len(duplicates)} 组重复角色，共 {total_duplicates} 条待删除记录\n")
+        print(
+            f"发现 {len(duplicates)} 组重复角色，共 {total_duplicates} 条待删除记录\n"
+        )
 
         for key, chars in duplicates.items():
             novel_id_str, name_lower = key.split("::", 1)

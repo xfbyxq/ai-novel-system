@@ -23,7 +23,6 @@ from agents.base import (
     WorldReviewResult,
 )
 
-
 # ── 世界观审查专用提示词 ──────────────────────────────────────────
 
 WORLD_REVIEWER_SYSTEM = """你是一位资深的网络小说世界观评审专家，专注于世界观设计的深度、一致性和创新性。
@@ -243,6 +242,7 @@ class WorldReviewHandler(
 
     def _get_builder_system_prompt(self) -> str:
         from llm.prompt_manager import PromptManager
+
         return PromptManager.WORLD_BUILDER_SYSTEM
 
     def _get_reviewer_agent_name(self) -> str:
@@ -296,9 +296,7 @@ class WorldReviewHandler(
         consistency_analysis = review_data.get("consistency_analysis", {})
 
         consistency_text = (
-            self.to_json(consistency_analysis)
-            if consistency_analysis
-            else "（无）"
+            self.to_json(consistency_analysis) if consistency_analysis else "（无）"
         )
 
         return WORLD_REVISION_TASK.format(

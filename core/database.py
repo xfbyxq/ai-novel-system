@@ -9,7 +9,7 @@ class Base(DeclarativeBase):
 
 
 engine = create_async_engine(
-    settings.DATABASE_URL.split('?')[0],  # 移除 URL 中的查询参数
+    settings.DATABASE_URL.split("?")[0],  # 移除 URL 中的查询参数
     echo=settings.APP_DEBUG,
     pool_size=10,
     max_overflow=20,

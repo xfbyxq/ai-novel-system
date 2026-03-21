@@ -81,7 +81,9 @@ class CharacterAutoDetector:
             )
 
             if not extracted:
-                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色")
+                logger.info(
+                    f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色"
+                )
                 return []
 
             # 2. 多层去重过滤（使用数据库最新数据）
@@ -107,7 +109,9 @@ class CharacterAutoDetector:
             return registered
 
         except Exception as e:
-            logger.warning(f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}")
+            logger.warning(
+                f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}"
+            )
             return []
 
     async def _extract_characters_from_content(
@@ -130,7 +134,11 @@ class CharacterAutoDetector:
         max_len = settings.CHARACTER_DETECTION_MAX_CONTENT_LENGTH
         content_truncated = chapter_content[:max_len]
 
-        names_str = "、".join(existing_character_names) if existing_character_names else "（暂无已知角色）"
+        names_str = (
+            "、".join(existing_character_names)
+            if existing_character_names
+            else "（暂无已知角色）"
+        )
 
         task_prompt = self.pm.format(
             self.pm.CHARACTER_DETECTION_TASK,
@@ -216,7 +224,10 @@ class CharacterAutoDetector:
                 if (
                     len(name_normalized) >= 2
                     and len(existing_norm) >= 2
-                    and (name_normalized in existing_norm or existing_norm in name_normalized)
+                    and (
+                        name_normalized in existing_norm
+                        or existing_norm in name_normalized
+                    )
                 ):
                     is_substring = True
                     logger.debug(
@@ -245,7 +256,10 @@ class CharacterAutoDetector:
                     if (
                         len(variant_norm) >= 2
                         and len(existing_norm) >= 2
-                        and (variant_norm in existing_norm or existing_norm in variant_norm)
+                        and (
+                            variant_norm in existing_norm
+                            or existing_norm in variant_norm
+                        )
                     ):
                         variant_match = True
                         break
@@ -362,9 +376,25 @@ class CharacterAutoDetector:
         name = name.strip()
         # 去除常见称呼后缀
         suffixes = [
-            "先生", "小姐", "女士", "大人", "前辈", "师兄", "师姐",
-            "师弟", "师妹", "师父", "师傅", "大师", "长老", "掌门",
-            "宗主", "公子", "姑娘", "道友", "阁下",
+            "先生",
+            "小姐",
+            "女士",
+            "大人",
+            "前辈",
+            "师兄",
+            "师姐",
+            "师弟",
+            "师妹",
+            "师父",
+            "师傅",
+            "大师",
+            "长老",
+            "掌门",
+            "宗主",
+            "公子",
+            "姑娘",
+            "道友",
+            "阁下",
         ]
         for suffix in suffixes:
             if name.endswith(suffix) and len(name) > len(suffix):

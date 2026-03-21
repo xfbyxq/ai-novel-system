@@ -118,7 +118,7 @@ class AgentActivityRecorder:
         activity_subtype: str,
         input_data: Dict[str, Any],
         output_data: Dict[str, Any],
-        **kwargs
+        **kwargs,
     ) -> AgentActivity:
         """记录企划阶段的 Agent 活动"""
         return await self.record_activity(
@@ -130,7 +130,7 @@ class AgentActivityRecorder:
             phase="planning",
             input_data=input_data,
             output_data=output_data,
-            **kwargs
+            **kwargs,
         )
 
     async def record_writing_activity(
@@ -144,7 +144,7 @@ class AgentActivityRecorder:
         input_data: Dict[str, Any],
         output_data: Dict[str, Any],
         raw_output: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> AgentActivity:
         """记录写作阶段的 Agent 活动"""
         metadata = kwargs.pop("metadata", {})
@@ -161,7 +161,7 @@ class AgentActivityRecorder:
             output_data=output_data,
             raw_output=raw_output,
             metadata=metadata,
-            **kwargs
+            **kwargs,
         )
 
     async def record_review_activity(
@@ -176,15 +176,17 @@ class AgentActivityRecorder:
         input_data: Dict[str, Any],
         output_data: Dict[str, Any],
         suggestions: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> AgentActivity:
         """记录审查活动的 Agent 活动"""
         metadata = kwargs.pop("metadata", {})
-        metadata.update({
-            "review_score": score,
-            "iteration": iteration,
-            "suggestions": suggestions or [],
-        })
+        metadata.update(
+            {
+                "review_score": score,
+                "iteration": iteration,
+                "suggestions": suggestions or [],
+            }
+        )
 
         return await self.record_activity(
             novel_id=novel_id,
@@ -196,7 +198,7 @@ class AgentActivityRecorder:
             input_data=input_data,
             output_data=output_data,
             metadata=metadata,
-            **kwargs
+            **kwargs,
         )
 
     async def record_voting_activity(
@@ -209,16 +211,18 @@ class AgentActivityRecorder:
         chosen_option: str,
         reasoning: str,
         confidence: float,
-        **kwargs
+        **kwargs,
     ) -> AgentActivity:
         """记录投票活动的 Agent 活动"""
         metadata = kwargs.pop("metadata", {})
-        metadata.update({
-            "voting_topic": topic,
-            "chosen_option": chosen_option,
-            "voting_reasoning": reasoning,
-            "confidence": confidence,
-        })
+        metadata.update(
+            {
+                "voting_topic": topic,
+                "chosen_option": chosen_option,
+                "voting_reasoning": reasoning,
+                "confidence": confidence,
+            }
+        )
 
         return await self.record_activity(
             novel_id=novel_id,
@@ -229,13 +233,11 @@ class AgentActivityRecorder:
             input_data={"topic": topic},
             output_data={"chosen_option": chosen_option},
             metadata=metadata,
-            **kwargs
+            **kwargs,
         )
 
     async def get_activities_by_task(
-        self,
-        task_id: UUID,
-        limit: int = 100
+        self, task_id: UUID, limit: int = 100
     ) -> List[AgentActivity]:
         """获取指定任务的所有 Agent 活动"""
         result = await self.db.execute(
@@ -247,9 +249,7 @@ class AgentActivityRecorder:
         return list(result.scalars().all())
 
     async def get_activities_by_novel(
-        self,
-        novel_id: UUID,
-        limit: int = 200
+        self, novel_id: UUID, limit: int = 200
     ) -> List[AgentActivity]:
         """获取指定小说的所有 Agent 活动"""
         result = await self.db.execute(
@@ -261,10 +261,7 @@ class AgentActivityRecorder:
         return list(result.scalars().all())
 
     async def get_activities_by_agent(
-        self,
-        agent_name: str,
-        novel_id: Optional[UUID] = None,
-        limit: int = 100
+        self, agent_name: str, novel_id: Optional[UUID] = None, limit: int = 100
     ) -> List[AgentActivity]:
         """获取指定 Agent 的活动记录"""
         query = select(AgentActivity).where(AgentActivity.agent_name == agent_name)
@@ -276,10 +273,7 @@ class AgentActivityRecorder:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def get_activity_summary(
-        self,
-        task_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_activity_summary(self, task_id: UUID) -> Dict[str, Any]:
         """获取任务的活动摘要"""
         activities = await self.get_activities_by_task(task_id)
 

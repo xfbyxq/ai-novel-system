@@ -1,4 +1,5 @@
 """集成服务 - 负责协调所有模块的工作，实现端到端的自动化流程"""
+
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -65,8 +66,8 @@ class IntegrationService:
                 "summary": {
                     "total_books_analyzed": 100,
                     "top_genres": ["都市", "玄幻", "仙侠"],
-                    "top_tags": ["热门", "都市", "情感"]
-                }
+                    "top_tags": ["热门", "都市", "情感"],
+                },
             }
 
             # 3. 执行发布（如果配置了）
@@ -91,7 +92,9 @@ class IntegrationService:
                 "market_analysis_report": market_report,
                 "publish_result": publish_result,
                 "summary": {
-                    "chapters_generated": novel_creation_result.get("chapters_generated", 0),
+                    "chapters_generated": novel_creation_result.get(
+                        "chapters_generated", 0
+                    ),
                     "platforms_analyzed": len(market_report.get("platforms", {})),
                     "costs": novel_creation_result.get("costs", {}),
                 },
@@ -199,6 +202,7 @@ class IntegrationService:
 
                     # 等待任务完成
                     import asyncio
+
                     await asyncio.sleep(10)  # 给创建过程足够时间
 
                     # 刷新任务状态
@@ -213,7 +217,9 @@ class IntegrationService:
                         continue
 
                     platform_book_id = create_book_task.platform_book_id
-                    logger.info(f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}")
+                    logger.info(
+                        f"📖 书籍在 {platform} 平台创建成功: {platform_book_id}"
+                    )
 
                 # 发布章节
                 from core.models.chapter import Chapter
@@ -281,14 +287,19 @@ class IntegrationService:
 
             # 平台发布间隔
             import asyncio
+
             await asyncio.sleep(5)
 
         return {
             "platforms": publish_results,
             "summary": {
                 "total_platforms": len(platforms),
-                "success_count": sum(1 for r in publish_results.values() if r.get("status") == "success"),
-                "failed_count": sum(1 for r in publish_results.values() if r.get("status") == "failed"),
+                "success_count": sum(
+                    1 for r in publish_results.values() if r.get("status") == "success"
+                ),
+                "failed_count": sum(
+                    1 for r in publish_results.values() if r.get("status") == "failed"
+                ),
             },
         }
 

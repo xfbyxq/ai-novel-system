@@ -92,7 +92,10 @@ app = FastAPI(
 # Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # 限制为前端开发服务器
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],  # 限制为前端开发服务器
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -122,12 +125,13 @@ async def health_check():
     health = {
         "status": "healthy",
         "service": "novel-generation-system",
-        "dependencies": {}
+        "dependencies": {},
     }
 
     # 检查数据库
     try:
         from core.database import engine
+
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         health["dependencies"]["postgres"] = "healthy"
@@ -138,6 +142,7 @@ async def health_check():
     # 检查Redis
     try:
         import redis
+
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
         health["dependencies"]["redis"] = "healthy"

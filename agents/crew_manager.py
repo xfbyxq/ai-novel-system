@@ -40,7 +40,7 @@ from agents.chapter_summary_generator import ChapterSummaryGenerator
 
 class NovelCrewManager:
     """小说生成 Crew 管理器
-    
+
     负责协调企划阶段和写作阶段的所有 Agent,
     通过直接调用 QwenClient 实现 Agent 间的数据传递和任务编排。
 
@@ -71,7 +71,7 @@ class NovelCrewManager:
         max_plot_review_iterations: int = 2,
     ):
         """初始化 Crew 管理器
-        
+
         Args:
             qwen_client: 通义千问客户端实例
             cost_tracker: 成本跟踪器实例
@@ -121,7 +121,7 @@ class NovelCrewManager:
             client=qwen_client,
             cost_tracker=cost_tracker,
         )
-        
+
         # 角色审查处理器
         self.character_review_handler = CharacterReviewHandler(
             client=qwen_client,
@@ -129,7 +129,7 @@ class NovelCrewManager:
             quality_threshold=character_quality_threshold,
             max_iterations=max_character_review_iterations,
         )
-        
+
         # 世界观审查处理器
         self.world_review_handler = WorldReviewHandler(
             client=qwen_client,
@@ -137,7 +137,7 @@ class NovelCrewManager:
             quality_threshold=world_quality_threshold,
             max_iterations=max_world_review_iterations,
         )
-        
+
         # 大纲审查处理器
         self.plot_review_handler = PlotReviewHandler(
             client=qwen_client,
@@ -158,16 +158,16 @@ class NovelCrewManager:
         self._chapter_summaries: dict[int, dict] = {}
         self._chapter_contents: dict[int, str] = {}
         self._chapter_detailed_outlines: dict[int, dict] = {}
-        
+
         # 反思代理（初始化为None，需要时通过setup_reflection设置）
         self.reflection_agent = None
 
     def _extract_json_from_response(self, response: str) -> dict | list:
         """从 LLM 响应中提取 JSON
-        
+
         LLM 可能会在 JSON 前后添加 markdown 代码块标记或其他文本,
         这个方法使用多种策略找到 JSON 内容并解析。
-        
+
         增强功能：
         - 支持中文引号自动转换为英文引号
         - 支持不规范的键名（无引号）
@@ -175,13 +175,13 @@ class NovelCrewManager:
         - 逐字段提取作为最后保障
         - 优先匹配根级别的 JSON 结构（字典优先于数组）
         - 更好的错误处理和异常捕获
-        
+
         Args:
             response: LLM 的原始响应文本
-            
+
         Returns:
             解析后的 JSON 对象（dict 或 list）
-            
+
         Raises:
             ValueError: 如果无法找到或解析 JSON
         """
@@ -214,15 +214,15 @@ class NovelCrewManager:
         # 策略 3: 优先匹配根级别的 JSON（字典优先于数组）
         # 先尝试匹配字典 { ... }
         try:
-            result = self._find_json_by_brackets(response, '{', '}')
+            result = self._find_json_by_brackets(response, "{", "}")
             if result is not None:
                 return result
         except Exception:
             pass
-        
+
         # 如果没有找到字典，尝试匹配数组 [ ... ]
         try:
-            result = self._find_json_by_brackets(response, '[', ']')
+            result = self._find_json_by_brackets(response, "[", "]")
             if result is not None:
                 return result
         except Exception:
@@ -236,7 +236,7 @@ class NovelCrewManager:
                 return result
         except json.JSONDecodeError:
             pass
-        
+
         # 策略 5: 逐字段提取（针对特定结构）
         try:
             extracted = self._extract_fields_manually(response)
@@ -244,26 +244,28 @@ class NovelCrewManager:
                 return extracted
         except Exception:
             pass
-        
+
         # 如果所有策略都失败，抛出更详细的错误信息
         raise ValueError(
             f"无法从响应中提取有效的 JSON。响应长度: {len(response)}, 开头: {response[:200]}..."
         )
-    
-    def _find_json_by_brackets(self, response: str, start_char: str, end_char: str) -> Optional[dict | list]:
+
+    def _find_json_by_brackets(
+        self, response: str, start_char: str, end_char: str
+    ) -> Optional[dict | list]:
         """使用括号匹配法找到完整的 JSON
-        
+
         Args:
             response: 原始响应文本
             start_char: 开始字符 '{' 或 '['
             end_char: 结束字符 '}' 或 ']'
-            
+
         Returns:
             解析后的 JSON 对象，或 None 如果找不到
         """
         if not response or not isinstance(response, str):
             return None
-        
+
         # 找到第一个指定类型开始字符的位置
         start_idx = -1
         try:
@@ -273,10 +275,10 @@ class NovelCrewManager:
                     break
         except Exception:
             return None
-        
+
         if start_idx == -1:
             return None
-        
+
         # 使用括号计数匹配完整的 JSON
         depth = 0
         in_string = False
@@ -287,7 +289,7 @@ class NovelCrewManager:
                 if escape_next:
                     escape_next = False
                     continue
-                if ch == '\\' and in_string:
+                if ch == "\\" and in_string:
                     escape_next = True
                     continue
                 if ch == '"' and not escape_next:
@@ -300,7 +302,7 @@ class NovelCrewManager:
                 elif ch == end_char:
                     depth -= 1
                     if depth == 0:
-                        candidate = response[start_idx:i + 1]
+                        candidate = response[start_idx : i + 1]
                         try:
                             result = json.loads(candidate)
                             if isinstance(result, (dict, list)):
@@ -311,33 +313,35 @@ class NovelCrewManager:
             # 如果在解析过程中发生任何异常，返回 None
             return None
         return None
-    
+
     def _extract_fields_manually(self, response: str) -> Optional[Dict[str, Any]]:
         """
         手动提取常见字段作为最后保障
-        
+
         适用于连续性审查员等特定 Agent 的输出
         """
         if not response or not isinstance(response, str):
             return None
-        
+
         result = {}
-        
+
         # 提取 has_issues
-        has_issues_match = re.search(r'"has_issues"\s*:\s*(true|false)', response, re.IGNORECASE)
+        has_issues_match = re.search(
+            r'"has_issues"\s*:\s*(true|false)', response, re.IGNORECASE
+        )
         if has_issues_match:
             result["has_issues"] = has_issues_match.group(1).lower() == "true"
-        
+
         # 提取 quality_score
         score_match = re.search(r'"quality_score"\s*:\s*([\d.]+)', response)
         if score_match:
             result["quality_score"] = float(score_match.group(1))
-        
+
         # 提取 overall_assessment
         assessment_match = re.search(r'"overall_assessment"\s*:\s*"([^"]+)"', response)
         if assessment_match:
             result["overall_assessment"] = assessment_match.group(1)
-        
+
         # 如果有至少一个字段，返回部分结果
         if result:
             # 尝试提取 issues 数组
@@ -347,9 +351,9 @@ class NovelCrewManager:
                     result["issues"] = []  # 简化处理，返回空数组
             except Exception:
                 pass
-            
+
             return result
-        
+
         return None
 
     async def _call_agent(
@@ -379,7 +383,7 @@ class NovelCrewManager:
             ValueError: JSON 解析失败（当 expect_json=True 时，且重试后仍失败）
         """
         logger.info(f"🤖 [{agent_name}] 开始执行...")
-        
+
         try:
             # 调用 LLM
             response = await self.client.chat(
@@ -388,7 +392,7 @@ class NovelCrewManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            
+
             # 记录成本
             usage = response["usage"]
             self.cost_tracker.record(
@@ -396,9 +400,9 @@ class NovelCrewManager:
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             content = response["content"]
-            
+
             # 如果需要 JSON，解析之
             if expect_json:
                 try:
@@ -415,9 +419,11 @@ class NovelCrewManager:
                         max_retries=2,
                     )
             else:
-                logger.info(f"✅ [{agent_name}] 执行成功，返回文本内容（{len(content)} 字符）")
+                logger.info(
+                    f"✅ [{agent_name}] 执行成功，返回文本内容（{len(content)} 字符）"
+                )
                 return content
-                
+
         except Exception as e:
             logger.error(f"❌ [{agent_name}] 执行失败: {e}")
             raise
@@ -524,7 +530,7 @@ class NovelCrewManager:
             self.pm.TOPIC_ANALYST_TASK,
             context=topic_context + length_instructions,
         )
-        
+
         topic_analysis = await self._call_agent(
             agent_name="主题分析师",
             system_prompt=self.pm.TOPIC_ANALYST_SYSTEM,
@@ -540,11 +546,14 @@ class NovelCrewManager:
         elif length_type == "short":
             world_length_instructions = "\n\n重要要求：为短文设计简洁但完整的世界观，聚焦核心设定，避免过于复杂的背景，确保故事能在有限篇幅内展开。"
 
-        world_task = self.pm.format(
-            self.pm.WORLD_BUILDER_TASK,
-            topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
-        ) + world_length_instructions
-        
+        world_task = (
+            self.pm.format(
+                self.pm.WORLD_BUILDER_TASK,
+                topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
+            )
+            + world_length_instructions
+        )
+
         world_setting = await self._call_agent(
             agent_name="世界观架构师",
             system_prompt=self.pm.WORLD_BUILDER_SYSTEM,
@@ -562,16 +571,18 @@ class NovelCrewManager:
             world_dict = world_setting if isinstance(world_setting, dict) else {}
             if isinstance(world_setting, list) and world_setting:
                 world_dict = world_setting[0]
-            
+
             review_result = await self.world_review_handler.execute(
                 initial_world_setting=world_dict,
-                topic_analysis=topic_analysis if isinstance(topic_analysis, dict) else {},
+                topic_analysis=(
+                    topic_analysis if isinstance(topic_analysis, dict) else {}
+                ),
             )
-            
+
             # 使用审查后的世界观
             world_setting = review_result.final_world_setting
             world_review_result = review_result.to_dict()
-            
+
             logger.info(
                 f"🔍 世界观审查完成: iterations={review_result.total_iterations}, "
                 f"score={review_result.final_score:.1f}, "
@@ -585,12 +596,15 @@ class NovelCrewManager:
         elif length_type == "short":
             character_length_instructions = "\n\n重要要求：为短文聚焦核心角色，主要围绕少数几个关键人物展开，确保角色关系清晰，性格鲜明。"
 
-        character_task = self.pm.format(
-            self.pm.CHARACTER_DESIGNER_TASK,
-            topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
-        ) + character_length_instructions
-        
+        character_task = (
+            self.pm.format(
+                self.pm.CHARACTER_DESIGNER_TASK,
+                topic_analysis=json.dumps(topic_analysis, ensure_ascii=False, indent=2),
+                world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
+            )
+            + character_length_instructions
+        )
+
         characters = await self._call_agent(
             agent_name="角色设计师",
             system_prompt=self.pm.CHARACTER_DESIGNER_SYSTEM,
@@ -605,18 +619,22 @@ class NovelCrewManager:
         if self.enable_character_review:
             logger.info("🔍 启动角色设计审查循环...")
             # 确保 characters 是列表格式
-            characters_list = characters if isinstance(characters, list) else [characters]
-            
+            characters_list = (
+                characters if isinstance(characters, list) else [characters]
+            )
+
             review_result = await self.character_review_handler.execute(
                 initial_characters=characters_list,
                 world_setting=world_setting if isinstance(world_setting, dict) else {},
-                topic_analysis=topic_analysis if isinstance(topic_analysis, dict) else {},
+                topic_analysis=(
+                    topic_analysis if isinstance(topic_analysis, dict) else {}
+                ),
             )
-            
+
             # 使用审查后的角色
             characters = review_result.final_characters
             character_review_result = review_result.to_dict()
-            
+
             logger.info(
                 f"🔍 角色审查完成: iterations={review_result.total_iterations}, "
                 f"score={review_result.final_score:.1f}, "
@@ -629,15 +647,15 @@ class NovelCrewManager:
             plot_length_instructions = "\n\n重要要求：为长篇小说设计宏大的多卷情节架构，包括主线剧情、多条副线、多个高潮点和足够的伏笔，确保故事有长期发展的潜力。"
         elif length_type == "short":
             plot_length_instructions = "\n\n重要要求：为短文设计紧凑的单卷情节结构，有明确的开始、发展、高潮和结局，确保故事在有限篇幅内完整呈现。"
-        
+
         # 构建章节配置
         chapter_config = {
             "total_chapters": 6,  # 默认 6 章
             "min_chapters": 3,
             "max_chapters": 12,
-            "flexible": True
+            "flexible": True,
         }
-        
+
         # 启用投票时使用带决策点标注的模板
         plot_template = (
             self.pm.PLOT_ARCHITECT_WITH_DECISIONS_TASK
@@ -645,16 +663,19 @@ class NovelCrewManager:
             else self.pm.PLOT_ARCHITECT_TASK
         )
 
-        plot_task = self.pm.format(
-            plot_template,
-            world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
-            characters=json.dumps(characters, ensure_ascii=False, indent=2),
-            chapter_config=json.dumps(chapter_config, ensure_ascii=False, indent=2),
-            total_chapters=chapter_config["total_chapters"],
-            min_chapters=chapter_config["min_chapters"],
-            max_chapters=chapter_config["max_chapters"],
-        ) + plot_length_instructions
-        
+        plot_task = (
+            self.pm.format(
+                plot_template,
+                world_setting=json.dumps(world_setting, ensure_ascii=False, indent=2),
+                characters=json.dumps(characters, ensure_ascii=False, indent=2),
+                chapter_config=json.dumps(chapter_config, ensure_ascii=False, indent=2),
+                total_chapters=chapter_config["total_chapters"],
+                min_chapters=chapter_config["min_chapters"],
+                max_chapters=chapter_config["max_chapters"],
+            )
+            + plot_length_instructions
+        )
+
         plot_outline = await self._call_agent(
             agent_name="情节架构师",
             system_prompt=self.pm.PLOT_ARCHITECT_SYSTEM,
@@ -679,14 +700,23 @@ class NovelCrewManager:
                         topic=dp.get("topic", ""),
                         options=dp.get("options", []),
                         context=f"世界观: {json.dumps(world_setting, ensure_ascii=False)[:1000]}\n"
-                                f"角色: {json.dumps(characters, ensure_ascii=False)[:1000]}",
+                        f"角色: {json.dumps(characters, ensure_ascii=False)[:1000]}",
                         voters=[
-                            {"name": "世界观架构师", "role": "世界观专家",
-                             "perspective": "从世界观一致性和扩展性角度评估"},
-                            {"name": "角色设计师", "role": "角色专家",
-                             "perspective": "从角色发展和关系深度角度评估"},
-                            {"name": "情节架构师", "role": "情节专家",
-                             "perspective": "从情节张力和读者吸引力角度评估"},
+                            {
+                                "name": "世界观架构师",
+                                "role": "世界观专家",
+                                "perspective": "从世界观一致性和扩展性角度评估",
+                            },
+                            {
+                                "name": "角色设计师",
+                                "role": "角色专家",
+                                "perspective": "从角色发展和关系深度角度评估",
+                            },
+                            {
+                                "name": "情节架构师",
+                                "role": "情节专家",
+                                "perspective": "从情节张力和读者吸引力角度评估",
+                            },
                         ],
                     )
                     resolved_decisions.append(vote_result.to_dict())
@@ -707,20 +737,22 @@ class NovelCrewManager:
             plot_dict = plot_outline if isinstance(plot_outline, dict) else {}
             if isinstance(plot_outline, list):
                 plot_dict = {"volumes": plot_outline, "structure_type": "multi_volume"}
-            
+
             # 确保 characters 是列表格式
-            characters_list = characters if isinstance(characters, list) else [characters]
-            
+            characters_list = (
+                characters if isinstance(characters, list) else [characters]
+            )
+
             review_result = await self.plot_review_handler.execute(
                 initial_plot_outline=plot_dict,
                 world_setting=world_setting if isinstance(world_setting, dict) else {},
                 characters=characters_list,
             )
-            
+
             # 使用审查后的大纲
             plot_outline = review_result.final_plot_outline
             plot_review_result = review_result.to_dict()
-            
+
             logger.info(
                 f"🔍 大纲审查完成: iterations={review_result.total_iterations}, "
                 f"score={review_result.final_score:.1f}, "
@@ -737,7 +769,7 @@ class NovelCrewManager:
             "characters": characters,
             "plot_outline": plot_outline,
         }
-        
+
         # 添加审查结果（如果启用）
         if world_review_result:
             result["world_review"] = world_review_result
@@ -745,7 +777,7 @@ class NovelCrewManager:
             result["character_review"] = character_review_result
         if plot_review_result:
             result["plot_review"] = plot_review_result
-        
+
         return result
 
     # ============================================================
@@ -799,7 +831,7 @@ class NovelCrewManager:
         world_setting = novel_data.get("world_setting", {})
         characters = novel_data.get("characters", [])
         plot_outline = novel_data.get("plot_outline", {})
-        
+
         # 获取小说标题和类型
         novel_title = novel_data.get("title", "未命名小说")
         genre = novel_data.get("genre") or world_setting.get("world_type", "玄幻")
@@ -823,7 +855,7 @@ class NovelCrewManager:
             if vol.get("volume_num") == volume_number:
                 current_volume = vol
                 break
-        
+
         # 构建情节上下文（优先使用 TeamContext 的增强上下文）
         if team_context:
             plot_context = team_context.build_enhanced_context(chapter_number)
@@ -851,7 +883,7 @@ class NovelCrewManager:
             previous_summary=previous_chapters_summary or "（本章为第一章）",
             character_states=character_states or "（初始状态）",
         )
-        
+
         chapter_plan = await self._call_agent(
             agent_name="章节策划师",
             system_prompt=self.pm.CHAPTER_PLANNER_SYSTEM,
@@ -859,10 +891,12 @@ class NovelCrewManager:
             temperature=0.7,
             expect_json=True,
         )
-        
+
         # 记录到 TeamContext
         if team_context:
-            team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
+            team_context.add_agent_output(
+                "章节策划师", chapter_plan, f"第{chapter_number}章策划"
+            )
 
         # ── 1.5 章节大纲细化（可选步骤） ─────────────────────
         detailed_outline = {}
@@ -882,9 +916,13 @@ class NovelCrewManager:
             prev_summary = self._chapter_summaries.get(chapter_number - 1, {})
 
             if prev_detailed:
-                prev_outline_text = json.dumps(prev_detailed, ensure_ascii=False, indent=2)
+                prev_outline_text = json.dumps(
+                    prev_detailed, ensure_ascii=False, indent=2
+                )
             else:
-                prev_outline_text = "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
+                prev_outline_text = (
+                    "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
+                )
 
             # 构建上一章实际内容摘要
             if prev_summary:
@@ -928,10 +966,14 @@ class NovelCrewManager:
 
             # 缓存细化大纲
             self._chapter_detailed_outlines[chapter_number] = detailed_outline
-            detailed_outline_text = json.dumps(detailed_outline, ensure_ascii=False, indent=2)
+            detailed_outline_text = json.dumps(
+                detailed_outline, ensure_ascii=False, indent=2
+            )
 
-            logger.info(f"📋 大纲细化：第 {chapter_number} 章细化完成，"
-                        f"包含 {len(detailed_outline.get('detailed_scenes', []))} 个场景")
+            logger.info(
+                f"📋 大纲细化：第 {chapter_number} 章细化完成，"
+                f"包含 {len(detailed_outline.get('detailed_scenes', []))} 个场景"
+            )
 
             # 记录到 TeamContext
             if team_context:
@@ -968,7 +1010,9 @@ class NovelCrewManager:
         )
         # 前章结尾优先使用压缩器提取的 500 字
         previous_ending = compressed.previous_ending or (
-            previous_chapters_summary[-500:] if previous_chapters_summary else "（本章为开篇）"
+            previous_chapters_summary[-500:]
+            if previous_chapters_summary
+            else "（本章为开篇）"
         )
 
         # 选择带查询能力的 Writer prompt 还是普通的
@@ -1031,7 +1075,9 @@ class NovelCrewManager:
 
         # 记录到 TeamContext
         if team_context:
-            team_context.add_agent_output("作家", {"draft_length": len(draft)}, f"第{chapter_number}章初稿")
+            team_context.add_agent_output(
+                "作家", {"draft_length": len(draft)}, f"第{chapter_number}章初稿"
+            )
 
         # ── 3. Writer-Editor 审查反馈循环 ─────────────────────
         chapter_plan_json = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
@@ -1050,10 +1096,13 @@ class NovelCrewManager:
         # 记录到 TeamContext
         if team_context:
             team_context.add_agent_output(
-                "编辑", {"edited_length": len(edited_content),
-                        "review_iterations": review_result.total_iterations,
-                        "final_score": review_result.final_score},
-                f"第{chapter_number}章审查循环"
+                "编辑",
+                {
+                    "edited_length": len(edited_content),
+                    "review_iterations": review_result.total_iterations,
+                    "final_score": review_result.final_score,
+                },
+                f"第{chapter_number}章审查循环",
             )
 
         # ── 4. 连续性检查 + 修复循环 ─────────────────────────
@@ -1068,14 +1117,14 @@ class NovelCrewManager:
                 character_info=character_info or "（主要角色）",
                 previous_key_info=previous_chapters_summary or "（本章为第一章）",
             )
-            
+
             # 注入反思经验到连续性检查系统提示词
             continuity_system = self.pm.CONTINUITY_CHECKER_SYSTEM
             if self.reflection_agent:
                 continuity_lessons = self.reflection_agent.get_lessons_for_continuity()
                 if continuity_lessons:
                     continuity_system += "\n" + continuity_lessons
-            
+
             continuity_report = await self._call_agent(
                 agent_name="连续性审查员",
                 system_prompt=continuity_system,
@@ -1134,22 +1183,25 @@ class NovelCrewManager:
 
         # 记录到 TeamContext
         if team_context:
-            team_context.add_agent_output("连续性审查员", continuity_report, f"第{chapter_number}章检查")
+            team_context.add_agent_output(
+                "连续性审查员", continuity_report, f"第{chapter_number}章检查"
+            )
             # 更新本章出场角色的状态
             for char_name in chapter_characters:
                 team_context.update_character_state(
-                    char_name, 
-                    last_appearance_chapter=chapter_number
+                    char_name, last_appearance_chapter=chapter_number
                 )
             # 添加时间线事件
             if chapter_plan.get("summary"):
                 team_context.add_timeline_event(
                     chapter_number=chapter_number,
                     event=chapter_plan.get("summary", "")[:100],
-                    characters=chapter_characters
+                    characters=chapter_characters,
                 )
 
-        quality_score = continuity_report.get("quality_score", 0) if continuity_report else 0
+        quality_score = (
+            continuity_report.get("quality_score", 0) if continuity_report else 0
+        )
 
         # ── 5. 相似度检测 ─────────────────────────────────────
         similarity_report = None
@@ -1215,11 +1267,17 @@ class NovelCrewManager:
 
         logger.info("=" * 60)
         logger.info(f"🎉 第 {chapter_number} 章写作完成！")
-        logger.info(f"   审查循环：{review_result.total_iterations} 轮, "
-                     f"score={review_result.final_score:.1f}, "
-                     f"converged={review_result.converged}")
+        logger.info(
+            f"   审查循环：{review_result.total_iterations} 轮, "
+            f"score={review_result.final_score:.1f}, "
+            f"converged={review_result.converged}"
+        )
         logger.info(f"   连续性评分：{quality_score}")
-        logger.info(f"   发现问题：{len(continuity_report.get('issues', []))} 个" if continuity_report else "")
+        logger.info(
+            f"   发现问题：{len(continuity_report.get('issues', []))} 个"
+            if continuity_report
+            else ""
+        )
         logger.info("=" * 60)
 
         return {
@@ -1231,7 +1289,9 @@ class NovelCrewManager:
             "continuity_report": continuity_report,
             "quality_score": quality_score,
             "review_loop_result": review_result.to_dict(),
-            "similarity_report": similarity_report.to_dict() if similarity_report else None,
+            "similarity_report": (
+                similarity_report.to_dict() if similarity_report else None
+            ),
             "chapter_summary": chapter_summary,
         }
 
@@ -1265,7 +1325,9 @@ class NovelCrewManager:
             # 主线剧情
             main_plot = plot_outline.get("main_plot", {})
             if main_plot:
-                parts.append(f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}")
+                parts.append(
+                    f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}"
+                )
                 parts.append(f"  主题：{main_plot.get('theme', '未知')}")
 
             # 黄金三章（前3章适用）
@@ -1284,13 +1346,17 @@ class NovelCrewManager:
                     if isinstance(tp, str):
                         parts.append(f"  - {tp}")
                     elif isinstance(tp, dict):
-                        parts.append(f"  - {tp.get('event', tp.get('description', str(tp)))}")
+                        parts.append(
+                            f"  - {tp.get('event', tp.get('description', str(tp)))}"
+                        )
 
             # 当前卷信息
             volumes = plot_outline.get("volumes", [])
             for vol in volumes:
                 if vol.get("volume_num") == volume_number:
-                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
+                    parts.append(
+                        f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}"
+                    )
                     parts.append(f"  概要：{vol.get('summary', '')}")
 
                     # 张力循环
@@ -1299,9 +1365,13 @@ class NovelCrewManager:
                         parts.append("  张力循环：")
                         for tc in tension_cycles:
                             if isinstance(tc, dict):
-                                suppress = tc.get('suppress_event', tc.get('suppress', ''))
-                                release = tc.get('release_event', tc.get('release', ''))
-                                parts.append(f"    - 压制: {suppress} → 释放: {release}")
+                                suppress = tc.get(
+                                    "suppress_event", tc.get("suppress", "")
+                                )
+                                release = tc.get("release_event", tc.get("release", ""))
+                                parts.append(
+                                    f"    - 压制: {suppress} → 释放: {release}"
+                                )
                             elif isinstance(tc, str):
                                 parts.append(f"    - {tc}")
 
@@ -1319,16 +1389,16 @@ class NovelCrewManager:
                                 if isinstance(ms, str):
                                     parts.append(f"    - {ms}")
                                 elif isinstance(ms, dict):
-                                    parts.append(
-                                        f"    - {ms.get('event', str(ms))}"
-                                    )
+                                    parts.append(f"    - {ms.get('event', str(ms))}")
                     break
 
         elif isinstance(plot_outline, list):
             # 直接是卷列表格式
             for vol in plot_outline:
                 if vol.get("volume_num") == volume_number:
-                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
+                    parts.append(
+                        f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}"
+                    )
                     parts.append(f"  概要：{vol.get('summary', '')}")
                     break
 
@@ -1402,7 +1472,10 @@ class NovelCrewManager:
                 answers.append(f"关于「{q['question'][:30]}」的回答: {answer}")
 
             # 用查询答案重新调用 Writer
-            query_answers_text = "以下是你之前提出的设定疑问的回答，请据此完善内容：\n" + "\n".join(answers)
+            query_answers_text = (
+                "以下是你之前提出的设定疑问的回答，请据此完善内容：\n"
+                + "\n".join(answers)
+            )
             clean_draft = AgentQueryService.remove_query_tags(draft)
 
             rewrite_task = self.pm.format(
@@ -1412,7 +1485,11 @@ class NovelCrewManager:
                 detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
-                previous_ending=previous_chapters_summary[-200:] if previous_chapters_summary else "（本章为开篇）",
+                previous_ending=(
+                    previous_chapters_summary[-200:]
+                    if previous_chapters_summary
+                    else "（本章为开篇）"
+                ),
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers=query_answers_text,
                 previous_key_events=previous_key_events,
@@ -1436,89 +1513,88 @@ class NovelCrewManager:
         world_setting: dict,
         characters: list,
         options: dict,
-        max_rounds: int = 3
+        max_rounds: int = 3,
     ) -> dict:
         """综合大纲完善功能
-        
+
         对现有大纲进行全面的质量评估和优化，包括：
         - 结构完整性检查
         - 角色发展弧线优化
         - 情节节奏调整
         - 世界观融合度提升
         - 伏笔和呼应完善
-        
+
         Args:
             outline: 当前大纲
             world_setting: 世界观设定
             characters: 角色列表
             options: 完善选项
             max_rounds: 最大迭代轮次
-            
+
         Returns:
             包含完善结果的字典
         """
         logger.info("🎯 开始综合大纲完善...")
-        
+
         # 初始化结果
         current_outline = outline.copy()
         improvements_made = []
         round_history = []
-        
+
         for round_num in range(1, max_rounds + 1):
             logger.info(f"🔄 完善轮次 {round_num}/{max_rounds}")
-            
+
             # 1. 分析当前大纲问题
             analysis_result = await self._analyze_outline_issues(
                 current_outline, world_setting, characters
             )
-            
+
             # 2. 生成优化建议
             suggestions = await self._generate_optimization_suggestions(
                 analysis_result, current_outline, world_setting, characters
             )
-            
+
             # 3. 应用优化
             optimized_outline = await self._apply_outline_optimizations(
                 current_outline, suggestions, world_setting, characters
             )
-            
+
             # 记录本轮改进
             round_improvements = self._extract_improvements(
                 current_outline, optimized_outline, suggestions
             )
             improvements_made.extend(round_improvements)
-            
-            round_history.append({
-                "round": round_num,
-                "analysis": analysis_result,
-                "suggestions": suggestions,
-                "improvements": round_improvements
-            })
-            
+
+            round_history.append(
+                {
+                    "round": round_num,
+                    "analysis": analysis_result,
+                    "suggestions": suggestions,
+                    "improvements": round_improvements,
+                }
+            )
+
             # 更新当前大纲
             current_outline = optimized_outline
-            
+
             # 检查是否达到质量阈值或收敛
             if self._should_stop_refinement(analysis_result, options):
                 logger.info(f"✅ 完善在第 {round_num} 轮达到质量要求")
                 break
-                
+
         logger.info(f"🎯 大纲完善完成，共进行 {len(round_history)} 轮优化")
-        
+
         return {
             "enhancement_result": {
                 "enhanced_outline": current_outline,
                 "improvements_made": improvements_made,
                 "round_history": round_history,
-                "total_rounds": len(round_history)
+                "total_rounds": len(round_history),
             }
         }
-    
+
     async def _analyze_outline_issues(
-        self, 
-        outline: dict, 
-        world_setting: dict, 
-        characters: list
+        self, outline: dict, world_setting: dict, characters: list
     ) -> dict:
         """分析大纲存在的问题"""
         analysis_prompt = f"""
@@ -1550,23 +1626,23 @@ class NovelCrewManager:
     "overall_assessment": "总体评价"
 }}
 """
-        
+
         analysis = await self._call_agent(
             agent_name="大纲分析师",
             system_prompt="你是一位专业的小说大纲分析师，擅长发现大纲结构和内容上的问题。",
             task_prompt=analysis_prompt,
             temperature=0.3,
-            expect_json=True
+            expect_json=True,
         )
-        
+
         return analysis
-    
+
     async def _generate_optimization_suggestions(
         self,
         analysis_result: dict,
         outline: dict,
         world_setting: dict,
-        characters: list
+        characters: list,
     ) -> list:
         """基于分析结果生成优化建议"""
         suggestions_prompt = f"""
@@ -1588,28 +1664,24 @@ class NovelCrewManager:
     }}
 ]
 """
-        
+
         suggestions = await self._call_agent(
             agent_name="大纲优化师",
             system_prompt="你是一位专业的小说大纲优化师，能够提供具体可行的改进建议。",
             task_prompt=suggestions_prompt,
             temperature=0.6,
-            expect_json=True
+            expect_json=True,
         )
-        
+
         return suggestions if isinstance(suggestions, list) else []
-    
+
     async def _apply_outline_optimizations(
-        self,
-        outline: dict,
-        suggestions: list,
-        world_setting: dict,
-        characters: list
+        self, outline: dict, suggestions: list, world_setting: dict, characters: list
     ) -> dict:
         """应用优化建议到大纲"""
         if not suggestions:
             return outline
-            
+
         optimization_prompt = f"""
 请根据以下优化建议修改小说大纲：
 
@@ -1624,26 +1696,23 @@ class NovelCrewManager:
 
 请输出优化后的大纲，保持原有结构格式，只做必要的改进。
 """
-        
+
         optimized_outline = await self._call_agent(
             agent_name="大纲重构师",
             system_prompt="你是一位专业的小说大纲重构师，能够精准地改进大纲内容。",
             task_prompt=optimization_prompt,
             temperature=0.4,
-            expect_json=True
+            expect_json=True,
         )
-        
+
         return optimized_outline
-    
+
     def _extract_improvements(
-        self, 
-        original: dict, 
-        optimized: dict, 
-        suggestions: list
+        self, original: dict, optimized: dict, suggestions: list
     ) -> list:
         """提取本次优化的具体改进点"""
         improvements = []
-        
+
         # 基于建议生成改进描述
         for suggestion in suggestions:
             if isinstance(suggestion, dict):
@@ -1652,58 +1721,58 @@ class NovelCrewManager:
                     f"{suggestion.get('specific_issue', '某个问题')} → "
                     f"{suggestion.get('solution', '已解决')}"
                 )
-        
+
         # 如果没有具体建议，生成通用描述
         if not improvements:
             improvements.append("对大纲结构进行了综合性优化")
-            
+
         return improvements
-    
+
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
         """判断是否应该停止完善迭代"""
         quality_threshold = options.get("quality_threshold", 8.0)
-        
+
         # 简单的质量评估逻辑
         # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断
         overall_assessment = analysis_result.get("overall_assessment", "").lower()
-        
+
         # 如果评估中包含"良好"、"优秀"等正面词汇，或者问题很少
         positive_indicators = ["良好", "优秀", "完善", "完整"]
         structural_issues = len(analysis_result.get("structural_issues", []))
         character_issues = len(analysis_result.get("character_development_issues", []))
-        
-        has_positive_words = any(word in overall_assessment for word in positive_indicators)
+
+        has_positive_words = any(
+            word in overall_assessment for word in positive_indicators
+        )
         few_issues = (structural_issues + character_issues) <= 2
-        
+
         return has_positive_words or few_issues
-    
+
     def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
         """设置反思代理
-        
+
         Args:
             storage: 存储实例（如 NovelMemoryStorage）
             novel_id: 小说ID
             config: ReflectionConfig 配置，如果为 None 则使用默认配置
         """
         from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+
         self.reflection_agent = ReflectionAgent(
             client=self.client,
             cost_tracker=self.cost_tracker,
             novel_id=novel_id,
             storage=storage,
-            config=config or ReflectionConfig()
+            config=config or ReflectionConfig(),
         )
         return self.reflection_agent
-    
+
     def _extract_improvements(
-        self, 
-        original: dict, 
-        optimized: dict, 
-        suggestions: list
+        self, original: dict, optimized: dict, suggestions: list
     ) -> list:
         """提取本次优化的具体改进点"""
         improvements = []
-        
+
         # 基于建议生成改进描述
         for suggestion in suggestions:
             if isinstance(suggestion, dict):
@@ -1712,45 +1781,48 @@ class NovelCrewManager:
                     f"{suggestion.get('specific_issue', '某个问题')} → "
                     f"{suggestion.get('solution', '已解决')}"
                 )
-        
+
         # 如果没有具体建议，生成通用描述
         if not improvements:
             improvements.append("对大纲结构进行了综合性优化")
-            
+
         return improvements
-    
+
     def _should_stop_refinement(self, analysis_result: dict, options: dict) -> bool:
         """判断是否应该停止完善迭代"""
         quality_threshold = options.get("quality_threshold", 8.0)
-        
+
         # 简单的质量评估逻辑
         # 实际项目中可以根据analysis_result的具体内容进行更复杂的判断
         overall_assessment = analysis_result.get("overall_assessment", "").lower()
-        
+
         # 如果评估中包含"良好"、"优秀"等正面词汇，或者问题很少
         positive_indicators = ["良好", "优秀", "完善", "完整"]
         structural_issues = len(analysis_result.get("structural_issues", []))
         character_issues = len(analysis_result.get("character_development_issues", []))
-        
-        has_positive_words = any(word in overall_assessment for word in positive_indicators)
+
+        has_positive_words = any(
+            word in overall_assessment for word in positive_indicators
+        )
         few_issues = (structural_issues + character_issues) <= 2
-        
+
         return has_positive_words or few_issues
-    
+
     def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
         """设置反思代理
-        
+
         Args:
             storage: 存储实例（如 NovelMemoryStorage）
             novel_id: 小说ID
             config: ReflectionConfig 配置，如果为 None 则使用默认配置
         """
         from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+
         self.reflection_agent = ReflectionAgent(
             client=self.client,
             cost_tracker=self.cost_tracker,
             novel_id=novel_id,
             storage=storage,
-            config=config or ReflectionConfig()
+            config=config or ReflectionConfig(),
         )
         return self.reflection_agent

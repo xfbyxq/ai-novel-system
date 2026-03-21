@@ -22,7 +22,9 @@ class NovelQueryService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def search_novels(self, keyword: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_novels(
+        self, keyword: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """搜索小说"""
         # 简单实现：搜索标题包含关键词的小说
         stmt = select(Novel).where(Novel.title.ilike(f"%{keyword}%")).limit(limit)
@@ -36,7 +38,7 @@ class NovelQueryService:
                 "genre": n.genre,
                 "status": n.status,
                 "word_count": n.word_count,
-                "chapter_count": n.chapter_count
+                "chapter_count": n.chapter_count,
             }
             for n in novels
         ]
@@ -44,6 +46,7 @@ class NovelQueryService:
     async def get_novel_by_id(self, novel_id: str) -> Optional[Dict[str, Any]]:
         """根据 ID 获取小说"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -66,12 +69,13 @@ class NovelQueryService:
             "word_count": novel.word_count,
             "chapter_count": novel.chapter_count,
             "synopsis": novel.synopsis,
-            "target_platform": novel.target_platform
+            "target_platform": novel.target_platform,
         }
 
     async def get_world_setting(self, novel_id: str) -> Dict[str, Any]:
         """获取世界观设定"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -92,12 +96,15 @@ class NovelQueryService:
             "factions": ws.factions or {},
             "rules": ws.rules or {},
             "timeline": ws.timeline or {},
-            "special_elements": ws.special_elements or {}
+            "special_elements": ws.special_elements or {},
         }
 
-    async def get_characters(self, novel_id: str, role_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_characters(
+        self, novel_id: str, role_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """获取角色列表"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -115,14 +122,22 @@ class NovelQueryService:
             {
                 "id": str(c.id),
                 "name": c.name,
-                "role_type": c.role_type.value if hasattr(c.role_type, 'value') else str(c.role_type or "unknown"),
-                "gender": c.gender.value if hasattr(c.gender, 'value') else str(c.gender or "unknown"),
+                "role_type": (
+                    c.role_type.value
+                    if hasattr(c.role_type, "value")
+                    else str(c.role_type or "unknown")
+                ),
+                "gender": (
+                    c.gender.value
+                    if hasattr(c.gender, "value")
+                    else str(c.gender or "unknown")
+                ),
                 "age": c.age,
                 "appearance": c.appearance,
                 "personality": c.personality,
                 "background": c.background,
                 "goals": c.goals,
-                "abilities": c.abilities or {}
+                "abilities": c.abilities or {},
             }
             for c in characters
         ]
@@ -130,6 +145,7 @@ class NovelQueryService:
     async def get_plot_outline(self, novel_id: str) -> Dict[str, Any]:
         """获取剧情大纲"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
@@ -147,18 +163,26 @@ class NovelQueryService:
             "volumes": plot.volumes or [],
             "main_plot_detailed": plot.main_plot_detailed or {},
             "sub_plots": plot.sub_plots or {},
-            "key_turning_points": plot.key_turning_points or []
+            "key_turning_points": plot.key_turning_points or [],
         }
 
-    async def get_chapter_list(self, novel_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_chapter_list(
+        self, novel_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
         """获取章节列表"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
             return []
 
-        stmt = select(Chapter).where(Chapter.novel_id == novel_uuid).order_by(Chapter.chapter_number).limit(limit)
+        stmt = (
+            select(Chapter)
+            .where(Chapter.novel_id == novel_uuid)
+            .order_by(Chapter.chapter_number)
+            .limit(limit)
+        )
         result = await self.db.execute(stmt)
         chapters = result.scalars().all()
 
@@ -168,22 +192,24 @@ class NovelQueryService:
                 "volume_number": c.volume_number,
                 "title": c.title,
                 "word_count": c.word_count,
-                "status": c.status if c.status else "draft"
+                "status": c.status if c.status else "draft",
             }
             for c in chapters
         ]
 
-    async def get_chapter_content(self, novel_id: str, chapter_number: int) -> Dict[str, Any]:
+    async def get_chapter_content(
+        self, novel_id: str, chapter_number: int
+    ) -> Dict[str, Any]:
         """获取章节内容"""
         import uuid
+
         try:
             novel_uuid = uuid.UUID(novel_id)
         except ValueError:
             return {"error": "无效的小说 ID"}
 
         stmt = select(Chapter).where(
-            Chapter.novel_id == novel_uuid,
-            Chapter.chapter_number == chapter_number
+            Chapter.novel_id == novel_uuid, Chapter.chapter_number == chapter_number
         )
         result = await self.db.execute(stmt)
         chapter = result.scalar_one_or_none()
@@ -196,5 +222,5 @@ class NovelQueryService:
             "title": chapter.title,
             "content": chapter.content,
             "word_count": chapter.word_count,
-            "outline": chapter.outline or {}
+            "outline": chapter.outline or {},
         }

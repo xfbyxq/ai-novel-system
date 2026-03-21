@@ -172,7 +172,9 @@ class ReflectionAgent:
     # 短期反思：纯 Python 规则/统计，零 LLM 开销
     # ══════════════════════════════════════════════════════════════════════
 
-    async def reflect_on_loop(self, input_data: ReflectionInput) -> Optional[ReflectionEntry]:
+    async def reflect_on_loop(
+        self, input_data: ReflectionInput
+    ) -> Optional[ReflectionEntry]:
         """短期反思：从单次审查循环中提取统计特征
 
         纯 Python 计算，不调用 LLM。提取以下信息：
@@ -438,9 +440,7 @@ class ReflectionAgent:
             if categories:
                 line += f", 问题类别: {', '.join(categories[:5])}"
             if recurring:
-                recurring_descs = [
-                    r.get("description", "")[:30] for r in recurring[:3]
-                ]
+                recurring_descs = [r.get("description", "")[:30] for r in recurring[:3]]
                 line += f", 反复问题: {'; '.join(recurring_descs)}"
             if unresolved:
                 unresolved_descs = [
@@ -507,17 +507,15 @@ class ReflectionAgent:
             pattern_descs = [
                 p.get("description", "")[:50] for p in existing_patterns[:5]
             ]
-            existing_patterns_text = (
-                f"\n已有模式（避免重复）：\n"
-                + "\n".join(f"- {d}" for d in pattern_descs)
+            existing_patterns_text = f"\n已有模式（避免重复）：\n" + "\n".join(
+                f"- {d}" for d in pattern_descs
             )
 
         existing_lessons_text = ""
         if existing_lessons:
             lesson_descs = [l.get("rule_text", "")[:50] for l in existing_lessons[:5]]
-            existing_lessons_text = (
-                f"\n已有规则（避免重复）：\n"
-                + "\n".join(f"- {d}" for d in lesson_descs)
+            existing_lessons_text = f"\n已有规则（避免重复）：\n" + "\n".join(
+                f"- {d}" for d in lesson_descs
             )
 
         system_prompt = (
@@ -604,9 +602,7 @@ class ReflectionAgent:
                         "evidence_chapters": json.dumps(
                             [current_chapter], ensure_ascii=False
                         ),
-                        "affected_dimension": pattern.get(
-                            "affected_dimension", ""
-                        ),
+                        "affected_dimension": pattern.get("affected_dimension", ""),
                         "occurrence_count": 1,
                         "last_seen_chapter": current_chapter,
                         "status": "active",
@@ -650,9 +646,7 @@ class ReflectionAgent:
             except Exception as e:
                 logger.error(f"[ReflectionAgent] 保存 lesson 失败: {e}")
 
-    def _evict_lowest_priority_lesson(
-        self, lessons: List[Dict[str, Any]]
-    ) -> None:
+    def _evict_lowest_priority_lesson(self, lessons: List[Dict[str, Any]]) -> None:
         """淘汰最低优先级或效果最差的 lesson"""
         if not lessons:
             return
@@ -770,9 +764,7 @@ class ReflectionAgent:
         total = len(entries)
         converged = sum(1 for e in entries if e.get("converged", False))
         avg_final = (
-            sum(e.get("final_score", 0) for e in entries) / total
-            if total > 0
-            else 0
+            sum(e.get("final_score", 0) for e in entries) / total if total > 0 else 0
         )
 
         return (

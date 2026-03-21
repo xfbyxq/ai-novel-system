@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class NovelDialogueScene(str, Enum):
     """小说对话场景"""
+
     CREATE = "create"  # 创建新小说
     QUERY = "query"  # 查询已有小说
     REVISE = "revise"  # 修改小说内容
@@ -13,6 +14,7 @@ class NovelDialogueScene(str, Enum):
 
 class CreationFlowStep(str, Enum):
     """小说对话流程步骤"""
+
     # 通用步骤
     INITIAL = "initial"  # 初始问候
     SCENE_SELECTION = "scene_selection"  # 场景选择（创建/查询/修改）
@@ -40,6 +42,7 @@ class CreationFlowStep(str, Enum):
 
 class WorldSettingDetails(BaseModel):
     """世界观背景设定详情"""
+
     era_background: Optional[str] = Field(None, description="时代背景")
     geographical_environment: Optional[str] = Field(None, description="地理环境")
     social_structure: Optional[str] = Field(None, description="社会结构")
@@ -50,6 +53,7 @@ class WorldSettingDetails(BaseModel):
 
 class NovelSynopsis(BaseModel):
     """小说核心简介"""
+
     main_plot: str = Field(..., description="主要情节脉络")
     core_conflict: str = Field(..., description="核心冲突")
     target_audience: str = Field(..., description="目标读者群体")
@@ -58,6 +62,7 @@ class NovelSynopsis(BaseModel):
 
 class NovelCreationContext(BaseModel):
     """小说创建对话上下文"""
+
     # 对话场景
     scene: NovelDialogueScene = Field(default=NovelDialogueScene.CREATE)
 
@@ -78,7 +83,9 @@ class NovelCreationContext(BaseModel):
 
     # 查询相关字段
     selected_novel_id: Optional[str] = Field(None, description="选择的小说 ID")
-    query_target: Optional[str] = Field(None, description="查询目标 (world_setting/character/plot/chapter)")
+    query_target: Optional[str] = Field(
+        None, description="查询目标 (world_setting/character/plot/chapter)"
+    )
     query_result: Optional[dict] = Field(None, description="查询结果")
 
     # 修改相关字段
@@ -92,6 +99,7 @@ class NovelCreationContext(BaseModel):
 
 class NovelCreationFlowState(BaseModel):
     """小说创建流程状态"""
+
     session_id: str
     context: NovelCreationContext
     conversation_history: list[dict] = Field(default_factory=list)

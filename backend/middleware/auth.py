@@ -7,7 +7,6 @@ API 认证中间件
 from fastapi import Request
 from backend.dependencies import verify_api_key
 
-
 # 全局认证实例
 api_key_auth = verify_api_key
 

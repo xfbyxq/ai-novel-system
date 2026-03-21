@@ -43,10 +43,10 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode with sync engine."""
     from sqlalchemy import create_engine
-    
+
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.DATABASE_URL_SYNC
-    
+
     # 使用 sync engine for Alembic (使用 psycopg2)
     connectable = create_engine(
         settings.DATABASE_URL_SYNC.replace("postgresql://", "postgresql+psycopg2://"),
@@ -59,7 +59,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
         )
-        
+
         with context.begin_transaction():
             context.run_migrations()
 

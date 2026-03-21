@@ -7,6 +7,7 @@
 4. 检查世界观一致性
 5. 生成改进建议
 """
+
 import json
 from typing import Any, Dict, List, Optional
 
@@ -18,37 +19,41 @@ from core.logging_config import logger
 
 class OutlineValidator:
     """大纲验证 Agent"""
-    
-    def __init__(self, client: Optional[QwenClient] = None, cost_tracker: Optional[CostTracker] = None):
+
+    def __init__(
+        self,
+        client: Optional[QwenClient] = None,
+        cost_tracker: Optional[CostTracker] = None,
+    ):
         """初始化大纲验证 Agent
-        
+
         Args:
             client: LLM 客户端
             cost_tracker: 成本跟踪器
         """
         self.client = client or QwenClient()
         self.cost_tracker = cost_tracker or CostTracker()
-    
+
     async def validate_chapter_against_outline(
-        self,
-        chapter_plan: Dict[str, Any],
-        outline_task: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], outline_task: Dict[str, Any]
     ) -> Dict[str, Any]:
         """验证章节与大纲一致性
-        
+
         检查章节计划是否符合大纲要求
-        
+
         Args:
             chapter_plan: 章节计划
             outline_task: 大纲任务（包含强制性事件等）
-        
+
         Returns:
             验证报告
         """
-        logger.info(f"开始验证章节 {chapter_plan.get('chapter_number', '未知')} 与大纲的一致性")
-        
+        logger.info(
+            f"开始验证章节 {chapter_plan.get('chapter_number', '未知')} 与大纲的一致性"
+        )
+
         prompt = self._build_chapter_validation_prompt(chapter_plan, outline_task)
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -56,45 +61,47 @@ class OutlineValidator:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_validator_chapter",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             validation_report = self._parse_validation_response(response["content"])
-            
+
             passed = validation_report.get("passed", False)
             logger.info(f"章节验证完成：{'通过' if passed else '未通过'}")
-            
+
             return validation_report
-            
+
         except Exception as e:
             logger.error(f"章节验证失败：{e}")
             raise
-    
+
     async def check_character_consistency(
-        self,
-        chapter_plan: Dict[str, Any],
-        character_states: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], character_states: Dict[str, Any]
     ) -> Dict[str, Any]:
         """检查角色一致性
-        
+
         检查章节中的角色行为、性格、能力是否与设定一致
-        
+
         Args:
             chapter_plan: 章节计划
             character_states: 角色状态（包含角色设定和当前状态）
-        
+
         Returns:
             角色一致性检查报告
         """
-        logger.info(f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的角色一致性")
-        
-        prompt = self._build_character_consistency_prompt(chapter_plan, character_states)
-        
+        logger.info(
+            f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的角色一致性"
+        )
+
+        prompt = self._build_character_consistency_prompt(
+            chapter_plan, character_states
+        )
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -102,45 +109,47 @@ class OutlineValidator:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_validator_character",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
-            consistency_report = self._parse_character_consistency_response(response["content"])
-            
+
+            consistency_report = self._parse_character_consistency_response(
+                response["content"]
+            )
+
             score = consistency_report.get("consistency_score", 0)
             logger.info(f"角色一致性检查完成，评分：{score}")
-            
+
             return consistency_report
-            
+
         except Exception as e:
             logger.error(f"角色一致性检查失败：{e}")
             raise
-    
+
     async def check_plot_continuity(
-        self,
-        chapter_plan: Dict[str, Any],
-        previous_chapters: List[Dict[str, Any]]
+        self, chapter_plan: Dict[str, Any], previous_chapters: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """检查剧情连贯性
-        
+
         检查章节与之前章节的剧情是否连贯
-        
+
         Args:
             chapter_plan: 章节计划
             previous_chapters: 之前章节的摘要或计划
-        
+
         Returns:
             剧情连贯性检查报告
         """
-        logger.info(f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的剧情连贯性")
-        
+        logger.info(
+            f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的剧情连贯性"
+        )
+
         prompt = self._build_plot_continuity_prompt(chapter_plan, previous_chapters)
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -148,45 +157,49 @@ class OutlineValidator:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_validator_plot",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
-            continuity_report = self._parse_plot_continuity_response(response["content"])
-            
+
+            continuity_report = self._parse_plot_continuity_response(
+                response["content"]
+            )
+
             score = continuity_report.get("continuity_score", 0)
             logger.info(f"剧情连贯性检查完成，评分：{score}")
-            
+
             return continuity_report
-            
+
         except Exception as e:
             logger.error(f"剧情连贯性检查失败：{e}")
             raise
-    
+
     async def check_world_setting_consistency(
-        self,
-        chapter_plan: Dict[str, Any],
-        world_setting: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> Dict[str, Any]:
         """检查世界观一致性
-        
+
         检查章节内容是否符合世界观设定
-        
+
         Args:
             chapter_plan: 章节计划
             world_setting: 世界观设定数据
-        
+
         Returns:
             世界观一致性检查报告
         """
-        logger.info(f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的世界观一致性")
-        
-        prompt = self._build_world_setting_consistency_prompt(chapter_plan, world_setting)
-        
+        logger.info(
+            f"开始检查章节 {chapter_plan.get('chapter_number', '未知')} 的世界观一致性"
+        )
+
+        prompt = self._build_world_setting_consistency_prompt(
+            chapter_plan, world_setting
+        )
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -194,43 +207,44 @@ class OutlineValidator:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_validator_world",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
-            consistency_report = self._parse_world_setting_consistency_response(response["content"])
-            
+
+            consistency_report = self._parse_world_setting_consistency_response(
+                response["content"]
+            )
+
             score = consistency_report.get("consistency_score", 0)
             logger.info(f"世界观一致性检查完成，评分：{score}")
-            
+
             return consistency_report
-            
+
         except Exception as e:
             logger.error(f"世界观一致性检查失败：{e}")
             raise
-    
+
     async def generate_improvement_suggestions(
-        self,
-        validation_issues: List[Dict[str, Any]]
+        self, validation_issues: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """生成改进建议
-        
+
         基于验证发现的问题，生成具体的改进建议
-        
+
         Args:
             validation_issues: 验证发现的问题列表
-        
+
         Returns:
             改进建议列表
         """
         logger.info(f"开始为{len(validation_issues)}个问题生成改进建议")
-        
+
         prompt = self._build_improvement_suggestions_prompt(validation_issues)
-        
+
         try:
             response = await self.client.chat(
                 prompt=prompt,
@@ -238,33 +252,31 @@ class OutlineValidator:
                 temperature=0.6,
                 max_tokens=4096,
             )
-            
+
             usage = response["usage"]
             self.cost_tracker.record(
                 agent_name="outline_validator_suggestions",
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
             )
-            
+
             suggestions = self._parse_suggestions_response(response["content"])
-            
+
             logger.info(f"生成了{len(suggestions)}条改进建议")
-            
+
             return suggestions
-            
+
         except Exception as e:
             logger.error(f"生成改进建议失败：{e}")
             raise
-    
+
     def _build_chapter_validation_prompt(
-        self,
-        chapter_plan: Dict[str, Any],
-        outline_task: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], outline_task: Dict[str, Any]
     ) -> str:
         """构建章节验证提示词"""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         outline_task_str = json.dumps(outline_task, ensure_ascii=False)
-        
+
         prompt = f"""
 # 任务：验证章节与大纲的一致性
 
@@ -345,16 +357,14 @@ class OutlineValidator:
 }}
 """
         return prompt
-    
+
     def _build_character_consistency_prompt(
-        self,
-        chapter_plan: Dict[str, Any],
-        character_states: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], character_states: Dict[str, Any]
     ) -> str:
         """构建角色一致性检查提示词"""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         character_states_str = json.dumps(character_states, ensure_ascii=False)
-        
+
         prompt = f"""
 # 任务：检查角色一致性
 
@@ -423,16 +433,16 @@ class OutlineValidator:
 }}
 """
         return prompt
-    
+
     def _build_plot_continuity_prompt(
-        self,
-        chapter_plan: Dict[str, Any],
-        previous_chapters: List[Dict[str, Any]]
+        self, chapter_plan: Dict[str, Any], previous_chapters: List[Dict[str, Any]]
     ) -> str:
         """构建剧情连贯性检查提示词"""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
-        previous_chapters_str = json.dumps(previous_chapters[:5], ensure_ascii=False)  # 只取最近 5 章
-        
+        previous_chapters_str = json.dumps(
+            previous_chapters[:5], ensure_ascii=False
+        )  # 只取最近 5 章
+
         prompt = f"""
 # 任务：检查剧情连贯性
 
@@ -517,16 +527,14 @@ class OutlineValidator:
 }}
 """
         return prompt
-    
+
     def _build_world_setting_consistency_prompt(
-        self,
-        chapter_plan: Dict[str, Any],
-        world_setting: Dict[str, Any]
+        self, chapter_plan: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> str:
         """构建世界观一致性检查提示词"""
         chapter_plan_str = json.dumps(chapter_plan, ensure_ascii=False)
         world_setting_str = json.dumps(world_setting, ensure_ascii=False)
-        
+
         prompt = f"""
 # 任务：检查世界观一致性
 
@@ -626,14 +634,13 @@ class OutlineValidator:
 }}
 """
         return prompt
-    
+
     def _build_improvement_suggestions_prompt(
-        self,
-        validation_issues: List[Dict[str, Any]]
+        self, validation_issues: List[Dict[str, Any]]
     ) -> str:
         """构建改进建议提示词"""
         issues_str = json.dumps(validation_issues, ensure_ascii=False)
-        
+
         prompt = f"""
 # 任务：生成改进建议
 
@@ -687,29 +694,29 @@ class OutlineValidator:
 4. 考虑修改的影响范围
 """
         return prompt
-    
+
     def _parse_validation_response(self, content: str) -> Dict[str, Any]:
         """解析章节验证响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             report = json.loads(content)
-            
+
             if "passed" not in report:
                 report["passed"] = False
             if "completion_rate" not in report:
                 report["completion_rate"] = 0.0
             if "quality_score" not in report:
                 report["quality_score"] = 5.0
-            
+
             return report
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析章节验证响应失败：{e}")
             return {
@@ -719,25 +726,25 @@ class OutlineValidator:
                 "issues": [],
                 "suggestions": [],
             }
-    
+
     def _parse_character_consistency_response(self, content: str) -> Dict[str, Any]:
         """解析角色一致性响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             report = json.loads(content)
-            
+
             if "consistency_score" not in report:
                 report["consistency_score"] = 5.0
-            
+
             return report
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析角色一致性响应失败：{e}")
             return {
@@ -745,25 +752,25 @@ class OutlineValidator:
                 "character_checks": [],
                 "major_inconsistencies": [],
             }
-    
+
     def _parse_plot_continuity_response(self, content: str) -> Dict[str, Any]:
         """解析剧情连贯性响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             report = json.loads(content)
-            
+
             if "continuity_score" not in report:
                 report["continuity_score"] = 5.0
-            
+
             return report
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析剧情连贯性响应失败：{e}")
             return {
@@ -775,25 +782,25 @@ class OutlineValidator:
                 "information_check": {},
                 "major_issues": [],
             }
-    
+
     def _parse_world_setting_consistency_response(self, content: str) -> Dict[str, Any]:
         """解析世界观一致性响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             report = json.loads(content)
-            
+
             if "consistency_score" not in report:
                 report["consistency_score"] = 5.0
-            
+
             return report
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析世界观一致性响应失败：{e}")
             return {
@@ -806,26 +813,26 @@ class OutlineValidator:
                 "physics_check": {},
                 "major_violations": [],
             }
-    
+
     def _parse_suggestions_response(self, content: str) -> List[Dict[str, Any]]:
         """解析改进建议响应"""
         try:
             content = content.strip()
-            
+
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
                 content = content[:-3]
             content = content.strip()
-            
+
             suggestions = json.loads(content)
-            
+
             if not isinstance(suggestions, list):
                 logger.warning("改进建议应为列表格式")
                 return []
-            
+
             return suggestions
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"解析改进建议响应失败：{e}")
             return []
