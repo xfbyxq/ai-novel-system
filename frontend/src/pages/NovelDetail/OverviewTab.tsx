@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card, Row, Col, Statistic, Button, Space, Modal, InputNumber, Input, Select, Form, message, Typography,
 } from 'antd';
@@ -8,6 +8,7 @@ import {
 import type { Novel } from '@/api/types';
 import { updateNovel } from '@/api/novels';
 import { createGenerationTask } from '@/api/generation';
+import { useGenerationStore } from '@/stores/useGenerationStore';
 import { formatWordCount, formatCost } from '@/utils/format';
 import { GENRE_OPTIONS, NOVEL_STATUS_MAP } from '@/utils/constants';
 
@@ -19,6 +20,15 @@ interface Props {
 export default function OverviewTab({ novel, onRefresh }: Props) {
   const [planningLoading, setPlanningLoading] = useState(false);
   const [writingModalOpen, setWritingModalOpen] = useState(false);
+  const { tasks, fetchTasks } = useGenerationStore();
+
+  useEffect(() => {
+    void fetchTasks(novel.id);
+  }, [novel.id, fetchTasks]);
+
+  const hasRunningPlanningTask = tasks.some(
+    t => t.task_type === 'planning' && (t.status === 'pending' || t.status === 'running')
+  );
   const [chapterNum, setChapterNum] = useState(1);
   const [writingLoading, setWritingLoading] = useState(false);
   // 批量生成状态
@@ -35,6 +45,7 @@ export default function OverviewTab({ novel, onRefresh }: Props) {
     try {
       await createGenerationTask({ novel_id: novel.id, task_type: 'planning' });
       message.success('企划任务已创建，请在"生成历史"中查看进度');
+      void fetchTasks(novel.id);
       onRefresh();
     } finally {
       setPlanningLoading(false);
@@ -131,7 +142,7 @@ export default function OverviewTab({ novel, onRefresh }: Props) {
             icon={<RocketOutlined />}
             loading={planningLoading}
             onClick={handleStartPlanning}
-            disabled={novel.status !== 'planning'}
+            disabled={novel.status !== 'planning' || hasRunningPlanningTask}
           >
             开始企划
           </Button>
