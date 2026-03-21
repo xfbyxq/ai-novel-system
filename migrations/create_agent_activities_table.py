@@ -1,5 +1,5 @@
 """
-数据库迁移脚本：创建 agent_activities 表
+数据库迁移脚本：创建 agent_activities 表.
 
 此脚本创建 agent_activities 表用于记录每个 Agent 的详细活动
 

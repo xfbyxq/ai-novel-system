@@ -23,7 +23,7 @@ def pytest_configure(config):
 @pytest.fixture(scope="session")
 def browser_type_launch_args():
     """
-    浏览器启动参数配置
+    浏览器启动参数配置.
 
     Returns:
         dict: 浏览器启动参数
@@ -42,7 +42,7 @@ def browser_type_launch_args():
 @pytest.fixture(scope="session")
 def browser_context_args():
     """
-    浏览器上下文参数配置
+    浏览器上下文参数配置.
 
     Returns:
         dict: 浏览器上下文参数
@@ -58,7 +58,7 @@ def browser_context_args():
 @pytest.fixture(scope="session")
 def base_url():
     """
-    基础URL配置
+    基础URL配置.
 
     Returns:
         str: 应用的基础URL
@@ -69,7 +69,7 @@ def base_url():
 @pytest.fixture
 def api_base_url():
     """
-    API基础URL配置
+    API基础URL配置.
 
     Returns:
         str: API的基础URL
@@ -80,7 +80,7 @@ def api_base_url():
 @pytest.fixture
 def page(browser: Browser, browser_context_args: dict, base_url: str) -> Page:
     """
-    页面fixture - 为每个测试提供一个新的页面实例
+    页面fixture - 为每个测试提供一个新的页面实例.
 
     Args:
         browser: 浏览器实例

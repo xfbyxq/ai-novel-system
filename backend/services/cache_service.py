@@ -1,5 +1,5 @@
 """
-Redis缓存服务
+Redis缓存服务.
 
 提供通用的缓存功能,用于减少数据库查询压力,提高系统性能。
 支持分布式环境检测,自动使用正确的Redis地址。
@@ -13,7 +13,7 @@ from backend.config import settings
 
 class CacheService:
     """
-    Redis缓存服务
+    Redis缓存服务.
 
     提供通用的缓存功能:
     - 通用键值操作
@@ -50,7 +50,7 @@ class CacheService:
 
     async def get(self, key: str) -> Optional[str]:
         """
-        获取缓存值
+        获取缓存值.
 
         Args:
             key: 缓存键
@@ -67,7 +67,7 @@ class CacheService:
 
     async def set(self, key: str, value: str, ttl: int = 3600) -> bool:
         """
-        设置缓存值
+        设置缓存值.
 
         Args:
             key: 缓存键
@@ -86,7 +86,7 @@ class CacheService:
 
     async def delete(self, key: str) -> bool:
         """
-        删除缓存
+        删除缓存.
 
         Args:
             key: 缓存键
@@ -102,7 +102,7 @@ class CacheService:
 
     async def exists(self, key: str) -> bool:
         """
-        检查缓存是否存在
+        检查缓存是否存在.
 
         Args:
             key: 缓存键
@@ -119,7 +119,7 @@ class CacheService:
 
     async def get_generation_result(self, task_id: str) -> Optional[dict]:
         """
-        获取生成结果缓存
+        获取生成结果缓存.
 
         Args:
             task_id: 任务ID
@@ -148,7 +148,7 @@ class CacheService:
 
     async def delete_generation_result(self, task_id: str) -> bool:
         """
-        删除生成结果缓存
+        删除生成结果缓存.
 
         Args:
             task_id: 任务ID
@@ -164,7 +164,7 @@ class CacheService:
         self, agent_name: str, novel_id: int, version: int = 1
     ) -> Optional[dict]:
         """
-        获取Agent输出缓存
+        获取Agent输出缓存.
 
         Args:
             agent_name: Agent名称
@@ -206,7 +206,7 @@ class CacheService:
         self, agent_name: str, novel_id: int, version: int = 1
     ) -> bool:
         """
-        删除Agent输出缓存
+        删除Agent输出缓存.
 
         Args:
             agent_name: Agent名称
@@ -225,7 +225,7 @@ class CacheService:
         self, novel_id: int, chapter_number: int
     ) -> Optional[str]:
         """
-        获取章节内容缓存
+        获取章节内容缓存.
 
         Args:
             novel_id: 小说ID
@@ -257,7 +257,7 @@ class CacheService:
 
     async def delete_chapter_content(self, novel_id: int, chapter_number: int) -> bool:
         """
-        删除章节内容缓存
+        删除章节内容缓存.
 
         Args:
             novel_id: 小说ID
@@ -304,7 +304,7 @@ class CacheService:
 
     async def delete_dashboard_stats(self, user_id: int) -> bool:
         """
-        删除仪表盘统计数据缓存
+        删除仪表盘统计数据缓存.
 
         Args:
             user_id: 用户ID

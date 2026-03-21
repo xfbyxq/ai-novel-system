@@ -185,7 +185,7 @@ async def cancel_generation_task(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    取消生成任务。
+    取消生成任务.
 
     只能取消处于 pending（等待中）或 running（执行中）状态的任务。
     已完成、已失败或已取消的任务无法再次取消。

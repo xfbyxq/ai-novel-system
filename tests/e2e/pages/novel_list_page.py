@@ -62,7 +62,7 @@ class NovelListPage(BasePage):
         length_type: Optional[str] = None,
     ):
         """
-        填写创建小说表单
+        填写创建小说表单.
 
         Args:
             title: 小说标题
@@ -149,7 +149,7 @@ class NovelListPage(BasePage):
         length_type: Optional[str] = None,
     ):
         """
-        完整的小说创建流程
+        完整的小说创建流程.
 
         Args:
             title: 小说标题
@@ -164,7 +164,7 @@ class NovelListPage(BasePage):
 
     def get_novel_count(self) -> int:
         """
-        获取小说数量
+        获取小说数量.
 
         Returns:
             int: 小说卡片数量
@@ -173,7 +173,7 @@ class NovelListPage(BasePage):
 
     def get_novel_titles(self) -> List[str]:
         """
-        获取所有小说标题
+        获取所有小说标题.
 
         Returns:
             list: 小说标题列表
@@ -186,7 +186,7 @@ class NovelListPage(BasePage):
 
     def get_novel_statuses(self) -> List[str]:
         """
-        获取所有小说状态
+        获取所有小说状态.
 
         Returns:
             list: 小说状态列表
@@ -199,7 +199,7 @@ class NovelListPage(BasePage):
 
     def is_success_message_visible(self) -> bool:
         """
-        检查成功消息是否可见
+        检查成功消息是否可见.
 
         Returns:
             bool: 成功消息是否可见
@@ -208,7 +208,7 @@ class NovelListPage(BasePage):
 
     def is_error_message_visible(self) -> bool:
         """
-        检查错误消息是否可见
+        检查错误消息是否可见.
 
         Returns:
             bool: 错误消息是否可见
@@ -217,7 +217,7 @@ class NovelListPage(BasePage):
 
     def get_error_messages(self) -> List[str]:
         """
-        获取所有错误消息
+        获取所有错误消息.
 
         Returns:
             list: 错误消息列表
@@ -230,7 +230,7 @@ class NovelListPage(BasePage):
 
     def click_novel_card(self, index: int = 0):
         """
-        点击小说卡片
+        点击小说卡片.
 
         Args:
             index: 小说卡片索引
@@ -241,7 +241,7 @@ class NovelListPage(BasePage):
 
     def filter_by_status(self, status: str):
         """
-        按状态筛选小说
+        按状态筛选小说.
 
         Args:
             status: 状态值
@@ -250,7 +250,7 @@ class NovelListPage(BasePage):
 
     def sort_by(self, sort_option: str):
         """
-        按指定方式排序
+        按指定方式排序.
 
         Args:
             sort_option: 排序选项
@@ -269,7 +269,7 @@ class NovelListPage(BasePage):
 
     def is_create_modal_open(self) -> bool:
         """
-        检查创建模态框是否打开
+        检查创建模态框是否打开.
 
         Returns:
             bool: 模态框是否打开
@@ -278,7 +278,7 @@ class NovelListPage(BasePage):
 
     def wait_for_novels_loaded(self, timeout: int = 10000):
         """
-        等待小说列表加载完成
+        等待小说列表加载完成.
 
         Args:
             timeout: 超时时间(毫秒)

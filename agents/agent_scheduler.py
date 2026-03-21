@@ -55,7 +55,7 @@ class AgentTask:
         timeout: Optional[float] = None,
         callback: Optional[Callable] = None,
     ):
-        """初始化任务。
+        """初始化任务.
 
         Args:
             task_id: 任务ID
@@ -115,7 +115,7 @@ class BaseAgent:
     """基础Agent类."""
 
     def __init__(self, name: str, communicator: AgentCommunicator):
-        """初始化Agent。
+        """初始化Agent.
 
         Args:
             name: Agent名称
@@ -158,7 +158,7 @@ class BaseAgent:
                 logger.error(f"❌ Agent '{self.name}' 消息处理错误: {e}")
 
     async def _handle_message(self, message: Message):
-        """处理消息。
+        """处理消息.
 
         Args:
             message: 消息对象
@@ -213,7 +213,7 @@ class BaseAgent:
                 self.status = AgentStatus.ERROR
 
     async def _process_task(self, task_data: Dict[str, Any]):
-        """处理任务。
+        """处理任务.
 
         Args:
             task_data: 任务数据
@@ -248,7 +248,7 @@ class AgentScheduler:
     """Agent调度器."""
 
     def __init__(self, communicator: AgentCommunicator):
-        """初始化调度器。
+        """初始化调度器.
 
         Args:
             communicator: 通信管理器
@@ -265,7 +265,7 @@ class AgentScheduler:
         asyncio.create_task(self._message_loop())
 
     async def register_agent(self, agent: BaseAgent):
-        """注册Agent。
+        """注册Agent.
 
         Args:
             agent: Agent实例
@@ -277,7 +277,7 @@ class AgentScheduler:
                 logger.info(f"🎮 调度器已注册Agent: '{agent.name}'")
 
     async def submit_task(self, task: AgentTask) -> UUID:
-        """提交任务。
+        """提交任务.
 
         Args:
             task: 任务对象
@@ -310,7 +310,7 @@ class AgentScheduler:
                 logger.error(f"❌ 调度器消息处理错误: {e}")
 
     async def _handle_message(self, message: Message):
-        """处理消息。
+        """处理消息.
 
         Args:
             message: 消息对象
@@ -326,7 +326,7 @@ class AgentScheduler:
             logger.debug(f"🎮 收到Agent状态消息: {message.content}")
 
     async def _handle_task_completion(self, message: Message):
-        """处理任务完成消息。
+        """处理任务完成消息.
 
         Args:
             message: 任务完成消息
@@ -350,7 +350,7 @@ class AgentScheduler:
             logger.error(f"❌ 处理任务完成消息失败: {e}")
 
     async def _schedule_tasks(self):
-        """调度任务。
+        """调度任务.
 
         1. 检查待处理任务的依赖关系
         2. 筛选出可执行的任务
@@ -424,7 +424,7 @@ class AgentScheduler:
                 logger.info(f"🎮 任务已分配: {task.task_name} -> {agent.name}")
 
     async def get_task_status(self, task_id: UUID) -> Optional[TaskStatus]:
-        """获取任务状态。
+        """获取任务状态.
 
         Args:
             task_id: 任务ID
@@ -437,7 +437,7 @@ class AgentScheduler:
             return task.status if task else None
 
     async def get_agent_status(self, agent_name: str) -> Optional[AgentStatus]:
-        """获取Agent状态。
+        """获取Agent状态.
 
         Args:
             agent_name: Agent名称
@@ -450,7 +450,7 @@ class AgentScheduler:
             return agent.status if agent else None
 
     async def cancel_task(self, task_id: UUID) -> bool:
-        """取消任务。
+        """取消任务.
 
         Args:
             task_id: 任务ID
@@ -493,7 +493,7 @@ class AgentScheduler:
         result: Optional[Any] = None,
         error_message: Optional[str] = None,
     ):
-        """更新任务状态。
+        """更新任务状态.
 
         Args:
             task_id: 任务ID

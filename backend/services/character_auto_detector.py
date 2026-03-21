@@ -36,6 +36,7 @@ class CharacterAutoDetector:
         client: QwenClient,
         cost_tracker: CostTracker,
     ):
+        """初始化方法."""
         self.db = db
         self.client = client
         self.cost_tracker = cost_tracker
@@ -50,7 +51,7 @@ class CharacterAutoDetector:
     ) -> List[Character]:
         """检测并注册新角色（对外入口方法）.
 
-        整体用 try/except 包裹，绝不抛异常，确保不阻塞章节生成流程。
+        整体用 try/except 包裹，绝不抛异常，确保不阻塞章节生成流程.
 
         Args:
             novel_id: 小说 ID
@@ -365,7 +366,7 @@ class CharacterAutoDetector:
     def _normalize_name(name: str) -> str:
         """标准化角色名字，用于去重比较.
 
-        去除空格、标点、常见称呼后缀等。
+        去除空格、标点、常见称呼后缀等.
 
         Args:
             name: 原始名字
@@ -408,7 +409,7 @@ class CharacterAutoDetector:
     def _extract_json_array(text: str) -> List[Dict[str, Any]]:
         """从 LLM 响应中提取 JSON 数组.
 
-        多层策略，兼容各种 LLM 输出格式。
+        多层策略，兼容各种 LLM 输出格式.
 
         Args:
             text: LLM 响应的原始文本

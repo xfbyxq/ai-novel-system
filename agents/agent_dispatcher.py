@@ -42,7 +42,7 @@ class AgentDispatcher:
         max_character_review_iterations: int = 2,
         max_plot_review_iterations: int = 2,
     ):
-        """初始化Agent调度器。
+        """初始化Agent调度器.
 
         Args:
             client: LLM客户端
@@ -88,7 +88,7 @@ class AgentDispatcher:
         self.use_scheduled_agents = False  # 默认使用CrewAI风格系统，确保完整的企划阶段
 
     async def initialize(self):
-        """初始化Agent调度器。
+        """初始化Agent调度器.
 
         - 初始化Agent管理器
         - 启动所有Agent
@@ -99,7 +99,7 @@ class AgentDispatcher:
         logger.info("🎮 Agent调度器初始化完成！")
 
     def set_use_scheduled_agents(self, use_scheduled: bool):
-        """设置是否使用基于调度器的Agent系统。
+        """设置是否使用基于调度器的Agent系统.
 
         Args:
             use_scheduled: 是否使用基于调度器的Agent系统
@@ -112,7 +112,7 @@ class AgentDispatcher:
     async def run_planning(
         self, novel_id: UUID, task_id: UUID, **kwargs
     ) -> Dict[str, Any]:
-        """执行企划阶段。
+        """执行企划阶段.
 
         Args:
             novel_id: 小说ID
@@ -132,7 +132,7 @@ class AgentDispatcher:
     async def _run_planning_with_scheduled_agents(
         self, novel_id: UUID, task_id: UUID, **kwargs
     ) -> Dict[str, Any]:
-        """使用基于调度器的Agent系统执行企划阶段。
+        """使用基于调度器的Agent系统执行企划阶段.
 
         Args:
             novel_id: 小说ID
@@ -237,7 +237,7 @@ class AgentDispatcher:
     async def _run_planning_with_crew_manager(
         self, novel_id: UUID, **kwargs
     ) -> Dict[str, Any]:
-        """使用CrewAI风格系统执行企划阶段。
+        """使用CrewAI风格系统执行企划阶段.
 
         Args:
             novel_id: 小说ID
@@ -270,7 +270,7 @@ class AgentDispatcher:
         volume_number: int = 1,
         **kwargs,
     ) -> Dict[str, Any]:
-        """执行单章写作。
+        """执行单章写作.
 
         Args:
             novel_id: 小说ID
@@ -299,7 +299,7 @@ class AgentDispatcher:
         volume_number: int = 1,
         **kwargs,
     ) -> Dict[str, Any]:
-        """使用基于调度器的Agent系统执行单章写作。
+        """使用基于调度器的Agent系统执行单章写作.
 
         Args:
             novel_id: 小说ID
@@ -325,7 +325,7 @@ class AgentDispatcher:
     async def _run_chapter_writing_with_crew_manager(
         self, novel_id: UUID, chapter_number: int, volume_number: int = 1, **kwargs
     ) -> Dict[str, Any]:
-        """使用CrewAI风格系统执行单章写作。
+        """使用CrewAI风格系统执行单章写作.
 
         Args:
             novel_id: 小说ID
@@ -367,7 +367,7 @@ class AgentDispatcher:
         volume_number: int = 1,
         **kwargs,
     ) -> Dict[str, Any]:
-        """执行批量写作。
+        """执行批量写作.
 
         Args:
             novel_id: 小说ID
@@ -409,7 +409,7 @@ class AgentDispatcher:
         }
 
     async def get_agent_statuses(self) -> Dict[str, str]:
-        """获取所有Agent状态。
+        """获取所有Agent状态.
 
         Returns:
             Dict[str, str]: Agent名称到状态的映射
@@ -417,7 +417,7 @@ class AgentDispatcher:
         return await self.agent_manager.get_all_agent_statuses()
 
     async def _wait_for_task_completion(self, scheduler, task_id, timeout=300):
-        """等待任务完成。
+        """等待任务完成.
 
         Args:
             scheduler: 调度器实例
@@ -445,7 +445,7 @@ class AgentDispatcher:
         volume_number: int = 1,
         **kwargs,
     ) -> Dict[str, Any]:
-        """使用基于调度器的Agent系统执行单章写作。
+        """使用基于调度器的Agent系统执行单章写作.
 
         Args:
             novel_id: 小说ID
@@ -570,7 +570,7 @@ class AgentDispatcher:
             )
 
     async def shutdown(self):
-        """关闭Agent调度器。
+        """关闭Agent调度器.
 
         - 停止所有Agent
         """

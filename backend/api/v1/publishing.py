@@ -47,7 +47,7 @@ async def create_platform_account(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建平台账号。
+    创建平台账号.
 
     支持的平台：qidian、jjwxc、hongxiu、zongheng、17k、fanqie 等。
     """
@@ -71,7 +71,7 @@ async def list_platform_accounts(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取平台账号列表。
+    获取平台账号列表.
 
     支持按平台和状态筛选。
     """
@@ -142,7 +142,7 @@ async def delete_platform_account(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除平台账号。
+    删除平台账号.
 
     删除后，使用此账号的发布任务将无法继续执行。
     """
@@ -164,7 +164,7 @@ async def verify_platform_account(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    验证平台账号。
+    验证平台账号.
 
     检查账号凭证是否有效，可正常登录平台。
     """
@@ -187,7 +187,7 @@ async def create_publish_task(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建发布任务。
+    创建发布任务.
 
     **发布类型 (publish_type)**:
     - `create_book`: 在平台创建新书
@@ -319,7 +319,7 @@ async def cancel_publish_task(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    取消发布任务。
+    取消发布任务.
 
     只能取消处于 pending 或 running 状态的任务。
     """
@@ -414,7 +414,7 @@ async def get_publish_preview(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取发布预览。
+    获取发布预览.
 
     预览指定章节范围的发布情况，包括已发布/未发布状态。
     """

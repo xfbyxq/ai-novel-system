@@ -28,7 +28,7 @@ from llm.qwen_client import QwenClient
 
 class OutlineService:
     """
-    大纲梳理和细化服务
+    大纲梳理和细化服务.
 
     核心功能：
     1. 使用 LLM 生成完整大纲
@@ -38,6 +38,7 @@ class OutlineService:
     """
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
@@ -46,7 +47,7 @@ class OutlineService:
         self, novel_id: UUID, world_setting_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        生成完整大纲
+        生成完整大纲.
 
         基于世界观设定，使用 LLM 生成完整的剧情大纲，包括：
         - 主线剧情
@@ -120,7 +121,7 @@ class OutlineService:
         factions = world_setting.get("factions", [])
 
         prompt = f"""
-# 任务：为小说《{novel.title}》生成完整大纲
+# 任务：为小说《{novel.title}》生成完整大纲.
 
 ## 小说基本信息
 - **书名**: {novel.title}
@@ -321,7 +322,7 @@ class OutlineService:
         config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        分解大纲为章节配置
+        分解大纲为章节配置.
 
         将卷级大纲分解为详细的章节配置，包括：
         - 每章的强制性事件
@@ -520,7 +521,7 @@ class OutlineService:
         self, novel_id: UUID, chapter_number: int
     ) -> Dict[str, Any]:
         """
-        获取章节大纲任务
+        获取章节大纲任务.
 
         从大纲中提取指定章节的任务信息
 
@@ -596,7 +597,7 @@ class OutlineService:
         self, novel_id: UUID, chapter_number: int, chapter_plan: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        验证章节大纲一致性
+        验证章节大纲一致性.
 
         检查章节计划是否符合大纲要求
 
@@ -685,7 +686,7 @@ class OutlineService:
         hints: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        为大纲字段生成AI建议
+        为大纲字段生成AI建议.
 
         Args:
             novel_id: 小说 ID
@@ -875,7 +876,7 @@ class OutlineService:
 
     async def get_outline_versions(self, novel_id: UUID) -> List[Dict[str, Any]]:
         """
-        获取大纲版本历史
+        获取大纲版本历史.
 
         从数据库查询大纲的修改历史
 

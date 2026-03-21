@@ -17,6 +17,7 @@ class CostTracker:
     """追踪 LLM API 调用的 token 使用量和成本."""
 
     def __init__(self, model: str = "qwen-plus"):
+        """初始化方法."""
         self.model = model
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -91,7 +92,7 @@ class CostTracker:
         return float(sum(costs.values()))
 
     def check_chapter_limit(self, chapter_number: int, limit: float) -> bool:
-        """检查某章成本是否超限。
+        """检查某章成本是否超限.
 
         Returns:
             True 表示未超限，False 表示已超限
@@ -116,6 +117,7 @@ class CostTracker:
         }
 
     def reset(self):
+        """reset 方法."""
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_cost = Decimal("0")

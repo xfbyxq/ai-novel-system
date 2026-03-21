@@ -82,7 +82,7 @@ class NovelDetailPage(BasePage):
 
     def navigate_to_novel(self, novel_id: str):
         """
-        导航到指定小说详情页
+        导航到指定小说详情页.
 
         Args:
             novel_id: 小说ID
@@ -93,7 +93,7 @@ class NovelDetailPage(BasePage):
 
     def switch_to_tab(self, tab_name: str):
         """
-        切换到指定标签页
+        切换到指定标签页.
 
         Args:
             tab_name: 标签页名称 (overview, characters, outline等)
@@ -105,7 +105,7 @@ class NovelDetailPage(BasePage):
 
     def get_current_tab(self) -> str:
         """
-        获取当前激活的标签页
+        获取当前激活的标签页.
 
         Returns:
             str: 当前标签页名称
@@ -141,7 +141,7 @@ class NovelDetailPage(BasePage):
 
     def fill_chapter_generation_form(self, chapter_number: int):
         """
-        填写单章生成表单
+        填写单章生成表单.
 
         Args:
             chapter_number: 章节数
@@ -152,7 +152,7 @@ class NovelDetailPage(BasePage):
 
     def fill_batch_generation_form(self, start_chapter: int, end_chapter: int):
         """
-        填写批量生成表单
+        填写批量生成表单.
 
         Args:
             start_chapter: 起始章节数
@@ -172,7 +172,7 @@ class NovelDetailPage(BasePage):
         self, title: str, genre: str, tags: list = None, synopsis: str = None
     ):
         """
-        填写编辑小说表单
+        填写编辑小说表单.
 
         Args:
             title: 标题
@@ -208,7 +208,7 @@ class NovelDetailPage(BasePage):
 
     def fill_outline_fields(self, outline_data: dict):
         """
-        填写大纲字段
+        填写大纲字段.
 
         Args:
             outline_data: 大纲数据字典
@@ -250,7 +250,7 @@ class NovelDetailPage(BasePage):
 
     def get_outline_quality_score(self) -> float:
         """
-        获取大纲质量评分
+        获取大纲质量评分.
 
         Returns:
             float: 质量评分
@@ -268,7 +268,7 @@ class NovelDetailPage(BasePage):
 
     def get_chapter_count(self) -> int:
         """
-        获取章节数量
+        获取章节数量.
 
         Returns:
             int: 章节列表数量
@@ -278,7 +278,7 @@ class NovelDetailPage(BasePage):
 
     def get_chapter_titles(self) -> list:
         """
-        获取所有章节标题
+        获取所有章节标题.
 
         Returns:
             list: 章节标题列表
@@ -294,7 +294,7 @@ class NovelDetailPage(BasePage):
 
     def delete_chapter(self, chapter_index: int = 0):
         """
-        删除指定章节
+        删除指定章节.
 
         Args:
             chapter_index: 章节索引
@@ -317,7 +317,7 @@ class NovelDetailPage(BasePage):
 
     def is_generation_running(self) -> bool:
         """
-        检查是否有生成任务正在运行
+        检查是否有生成任务正在运行.
 
         Returns:
             bool: 是否有运行中的任务
@@ -328,7 +328,7 @@ class NovelDetailPage(BasePage):
 
     def wait_for_generation_complete(self, timeout: int = 60000):
         """
-        等待生成任务完成
+        等待生成任务完成.
 
         Args:
             timeout: 超时时间(毫秒)

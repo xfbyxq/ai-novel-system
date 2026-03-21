@@ -10,7 +10,7 @@ class BasePage:
 
     def __init__(self, page: Page):
         """
-        初始化页面对象
+        初始化页面对象.
 
         Args:
             page: Playwright页面实例
@@ -20,7 +20,7 @@ class BasePage:
 
     def wait_for_load(self, timeout: int = 10000):
         """
-        等待页面加载完成
+        等待页面加载完成.
 
         Args:
             timeout: 超时时间(毫秒)
@@ -33,7 +33,7 @@ class BasePage:
 
     def get_element(self, selector: str) -> Locator:
         """
-        获取元素定位器
+        获取元素定位器.
 
         Args:
             selector: CSS选择器或data-testid选择器
@@ -45,7 +45,7 @@ class BasePage:
 
     def click_element(self, selector: str, timeout: int = None):
         """
-        点击元素
+        点击元素.
 
         Args:
             selector: 元素选择器
@@ -56,7 +56,7 @@ class BasePage:
 
     def fill_input(self, selector: str, value: str, timeout: int = None):
         """
-        填充输入框
+        填充输入框.
 
         Args:
             selector: 输入框选择器
@@ -68,7 +68,7 @@ class BasePage:
 
     def select_option(self, selector: str, value: str, timeout: int = None):
         """
-        选择下拉选项
+        选择下拉选项.
 
         Args:
             selector: 下拉选择器
@@ -80,7 +80,7 @@ class BasePage:
 
     def is_element_visible(self, selector: str, timeout: int = None) -> bool:
         """
-        检查元素是否可见
+        检查元素是否可见.
 
         Args:
             selector: 元素选择器
@@ -97,7 +97,7 @@ class BasePage:
 
     def is_element_enabled(self, selector: str, timeout: int = None) -> bool:
         """
-        检查元素是否启用
+        检查元素是否启用.
 
         Args:
             selector: 元素选择器
@@ -114,7 +114,7 @@ class BasePage:
 
     def get_text(self, selector: str, timeout: int = None) -> str:
         """
-        获取元素文本内容
+        获取元素文本内容.
 
         Args:
             selector: 元素选择器
@@ -128,7 +128,7 @@ class BasePage:
 
     def get_input_value(self, selector: str, timeout: int = None) -> str:
         """
-        获取输入框的值
+        获取输入框的值.
 
         Args:
             selector: 输入框选择器
@@ -142,7 +142,7 @@ class BasePage:
 
     def wait_for_element_visible(self, selector: str, timeout: int = None):
         """
-        等待元素变为可见
+        等待元素变为可见.
 
         Args:
             selector: 元素选择器
@@ -153,7 +153,7 @@ class BasePage:
 
     def wait_for_element_hidden(self, selector: str, timeout: int = None):
         """
-        等待元素变为隐藏
+        等待元素变为隐藏.
 
         Args:
             selector: 元素选择器
@@ -164,7 +164,7 @@ class BasePage:
 
     def wait_for_url(self, url_pattern: str, timeout: int = None):
         """
-        等待URL匹配指定模式
+        等待URL匹配指定模式.
 
         Args:
             url_pattern: URL模式(支持正则表达式)
@@ -175,7 +175,7 @@ class BasePage:
 
     def get_element_count(self, selector: str) -> int:
         """
-        获取匹配选择器的元素数量
+        获取匹配选择器的元素数量.
 
         Args:
             selector: 元素选择器
@@ -187,7 +187,7 @@ class BasePage:
 
     def scroll_to_element(self, selector: str):
         """
-        滚动到指定元素
+        滚动到指定元素.
 
         Args:
             selector: 元素选择器
@@ -196,7 +196,7 @@ class BasePage:
 
     def hover_element(self, selector: str, timeout: int = None):
         """
-        悬停在元素上
+        悬停在元素上.
 
         Args:
             selector: 元素选择器
@@ -207,7 +207,7 @@ class BasePage:
 
     def press_key(self, selector: str, key: str, timeout: int = None):
         """
-        在元素上按下按键
+        在元素上按下按键.
 
         Args:
             selector: 元素选择器
@@ -219,7 +219,7 @@ class BasePage:
 
     def clear_input(self, selector: str, timeout: int = None):
         """
-        清空输入框内容
+        清空输入框内容.
 
         Args:
             selector: 输入框选择器

@@ -1,4 +1,4 @@
-"""大纲细化和完善 Agent。
+"""大纲细化和完善 Agent.
 
 功能：
 1. 细化完整大纲
@@ -24,7 +24,7 @@ class OutlineRefiner:
         client: Optional[QwenClient] = None,
         cost_tracker: Optional[CostTracker] = None,
     ):
-        """初始化大纲细化 Agent。
+        """初始化大纲细化 Agent.
 
         Args:
             client: LLM 客户端
@@ -40,7 +40,7 @@ class OutlineRefiner:
         tags: List[str],
         total_chapters: int = 100,
     ) -> Dict[str, Any]:
-        """细化完整大纲。
+        """细化完整大纲.
 
         基于世界观设定，生成包含主线、支线、卷大纲的完整大纲
 
@@ -92,7 +92,7 @@ class OutlineRefiner:
     async def generate_main_plot_detailed(
         self, world_setting_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """生成详细主线剧情。
+        """生成详细主线剧情.
 
         基于世界观设定，生成包含起承转合的详细主线
 
@@ -137,7 +137,7 @@ class OutlineRefiner:
         total_chapters: int,
         main_plot: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """生成带张力循环的卷大纲。
+        """生成带张力循环的卷大纲.
 
         根据小说类型和长度，生成包含欲扬先抑循环的卷大纲
 
@@ -183,7 +183,7 @@ class OutlineRefiner:
     async def ensure_ending_coherence(
         self, main_plot: Dict[str, Any], volumes: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """确保结局连贯性。
+        """确保结局连贯性.
 
         检查主线剧情和卷大纲的结局部分，确保逻辑连贯
 
@@ -239,7 +239,7 @@ class OutlineRefiner:
         factions = world_setting_data.get("factions", [])
 
         prompt = f"""
-# 任务：生成完整的小说大纲
+# 任务：生成完整的小说大纲.
 
 ## 小说基本信息
 - **类型**: {genre}
@@ -360,7 +360,7 @@ class OutlineRefiner:
         power_system = world_setting_data.get("power_system", {})
 
         prompt = f"""
-# 任务：生成详细主线剧情
+# 任务：生成详细主线剧情.
 
 ## 世界观设定
 - **世界名称**: {world_name}
@@ -444,7 +444,7 @@ class OutlineRefiner:
         num_volumes = max(3, min(5, total_chapters // 20))
 
         prompt = f"""
-# 任务：生成带张力循环的卷大纲
+# 任务：生成带张力循环的卷大纲.
 
 ## 小说信息
 - **类型**: {genre}
@@ -529,7 +529,7 @@ class OutlineRefiner:
         volumes_str = json.dumps(volumes, ensure_ascii=False)
 
         prompt = f"""
-# 任务：检查结局连贯性
+# 任务：检查结局连贯性.
 
 ## 主线剧情
 {main_plot_str}

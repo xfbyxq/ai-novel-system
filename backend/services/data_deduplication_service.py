@@ -18,6 +18,7 @@ class DataDeduplicationService:
     """数据去重服务."""
 
     def __init__(self):
+        """初始化方法."""
         self.redis_client = redis.from_url(settings.REDIS_URL)
         self.deduplication_prefix = "crawler:deduplication"
         self.logger = logger.getChild("data_deduplication")

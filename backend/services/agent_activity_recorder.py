@@ -13,7 +13,7 @@ from core.models.agent_activity import AgentActivity
 
 class AgentActivityRecorder:
     """
-    Agent 活动记录器
+    Agent 活动记录器.
 
     用于记录 Agent 执行过程中的详细活动，包括：
     - 输入输出数据
@@ -25,6 +25,7 @@ class AgentActivityRecorder:
     """
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def record_activity(
@@ -50,7 +51,7 @@ class AgentActivityRecorder:
         retry_count: int = 0,
     ) -> AgentActivity:
         """
-        记录 Agent 活动
+        记录 Agent 活动.
 
         Args:
             novel_id: 小说 ID

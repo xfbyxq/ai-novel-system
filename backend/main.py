@@ -63,7 +63,7 @@ app = FastAPI(
     title="小说生成系统 API",
     version=settings.APP_VERSION,
     description="""
-## AI驱动的小说生成系统
+## AI驱动的小说生成系统.
 
 本系统提供完整的AI小说创作能力，包括：
 

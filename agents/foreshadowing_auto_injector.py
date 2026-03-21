@@ -1,5 +1,5 @@
 """
-ForeshadowingAutoInjector - 伏笔自动注入系统
+ForeshadowingAutoInjector - 伏笔自动注入系统.
 
 功能：
 1. 自动识别当前章需要回收的伏笔（超期提醒）
@@ -193,7 +193,7 @@ class ForeshadowingReport:
 
 class ForeshadowingAutoInjector:
     """
-    伏笔自动注入系统
+    伏笔自动注入系统.
 
     核心功能：
     1. 追踪所有伏笔的状态
@@ -204,7 +204,7 @@ class ForeshadowingAutoInjector:
 
     def __init__(self, novel_id: str):
         """
-        初始化伏笔注入器
+        初始化伏笔注入器.
 
         Args:
             novel_id: 小说 ID
@@ -262,7 +262,7 @@ class ForeshadowingAutoInjector:
         self, current_chapter: int, plot_outline: Optional[Dict[str, Any]] = None
     ) -> ForeshadowingReport:
         """
-        获取当前章的伏笔任务
+        获取当前章的伏笔任务.
 
         Args:
             current_chapter: 当前章节号
@@ -464,7 +464,7 @@ class ForeshadowingAutoInjector:
         self, current_chapter: int, plot_outline: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        构建伏笔提示词
+        构建伏笔提示词.
 
         强制提醒作家需要回收/埋设的伏笔
         """
@@ -478,7 +478,7 @@ class ForeshadowingAutoInjector:
         plot_outline: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        将伏笔要求注入到现有提示词
+        将伏笔要求注入到现有提示词.
 
         Args:
             existing_prompt: 现有的提示词
@@ -509,7 +509,7 @@ class ForeshadowingAutoInjector:
         self, chapter_plan: Dict[str, Any], report: ForeshadowingReport
     ) -> Dict[str, Any]:
         """
-        验证章节计划是否完成了伏笔任务
+        验证章节计划是否完成了伏笔任务.
 
         Args:
             chapter_plan: 章节计划

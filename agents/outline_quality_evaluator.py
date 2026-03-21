@@ -101,6 +101,7 @@ class OutlineQualityEvaluator:
         client: Optional[QwenClient] = None,
         cost_tracker: Optional[CostTracker] = None,
     ):
+        """初始化方法."""
         self.client = client or QwenClient()
         self.cost_tracker = cost_tracker or CostTracker()
         self.dimensions = EXTENDED_OUTLINE_DIMENSIONS

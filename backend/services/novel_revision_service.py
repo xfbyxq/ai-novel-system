@@ -1,3 +1,5 @@
+"""novel_revision_service 模块."""
+
 from typing import Dict, Any, Optional
 import sys
 from pathlib import Path
@@ -20,6 +22,7 @@ class NovelRevisionService:
     """小说修订服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def update_world_setting(

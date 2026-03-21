@@ -1,4 +1,4 @@
-"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要。
+"""LLM 章节摘要生成器 - 使用 LLM 生成高质量结构化摘要.
 
 替代简单的文本截断，生成包含关键事件、角色变化、情节推进等维度的摘要。
 """
@@ -16,6 +16,7 @@ class ChapterSummaryGenerator:
     """使用 LLM 生成高质量的章节摘要."""
 
     def __init__(self, client: QwenClient, cost_tracker: CostTracker):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.pm = PromptManager
@@ -26,7 +27,7 @@ class ChapterSummaryGenerator:
         chapter_content: str,
         chapter_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """使用 LLM 生成结构化章节摘要。
+        """使用 LLM 生成结构化章节摘要.
 
         Args:
             chapter_number: 章节号
@@ -145,7 +146,7 @@ class ChapterSummaryGenerator:
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON。
+        """从 LLM 响应中提取 JSON.
 
         使用多层策略：
         1. 直接解析完整文本

@@ -6,7 +6,7 @@ from typing import Any, Optional, Union
 
 def safe_enum_value(enum_obj: Any, default: Any = None) -> Any:
     """
-    安全获取枚举值，处理枚举对象和字符串的情况
+    安全获取枚举值，处理枚举对象和字符串的情况.
 
     Args:
         enum_obj: 可能是枚举对象或字符串
@@ -36,7 +36,7 @@ def safe_enum_value(enum_obj: Any, default: Any = None) -> Any:
 
 def safe_enum_name(enum_obj: Any, default: Any = None) -> Any:
     """
-    安全获取枚举名称
+    安全获取枚举名称.
 
     Args:
         enum_obj: 可能是枚举对象或字符串

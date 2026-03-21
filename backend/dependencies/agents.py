@@ -14,6 +14,7 @@ class AgentDependencies:
     """Agent依赖管理器."""
 
     def __init__(self):
+        """初始化方法."""
         self._qwen_client: Optional[QwenClient] = None
         self._cost_tracker: Optional[CostTracker] = None
         self._crew_manager: Optional[NovelCrewManager] = None

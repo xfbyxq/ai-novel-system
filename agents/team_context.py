@@ -1,5 +1,5 @@
 """
-NovelTeamContext - 小说生成团队共享上下文
+NovelTeamContext - 小说生成团队共享上下文.
 
 借鉴AgentMesh的TeamContext设计，实现Agent之间的信息共享和状态追踪。
 
@@ -23,6 +23,7 @@ class AgentOutput:
     """Agent输出记录."""
 
     def __init__(self, agent_name: str, output: Dict[str, Any], subtask: str = ""):
+        """初始化方法."""
         self.agent_name = agent_name
         self.output = output
         self.subtask = subtask
@@ -41,6 +42,7 @@ class CharacterState:
     """角色状态追踪."""
 
     def __init__(self, name: str):
+        """初始化方法."""
         self.name = name
         self.last_appearance_chapter: int = 0
         self.current_location: str = ""
@@ -97,6 +99,7 @@ class TimelineEvent:
         characters: List[str] = None,
         location: str = "",
     ):
+        """初始化方法."""
         self.id = str(uuid.uuid4())[:8]
         self.chapter_number = chapter_number
         self.story_day = story_day
@@ -130,6 +133,7 @@ class AgentReview:
         suggestions: List[Dict[str, str]] = None,
         chapter_number: int = 0,
     ):
+        """初始化方法."""
         self.reviewer = reviewer
         self.target_agent = target_agent
         self.task_desc = task_desc
@@ -168,7 +172,7 @@ class AgentReview:
 
 class NovelTeamContext:
     """
-    小说生成团队共享上下文
+    小说生成团队共享上下文.
 
     借鉴AgentMesh的TeamContext设计，实现：
     1. Agent输出历史追踪
@@ -183,6 +187,7 @@ class NovelTeamContext:
     """
 
     def __init__(self, novel_id: str, novel_title: str = ""):
+        """初始化方法."""
         self.novel_id = novel_id
         self.novel_title = novel_title
 
@@ -298,7 +303,7 @@ class NovelTeamContext:
     def add_agent_output(
         self, agent_name: str, output: Dict[str, Any], subtask: str = ""
     ):
-        """记录Agent输出（同步版本，向后兼容）。
+        """记录Agent输出（同步版本，向后兼容）.
 
         注意：在异步上下文中应优先使用 add_agent_output_async
         """
@@ -525,7 +530,7 @@ class NovelTeamContext:
 
     def build_enhanced_context(self, chapter_number: int) -> str:
         """
-        构建增强的章节上下文
+        构建增强的章节上下文.
 
         整合：当前卷信息、角色状态、时间线、伏笔等
         """
@@ -533,18 +538,18 @@ class NovelTeamContext:
 
         # 当前卷信息
         current_volume = self.get_current_volume_info()
-        volume_info = f"""## 当前卷信息
+        volume_info = f"""## 当前卷信息.
 卷号：第 {self.current_volume_number} 卷 - {current_volume.get('title', '')}
 卷概要：{current_volume.get('summary', '')}
 关键事件：{', '.join(current_volume.get('key_events', [])[:5])}"""
 
         # 角色状态
-        character_info = f"""## 主要角色当前状态
+        character_info = f"""## 主要角色当前状态.
 {self.format_character_states()}"""
 
         # 时间线
-        timeline_info = f"""## 时间线进度
-当前是故事的第 {self.current_story_day} 天
+        timeline_info = f"""## 时间线进度.
+当前是故事的第 {self.current_story_day} 天.
 最近事件：
 {self.get_recent_timeline(5)}"""
 
@@ -559,7 +564,7 @@ class NovelTeamContext:
                         for f in pending[:5]
                     ]
                 )
-                foreshadowing_info = f"""## 待回收的伏笔
+                foreshadowing_info = f"""## 待回收的伏笔.
 {foreshadowing_list}"""
 
         # 组合上下文

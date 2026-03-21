@@ -51,7 +51,7 @@ class Message:
         timestamp: Optional[float] = None,
         priority: int = 0,
     ):
-        """初始化消息。
+        """初始化消息.
 
         Args:
             sender: 发送者Agent名称
@@ -112,7 +112,7 @@ class AgentCommunicator:
         self.pending_requests: Dict[UUID, asyncio.Future] = {}
 
     async def register_agent(self, agent_name: str) -> None:
-        """注册Agent。
+        """注册Agent.
 
         Args:
             agent_name: Agent名称
@@ -123,7 +123,7 @@ class AgentCommunicator:
                 logger.info(f"🤖 Agent '{agent_name}' 已注册到通信系统")
 
     async def send_message(self, message: Message) -> None:
-        """发送消息。
+        """发送消息.
 
         Args:
             message: 消息对象
@@ -147,7 +147,7 @@ class AgentCommunicator:
     async def receive_message(
         self, agent_name: str, timeout: Optional[float] = None
     ) -> Optional[Message]:
-        """接收消息。
+        """接收消息.
 
         Args:
             agent_name: Agent名称
@@ -176,7 +176,7 @@ class AgentCommunicator:
     async def broadcast_message(
         self, sender: str, message_type: str, content: Dict[str, Any]
     ) -> None:
-        """广播消息给所有注册的Agent。
+        """广播消息给所有注册的Agent.
 
         Args:
             sender: 发送者Agent名称
@@ -199,7 +199,7 @@ class AgentCommunicator:
     async def send_and_wait_reply(
         self, message: Message, timeout: float = 60.0
     ) -> Optional[Message]:
-        """发送请求消息并等待对方回复。
+        """发送请求消息并等待对方回复.
 
         通过 Future 实现请求-响应配对。发送方阻塞等待，直到接收方调用
         send_reply() 回复对应的 message_id。
@@ -232,7 +232,7 @@ class AgentCommunicator:
     async def send_reply(
         self, original_message_id: UUID, response_message: Message
     ) -> None:
-        """回复一个请求消息。
+        """回复一个请求消息.
 
         将响应消息投递到发送方队列，并唤醒 send_and_wait_reply 中的等待方。
 
@@ -253,7 +253,7 @@ class AgentCommunicator:
             )
 
     def get_message_history(self, agent_name: Optional[str] = None) -> List[Message]:
-        """获取消息历史。
+        """获取消息历史.
 
         Args:
             agent_name: Agent名称（可选，None表示所有消息）

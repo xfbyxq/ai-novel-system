@@ -1,3 +1,5 @@
+"""ai_chat_session 模块."""
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -15,6 +17,7 @@ import uuid
 
 
 class AIChatSession(Base):
+    """AIChatSession 类."""
     __tablename__ = "ai_chat_sessions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -32,6 +35,7 @@ class AIChatSession(Base):
 
 
 class AIChatMessage(Base):
+    """AIChatMessage 类."""
     __tablename__ = "ai_chat_messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

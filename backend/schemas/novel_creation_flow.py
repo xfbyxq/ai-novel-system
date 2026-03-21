@@ -1,3 +1,5 @@
+"""novel_creation_flow 模块."""
+
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field

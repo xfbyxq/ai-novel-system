@@ -23,6 +23,7 @@ class PublishingService:
     """发布服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.encryption = EncryptionService()
 

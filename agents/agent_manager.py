@@ -41,7 +41,7 @@ class AgentManager:
             self.cost_tracker = None
 
     async def initialize(self):
-        """初始化Agent系统。
+        """初始化Agent系统.
 
         - 创建通信管理器
         - 创建调度器
@@ -156,7 +156,7 @@ class AgentManager:
         logger.info("🤖 所有Agent停止完成！")
 
     def get_scheduler(self) -> Optional[AgentScheduler]:
-        """获取调度器。
+        """获取调度器.
 
         Returns:
             AgentScheduler: 调度器实例
@@ -164,7 +164,7 @@ class AgentManager:
         return self.scheduler
 
     def get_agent(self, agent_name: str) -> Optional[object]:
-        """获取指定Agent。
+        """获取指定Agent.
 
         Args:
             agent_name: Agent名称
@@ -175,7 +175,7 @@ class AgentManager:
         return self.agents.get(agent_name)
 
     def get_all_agents(self) -> Dict[str, object]:
-        """获取所有Agent。
+        """获取所有Agent.
 
         Returns:
             Dict[str, object]: Agent名称到实例的映射
@@ -183,7 +183,7 @@ class AgentManager:
         return self.agents
 
     async def get_agent_status(self, agent_name: str) -> Optional[str]:
-        """获取Agent状态。
+        """获取Agent状态.
 
         Args:
             agent_name: Agent名称
@@ -197,7 +197,7 @@ class AgentManager:
         return await self.scheduler.get_agent_status(agent_name)
 
     async def get_all_agent_statuses(self) -> Dict[str, str]:
-        """获取所有Agent状态。
+        """获取所有Agent状态.
 
         Returns:
             Dict[str, str]: Agent名称到状态的映射
@@ -219,7 +219,7 @@ global_agent_manager = AgentManager()
 
 
 def get_agent_manager() -> AgentManager:
-    """获取全局Agent管理器实例。
+    """获取全局Agent管理器实例.
 
     Returns:
         AgentManager: 全局Agent管理器实例

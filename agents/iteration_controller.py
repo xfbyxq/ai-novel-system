@@ -1,4 +1,4 @@
-"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件。
+"""迭代控制器 - 管理 Agent 间反馈循环的迭代次数与退出条件.
 
 支持基于章节类型的动态迭代策略。
 """
@@ -63,7 +63,7 @@ class IterationRecord:
 
 
 class IterationController:
-    """控制反馈循环的迭代次数和退出条件。
+    """控制反馈循环的迭代次数和退出条件.
 
     支持三种退出条件：
     1. 质量达标（score >= threshold）
@@ -110,7 +110,7 @@ class IterationController:
         custom_strategy: Optional[IterationStrategy] = None,
         cost_limit: Optional[float] = None,
     ):
-        """初始化迭代控制器。
+        """初始化迭代控制器.
 
         Args:
             chapter_type: 章节类型
@@ -143,7 +143,7 @@ class IterationController:
         iteration: Optional[int] = None,
         cost_delta: float = 0.0,
     ) -> bool:
-        """判断是否需要继续迭代。
+        """判断是否需要继续迭代.
 
         Args:
             score: 当前迭代的质量分数
@@ -233,7 +233,7 @@ class IterationController:
         chapter_title: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> ChapterType:
-        """基于内容自动识别章节类型。
+        """基于内容自动识别章节类型.
 
         使用轻量级 LLM 调用识别章节类型，避免额外成本。
 

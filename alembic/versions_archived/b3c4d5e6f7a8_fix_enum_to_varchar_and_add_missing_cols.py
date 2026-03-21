@@ -1,6 +1,6 @@
 """fix: convert enum columns to varchar and add missing columns.
 
-将所有 PostgreSQL 原生枚举类型列转换为 varchar，以匹配 ORM 模型定义。
+将所有 PostgreSQL 原生枚举类型列转换为 varchar，以匹配 ORM 模型定义.
 同时添加 ORM 模型中定义但数据库缺失的列。
 
 Revision ID: b3c4d5e6f7a8

@@ -1,5 +1,5 @@
 """
-ChapterOutlineMapper - 章节大纲映射器
+ChapterOutlineMapper - 章节大纲映射器.
 
 功能：
 1. 将卷级大纲分解为章节级任务
@@ -190,7 +190,7 @@ class OutlineValidationReport:
 
 class ChapterOutlineMapper:
     """
-    章节大纲映射器
+    章节大纲映射器.
 
     核心算法：
     1. 解析卷级大纲的张力循环
@@ -199,6 +199,7 @@ class ChapterOutlineMapper:
     """
 
     def __init__(self, novel_id: str):
+        """初始化方法."""
         self.novel_id = novel_id
         self.volume_outlines: Dict[int, Dict[str, Any]] = {}
         self.tension_cycles: Dict[int, List[TensionCycle]] = {}
@@ -213,7 +214,7 @@ class ChapterOutlineMapper:
         chapter_config: Optional[Dict[str, Any]] = None,
     ):
         """
-        加载卷大纲并解析张力循环
+        加载卷大纲并解析张力循环.
 
         Args:
             volume_number: 卷号
@@ -254,7 +255,7 @@ class ChapterOutlineMapper:
         character_states: Optional[Dict[str, Any]] = None,
     ) -> List[ChapterOutlineTask]:
         """
-        将卷大纲分解为章节级任务列表
+        将卷大纲分解为章节级任务列表.
 
         支持自动章节拆分和主线细化
 
@@ -339,7 +340,7 @@ class ChapterOutlineMapper:
         chapter_config: Optional[Dict[str, Any]] = None,
     ) -> List[TensionCycle]:
         """
-        从卷大纲中解析张力循环
+        从卷大纲中解析张力循环.
 
         期望的卷大纲结构：
         {
@@ -432,7 +433,7 @@ class ChapterOutlineMapper:
         self, total_chapters: int, chapter_config: Optional[Dict[str, Any]] = None
     ) -> List[TensionCycle]:
         """
-        创建默认张力循环
+        创建默认张力循环.
 
         Args:
             total_chapters: 卷总章节数
@@ -487,7 +488,7 @@ class ChapterOutlineMapper:
         foreshadowings: Optional[List[Dict[str, Any]]] = None,
     ) -> ChapterOutlineTask:
         """
-        为指定章节分配大纲任务
+        为指定章节分配大纲任务.
 
         Args:
             volume_number: 卷号
@@ -590,7 +591,7 @@ class ChapterOutlineMapper:
         self, volume_outline: Dict[str, Any], chapter_number: int
     ) -> str:
         """
-        提取主线剧情线索
+        提取主线剧情线索.
 
         从卷大纲中提取当前章节应推进的主线剧情
 
@@ -649,7 +650,7 @@ class ChapterOutlineMapper:
         foreshadowings: List[Dict[str, Any]],
     ):
         """
-        添加伏笔任务
+        添加伏笔任务.
 
         增强功能：
         1. 智能伏笔分配：根据张力循环位置分配伏笔
@@ -706,7 +707,7 @@ class ChapterOutlineMapper:
 
     def analyze_tension_cycle_distribution(self, volume_number: int) -> Dict[str, Any]:
         """
-        分析张力循环分布
+        分析张力循环分布.
 
         提供张力循环的详细分析，包括：
         - 各循环的章节分布
@@ -780,7 +781,7 @@ class ChapterOutlineMapper:
         total_chapters: int,
     ) -> Dict[int, List[Dict[str, Any]]]:
         """
-        在章节间智能分配伏笔
+        在章节间智能分配伏笔.
 
         根据张力循环和伏笔重要性，自动分配伏笔到最佳章节
 
@@ -903,7 +904,7 @@ class ChapterOutlineMapper:
         self, chapter_plan: Dict[str, Any], chapter_number: int
     ) -> OutlineValidationReport:
         """
-        验证章节计划是否完成了大纲任务
+        验证章节计划是否完成了大纲任务.
 
         Args:
             chapter_plan: 章节计划
@@ -1032,7 +1033,7 @@ def map_chapter_outline_task(
     **kwargs,
 ) -> ChapterOutlineTask:
     """
-    便捷函数：为章节分配大纲任务
+    便捷函数：为章节分配大纲任务.
 
     Args:
         novel_id: 小说 ID
@@ -1066,7 +1067,7 @@ def decompose_volume_outline(
     **kwargs,
 ) -> List[ChapterOutlineTask]:
     """
-    便捷函数：将卷大纲分解为章节任务
+    便捷函数：将卷大纲分解为章节任务.
 
     Args:
         novel_id: 小说 ID
@@ -1098,7 +1099,7 @@ def analyze_volume_tension(
     chapter_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    便捷函数：分析卷张力循环分布
+    便捷函数：分析卷张力循环分布.
 
     Args:
         novel_id: 小说 ID

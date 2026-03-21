@@ -1,5 +1,5 @@
 """
-ContinuityIntegrationModule - 连贯性保障集成模块
+ContinuityIntegrationModule - 连贯性保障集成模块.
 
 将所有连贯性保障组件集成到一个统一的接口中，
 方便 GenerationService 和 CrewManager 调用。
@@ -95,7 +95,7 @@ class ContinuityIntegrationResult:
 
 class ContinuityIntegrationModule:
     """
-    连贯性保障集成模块
+    连贯性保障集成模块.
 
     提供统一的接口来管理所有连贯性保障组件
 
@@ -108,7 +108,7 @@ class ContinuityIntegrationModule:
 
     def __init__(self, novel_id: str, novel_data: Dict[str, Any]):
         """
-        初始化集成模块
+        初始化集成模块.
 
         Args:
             novel_id: 小说 ID
@@ -204,7 +204,7 @@ class ContinuityIntegrationModule:
         conflicts: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
-        准备章节生成：构建上下文和任务
+        准备章节生成：构建上下文和任务.
 
         Args:
             chapter_number: 章节号
@@ -276,7 +276,7 @@ class ContinuityIntegrationModule:
         previous_chapter: Optional[Dict[str, Any]] = None,
     ) -> ContinuityIntegrationResult:
         """
-        审查章节策划
+        审查章节策划.
 
         Args:
             chapter_plan: 章节策划

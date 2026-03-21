@@ -38,7 +38,7 @@ async def list_chapters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定小说的章节列表（分页）。
+    获取指定小说的章节列表（分页）.
 
     返回章节列表，按章节号正序排列。
 
@@ -91,7 +91,7 @@ async def get_chapter_by_number(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    根据章节号获取章节详情。
+    根据章节号获取章节详情.
 
     返回指定章节的完整内容。
     """
@@ -118,7 +118,7 @@ async def update_chapter(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新章节内容。
+    更新章节内容.
 
     仅更新请求体中提供的字段。如果更新 content 字段，word_count 会自动重新计算，
     同时会同步更新小说的总字数统计。
@@ -175,7 +175,7 @@ async def delete_chapter(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除章节。
+    删除章节.
 
     删除指定章节号的章节，不会影响其他章节的编号。
     删除后会自动更新小说的章节数和总字数统计。
@@ -224,7 +224,7 @@ async def batch_delete_chapters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    批量删除多个章节。
+    批量删除多个章节.
 
     一次性删除多个指定章节号的章节。不存在的章节号会被忽略。
     删除后会自动更新小说的章节数和总字数统计。

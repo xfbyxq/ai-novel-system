@@ -1,3 +1,5 @@
+"""generation_task 模块."""
+
 import enum
 import uuid
 
@@ -10,6 +12,7 @@ from core.database import Base
 
 
 class TaskType(str, enum.Enum):
+    """TaskType 类."""
     planning = "planning"
     writing = "writing"
     editing = "editing"
@@ -18,6 +21,7 @@ class TaskType(str, enum.Enum):
 
 
 class TaskStatus(str, enum.Enum):
+    """TaskStatus 类."""
     pending = "pending"
     running = "running"
     completed = "completed"
@@ -26,6 +30,7 @@ class TaskStatus(str, enum.Enum):
 
 
 class GenerationTask(Base):
+    """GenerationTask 类."""
     __tablename__ = "generation_tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

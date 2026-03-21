@@ -24,7 +24,7 @@ from agents.team_context import AgentReview, NovelTeamContext
 
 # ── 审查专用提示词 ──────────────────────────────────────────
 
-EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色。
+EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色.
 
 你的工作包含两个部分：
 1. 对内容进行多维度评分
@@ -37,7 +37,7 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - pacing：节奏把控
 - satisfaction_design：爽感设计——章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底（旁观者反应、对手震惊）？章末是否有有效卡章？压制期章节是否在章末给出反转信号？"""
 
-EDITOR_REVIEW_TASK = """请审查并润色以下章节内容。
+EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
 原文：
 {draft_content}
@@ -63,7 +63,7 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容。
     "edited_content": "润色后的完整章节内容"
 }}"""
 
-WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title}）经过编辑审查，需要修订。
+WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title}）经过编辑审查，需要修订.
 
 编辑评分：{score}/10
 编辑反馈：
@@ -82,7 +82,7 @@ WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title
 class ReviewLoopHandler(
     BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]
 ):
-    """Writer-Editor 审查反馈循环处理器。
+    """Writer-Editor 审查反馈循环处理器.
 
     流程：
     1. Writer 生成/修订内容
@@ -98,7 +98,7 @@ class ReviewLoopHandler(
         quality_threshold: float = 7.5,
         max_iterations: int = 3,
     ):
-        """初始化章节审查处理器。
+        """初始化章节审查处理器.
 
         Args:
             client: LLM 客户端
@@ -123,7 +123,7 @@ class ReviewLoopHandler(
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
     ) -> ReviewLoopResult:
-        """执行 Writer-Editor 反馈循环。
+        """执行 Writer-Editor 反馈循环.
 
         Args:
             initial_draft: Writer 的首版初稿
@@ -179,7 +179,7 @@ class ReviewLoopHandler(
         edited_content: str,
         review_data: Dict[str, Any],
     ) -> float:
-        """验证 Editor 润色后的内容质量。
+        """验证 Editor 润色后的内容质量.
 
         Args:
             original_content: 原始内容
@@ -329,7 +329,7 @@ class ReviewLoopHandler(
         result.editor_stats = editor_stats
 
     def _get_editor_stats(self, iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """获取 Editor 效果统计信息。
+        """获取 Editor 效果统计信息.
 
         Args:
             iterations: 迭代历史记录
@@ -495,7 +495,7 @@ class ReviewLoopHandler(
         team_context: Optional[NovelTeamContext] = None,
         chapter_type: Optional[str] = None,
     ) -> ReviewLoopResult:
-        """执行审查循环，支持使用 Editor 润色后的内容。
+        """执行审查循环，支持使用 Editor 润色后的内容.
 
         这是原始 execute 方法的增强版本，会优先使用 Editor 返回的润色内容。
 

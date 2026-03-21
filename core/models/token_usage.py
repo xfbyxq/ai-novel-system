@@ -1,3 +1,5 @@
+"""token_usage 模块."""
+
 import uuid
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
@@ -9,6 +11,7 @@ from core.database import Base
 
 
 class TokenUsage(Base):
+    """TokenUsage 类."""
     __tablename__ = "token_usages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

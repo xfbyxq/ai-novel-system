@@ -1,4 +1,4 @@
-"""内容相似度检测器 - 检测章节之间的内容重复。
+"""内容相似度检测器 - 检测章节之间的内容重复.
 
 使用多种轻量级文本相似度算法（无需外部依赖）：
 1. N-gram 重叠检测
@@ -39,9 +39,9 @@ class SimilarityReport:
 
 
 class SimilarityDetector:
-    """章节内容相似度检测器。
+    """章节内容相似度检测器.
 
-    用于检测新生成的章节是否与前几章存在严重内容重复。
+    用于检测新生成的章节是否与前几章存在严重内容重复.
     """
 
     # 判定阈值
@@ -68,7 +68,7 @@ class SimilarityDetector:
         previous_chapters: Dict[int, str],
         current_chapter: int = 0,
     ) -> SimilarityReport:
-        """检测新内容与前几章的相似度。
+        """检测新内容与前几章的相似度.
 
         Args:
             new_content: 新生成的章节内容

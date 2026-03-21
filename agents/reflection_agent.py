@@ -1,4 +1,4 @@
-"""反思代理 (Reflection Agent)。
+"""反思代理 (Reflection Agent).
 
 独立的反思模块，从审查循环的迭代历史中提取经验教训，
 分为短期反思（纯 Python 规则/统计，零 LLM 开销）和长期反思（跨章节模式分析，1 次 LLM 调用）。
@@ -145,7 +145,7 @@ class ReflectionEntry:
 
 
 class ReflectionAgent:
-    """反思代理。
+    """反思代理.
 
     职责：
     1. 短期反思 (reflect_on_loop): 每次审查循环结束后，零 LLM 开销地提取统计特征
@@ -162,6 +162,7 @@ class ReflectionAgent:
         storage,  # NovelMemoryStorage 实例
         config: Optional[ReflectionConfig] = None,
     ):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.novel_id = novel_id
@@ -175,7 +176,7 @@ class ReflectionAgent:
     async def reflect_on_loop(
         self, input_data: ReflectionInput
     ) -> Optional[ReflectionEntry]:
-        """短期反思：从单次审查循环中提取统计特征。
+        """短期反思：从单次审查循环中提取统计特征.
 
         纯 Python 计算，不调用 LLM。提取以下信息：
         - 评分提升趋势
@@ -249,7 +250,7 @@ class ReflectionAgent:
     # ── 短期反思内部方法 ──────────────────────────────────────
 
     def _detect_stagnation(self, scores: List[float]) -> bool:
-        """检测评分是否出现停滞。
+        """检测评分是否出现停滞.
 
         规则：连续 2 轮改善 < 0.3 分
         """
@@ -283,7 +284,7 @@ class ReflectionAgent:
     def _identify_effective_strategies(
         self, input_data: ReflectionInput, scores: List[float]
     ) -> List[str]:
-        """识别有效的修订策略。
+        """识别有效的修订策略.
 
         通过分析维度分数变化识别哪些方面改善最大。
         """
@@ -323,7 +324,7 @@ class ReflectionAgent:
     # ══════════════════════════════════════════════════════════════════════
 
     async def analyze_cross_chapter_patterns(self, current_chapter: int) -> bool:
-        """长期反思：跨章节模式分析。
+        """长期反思：跨章节模式分析.
 
         每 N 章触发一次（由 config.analysis_interval 控制）。
         聚合近期的 reflection_entries，调用 1 次 LLM 识别写作模式，
@@ -523,7 +524,7 @@ class ReflectionAgent:
             "识别写作中反复出现的问题模式，并生成简洁、可操作的写作建议。"
         )
 
-        task_prompt = f"""请分析以下多章节审查循环的统计数据，识别模式并生成建议。
+        task_prompt = f"""请分析以下多章节审查循环的统计数据，识别模式并生成建议.
 
 {analysis_input}
 {existing_patterns_text}
@@ -677,7 +678,7 @@ class ReflectionAgent:
     # ══════════════════════════════════════════════════════════════════════
 
     def get_lessons_for_writer(self, chapter_type: str = "normal") -> str:
-        """获取给 Writer 的经验建议。
+        """获取给 Writer 的经验建议.
 
         Args:
             chapter_type: 章节类型，用于筛选适用的 lessons
@@ -696,7 +697,7 @@ class ReflectionAgent:
         return self._format_lessons("continuity", chapter_type)
 
     def _format_lessons(self, lesson_type: str, chapter_type: str) -> str:
-        """格式化指定类型的 lessons 为 prompt 文本。
+        """格式化指定类型的 lessons 为 prompt 文本.
 
         遵循字符预算限制，返回 top N 条 lessons。
         """
@@ -778,7 +779,7 @@ class ReflectionAgent:
         chapter_number: int,
         was_effective: bool,
     ) -> None:
-        """记录 lesson 的实际应用效果。
+        """记录 lesson 的实际应用效果.
 
         根据应用后的审查循环结果，更新 lesson 的 effectiveness_score。
         如果连续无效，自动将其标记为 deprecated。

@@ -28,7 +28,7 @@ async def list_characters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定小说的所有角色。
+    获取指定小说的所有角色.
 
     返回角色列表，按创建时间正序排列（先创建的角色在前）。
     """
@@ -68,7 +68,7 @@ async def create_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    为指定小说创建新角色。
+    为指定小说创建新角色.
 
     创建角色后可在 relationships 字段中指定与其他角色的关系。
     """
@@ -107,7 +107,7 @@ async def get_character_relationships(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色关系图数据（图论格式）。
+    获取角色关系图数据（图论格式）.
 
     返回用于前端可视化的关系图数据结构：
     - **nodes**: 角色节点列表，每个节点包含 id、name、role_type 等信息
@@ -182,7 +182,7 @@ async def get_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色详情。
+    获取角色详情.
 
     返回指定角色的完整信息。
     """
@@ -207,7 +207,7 @@ async def update_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新角色信息。
+    更新角色信息.
 
     仅更新请求体中提供的字段，未提供的字段保持不变。
     """
@@ -238,7 +238,7 @@ async def delete_character(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    删除角色。
+    删除角色.
 
     删除后，其他角色的 relationships 中对此角色的引用不会自动更新。
     """
@@ -263,7 +263,7 @@ async def get_character_name_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取角色名字版本历史。
+    获取角色名字版本历史.
 
     返回角色名字的变更历史记录，包括每次变更的时间、操作人和原因。
     """
@@ -301,7 +301,7 @@ async def create_character_name_version(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    创建角色名字版本记录。
+    创建角色名字版本记录.
 
     记录角色名字的变更，包括旧名字、新名字、变更人和原因。
     """
@@ -351,7 +351,7 @@ async def compare_character_name_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    对比两个名字版本的差异。
+    对比两个名字版本的差异.
 
     返回两个版本之间的差异信息。
     """
@@ -379,7 +379,7 @@ async def revert_character_name_version(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    回溯到指定的名字版本。
+    回溯到指定的名字版本.
 
     将角色名字恢复到历史版本，并创建新的版本记录。
     """
@@ -430,7 +430,7 @@ async def validate_character_name_change(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    验证角色名字变更是否合理。
+    验证角色名字变更是否合理.
 
     检查新名字是否与历史版本冲突，并提供警告信息。
     """

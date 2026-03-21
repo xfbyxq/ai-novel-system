@@ -1,4 +1,4 @@
-"""大纲一致性验证 Agent。
+"""大纲一致性验证 Agent.
 
 功能：
 1. 验证章节与大纲一致性
@@ -25,7 +25,7 @@ class OutlineValidator:
         client: Optional[QwenClient] = None,
         cost_tracker: Optional[CostTracker] = None,
     ):
-        """初始化大纲验证 Agent。
+        """初始化大纲验证 Agent.
 
         Args:
             client: LLM 客户端
@@ -37,7 +37,7 @@ class OutlineValidator:
     async def validate_chapter_against_outline(
         self, chapter_plan: Dict[str, Any], outline_task: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """验证章节与大纲一致性。
+        """验证章节与大纲一致性.
 
         检查章节计划是否符合大纲要求
 
@@ -83,7 +83,7 @@ class OutlineValidator:
     async def check_character_consistency(
         self, chapter_plan: Dict[str, Any], character_states: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """检查角色一致性。
+        """检查角色一致性.
 
         检查章节中的角色行为、性格、能力是否与设定一致
 
@@ -133,7 +133,7 @@ class OutlineValidator:
     async def check_plot_continuity(
         self, chapter_plan: Dict[str, Any], previous_chapters: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """检查剧情连贯性。
+        """检查剧情连贯性.
 
         检查章节与之前章节的剧情是否连贯
 
@@ -181,7 +181,7 @@ class OutlineValidator:
     async def check_world_setting_consistency(
         self, chapter_plan: Dict[str, Any], world_setting: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """检查世界观一致性。
+        """检查世界观一致性.
 
         检查章节内容是否符合世界观设定
 
@@ -231,7 +231,7 @@ class OutlineValidator:
     async def generate_improvement_suggestions(
         self, validation_issues: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """生成改进建议。
+        """生成改进建议.
 
         基于验证发现的问题，生成具体的改进建议
 
@@ -278,7 +278,7 @@ class OutlineValidator:
         outline_task_str = json.dumps(outline_task, ensure_ascii=False)
 
         prompt = f"""
-# 任务：验证章节与大纲的一致性
+# 任务：验证章节与大纲的一致性.
 
 ## 章节计划
 {chapter_plan_str}
@@ -366,7 +366,7 @@ class OutlineValidator:
         character_states_str = json.dumps(character_states, ensure_ascii=False)
 
         prompt = f"""
-# 任务：检查角色一致性
+# 任务：检查角色一致性.
 
 ## 章节计划
 {chapter_plan_str}
@@ -444,7 +444,7 @@ class OutlineValidator:
         )  # 只取最近 5 章
 
         prompt = f"""
-# 任务：检查剧情连贯性
+# 任务：检查剧情连贯性.
 
 ## 当前章节计划
 {chapter_plan_str}
@@ -536,7 +536,7 @@ class OutlineValidator:
         world_setting_str = json.dumps(world_setting, ensure_ascii=False)
 
         prompt = f"""
-# 任务：检查世界观一致性
+# 任务：检查世界观一致性.
 
 ## 章节计划
 {chapter_plan_str}
@@ -642,7 +642,7 @@ class OutlineValidator:
         issues_str = json.dumps(validation_issues, ensure_ascii=False)
 
         prompt = f"""
-# 任务：生成改进建议
+# 任务：生成改进建议.
 
 ## 验证发现的问题
 {issues_str}

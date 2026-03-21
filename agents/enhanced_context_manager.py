@@ -1,5 +1,5 @@
 """
-EnhancedContextManager - 增强型上下文管理器
+EnhancedContextManager - 增强型上下文管理器.
 
 采用四层记忆架构，确保关键信息不丢失：
 1. 核心层（始终携带）：主题、核心冲突、主角终极目标
@@ -201,7 +201,7 @@ class EnhancedContext:
 
 class EnhancedContextManager:
     """
-    增强型上下文管理器
+    增强型上下文管理器.
 
     核心功能：
     1. 智能提取关键信息（不只是压缩，而是保留重要内容）
@@ -210,6 +210,7 @@ class EnhancedContextManager:
     """
 
     def __init__(self, novel_id: str):
+        """初始化方法."""
         self.novel_id = novel_id
         self.context_cache: Dict[int, EnhancedContext] = {}
         logger.info(f"EnhancedContextManager initialized for novel: {novel_id}")
@@ -225,7 +226,7 @@ class EnhancedContextManager:
         volume_summaries: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> EnhancedContext:
         """
-        为指定章节构建增强的上下文
+        为指定章节构建增强的上下文.
 
         Args:
             chapter_number: 当前要写的章节号
@@ -311,7 +312,7 @@ class EnhancedContextManager:
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> List[CriticalElement]:
         """
-        构建关键层
+        构建关键层.
 
         关键改进：
         - 识别"如果这章不写，后面就忘了"的信息

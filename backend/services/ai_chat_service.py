@@ -32,6 +32,7 @@ class RevisionSuggestion:
         description: str = "",
         confidence: float = 0.8,
     ):
+        """初始化方法."""
         self.suggestion_type = (
             suggestion_type  # world_setting, character, outline, chapter
         )
@@ -130,6 +131,7 @@ class ChatMessage:
     """对话消息."""
 
     def __init__(self, role: str, content: str):
+        """初始化方法."""
         self.role = role
         self.content = content
 
@@ -148,6 +150,7 @@ class ChatSession:
         novel_id: Optional[str] = None,
         title: Optional[str] = None,
     ):
+        """初始化方法."""
         self.session_id = session_id
         self.scene = scene
         self.context = context or {}
@@ -212,6 +215,7 @@ class AiChatService:
     """AI 对话服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.client = QwenClient()
         self.sessions: dict[str, ChatSession] = {}

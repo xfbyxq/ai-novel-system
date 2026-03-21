@@ -7,7 +7,7 @@ from core.logging_config import logger
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询请求。
+QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询请求.
 
 查询问题：
 {question}
@@ -20,7 +20,7 @@ QUERY_HANDLER_PROMPT = """你是{target_role}，收到来自{requester}的查询
 
 
 class AgentQueryService:
-    """Agent 间请求-应答协商服务。
+    """Agent 间请求-应答协商服务.
 
     在 CrewManager 串行流程中模拟 Agent 间的查询交互：
     Writer 遇到设定疑问时，可通过标记触发查询，
@@ -38,6 +38,7 @@ class AgentQueryService:
     }
 
     def __init__(self, client: QwenClient, cost_tracker: CostTracker):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
 
@@ -49,7 +50,7 @@ class AgentQueryService:
         knowledge_base: str,
         chapter_number: int = 0,
     ) -> str:
-        """发起一次跨 Agent 查询。
+        """发起一次跨 Agent 查询.
 
         Args:
             requester: 发起查询的 Agent 名称（如 "作家"）
@@ -100,7 +101,7 @@ class AgentQueryService:
 
     @staticmethod
     def parse_query_tags(text: str) -> list[dict[str, str]]:
-        """从文本中解析 [QUERY:type]question[/QUERY] 标记。
+        """从文本中解析 [QUERY:type]question[/QUERY] 标记.
 
         Returns:
             列表，每项包含 {"type": "world/character/plot", "question": "问题内容"}

@@ -1,3 +1,5 @@
+"""character 模块."""
+
 import enum
 import uuid
 
@@ -10,6 +12,7 @@ from core.database import Base
 
 
 class RoleType(str, enum.Enum):
+    """RoleType 类."""
     protagonist = "protagonist"  # 主角
     supporting = "supporting"  # 配角
     antagonist = "antagonist"  # 反派
@@ -17,18 +20,21 @@ class RoleType(str, enum.Enum):
 
 
 class Gender(str, enum.Enum):
+    """Gender 类."""
     male = "male"
     female = "female"
     other = "other"
 
 
 class CharacterStatus(str, enum.Enum):
+    """CharacterStatus 类."""
     alive = "alive"
     dead = "dead"
     unknown = "unknown"
 
 
 class Character(Base):
+    """Character 类."""
     __tablename__ = "characters"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

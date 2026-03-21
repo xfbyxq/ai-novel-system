@@ -1,3 +1,5 @@
+"""novel 模块."""
+
 import enum
 
 from sqlalchemy import (
@@ -21,6 +23,7 @@ import uuid
 
 
 class NovelStatus(str, enum.Enum):
+    """NovelStatus 类."""
     planning = "planning"
     writing = "writing"
     completed = "completed"
@@ -28,12 +31,14 @@ class NovelStatus(str, enum.Enum):
 
 
 class NovelLengthType(str, enum.Enum):
+    """NovelLengthType 类."""
     short = "short"  # 短文
     medium = "medium"  # 中篇小说
     long = "long"  # 长篇小说
 
 
 class Novel(Base):
+    """Novel 类."""
     __tablename__ = "novels"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -1,5 +1,5 @@
 """
-ThemeGuardian - 主题守护者
+ThemeGuardian - 主题守护者.
 
 职责：
 1. 定义小说的核心主题和主线冲突
@@ -165,7 +165,7 @@ class ThemeConsistencyReport:
 
 class ThemeGuardian:
     """
-    主题守护者
+    主题守护者.
 
     核心方法：
     1. 定义主题
@@ -175,7 +175,7 @@ class ThemeGuardian:
     """
 
     # 审查提示词模板
-    REVIEW_PROMPT = """请作为专业编辑，审查以下章节计划是否符合小说的核心主题。
+    REVIEW_PROMPT = """请作为专业编辑，审查以下章节计划是否符合小说的核心主题.
 
 {theme_definition}
 
@@ -225,7 +225,7 @@ class ThemeGuardian:
 
     def __init__(self, novel_id: str, theme_definition: ThemeDefinition):
         """
-        初始化主题守护者
+        初始化主题守护者.
 
         Args:
             novel_id: 小说 ID
@@ -241,7 +241,7 @@ class ThemeGuardian:
         self, chapter_plan: Dict[str, Any], chapter_number: int
     ) -> ThemeConsistencyReport:
         """
-        审查章节计划是否符合主题
+        审查章节计划是否符合主题.
 
         Args:
             chapter_plan: 章节计划
@@ -302,7 +302,7 @@ class ThemeGuardian:
         self, chapter_plan: Dict[str, Any], central_question: str
     ) -> Dict[str, Any]:
         """
-        计算主线推进度
+        计算主线推进度.
 
         检查：
         - 本章事件是否与核心问题相关
@@ -357,7 +357,7 @@ class ThemeGuardian:
         self, chapter_plan: Dict[str, Any], chapter_number: int
     ) -> Dict[str, Any]:
         """
-        分析角色动机一致性
+        分析角色动机一致性.
 
         检查：
         - 角色行为是否符合其核心动机
@@ -402,7 +402,7 @@ class ThemeGuardian:
 
     def _analyze_subplots(self, chapter_plan: Dict[str, Any]) -> Dict[str, Any]:
         """
-        分析支线情节相关度
+        分析支线情节相关度.
 
         检查：
         - 支线是否服务于主题
@@ -462,7 +462,7 @@ class ThemeGuardian:
         self, chapter_plan: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        评估主题表达度
+        评估主题表达度.
 
         检查：
         - 是否深化了主题
@@ -497,7 +497,7 @@ class ThemeGuardian:
 
     def _calculate_overall_score(self, report: ThemeConsistencyReport) -> float:
         """
-        计算综合评分
+        计算综合评分.
 
         权重：
         - 主线推进度：40%
@@ -542,7 +542,7 @@ class ThemeGuardian:
 
     def build_theme_guidance_prompt(self) -> str:
         """
-        构建主题指导提示词
+        构建主题指导提示词.
 
         用于在生成前提醒作家
         """

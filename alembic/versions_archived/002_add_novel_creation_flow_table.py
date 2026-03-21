@@ -18,6 +18,7 @@ depends_on = None
 
 
 def upgrade():
+    """upgrade 函数."""
     op.create_table(
         "novel_creation_flows",
         sa.Column("id", sa.String(100), nullable=False),
@@ -83,6 +84,7 @@ def upgrade():
 
 
 def downgrade():
+    """downgrade 函数."""
     op.drop_index("ix_novel_creation_flows_selected_novel_id")
     op.drop_index("ix_novel_creation_flows_novel_id")
     op.drop_index("ix_novel_creation_flows_session_id")

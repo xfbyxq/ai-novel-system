@@ -64,6 +64,7 @@ class MonitoringService:
     """监控服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.start_time = time.time()
         self.metrics_history = []

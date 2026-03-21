@@ -1,4 +1,4 @@
-"""清理数据库中的重复角色数据。
+"""清理数据库中的重复角色数据.
 
 功能：
 1. 查找所有 (novel_id, lower(name)) 重复的角色记录
@@ -231,6 +231,7 @@ async def cleanup(apply: bool = False) -> None:
 
 
 def main():
+    """main 函数."""
     parser = argparse.ArgumentParser(description="清理数据库中的重复角色数据")
     parser.add_argument(
         "--apply",

@@ -1,3 +1,5 @@
+"""novel_creation_flow_manager 模块."""
+
 import json
 import sys
 from typing import Optional
@@ -29,6 +31,7 @@ class FlowResponse:
     def __init__(
         self, message: str, context: NovelCreationContext, next_step: CreationFlowStep
     ):
+        """初始化方法."""
         self.message = message
         self.context = context
         self.next_step = next_step
@@ -38,6 +41,7 @@ class NovelCreationFlowManager:
     """小说创建对话流程管理器."""
 
     def __init__(self, db: AsyncSession, qwen_client: Optional[QwenClient] = None):
+        """初始化方法."""
         self.db = db
         self.qwen_client = qwen_client or QwenClient()
         self._context_cache: dict[str, NovelCreationContext] = {}
@@ -207,7 +211,7 @@ class NovelCreationFlowManager:
                 context.genre = extracted_info["genre"]
                 context.current_step = CreationFlowStep.GENRE_CONFIRMATION.value
 
-                response_message = f"""我了解到您想创作一部**{extracted_info['genre']}**类型的小说。
+                response_message = f"""我了解到您想创作一部**{extracted_info['genre']}**类型的小说.
 
 这个类型非常受欢迎！让我确认一下：您确定要创作{extracted_info['genre']}类型的小说吗？
 
@@ -227,7 +231,7 @@ class NovelCreationFlowManager:
 
     def _get_genre_selection_message(self) -> str:
         """获取类型选择消息."""
-        return """您好！我是您的小说创作助手。
+        return """您好！我是您的小说创作助手.
 
 在开始创作之前，让我先了解一下：您想创作什么类型的小说呢？
 
@@ -264,7 +268,7 @@ class NovelCreationFlowManager:
         else:
             # 用户想修改类型
             context.genre = user_input.strip()
-            response_message = f"""明白了！那我们将创作一部**{context.genre}**类型的小说。
+            response_message = f"""明白了！那我们将创作一部**{context.genre}**类型的小说.
 
 您对这个类型有什么特别的想法或设定吗？或者我们直接进入世界观设定的讨论？"""
 
@@ -927,7 +931,7 @@ class NovelCreationFlowManager:
                 target_display += f" - {target_name}"
 
             return FlowResponse(
-                message=f"""好的，您想修改**{target_display}**。
+                message=f"""好的，您想修改**{target_display}**.
 
 请详细描述您想如何修改？例如：
 - 如果要修改世界观，请描述新的设定

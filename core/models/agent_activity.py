@@ -23,7 +23,7 @@ from core.database import Base
 
 class AgentActivity(Base):
     """
-    Agent 活动记录表
+    Agent 活动记录表.
 
     记录每个 Agent 在执行过程中的详细活动，包括：
     - 输入数据

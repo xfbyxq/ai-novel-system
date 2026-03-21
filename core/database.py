@@ -1,3 +1,5 @@
+"""database 模块."""
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -5,6 +7,7 @@ from backend.config import settings
 
 
 class Base(DeclarativeBase):
+    """Base 类."""
     pass
 
 

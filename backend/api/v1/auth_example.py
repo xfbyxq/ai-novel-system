@@ -1,5 +1,5 @@
 """
-API 认证使用示例
+API 认证使用示例.
 
 展示如何在 API 端点中添加认证保护。
 """
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/public")
 async def public_endpoint():
     """
-    公开端点 - 无需认证
+    公开端点 - 无需认证.
 
     适用于：健康检查、公开文档、登录注册等
     """
@@ -33,7 +33,7 @@ async def protected_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    受保护端点 - 需要 API Key 认证
+    受保护端点 - 需要 API Key 认证.
 
     使用方法：
     1. 在请求头中添加：Authorization: Bearer <your_api_key>
@@ -60,7 +60,7 @@ async def bulk_operation(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    批量操作端点 - 需要认证
+    批量操作端点 - 需要认证.
 
     示例：批量生成章节、批量发布等
     """

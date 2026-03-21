@@ -1,3 +1,5 @@
+"""config 模块."""
+
 import os
 from functools import lru_cache
 
@@ -23,6 +25,7 @@ def get_version_from_pyproject() -> str:
 
 
 class Settings(BaseSettings):
+    """Settings 类."""
     # LLM
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen-plus"
@@ -185,6 +188,7 @@ class Settings(BaseSettings):
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限
 
     def __init__(self, **values):
+        """初始化方法."""
         super().__init__(**values)
         # 验证配置值的合理性
         if (

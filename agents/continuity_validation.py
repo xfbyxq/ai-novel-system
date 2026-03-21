@@ -1,5 +1,5 @@
 """
-连贯性验证引擎
+连贯性验证引擎.
 
 使用 LLM 验证新章节是否满足合理期待。
 区分"连贯性问题"和"艺术性打破期待"。
@@ -20,7 +20,7 @@ from agents.continuity_models import (
 
 class ValidationEngine:
     """
-    连贯性验证引擎
+    连贯性验证引擎.
 
     核心方法：
     1. 将约束和生成内容一起交给 LLM
@@ -30,7 +30,7 @@ class ValidationEngine:
     """
 
     # 验证提示词模板
-    VALIDATION_PROMPT = """请作为专业编辑，评估以下章节开头是否满足了读者的合理期待。
+    VALIDATION_PROMPT = """请作为专业编辑，评估以下章节开头是否满足了读者的合理期待.
 
 ## 上一章结尾
 {previous_ending}
@@ -80,7 +80,7 @@ class ValidationEngine:
 
     def __init__(self, qwen_client: Optional[QwenClient] = None):
         """
-        初始化验证引擎
+        初始化验证引擎.
 
         Args:
             qwen_client: 通义千问客户端
@@ -95,7 +95,7 @@ class ValidationEngine:
         constraints: ConstraintList,
     ) -> ValidationReport:
         """
-        验证新章节是否满足连贯性约束
+        验证新章节是否满足连贯性约束.
 
         Args:
             previous_ending: 上一章结尾（500-800 字）
@@ -151,7 +151,7 @@ class ValidationEngine:
 
     def _format_constraints(self, constraints: ConstraintList) -> str:
         """
-        格式化约束描述
+        格式化约束描述.
 
         Args:
             constraints: 约束列表
@@ -173,7 +173,7 @@ class ValidationEngine:
 
     def _parse_llm_response(self, content: str) -> Dict[str, Any]:
         """
-        解析 LLM 响应
+        解析 LLM 响应.
 
         使用多种策略解析 JSON：
         1. 直接解析
@@ -225,7 +225,7 @@ class ValidationEngine:
         self, report_data: Dict[str, Any], constraints: ConstraintList
     ) -> ValidationReport:
         """
-        创建验证报告
+        创建验证报告.
 
         Args:
             report_data: LLM 解析后的数据
@@ -281,7 +281,7 @@ class ValidationEngine:
         max_retries: int = 2,
     ) -> ValidationReport:
         """
-        带重试的验证
+        带重试的验证.
 
         如果第一次验证失败，可以尝试重新生成评估。
 
@@ -315,7 +315,7 @@ class ValidationEngine:
 
     def calculate_transition_quality(self, report: ValidationReport) -> str:
         """
-        根据验证报告计算过渡质量等级
+        根据验证报告计算过渡质量等级.
 
         Args:
             report: 验证报告
@@ -345,7 +345,7 @@ async def validate_chapter_transition(
     qwen_client: Optional[QwenClient] = None,
 ) -> ValidationReport:
     """
-    便捷函数：验证章节过渡
+    便捷函数：验证章节过渡.
 
     Args:
         previous_ending: 上一章结尾

@@ -22,6 +22,7 @@ class QwenClient:
         model: str | None = None,
         base_url: str | None = None,
     ):
+        """初始化方法."""
         self.api_key = api_key or settings.DASHSCOPE_API_KEY
         self.model = model or settings.DASHSCOPE_MODEL
         self.base_url = base_url or settings.DASHSCOPE_BASE_URL

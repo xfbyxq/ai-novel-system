@@ -1,5 +1,5 @@
 """
-连贯性约束推断引擎
+连贯性约束推断引擎.
 
 从上一章内容中自动推断读者期待和连贯性约束。
 完全基于 LLM 自适应推断，不预设具体规则。
@@ -16,7 +16,7 @@ from agents.continuity_models import ContinuityConstraint, ConstraintList
 
 class ConstraintInferenceEngine:
     """
-    连贯性约束推断引擎
+    连贯性约束推断引擎.
 
     核心方法：
     1. 分析上一章文本，识别"未完成状态"（open states）
@@ -28,9 +28,9 @@ class ConstraintInferenceEngine:
     """
 
     # 推断提示词模板
-    INFERENCE_PROMPT = """请分析以下文本的结尾部分，推断读者会对下一章产生哪些期待。
+    INFERENCE_PROMPT = """请分析以下文本的结尾部分，推断读者会对下一章产生哪些期待.
 
-## 文本结尾
+## 文本结尾.
 {previous_chapter_ending}
 
 ## 分析维度（仅供参考，不限制你的推断）
@@ -62,7 +62,7 @@ class ConstraintInferenceEngine:
 
     def __init__(self, qwen_client: Optional[QwenClient] = None):
         """
-        初始化推断引擎
+        初始化推断引擎.
 
         Args:
             qwen_client: 通义千问客户端，如不提供则创建默认实例
@@ -78,7 +78,7 @@ class ConstraintInferenceEngine:
         min_priority: int = 6,
     ) -> ConstraintList:
         """
-        从上一章推断连贯性约束
+        从上一章推断连贯性约束.
 
         Args:
             previous_chapter_ending: 上一章结尾（最后 500-1000 字）
@@ -146,7 +146,7 @@ class ConstraintInferenceEngine:
 
     def _parse_llm_response(self, content: str) -> Dict[str, Any]:
         """
-        解析 LLM 响应
+        解析 LLM 响应.
 
         尝试多种解析策略：
         1. 直接解析 JSON
@@ -225,7 +225,7 @@ class ConstraintInferenceEngine:
 
     def get_constraint_statistics(self, constraints: ConstraintList) -> Dict[str, Any]:
         """
-        获取约束统计信息
+        获取约束统计信息.
 
         Args:
             constraints: 约束列表
@@ -259,7 +259,7 @@ async def infer_chapter_constraints(
     previous_ending: str, qwen_client: Optional[QwenClient] = None
 ) -> ConstraintList:
     """
-    便捷函数：从上一章结尾推断约束
+    便捷函数：从上一章结尾推断约束.
 
     Args:
         previous_ending: 上一章结尾内容

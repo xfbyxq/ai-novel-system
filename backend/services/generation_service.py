@@ -35,6 +35,7 @@ class GenerationService:
     """小说生成服务，编排 CrewManager 并将结果持久化到数据库."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.client = QwenClient()
         self.cost_tracker = CostTracker()
@@ -1496,7 +1497,7 @@ class GenerationService:
     ) -> str:
         """构建结构化的前置章节上下文.
 
-        优先使用记忆系统中的结构化摘要，回退到智能截取。
+        优先使用记忆系统中的结构化摘要，回退到智能截取.
 
         Args:
             novel_id: 小说ID
@@ -1634,7 +1635,7 @@ class GenerationService:
     def _extract_character_mentions(self, content: str) -> str:
         """提取角色变化描述.
 
-        简化实现：返回内容中可能的角色状态变化关键词。
+        简化实现：返回内容中可能的角色状态变化关键词.
         后续可增强为 LLM 提取或更复杂的规则匹配。
 
         Args:
@@ -1689,7 +1690,7 @@ class GenerationService:
     ) -> NovelTeamContext:
         """获取或创建小说的 TeamContext.
 
-        TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享。
+        TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享.
 
         Args:
             novel_id: 小说ID
@@ -1716,7 +1717,7 @@ class GenerationService:
     ):
         """初始化小说的持久化长期记忆.
 
-        在企划阶段完成后调用，保存世界观、角色、大纲等核心设定。
+        在企划阶段完成后调用，保存世界观、角色、大纲等核心设定.
 
         Args:
             novel_id: 小说ID
@@ -1750,7 +1751,7 @@ class GenerationService:
     ) -> str:
         """构建增强的前置章节上下文.
 
-        优先使用持久化记忆系统，回退到内存缓存和数据库。
+        优先使用持久化记忆系统，回退到内存缓存和数据库.
 
         Args:
             novel_id: 小说ID

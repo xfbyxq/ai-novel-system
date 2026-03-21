@@ -1,5 +1,5 @@
 """
-ForeshadowingTracker - 伏笔追踪系统
+ForeshadowingTracker - 伏笔追踪系统.
 
 用于追踪小说中的伏笔埋设和回收，确保情节连贯性。
 """
@@ -46,6 +46,7 @@ class Foreshadowing:
         related_characters: List[str] = None,
         notes: str = "",
     ):
+        """初始化方法."""
         self.id = str(uuid.uuid4())[:8]
         self.content = content
         self.planted_chapter = planted_chapter
@@ -126,7 +127,7 @@ class Foreshadowing:
 
 class ForeshadowingTracker:
     """
-    伏笔追踪器
+    伏笔追踪器.
 
     功能：
     1. 埋设伏笔并记录
@@ -136,6 +137,7 @@ class ForeshadowingTracker:
     """
 
     def __init__(self, novel_id: str):
+        """初始化方法."""
         self.novel_id = novel_id
         self.foreshadowings: Dict[str, Foreshadowing] = {}
         logger.info(f"ForeshadowingTracker initialized for novel: {novel_id}")
@@ -151,7 +153,7 @@ class ForeshadowingTracker:
         notes: str = "",
     ) -> str:
         """
-        埋下伏笔
+        埋下伏笔.
 
         Returns:
             伏笔ID
@@ -175,7 +177,7 @@ class ForeshadowingTracker:
         self, fid: str, chapter_number: int, resolution_content: str = ""
     ) -> bool:
         """
-        回收伏笔
+        回收伏笔.
 
         Args:
             fid: 伏笔ID
@@ -246,7 +248,7 @@ class ForeshadowingTracker:
         self, chapter_number: int
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取与某章节相关的伏笔
+        获取与某章节相关的伏笔.
 
         Returns:
             {
@@ -274,7 +276,7 @@ class ForeshadowingTracker:
         self, current_chapter: int, look_ahead: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        建议近期需要回收的伏笔
+        建议近期需要回收的伏笔.
 
         Args:
             current_chapter: 当前章节
@@ -315,7 +317,7 @@ class ForeshadowingTracker:
 
     def format_for_prompt(self, current_chapter: int, max_items: int = 10) -> str:
         """
-        格式化伏笔信息用于提示词
+        格式化伏笔信息用于提示词.
 
         Args:
             current_chapter: 当前章节

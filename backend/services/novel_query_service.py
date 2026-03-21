@@ -1,3 +1,5 @@
+"""novel_query_service 模块."""
+
 from typing import Optional, Dict, Any, List
 import sys
 from pathlib import Path
@@ -20,6 +22,7 @@ class NovelQueryService:
     """小说查询服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def search_novels(

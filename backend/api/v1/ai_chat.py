@@ -61,7 +61,7 @@ async def create_session(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    创建新的 AI 对话会话。
+    创建新的 AI 对话会话.
 
     **支持的场景 (scene)**:
     - `novel_creation`: 小说创建对话
@@ -100,7 +100,7 @@ async def send_message(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    发送消息并获取 AI 回复。
+    发送消息并获取 AI 回复.
 
     同步接口，等待完整响应返回。如需流式响应，请使用 WebSocket 接口。
     """
@@ -132,7 +132,7 @@ async def websocket_chat(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    WebSocket 流式对话。
+    WebSocket 流式对话.
 
     **连接方式**: `ws://host/api/v1/ai-chat/ws/{session_id}`
 
@@ -195,7 +195,7 @@ async def parse_novel_intent(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    解析小说创建意图。
+    解析小说创建意图.
 
     将用户的自然语言描述转换为结构化的小说创建参数。
     """
@@ -212,7 +212,7 @@ async def parse_crawler_intent(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    解析爬虫任务意图。
+    解析爬虫任务意图.
 
     将用户的自然语言描述转换为结构化的爬虫任务参数。
     """
@@ -230,7 +230,7 @@ async def list_sessions(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    获取会话列表。
+    获取会话列表.
 
     支持按场景和小说ID筛选。
     """
@@ -247,7 +247,7 @@ async def get_session(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    获取会话详情。
+    获取会话详情.
 
     返回会话的完整信息，包括所有历史消息。
     """
@@ -282,7 +282,7 @@ async def delete_session(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    删除会话。
+    删除会话.
 
     删除指定会话及其所有消息。
     """
@@ -309,7 +309,7 @@ async def extract_suggestions(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    从AI响应中提取结构化的修订建议。
+    从AI响应中提取结构化的修订建议.
 
     分析AI回复的文本，提取出可以应用到小说数据的具体修改建议。
     """
@@ -371,7 +371,7 @@ async def apply_suggestion(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    应用单个修订建议到数据库。
+    应用单个修订建议到数据库.
 
     将提取的建议直接应用到对应的小说数据。
     """
@@ -401,7 +401,7 @@ async def apply_suggestions_batch(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    批量应用修订建议到数据库。
+    批量应用修订建议到数据库.
 
     一次性应用多个修订建议，返回每个建议的应用结果。
     """
@@ -434,7 +434,7 @@ async def get_novel_characters_for_revision(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    获取小说的角色列表（简化版）。
+    获取小说的角色列表（简化版）.
 
     用于修订建议时选择目标角色，返回精简的角色信息。
     """
@@ -468,7 +468,7 @@ async def get_novel_chapters_for_revision(
     service: AiChatService = Depends(get_ai_chat_service),
 ):
     """
-    获取小说的章节列表（简化版）。
+    获取小说的章节列表（简化版）.
 
     用于修订建议时选择目标章节，返回精简的章节信息。
     """

@@ -41,11 +41,11 @@ class QualityReport:
         )
 
 
-QUALITY_EVALUATOR_SYSTEM = """你是一位专业的网络小说质量评审专家。
+QUALITY_EVALUATOR_SYSTEM = """你是一位专业的网络小说质量评审专家.
 你需要从多个维度对章节内容进行客观评分，并给出具体的改进建议。
 评分必须严格、公正，能真实反映内容质量。"""
 
-QUALITY_EVALUATOR_TASK = """请对以下章节内容进行多维度质量评估。
+QUALITY_EVALUATOR_TASK = """请对以下章节内容进行多维度质量评估.
 
 章节内容：
 {content}
@@ -89,6 +89,7 @@ class QualityEvaluator:
         cost_tracker: CostTracker,
         default_threshold: float = 7.5,
     ):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.default_threshold = default_threshold
@@ -99,7 +100,7 @@ class QualityEvaluator:
         chapter_plan: str = "",
         threshold: Optional[float] = None,
     ) -> QualityReport:
-        """评估章节内容质量。
+        """评估章节内容质量.
 
         Args:
             content: 章节文本

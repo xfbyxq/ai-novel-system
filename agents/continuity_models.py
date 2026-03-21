@@ -1,5 +1,5 @@
 """
-章节连贯性保障系统的数据模型
+章节连贯性保障系统的数据模型.
 
 定义了连贯性约束、验证报告和章节过渡记录的数据结构。
 """
@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 @dataclass
 class ContinuityConstraint:
     """
-    连贯性约束的通用抽象
+    连贯性约束的通用抽象.
 
     不预设具体内容，只定义结构：
     - constraint_type: 约束类型（由 LLM 推断）
@@ -81,7 +81,7 @@ class ContinuityConstraint:
 @dataclass
 class ValidationReport:
     """
-    连贯性验证报告
+    连贯性验证报告.
 
     包含 LLM 验证的结果，区分"连贯性问题"和"艺术性打破期待"。
 
@@ -143,7 +143,7 @@ class ValidationReport:
 @dataclass
 class ChapterTransition:
     """
-    章节过渡记录
+    章节过渡记录.
 
     记录每次章节过渡的决策过程，用于后续分析和系统优化。
 

@@ -1,5 +1,5 @@
 """
-章节连贯性保障集成模块
+章节连贯性保障集成模块.
 
 将连贯性保障系统集成到章节生成流程中。
 提供装饰器和辅助函数，用于增强现有的 generation_service。
@@ -25,7 +25,7 @@ from agents.continuity_models import (
 
 class ContinuityAssuranceIntegration:
     """
-    连贯性保障集成器
+    连贯性保障集成器.
 
     将连贯性检查集成到章节生成流程中，提供：
     1. 约束推断
@@ -36,7 +36,7 @@ class ContinuityAssuranceIntegration:
 
     def __init__(self, qwen_client: Optional[QwenClient] = None):
         """
-        初始化集成器
+        初始化集成器.
 
         Args:
             qwen_client: 通义千问客户端
@@ -59,7 +59,7 @@ class ContinuityAssuranceIntegration:
         min_quality_score: float = 70.0,
     ) -> Dict[str, Any]:
         """
-        强制执行连贯性保障
+        强制执行连贯性保障.
 
         Args:
             novel_id: 小说 ID
@@ -163,7 +163,7 @@ class ContinuityAssuranceIntegration:
 
     def _extract_ending(self, content: str, max_length: int = 800) -> str:
         """
-        提取章节结尾
+        提取章节结尾.
 
         Args:
             content: 章节内容
@@ -187,7 +187,7 @@ class ContinuityAssuranceIntegration:
 
     def _extract_beginning(self, content: str, max_length: int = 800) -> str:
         """
-        提取章节开头
+        提取章节开头.
 
         Args:
             content: 章节内容
@@ -208,7 +208,7 @@ class ContinuityAssuranceIntegration:
         self, original_prompt: str, suggestions: List[str]
     ) -> str:
         """
-        添加改进建议到提示词
+        添加改进建议到提示词.
 
         Args:
             original_prompt: 原始提示词
@@ -243,7 +243,7 @@ class ContinuityAssuranceIntegration:
         regeneration_count: int,
     ) -> ChapterTransition:
         """
-        创建过渡记录
+        创建过渡记录.
 
         Args:
             novel_id: 小说 ID
@@ -288,7 +288,7 @@ class ContinuityAssuranceIntegration:
 
     async def _save_transition_record(self, transition: ChapterTransition) -> None:
         """
-        保存过渡记录
+        保存过渡记录.
 
         当前实现：仅记录日志
         未来实现：可以保存到数据库或文件系统
@@ -317,7 +317,7 @@ async def generate_chapter_with_continuity(
     qwen_client: Optional[QwenClient] = None,
 ) -> Dict[str, Any]:
     """
-    便捷函数：带连贯性保障的章节生成
+    便捷函数：带连贯性保障的章节生成.
 
     Args:
         novel_id: 小说 ID

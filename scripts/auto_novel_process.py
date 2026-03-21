@@ -34,6 +34,7 @@ class AutoNovelProcess:
     """自动小说创作流程."""
 
     def __init__(self):
+        """初始化方法."""
         self.scheduler = None
         self.qwen_client = None
         self.cost_tracker = None
@@ -66,7 +67,7 @@ class AutoNovelProcess:
     async def run_full_process(
         self, genre="玄幻", tags=["系统", "穿越"], platform="qidian"
     ):
-        """运行完整的小说创作流程。
+        """运行完整的小说创作流程.
 
         Args:
             genre: 小说类型
@@ -225,7 +226,7 @@ class AutoNovelProcess:
             }
 
     async def wait_for_task_completion(self, task_id, task_name):
-        """等待任务完成。
+        """等待任务完成.
 
         Args:
             task_id: 任务ID

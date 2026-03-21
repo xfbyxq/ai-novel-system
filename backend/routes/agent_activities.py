@@ -23,7 +23,7 @@ async def get_agent_activities(
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    查询 Agent 活动记录
+    查询 Agent 活动记录.
 
     支持多种查询条件：
     - task_id: 查询特定任务的所有 Agent 活动

@@ -1,5 +1,5 @@
 """
-小说持久化记忆系统
+小说持久化记忆系统.
 借鉴 AgentMesh 的设计思想：SQLite + FTS5 全文搜索 + 分层记忆
 解决当前内存缓存 30 分钟过期导致的内容不连贯问题
 """
@@ -19,11 +19,12 @@ logger = logging.getLogger(__name__)
 
 class NovelMemoryStorage:
     """
-    小说记忆持久化存储层
+    小说记忆持久化存储层.
     借鉴 AgentMesh storage.py 的设计：SQLite + FTS5
     """
 
     def __init__(self, db_path: str = "./novel_memory/novel_memory.db"):
+        """初始化方法."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
@@ -784,7 +785,7 @@ class NovelMemoryStorage:
         limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """
-        搜索相关记忆
+        搜索相关记忆.
         使用 FTS5 全文搜索
         """
         conn = self._get_connection()
@@ -1328,12 +1329,13 @@ class NovelMemoryStorage:
 
 class NovelMemoryAdapter:
     """
-    小说记忆适配器
+    小说记忆适配器.
     提供高层 API，集成持久化存储与现有系统
     借鉴 AgentMesh MemoryManager 的设计
     """
 
     def __init__(self, workspace_root: str = "./novel_memory"):
+        """初始化方法."""
         self.workspace_root = Path(workspace_root)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -1348,7 +1350,7 @@ class NovelMemoryAdapter:
         self, novel_id: str, chapter_number: int, content: str, summary: Dict[str, Any]
     ) -> str:
         """
-        保存章节记忆
+        保存章节记忆.
         包括章节摘要和全文索引
         """
         # 计算全文哈希
@@ -1372,7 +1374,7 @@ class NovelMemoryAdapter:
         self, novel_id: str, chapter_number: int, context_chapters: int = 5
     ) -> str:
         """
-        获取章节生成所需的上下文
+        获取章节生成所需的上下文.
         包括最近 N 章摘要、角色状态、待回收伏笔
         """
         parts = []
@@ -1420,7 +1422,7 @@ class NovelMemoryAdapter:
 
     async def initialize_novel_memory(self, novel_id: str, novel_data: Dict[str, Any]):
         """
-        初始化小说长期记忆
+        初始化小说长期记忆.
         在企划完成后调用，保存世界观、角色、大纲等核心设定
         """
         metadata = {
@@ -1517,7 +1519,7 @@ class NovelMemoryAdapter:
         self, novel_id: str, query: str, max_results: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        搜索相关上下文
+        搜索相关上下文.
         使用 FTS5 全文搜索
         """
         return self.storage.search_memories(

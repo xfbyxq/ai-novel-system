@@ -1,4 +1,4 @@
-"""JSON 提取工具类。
+"""JSON 提取工具类.
 
 统一处理 LLM 响应中的 JSON 提取，支持多种格式：
 - 纯 JSON 文本
@@ -14,7 +14,7 @@ from core.logging_config import logger
 
 
 class JsonExtractor:
-    """LLM 响应 JSON 提取器。
+    """LLM 响应 JSON 提取器.
 
     提供多种策略从 LLM 响应中提取 JSON：
     1. 直接解析（纯 JSON）
@@ -34,7 +34,7 @@ class JsonExtractor:
 
     @classmethod
     def extract_json(cls, text: str, default: Any = None) -> Any:
-        """从文本中提取 JSON（静态方法）。
+        """从文本中提取 JSON（静态方法）.
 
         Args:
             text: LLM 响应文本
@@ -58,7 +58,7 @@ class JsonExtractor:
     def extract_object(
         cls, text: str, default: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """提取 JSON 对象（字典）。
+        """提取 JSON 对象（字典）.
 
         Args:
             text: LLM 响应文本
@@ -79,7 +79,7 @@ class JsonExtractor:
 
     @classmethod
     def extract_array(cls, text: str, default: Optional[List] = None) -> List[Any]:
-        """提取 JSON 数组。
+        """提取 JSON 数组.
 
         Args:
             text: LLM 响应文本
@@ -100,7 +100,7 @@ class JsonExtractor:
 
     @classmethod
     def _extract(cls, text: str) -> Any:
-        """内部提取方法，尝试多种策略。
+        """内部提取方法，尝试多种策略.
 
         策略优先级：
         1. 直接解析（最快）
@@ -160,7 +160,7 @@ class JsonExtractor:
 
     @classmethod
     def _clean_json_string(cls, text: str) -> str:
-        """尝试修复常见的 JSON 格式问题。
+        """尝试修复常见的 JSON 格式问题.
 
         处理：
         - 移除注释
@@ -193,7 +193,7 @@ class JsonExtractor:
 
     @classmethod
     def safe_extract(cls, text: str, context: str = "") -> Dict[str, Any]:
-        """安全提取，失败时返回空字典并记录日志。
+        """安全提取，失败时返回空字典并记录日志.
 
         Args:
             text: LLM 响应文本
@@ -219,7 +219,7 @@ class JsonExtractor:
 
 # 便捷函数（向后兼容）
 def extract_json(text: str) -> Any:
-    """从 LLM 响应中提取 JSON（便捷函数）。
+    """从 LLM 响应中提取 JSON（便捷函数）.
 
     这是 JsonExtractor.extract_json 的快捷方式，
     用于替换原有的 _extract_json 静态方法。

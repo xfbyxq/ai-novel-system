@@ -1,5 +1,5 @@
 """
-上下文携带器
+上下文携带器.
 
 将推断的约束转化为下一章生成的提示词增强。
 使用"读者期待"表述，引导而非强制创作方向。
@@ -14,7 +14,7 @@ from agents.continuity_models import ContinuityConstraint, ConstraintList
 
 class ContextPropagator:
     """
-    上下文携带器
+    上下文携带器.
 
     将推断的约束转化为下一章生成的提示词增强。
 
@@ -54,7 +54,7 @@ class ContextPropagator:
         include_fewshot: bool = False,
     ) -> str:
         """
-        构建增强型生成提示词
+        构建增强型生成提示词.
 
         Args:
             next_chapter_outline: 下一章情节大纲
@@ -71,9 +71,9 @@ class ContextPropagator:
         constraint_guidance = self._format_constraints_as_guidance(constraints)
 
         # 构建完整提示词
-        enhanced_prompt = f"""## 下一章创作要求
+        enhanced_prompt = f"""## 下一章创作要求.
 
-### 基本情节
+### 基本情节.
 {next_chapter_outline}
 
 {constraint_guidance}
@@ -91,7 +91,7 @@ class ContextPropagator:
 
     def _format_constraints_as_guidance(self, constraints: ConstraintList) -> str:
         """
-        将约束转化为创作指导（而非硬性要求）
+        将约束转化为创作指导（而非硬性要求）.
 
         关键：用"读者期待"的表述，而非"你必须"
 
@@ -118,7 +118,7 @@ class ContextPropagator:
 
     def _constraint_to_expectation(self, constraint: ContinuityConstraint) -> str:
         """
-        将约束转化为读者期待的表述
+        将约束转化为读者期待的表述.
 
         示例：
         - 约束："场景转换需要过渡"
@@ -152,7 +152,7 @@ class ContextPropagator:
         self, previous_ending: str, constraints: ConstraintList
     ) -> str:
         """
-        生成 few-shot 过渡示例
+        生成 few-shot 过渡示例.
 
         这部分可以根据约束类型生成通用的过渡示例，
         或者从文学作品中提取经典的过渡手法作为参考。
@@ -208,7 +208,7 @@ class ContextPropagator:
         self, constraints: ConstraintList, max_items: int = 3
     ) -> str:
         """
-        创建最小化的约束指导（用于提示词空间有限的情况）
+        创建最小化的约束指导（用于提示词空间有限的情况）.
 
         Args:
             constraints: 约束列表
@@ -241,7 +241,7 @@ def propagate_constraints(
     outline: str, constraints: ConstraintList, previous_ending: Optional[str] = None
 ) -> str:
     """
-    便捷函数：将约束传播到提示词
+    便捷函数：将约束传播到提示词.
 
     Args:
         outline: 下一章大纲

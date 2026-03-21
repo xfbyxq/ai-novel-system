@@ -1,3 +1,5 @@
+"""world_setting 模块."""
+
 import uuid
 
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text
@@ -9,6 +11,7 @@ from core.database import Base
 
 
 class WorldSetting(Base):
+    """WorldSetting 类."""
     __tablename__ = "world_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

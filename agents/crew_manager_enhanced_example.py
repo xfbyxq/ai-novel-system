@@ -1,5 +1,5 @@
 """
-CrewManager 连贯性保障集成示例
+CrewManager 连贯性保障集成示例.
 
 本文档展示如何将连贯性保障组件集成到 CrewManager 中。
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class EnhancedCrewManager:
     """
-    增强版 CrewManager - 集成连贯性保障系统
+    增强版 CrewManager - 集成连贯性保障系统.
 
     这是在原有 CrewManager 基础上的增强版本，
     添加了完整的连贯性保障流程。
@@ -121,7 +121,7 @@ class EnhancedCrewManager:
         self, chapter_number: int, volume_number: int = 1, **kwargs
     ) -> Dict[str, Any]:
         """
-        准备章节生成：构建增强的上下文
+        准备章节生成：构建增强的上下文.
 
         整合：
         - EnhancedContextManager
@@ -149,7 +149,7 @@ class EnhancedCrewManager:
         self, chapter_number: int, prep_result: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """
-        运行增强的章节策划
+        运行增强的章节策划.
 
         在原有策划流程基础上，添加：
         - 大纲任务约束
@@ -171,7 +171,7 @@ class EnhancedCrewManager:
         self, prep_result: Dict[str, Any], **kwargs
     ) -> str:
         """
-        构建增强的策划提示词
+        构建增强的策划提示词.
 
         整合所有连贯性要求
         """
@@ -237,7 +237,7 @@ class EnhancedCrewManager:
         self, original_plan: Dict[str, Any], review_result: ContinuityIntegrationResult
     ) -> Dict[str, Any]:
         """
-        根据审查结果修正策划
+        根据审查结果修正策划.
 
         Args:
             original_plan: 原策划
@@ -277,7 +277,7 @@ class EnhancedCrewManager:
         self, chapter_plan: Dict[str, Any], prep_result: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """
-        生成章节内容
+        生成章节内容.
 
         使用增强的提示词（包含所有连贯性要求）
         """
@@ -308,7 +308,7 @@ class EnhancedCrewManager:
         # 3. 创作要求
         parts.append("\n\n【创作要求】")
         parts.append("""
-请根据以上策划和上下文，创作本章内容。
+请根据以上策划和上下文，创作本章内容.
 
 要求：
 1. 完成策划中的所有主要事件

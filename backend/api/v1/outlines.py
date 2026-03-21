@@ -51,7 +51,7 @@ async def get_world_setting(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说世界观设定。
+    获取小说世界观设定.
 
     返回小说的世界观设定信息，包括世界名称、类型、力量体系、地理、势力等。
     """
@@ -83,7 +83,7 @@ async def update_world_setting(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说世界观设定（UPSERT模式）。
+    更新小说世界观设定（UPSERT模式）.
 
     - 如果世界观设定不存在，则自动创建
     - 如果已存在，则仅更新请求体中提供的字段
@@ -123,7 +123,7 @@ async def get_plot_outline(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取小说情节大纲。
+    获取小说情节大纲.
 
     返回小说的情节大纲信息，包括结构类型、卷/篇设定、主线/支线剧情、转折点等。
     """
@@ -156,7 +156,7 @@ async def update_plot_outline(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说情节大纲（UPSERT模式）。
+    更新小说情节大纲（UPSERT模式）.
 
     - 如果情节大纲不存在，则自动创建
     - 如果已存在，则仅更新请求体中提供的字段
@@ -201,7 +201,7 @@ async def generate_complete_outline(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    生成小说完整大纲。
+    生成小说完整大纲.
 
     根据请求参数生成小说的完整大纲，包括结构类型、卷设定、主线/支线剧情、转折点等。
     """
@@ -253,7 +253,7 @@ async def decompose_outline_to_chapters(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    将大纲拆分为章节配置。
+    将大纲拆分为章节配置.
 
     根据指定的章节范围和分解粒度，将大纲分解为各章节的详细任务。
     """
@@ -367,7 +367,7 @@ async def get_chapter_outline_task(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定章节的大纲任务。
+    获取指定章节的大纲任务.
 
     返回章节的详细大纲任务，包括主要剧情点、角色发展弧线、伏笔要求等。
     """
@@ -422,7 +422,7 @@ async def validate_chapter_outline(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    验证章节大纲的一致性。
+    验证章节大纲的一致性.
 
     检查章节大纲与整体大纲、角色设定、世界观设定等的一致性。
     """
@@ -486,7 +486,7 @@ async def ai_assist_outline_field(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    AI辅助生成大纲字段内容。
+    AI辅助生成大纲字段内容.
 
     根据当前大纲上下文，为指定字段生成AI建议。
     """
@@ -571,7 +571,7 @@ async def get_outline_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取大纲版本历史。
+    获取大纲版本历史.
 
     返回小说大纲的所有版本信息，支持版本对比和回滚。
     """
@@ -619,7 +619,7 @@ async def update_plot_outline_with_version(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    更新小说情节大纲（支持版本管理）。
+    更新小说情节大纲（支持版本管理）.
 
     - 如果情节大纲不存在，则自动创建
     - 如果已存在，则仅更新请求体中提供的字段

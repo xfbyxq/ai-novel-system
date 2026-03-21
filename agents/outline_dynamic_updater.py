@@ -1,4 +1,4 @@
-"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲。
+"""大纲动态更新器 - 根据实际写作内容动态调整后续大纲.
 
 每 N 章触发一次偏差评估，分析实际内容与大纲的偏差，
 自动更新未来章节的大纲（已写章节不受影响）。
@@ -60,7 +60,7 @@ class OutlineUpdatePlan:
 
 
 class OutlineDynamicUpdater:
-    """大纲动态更新器。
+    """大纲动态更新器.
 
     核心功能：
     1. 分析最近 N 章内容与大纲的偏差
@@ -74,6 +74,7 @@ class OutlineDynamicUpdater:
         cost_tracker: CostTracker,
         deviation_threshold: float = 6.0,
     ):
+        """初始化方法."""
         self.client = client
         self.cost_tracker = cost_tracker
         self.deviation_threshold = deviation_threshold
@@ -89,7 +90,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用。
+        """主编排方法：偏差分析 -> 判断 -> 生成更新 -> 应用.
 
         Args:
             db: 数据库会话
@@ -204,7 +205,7 @@ class OutlineDynamicUpdater:
         outline_data: Dict[str, Any],
         current_chapter: int,
     ) -> DeviationReport:
-        """分析最近章节内容与大纲的偏差。
+        """分析最近章节内容与大纲的偏差.
 
         Args:
             recent_chapters: 最近 N 章的摘要
@@ -276,7 +277,7 @@ class OutlineDynamicUpdater:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> OutlineUpdatePlan:
-        """生成大纲更新方案。
+        """生成大纲更新方案.
 
         核心约束：仅修改 current_chapter 之后的章节。
 
@@ -369,7 +370,7 @@ class OutlineDynamicUpdater:
         current_chapter: int,
         deviation_report: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """将更新方案应用到数据库。
+        """将更新方案应用到数据库.
 
         Args:
             db: 数据库会话
@@ -706,7 +707,7 @@ class OutlineDynamicUpdater:
 
     @staticmethod
     def _extract_json_object(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON 对象。
+        """从 LLM 响应中提取 JSON 对象.
 
         多层策略，兼容各种 LLM 输出格式。
         """

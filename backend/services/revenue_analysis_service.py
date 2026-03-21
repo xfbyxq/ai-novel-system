@@ -22,6 +22,7 @@ class RevenueAnalysisService:
     """收益分析服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def analyze_novel_performance(

@@ -1,5 +1,5 @@
 """
-章节生成失败处理增强模块
+章节生成失败处理增强模块.
 
 提供章节生成失败时的安全处理机制，确保：
 1. 立即终止后续章节生成
@@ -31,6 +31,7 @@ class ChapterGenerationFailure(Exception):
         reason: str,
         original_error: Optional[Exception] = None,
     ):
+        """初始化方法."""
         self.chapter_number = chapter_number
         self.reason = reason
         self.original_error = original_error
@@ -41,6 +42,7 @@ class BatchGenerationInterrupted(Exception):
     """批量生成中断异常."""
 
     def __init__(self, continuous_failures: int, last_failed_chapter: int):
+        """初始化方法."""
         self.continuous_failures = continuous_failures
         self.last_failed_chapter = last_failed_chapter
         super().__init__(
@@ -51,10 +53,11 @@ class BatchGenerationInterrupted(Exception):
 class SafeChapterGenerator:
     """安全的章节生成器.
 
-    实现章节生成失败的安全处理机制
+    实现章节生成失败的安全处理机制.
     """
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.max_continuous_failures = 2  # 连续失败阈值
 
@@ -62,7 +65,7 @@ class SafeChapterGenerator:
         self, novel_id: UUID, chapter_number: int, generation_func, **kwargs
     ) -> Dict[str, Any]:
         """
-        安全生成单个章节
+        安全生成单个章节.
 
         Args:
             novel_id: 小说 ID
@@ -129,7 +132,7 @@ class SafeChapterGenerator:
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        安全批量生成章节
+        安全批量生成章节.
 
         Args:
             novel_id: 小说 ID
@@ -271,7 +274,7 @@ class SafeChapterGenerator:
         self, novel_id: UUID, chapter_number: int, generation_result: Dict[str, Any]
     ):
         """
-        独立保存章节到数据库
+        独立保存章节到数据库.
 
         使用独立事务，确保提交后不受后续操作影响
         """
@@ -330,7 +333,7 @@ async def safe_generate_single_chapter(
     db: AsyncSession, novel_id: UUID, chapter_number: int, generation_func, **kwargs
 ) -> Dict[str, Any]:
     """
-    安全生成单个章节的便捷函数
+    安全生成单个章节的便捷函数.
 
     Args:
         db: 数据库会话
@@ -361,7 +364,7 @@ async def safe_generate_batch_chapters(
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    安全批量生成章节的便捷函数
+    安全批量生成章节的便捷函数.
 
     Args:
         db: 数据库会话

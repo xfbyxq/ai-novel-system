@@ -1,5 +1,5 @@
 """
-CharacterConsistencyTracker - 角色一致性追踪器
+CharacterConsistencyTracker - 角色一致性追踪器.
 
 追踪内容：
 1. 核心动机（Core Motivation）：角色行为的根本驱动力
@@ -21,7 +21,7 @@ from core.logging_config import logger
 @dataclass
 class CharacterProfile:
     """
-    角色档案
+    角色档案.
 
     包含角色的核心设定，用于一致性验证
     """
@@ -198,7 +198,7 @@ class ConsistencyValidation:
 
 class CharacterConsistencyTracker:
     """
-    角色一致性追踪器
+    角色一致性追踪器.
 
     核心功能：
     1. 维护角色档案（动机、准则、性格）
@@ -208,7 +208,7 @@ class CharacterConsistencyTracker:
     """
 
     # 验证提示词模板
-    VALIDATION_PROMPT = """请作为专业编辑，验证以下角色行为是否与其人设一致。
+    VALIDATION_PROMPT = """请作为专业编辑，验证以下角色行为是否与其人设一致.
 
 ## 角色档案
 {character_profile}
@@ -256,7 +256,7 @@ class CharacterConsistencyTracker:
 
     def __init__(self, character_profile: CharacterProfile):
         """
-        初始化角色一致性追踪器
+        初始化角色一致性追踪器.
 
         Args:
             character_profile: 角色档案
@@ -280,7 +280,7 @@ class CharacterConsistencyTracker:
         consequences: Optional[List[str]] = None,
     ):
         """
-        记录角色的重要决策
+        记录角色的重要决策.
 
         Args:
             chapter_number: 章节号
@@ -341,7 +341,7 @@ class CharacterConsistencyTracker:
         self, proposed_action: str, context: str, chapter_number: int
     ) -> ConsistencyValidation:
         """
-        验证角色行为是否一致
+        验证角色行为是否一致.
 
         Args:
             proposed_action: 待验证的行为
@@ -602,7 +602,7 @@ class CharacterConsistencyTracker:
 
     def build_character_prompt(self) -> str:
         """
-        构建角色一致性提示词
+        构建角色一致性提示词.
 
         用于在生成前提醒作家
         """

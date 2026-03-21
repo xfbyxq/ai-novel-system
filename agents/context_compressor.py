@@ -1,4 +1,4 @@
-"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题。
+"""分层上下文压缩器 - 解决长篇小说上下文膨胀问题.
 
 采用热/温/冷/核心四层记忆架构，将上下文保持在恒定 ~8K tokens。
 
@@ -18,7 +18,7 @@ from core.logging_config import logger
 
 @dataclass
 class CompressedContext:
-    """压缩后的上下文结构（增强版）。
+    """压缩后的上下文结构（增强版）.
 
     新增关键信息提取层：
     - 伏笔追踪：识别和保留未回收的伏笔
@@ -111,7 +111,7 @@ class CompressedContext:
 
 
 class ContextCompressor:
-    """分层上下文压缩器。
+    """分层上下文压缩器.
 
     确保无论小说写到第几章，上下文大小保持在 ~8K tokens。
     """
@@ -133,6 +133,7 @@ class ContextCompressor:
         warm_chapters: int = 8,
         max_events_per_chapter: int = 3,
     ):
+        """初始化方法."""
         self.HOT_CHAPTERS = hot_chapters
         self.WARM_CHAPTERS = warm_chapters
         self.MAX_EVENTS_PER_CHAPTER = max_events_per_chapter
@@ -147,7 +148,7 @@ class ContextCompressor:
         plot_outline: Any,
         volume_summaries: Optional[Dict[int, str]] = None,
     ) -> CompressedContext:
-        """压缩上下文。
+        """压缩上下文.
 
         Args:
             chapter_number: 当前要写的章节号
@@ -210,7 +211,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         chapter_contents: Dict[int, str],
     ) -> List[Dict[str, Any]]:
-        """提取伏笔信息。
+        """提取伏笔信息.
 
         Args:
             chapter_number: 当前章节号
@@ -250,7 +251,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         characters: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """追踪角色发展轨迹。
+        """追踪角色发展轨迹.
 
         Args:
             chapter_number: 当前章节号
@@ -309,7 +310,7 @@ class ContextCompressor:
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """提取关键事件。
+        """提取关键事件.
 
         Args:
             chapter_number: 当前章节号
@@ -359,7 +360,7 @@ class ContextCompressor:
         chapter_summaries: Dict[int, Dict[str, Any]],
         plot_outline: Any,
     ) -> List[Dict[str, Any]]:
-        """识别未解决的冲突。
+        """识别未解决的冲突.
 
         Args:
             chapter_number: 当前章节号

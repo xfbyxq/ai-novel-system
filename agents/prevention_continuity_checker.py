@@ -1,5 +1,5 @@
 """
-PreventionContinuityChecker - 预防式连贯性检查器
+PreventionContinuityChecker - 预防式连贯性检查器.
 
 功能：
 1. 在章节生成前检查策划是否有潜在连贯性问题
@@ -163,7 +163,7 @@ class PreventionReport:
 
 class PreventionContinuityChecker:
     """
-    预防式连贯性检查器
+    预防式连贯性检查器.
 
     核心方法：
     1. 在章节策划完成后、生成前进行检查
@@ -173,7 +173,7 @@ class PreventionContinuityChecker:
     """
 
     # 检查提示词模板
-    CHECK_PROMPT = """请作为专业编辑，检查以下章节策划是否存在连贯性问题。
+    CHECK_PROMPT = """请作为专业编辑，检查以下章节策划是否存在连贯性问题.
 
 ## 上一章结尾
 {previous_chapter_ending}
@@ -230,7 +230,7 @@ class PreventionContinuityChecker:
 
     def __init__(self, novel_id: str):
         """
-        初始化预防式检查器
+        初始化预防式检查器.
 
         Args:
             novel_id: 小说 ID
@@ -247,7 +247,7 @@ class PreventionContinuityChecker:
         chapter_number: int,
     ) -> PreventionReport:
         """
-        检查章节策划
+        检查章节策划.
 
         Args:
             chapter_plan: 章节策划
@@ -594,7 +594,7 @@ class PreventionContinuityChecker:
         self, chapter_plan: Dict[str, Any], report: PreventionReport
     ) -> Dict[str, Any]:
         """
-        建议策划修正
+        建议策划修正.
 
         Args:
             chapter_plan: 原策划

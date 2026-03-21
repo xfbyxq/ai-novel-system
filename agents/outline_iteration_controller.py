@@ -48,7 +48,7 @@ class OutlineIterationController:
         max_iterations: int = 3,
         cost_limit: Optional[float] = None,
     ):
-        """初始化大纲迭代控制器。
+        """初始化大纲迭代控制器.
 
         Args:
             quality_threshold: 质量评分阈值
@@ -74,7 +74,7 @@ class OutlineIterationController:
         iteration: Optional[int] = None,
         cost_delta: float = 0.0,
     ) -> bool:
-        """判断是否需要继续大纲优化迭代。
+        """判断是否需要继续大纲优化迭代.
 
         Args:
             quality_score: 当前质量评分
@@ -209,7 +209,7 @@ class OutlineIterationController:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """迭代优化大纲直到满足质量标准。
+        """迭代优化大纲直到满足质量标准.
 
         Args:
             initial_outline: 初始大纲

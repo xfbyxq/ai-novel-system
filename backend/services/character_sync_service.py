@@ -1,5 +1,5 @@
 """
-角色数据同步服务
+角色数据同步服务.
 
 确保角色数据在多模块间的一致性，提供：
 1. 角色数据同步机制
@@ -25,6 +25,7 @@ class CharacterDataSyncService:
     """角色数据同步服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
         self.max_retry_attempts = 2
         self.sync_history = []
@@ -36,7 +37,7 @@ class CharacterDataSyncService:
         source_type: str = "database",
     ) -> Dict[str, Any]:
         """
-        同步角色数据
+        同步角色数据.
 
         Args:
             novel_id: 小说 ID
@@ -99,7 +100,7 @@ class CharacterDataSyncService:
 
     async def sync_all_characters(self, novel_id: UUID) -> Dict[str, Any]:
         """
-        同步小说中所有角色数据
+        同步小说中所有角色数据.
 
         Args:
             novel_id: 小说 ID
@@ -164,7 +165,7 @@ class CharacterDataSyncService:
         self, novel_id: UUID, character_name: str
     ) -> Dict[str, Any]:
         """
-        验证角色数据一致性
+        验证角色数据一致性.
 
         Args:
             novel_id: 小说 ID

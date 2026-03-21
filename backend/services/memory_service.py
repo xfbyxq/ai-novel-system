@@ -13,6 +13,7 @@ class MemoryCache:
     """内存缓存实现."""
 
     def __init__(self, max_size: int = 100, expiration_minutes: int = 30):
+        """初始化方法."""
         self.max_size = max_size
         self.expiration_minutes = expiration_minutes
         self.cache: Dict[str, Dict[str, Any]] = {}
@@ -75,6 +76,7 @@ class NovelMemoryService:
     """小说记忆服务."""
 
     def __init__(self):
+        """初始化方法."""
         self.cache = MemoryCache()
         self.version_map: Dict[str, int] = {}  # 小说ID -> 版本号
 

@@ -1,3 +1,5 @@
+"""character_name_version 模块."""
+
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -34,6 +36,7 @@ class CharacterNameVersionService:
     """角色名字版本管理服务."""
 
     def __init__(self, db: AsyncSession):
+        """初始化方法."""
         self.db = db
 
     async def create_version_record(

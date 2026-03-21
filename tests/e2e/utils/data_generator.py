@@ -10,7 +10,7 @@ class TestDataGenerator:
 
     def __init__(self, locale: str = "zh_CN"):
         """
-        初始化测试数据生成器
+        初始化测试数据生成器.
 
         Args:
             locale: 本地化设置，默认为中文
@@ -75,7 +75,7 @@ class TestDataGenerator:
         length_type: Optional[str] = None,
     ) -> Dict:
         """
-        生成小说测试数据
+        生成小说测试数据.
 
         Args:
             title: 小说标题
@@ -104,7 +104,7 @@ class TestDataGenerator:
         age: Optional[int] = None,
     ) -> Dict:
         """
-        生成角色测试数据
+        生成角色测试数据.
 
         Args:
             name: 角色姓名
@@ -134,7 +134,7 @@ class TestDataGenerator:
         antagonist: Optional[str] = None,
     ) -> Dict:
         """
-        生成大纲测试数据
+        生成大纲测试数据.
 
         Args:
             core_conflict: 核心冲突
@@ -159,7 +159,7 @@ class TestDataGenerator:
         self, chapter_number: Optional[int] = None, title: Optional[str] = None
     ) -> Dict:
         """
-        生成章节测试数据
+        生成章节测试数据.
 
         Args:
             chapter_number: 章节数
@@ -180,7 +180,7 @@ class TestDataGenerator:
         self, username: Optional[str] = None, email: Optional[str] = None
     ) -> Dict:
         """
-        生成用户测试数据
+        生成用户测试数据.
 
         Args:
             username: 用户名
@@ -198,7 +198,7 @@ class TestDataGenerator:
 
     def generate_platform_account_data(self, platform: Optional[str] = None) -> Dict:
         """
-        生成平台账号测试数据
+        生成平台账号测试数据.
 
         Args:
             platform: 平台名称
@@ -218,7 +218,7 @@ class TestDataGenerator:
         self, start_chapter: int = 1, end_chapter: int = 5
     ) -> List[Dict]:
         """
-        生成批量章节测试数据
+        生成批量章节测试数据.
 
         Args:
             start_chapter: 起始章节数
