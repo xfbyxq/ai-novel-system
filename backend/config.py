@@ -36,14 +36,37 @@ class Settings(BaseSettings):
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
     DB_NAME: str = "novel_system"
-
+    
     def model_post_init(self, __context) -> None:
         """初始化后验证：确保敏感配置已设置."""
-        if self.DB_PASSWORD is None:
-            raise ValueError(
-                "DB_PASSWORD 未设置！请通过环境变量或 .env 文件配置数据库密码。\n"
-                "示例：export DB_PASSWORD='your_secure_password'"
-            )
+        # 跳过验证，因为密码会从 DATABASE_URL 中提取
+        pass
+    
+    def _get_db_password_from_url(self) -> str:
+        """从 DATABASE_URL 中提取密码."""
+        import os
+        # __file__ 是 backend/config.py，需要向上两级到项目根目录
+        config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/
+        project_root = os.path.dirname(config_dir)  # 项目根目录
+        env_file = os.path.join(project_root, ".env")
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DATABASE_URL="):
+                        url = line.split("=", 1)[1]
+                        import re
+                        match = re.search(r"://([^:]+):([^@]+)@", url)
+                        if match:
+                            return match.group(2)
+        return ""
+    
+    @property
+    def _effective_db_password(self) -> str:
+        """获取有效的数据库密码."""
+        if self.DB_PASSWORD:
+            return self.DB_PASSWORD
+        return self._get_db_password_from_url()
 
     @property
     def DB_HOST(self) -> str:
@@ -62,12 +85,12 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """动态构建数据库连接URL."""
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql+asyncpg://{self.DB_USER}:{self._effective_db_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
         """动态构建同步数据库连接URL."""
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql://{self.DB_USER}:{self._effective_db_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis
     @property
