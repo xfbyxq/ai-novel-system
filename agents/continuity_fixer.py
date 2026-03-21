@@ -1,5 +1,5 @@
 """
-ContinuityFixerAgent - 连续性问题修复Agent
+ContinuityFixerAgent - 连续性问题修复Agent.
 
 负责修复连续性审查员发现的问题，在不改变核心剧情的前提下修正：
 - 角色行为与设定不符

@@ -195,7 +195,7 @@ class ConstraintInferenceEngine:
         novel_context: Optional[str] = None,
     ) -> ConstraintList:
         """
-        结合上下文推断约束（增强版）
+        结合上下文推断约束（增强版）.
 
         Args:
             previous_chapter_full: 上一章完整内容
