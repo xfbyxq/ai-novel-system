@@ -69,7 +69,7 @@ async def get_world_setting(
     world_setting = result.scalar_one_or_none()
 
     if not world_setting:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到")
+        return None
 
     return world_setting
 
@@ -139,7 +139,7 @@ async def get_plot_outline(
     plot_outline = result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
+        return None
 
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
