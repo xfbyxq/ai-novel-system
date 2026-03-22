@@ -103,7 +103,6 @@ export default function GenerationHistoryTab({ novelId, onNovelRefresh }: Props)
           { title: '成本', dataIndex: 'cost', width: 100, render: formatCost },
           { title: '开始', dataIndex: 'started_at', width: 150, render: formatDate },
           { title: '完成', dataIndex: 'completed_at', width: 150, render: formatDate },
-          { title: '错误', dataIndex: 'error_message', ellipsis: true },
           {
             title: '操作', width: 80,
             render: (_: unknown, r: GenerationTask) => (
