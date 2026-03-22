@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.logging_config import logger
+from core.models.chapter import Chapter
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.token_usage import TokenUsage
