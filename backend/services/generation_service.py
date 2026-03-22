@@ -73,7 +73,7 @@ class GenerationService:
         self.memory_service = get_novel_memory_service()
         # 新增：持久化记忆适配器（SQLite + FTS5）
         self.persistent_memory = get_novel_memory_adapter()
-        # 新增：统一上下文管理器（替代 _team_contexts）
+        # 统一上下文管理器
         self._context_managers: dict[str, UnifiedContextManager] = {}
         # 章节写作计数器（用于大纲动态更新触发）
         self._chapter_write_counter: dict[str, int] = {}
@@ -1714,33 +1714,6 @@ class GenerationService:
         return "; ".join(found_changes) if found_changes else ""
 
     # ==================== 新增：持久化记忆集成方法 ====================
-
-    def _get_or_create_team_context(
-        self, novel_id: str, novel_title: str, novel_data: dict
-    ) -> NovelTeamContext:
-        """获取或创建小说的 TeamContext.
-
-        TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享.
-
-        Args:
-            novel_id: 小说ID
-            novel_title: 小说标题
-            novel_data: 小说数据字典
-
-        Returns:
-            NovelTeamContext 实例
-        """
-        if novel_id not in self._team_contexts:
-            team_context = NovelTeamContext(novel_id, novel_title)
-            team_context.set_novel_data(novel_data)
-
-            # 集成伏笔追踪器
-            team_context.foreshadowing_tracker = ForeshadowingTracker(novel_id)
-
-            self._team_contexts[novel_id] = team_context
-            logger.info(f"Created new TeamContext for novel {novel_id}")
-
-        return self._team_contexts[novel_id]
 
     async def _initialize_novel_persistent_memory(
         self, novel_id: UUID, planning_result: dict
