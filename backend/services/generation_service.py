@@ -1240,9 +1240,11 @@ class GenerationService:
                 "key_turning_points": po.key_turning_points or [],
             }
 
-        # 构建前几章摘要（使用增强的结构化摘要）
-        previous_summary = self._build_previous_context(
-            novel_id=novel_id, novel=novel, chapter_number=chapter_number
+        # 构建前几章摘要（使用统一上下文管理器）
+        context_manager = self._get_context_manager(novel_id)
+        previous_summary = await context_manager.build_previous_context(
+            chapter_number=chapter_number,
+            count=3,
         )
 
         # 获取角色状态
@@ -1804,8 +1806,12 @@ class GenerationService:
         except Exception as e:
             logger.warning(f"Failed to get persistent memory context: {e}")
 
-        # 2. 回退到原有的内存缓存实现
-        return self._build_previous_context(novel_id, novel, chapter_number)
+        # 2. 回退到统一上下文管理器
+        context_manager = self._get_context_manager(novel_id)
+        return await context_manager.build_previous_context(
+            chapter_number=chapter_number,
+            count=3,
+        )
 
     async def _record_planning_activities(
         self, novel_id: UUID, task_id: UUID, planning_result: dict, cost_summary: dict
