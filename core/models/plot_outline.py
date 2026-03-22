@@ -126,3 +126,8 @@ class PlotOutline(Base):
         cascade="all, delete-orphan",
         order_by="PlotOutlineVersion.version_number.desc()",
     )
+    chapters = relationship(
+        "Chapter",
+        back_populates="plot_outline",
+        foreign_keys="Chapter.plot_outline_id",
+    )

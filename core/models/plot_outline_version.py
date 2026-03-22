@@ -29,3 +29,8 @@ class PlotOutlineVersion(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     plot_outline = relationship("PlotOutline", back_populates="versions")
+    chapters = relationship(
+        "Chapter",
+        back_populates="outline_version_rel",
+        foreign_keys="Chapter.outline_version_id",
+    )

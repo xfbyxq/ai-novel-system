@@ -44,6 +44,16 @@ class Chapter(Base):
     outline_task = Column(JSONB, default=dict)  # 本章的大纲任务
     outline_validation = Column(JSONB, default=dict)  # 大纲验证结果
     outline_version = Column(String(50), nullable=True)  # 使用的大纲版本号
+    plot_outline_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("plot_outlines.id", ondelete="SET NULL"),
+        nullable=True,
+    )  # 关联的大纲 ID
+    outline_version_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("plot_outline_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )  # 关联的大纲版本 ID
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -51,6 +61,16 @@ class Chapter(Base):
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     novel = relationship("Novel", back_populates="chapters")
+    plot_outline = relationship(
+        "PlotOutline",
+        back_populates="chapters",
+        foreign_keys=[plot_outline_id],
+    )
+    outline_version_rel = relationship(
+        "PlotOutlineVersion",
+        back_populates="chapters",
+        foreign_keys=[outline_version_id],
+    )
 
     __table_args__ = (
         # Ensure unique chapter numbers per novel
