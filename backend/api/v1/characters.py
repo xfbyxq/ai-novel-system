@@ -15,11 +15,86 @@ from backend.schemas.character import (
     CharacterResponse,
     CharacterUpdate,
 )
-from core.models.character import Character
+from core.models.character import Character, RelationshipType, RELATIONSHIP_REVERSE_MAP
 from core.models.novel import Novel
 from core.models.character_name_version import CharacterNameVersionService
 
 router = APIRouter(prefix="/novels/{novel_id}/characters", tags=["characters"])
+
+
+async def sync_character_relationships(
+    db: AsyncSession,
+    character: Character,
+    relationships: dict,
+):
+    """
+    同步角色关系，建立双向关联.
+    
+    Args:
+        db: 数据库会话
+        character: 当前角色
+        relationships: 关系字典 {target_name: relationship_type}
+    """
+    # 获取同小说的所有角色
+    all_chars_query = select(Character).where(Character.novel_id == character.novel_id)
+    all_chars_result = await db.execute(all_chars_query)
+    all_characters = all_chars_result.scalars().all()
+    
+    # 创建名称到角色的映射
+    name_to_char = {char.name: char for char in all_characters}
+    
+    # 建立双向关系
+    for target_name, rel_type in relationships.items():
+        target_char = name_to_char.get(target_name)
+        if not target_char:
+            continue  # 目标角色不存在，跳过
+        
+        # 在当前角色的 relationships 中设置关系
+        if character.relationships is None:
+            character.relationships = {}
+        character.relationships[target_name] = rel_type
+        
+        # 在目标角色的 relationships 中设置反向关系
+        if target_char.relationships is None:
+            target_char.relationships = {}
+        
+        # 获取反向关系类型
+        reverse_rel = RELATIONSHIP_REVERSE_MAP.get(
+            rel_type if rel_type in RelationshipType.__members__.values() 
+            else RelationshipType(rel_type),
+            RelationshipType.unknown
+        )
+        target_char.relationships[character.name] = reverse_rel.value
+
+
+async def clear_character_relationships(
+    db: AsyncSession,
+    character: Character,
+    cleanup_others: bool = False,
+):
+    """
+    清理角色关系.
+    
+    Args:
+        db: 数据库会话
+        character: 要清理的角色
+        cleanup_others: 是否清理其他角色中对此角色的引用
+    """
+    # 清理当前角色的 relationships
+    character.relationships = {}
+    
+    if cleanup_others:
+        # 清理其他角色中对此角色的引用
+        all_chars_query = select(Character).where(Character.novel_id == character.novel_id)
+        all_chars_result = await db.execute(all_chars_query)
+        all_characters = all_chars_result.scalars().all()
+        
+        for other_char in all_characters:
+            if other_char.id == character.id:
+                continue
+            
+            if other_char.relationships and character.name in other_char.relationships:
+                del other_char.relationships[character.name]
 
 
 @router.get("", response_model=list[CharacterResponse])
@@ -96,6 +171,12 @@ async def create_character(
     # Create character
     character = Character(**character_in.model_dump(), novel_id=novel_id)
     db.add(character)
+    await db.flush()  # 先获取 character.id
+    
+    # 如果有 relationships，建立双向关系
+    if character_in.relationships:
+        await sync_character_relationships(db, character, character_in.relationships)
+    
     await db.commit()
     await db.refresh(character)
     return character
@@ -223,6 +304,14 @@ async def update_character(
 
     # Update only provided fields
     update_data = character_in.model_dump(exclude_unset=True)
+    
+    # 如果更新了 relationships，需要同步双向关系
+    if "relationships" in update_data:
+        # 先清理旧关系
+        await clear_character_relationships(db, character)
+        # 建立新关系
+        await sync_character_relationships(db, character, update_data["relationships"])
+    
     for field, value in update_data.items():
         setattr(character, field, value)
 
@@ -252,6 +341,9 @@ async def delete_character(
     if not character:
         raise HTTPException(status_code=404, detail=f"角色 {character_id} 未找到")
 
+    # 清理其他角色中对此角色的关系引用
+    await clear_character_relationships(db, character, cleanup_others=True)
+    
     await db.delete(character)
     await db.commit()
 
