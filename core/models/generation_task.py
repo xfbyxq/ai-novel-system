@@ -52,8 +52,7 @@ class GenerationTask(Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    checkpoint_data = Column(JSONB, nullable=True)
 
     novel = relationship("Novel", back_populates="generation_tasks")
-    token_usages = relationship(
-        "TokenUsage", back_populates="task", cascade="all, delete-orphan"
-    )
+    token_usages = relationship("TokenUsage", back_populates="task", cascade="all, delete-orphan")
