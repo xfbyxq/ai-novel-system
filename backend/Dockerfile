@@ -14,8 +14,9 @@ RUN pip install --no-cache-dir poetry==1.8.2
 # 复制依赖文件
 COPY pyproject.toml poetry.lock ./
 
-# 配置 Poetry
-RUN poetry config virtualenvs.create false
+# 配置 Poetry - 安装到 /app 目录
+RUN poetry config virtualenvs.create false \
+    && poetry config installer.modern-installation false
 
 # 安装依赖
 RUN poetry install --no-interaction --no-ansi --only main
@@ -31,8 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# 从构建阶段复制依赖
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+# 设置 Python 路径
+ENV PYTHONPATH=/app/lib/python3.12/site-packages:$PYTHONPATH
+
+# 从构建阶段复制 Python 包
+COPY --from=builder /usr/local/lib/python3.12/site-packages /app/lib/python3.12/site-packages
 
 # 复制应用代码
 COPY . .
@@ -48,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

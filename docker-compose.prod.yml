@@ -37,6 +37,8 @@ services:
       dockerfile: backend/Dockerfile
     container_name: novel_backend_prod
     environment:
+      - DOCKER_ENV=true
+      - ENCRYPTION_KEY=da0bbd2d47d9070ef3302561a9a9a72e
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=novel_user
@@ -49,10 +51,9 @@ services:
       - APP_DEBUG=false
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-sk-258842ec972f46149b7364ccffb50ed2}
       - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen3.5-plus}
       - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     ports:
       - "8080:8000"
     depends_on:

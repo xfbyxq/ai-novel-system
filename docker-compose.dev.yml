@@ -1,51 +1,54 @@
-version: '3.8'
-
 services:
-  postgres:
+  postgres_dev:
     image: m.daocloud.io/docker.io/postgres:17
-    container_name: novel_postgres
+    container_name: novel_postgres_dev
     environment:
       POSTGRES_USER: novel_user
       POSTGRES_PASSWORD: novel_pass
       POSTGRES_DB: novel_system
     ports:
-      - "5434:5432"
+      - "5436:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U novel_user -d novel_system"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dev-network
 
-  redis:
+  redis_dev:
     image: m.daocloud.io/docker.io/redis:6-alpine
-    container_name: novel_redis
+    container_name: novel_redis_dev
     ports:
-      - "6379:6379"
+      - "6382:6379"
     volumes:
-      - redis_data:/data
+      - redis_data_dev:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    networks:
+      - dev-network
 
-  backend:
+  backend_dev:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: novel_backend
+    container_name: novel_backend_dev
     working_dir: /app
     environment:
-      - DB_HOST=postgres
+      - DOCKER_ENV=dev
+      - DB_HOST=postgres_dev
       - DB_PORT=5432
       - DB_USER=novel_user
       - DB_PASSWORD=novel_pass
       - DB_NAME=novel_system
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDIS_URL=redis://redis_dev:6379/0
+      - CELERY_BROKER_URL=redis://redis_dev:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis_dev:6379/2
       - APP_ENV=development
       - APP_DEBUG=true
       - APP_HOST=0.0.0.0
@@ -59,14 +62,21 @@ services:
     volumes:
       - ./:/app:cached
     depends_on:
-      postgres:
+      postgres_dev:
         condition: service_healthy
-      redis:
+      redis_dev:
         condition: service_healthy
+    networks:
+      - dev-network
     command: >
-      bash -c "pip install -e . &&
-               uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+      bash -c "pip install --no-cache-dir -r requirements.txt &&
+               PYTHONPATH=/app python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data_dev:
+  redis_data_dev:
+
+networks:
+  dev-network:
+    name: novel_dev_network
+    driver: bridge

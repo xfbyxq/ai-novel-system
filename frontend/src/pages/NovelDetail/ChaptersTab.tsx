@@ -4,7 +4,6 @@ import { Table, Tag, Button, Modal, message, Space, Typography, Tooltip } from '
 import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { Chapter } from '@/api/types';
 import { getChapters, deleteChapter, batchDeleteChapters } from '@/api/chapters';
-import { getChapterOutlineTask } from '@/api/outlines';
 import StatusBadge from '@/components/StatusBadge';
 import ChapterOutlineTaskModal, { type ChapterTask } from '@/components/ChapterOutlineTaskModal';
 import { formatWordCount, formatDate } from '@/utils/format';
@@ -38,19 +37,6 @@ export default function ChaptersTab({ novelId }: Props) {
   }, [novelId, page]);
 
   useEffect(() => { load(); }, [load]);
-
-  const handleGenerateChapter = useCallback(async (chapterNumber: number) => {
-    try {
-      const task = await getChapterOutlineTask(novelId, chapterNumber);
-      setCurrentChapterTask(task);
-      setPendingChapterNumber(chapterNumber);
-      setChapterTaskModalOpen(true);
-    } catch (error) {
-      console.error('Failed to get chapter outline task:', error);
-      message.warning('该章节暂无大纲任务，将直接生成');
-      navigate(`/novels/${novelId}/chapters/${chapterNumber}/edit`);
-    }
-  }, [novelId, navigate]);
 
   const handleChapterTaskConfirm = useCallback(() => {
     setChapterTaskModalOpen(false);

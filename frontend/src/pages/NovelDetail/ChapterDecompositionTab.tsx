@@ -8,7 +8,6 @@ import {
   Col,
   Collapse,
   Tag,
-  Tooltip,
   message,
   Slider,
   InputNumber,
@@ -16,7 +15,6 @@ import {
   Spin,
   Empty,
   Input,
-  Select,
 } from 'antd';
 import {
   DragOutlined,
@@ -82,7 +80,7 @@ const MAX_CHAPTERS_PER_VOLUME = 20;
 export default function ChapterDecompositionTab({ novelId, onDecompositionConfirm }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [outline, setOutline] = useState<PlotOutline | null>(null);
+  const [_outline, _setOutline] = useState<PlotOutline | null>(null);
 
   const [decomposition, setDecomposition] = useState<ChapterDecomposition | null>(null);
   const [draggedVolumeIndex, setDraggedVolumeIndex] = useState<number | null>(null);
