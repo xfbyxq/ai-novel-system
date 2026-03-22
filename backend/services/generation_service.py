@@ -29,6 +29,7 @@ from llm.qwen_client import QwenClient
 from .agentmesh_memory_adapter import get_novel_memory_adapter
 from .memory_service import get_novel_memory_service
 from .agent_activity_recorder import get_agent_activity_recorder
+from .context_manager import UnifiedContextManager
 
 
 class GenerationService:
@@ -72,12 +73,38 @@ class GenerationService:
         self.memory_service = get_novel_memory_service()
         # 新增：持久化记忆适配器（SQLite + FTS5）
         self.persistent_memory = get_novel_memory_adapter()
-        # 新增：TeamContext 缓存（按 novel_id 索引）
-        self._team_contexts: dict[str, NovelTeamContext] = {}
+        # 统一上下文管理器
+        self._context_managers: dict[str, UnifiedContextManager] = {}
         # 章节写作计数器（用于大纲动态更新触发）
         self._chapter_write_counter: dict[str, int] = {}
         # 记录小说最后活跃时间，用于清理长期未使用的计数器
         self._last_active_time: dict[str, datetime] = {}
+
+    def _get_context_manager(self, novel_id: UUID) -> UnifiedContextManager:
+        """
+        获取或创建小说的上下文管理器.
+        
+        Args:
+            novel_id: 小说 ID
+        
+        Returns:
+            UnifiedContextManager 实例
+        """
+        novel_id_str = str(novel_id)
+        
+        if novel_id_str not in self._context_managers:
+            self._context_managers[novel_id_str] = UnifiedContextManager(
+                db=self.db,
+                novel_id=novel_id,
+                cache_max_size=100,
+                cache_ttl_minutes=30,
+            )
+            logger.info(f"Created context manager for novel {novel_id}")
+        
+        # 更新活跃时间
+        self._last_active_time[novel_id_str] = datetime.now(timezone.utc)
+        
+        return self._context_managers[novel_id_str]
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行企划阶段并保存结果到数据库."""
@@ -665,9 +692,11 @@ class GenerationService:
                     "key_turning_points": po.key_turning_points or [],
                 }
 
-            # 构建前几章摘要（优先使用持久化记忆，回退到内存缓存）
-            previous_summary = await self._build_previous_context_enhanced(
-                novel_id=novel_id, novel=novel, chapter_number=chapter_number
+            # 构建前几章摘要（使用统一上下文管理器）
+            context_manager = self._get_context_manager(novel_id)
+            previous_summary = await context_manager.build_previous_context(
+                chapter_number=chapter_number,
+                count=3,
             )
 
             # 获取角色状态（优先从持久化记忆获取）
@@ -1211,9 +1240,11 @@ class GenerationService:
                 "key_turning_points": po.key_turning_points or [],
             }
 
-        # 构建前几章摘要（使用增强的结构化摘要）
-        previous_summary = self._build_previous_context(
-            novel_id=novel_id, novel=novel, chapter_number=chapter_number
+        # 构建前几章摘要（使用统一上下文管理器）
+        context_manager = self._get_context_manager(novel_id)
+        previous_summary = await context_manager.build_previous_context(
+            chapter_number=chapter_number,
+            count=3,
         )
 
         # 获取角色状态
@@ -1684,33 +1715,6 @@ class GenerationService:
 
     # ==================== 新增：持久化记忆集成方法 ====================
 
-    def _get_or_create_team_context(
-        self, novel_id: str, novel_title: str, novel_data: dict
-    ) -> NovelTeamContext:
-        """获取或创建小说的 TeamContext.
-
-        TeamContext 在整个小说生成过程中复用，用于 Agent 间信息共享.
-
-        Args:
-            novel_id: 小说ID
-            novel_title: 小说标题
-            novel_data: 小说数据字典
-
-        Returns:
-            NovelTeamContext 实例
-        """
-        if novel_id not in self._team_contexts:
-            team_context = NovelTeamContext(novel_id, novel_title)
-            team_context.set_novel_data(novel_data)
-
-            # 集成伏笔追踪器
-            team_context.foreshadowing_tracker = ForeshadowingTracker(novel_id)
-
-            self._team_contexts[novel_id] = team_context
-            logger.info(f"Created new TeamContext for novel {novel_id}")
-
-        return self._team_contexts[novel_id]
-
     async def _initialize_novel_persistent_memory(
         self, novel_id: UUID, planning_result: dict
     ):
@@ -1775,8 +1779,12 @@ class GenerationService:
         except Exception as e:
             logger.warning(f"Failed to get persistent memory context: {e}")
 
-        # 2. 回退到原有的内存缓存实现
-        return self._build_previous_context(novel_id, novel, chapter_number)
+        # 2. 回退到统一上下文管理器
+        context_manager = self._get_context_manager(novel_id)
+        return await context_manager.build_previous_context(
+            chapter_number=chapter_number,
+            count=3,
+        )
 
     async def _record_planning_activities(
         self, novel_id: UUID, task_id: UUID, planning_result: dict, cost_summary: dict
