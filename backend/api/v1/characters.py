@@ -4,7 +4,7 @@ Character CRUD API endpoints.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,12 +100,25 @@ async def clear_character_relationships(
 @router.get("", response_model=list[CharacterResponse])
 async def list_characters(
     novel_id: UUID,
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    status: Optional[str] = Query(None, description="角色状态筛选"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    获取指定小说的所有角色.
-
-    返回角色列表，按创建时间正序排列（先创建的角色在前）。
+    获取指定小说的角色列表（分页）.
+    
+    返回角色列表，支持分页和状态筛选。默认每页 20 个角色，最多 100 个。
+    
+    Args:
+        novel_id: 小说 ID
+        page: 页码（从 1 开始）
+        page_size: 每页数量（1-100）
+        status: 角色状态筛选（alive/dead/unknown）
+        db: 数据库会话
+    
+    Returns:
+        角色列表（不包含分页元数据，简单列表）
     """
     # Verify novel exists
     novel_query = select(Novel).where(Novel.id == novel_id)
@@ -115,25 +128,25 @@ async def list_characters(
     if not novel:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
-    # Get characters
-    query = (
-        select(Character)
-        .where(Character.novel_id == novel_id)
-        .order_by(Character.created_at)
-    )
+    # Build query
+    query = select(Character).where(Character.novel_id == novel_id)
+    
+    # Apply filters
+    if status:
+        query = query.where(Character.status == status)
+    
+    # Apply ordering
+    query = query.order_by(Character.created_at)
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+    
+    # Execute query
     result = await db.execute(query)
     characters = result.scalars().all()
-
-    # 按名称去重（保留最早创建的记录），防止数据库中存在历史重复数据
-    seen_names: set[str] = set()
-    unique_characters = []
-    for c in characters:
-        name_lower = c.name.strip().lower()
-        if name_lower not in seen_names:
-            seen_names.add(name_lower)
-            unique_characters.append(c)
-
-    return unique_characters
+    
+    return characters
 
 
 @router.post("", response_model=CharacterResponse, status_code=201)
