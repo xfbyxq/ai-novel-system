@@ -148,8 +148,8 @@ class UnifiedContextManager:
     def persistent_memory(self):
         """延迟加载持久化记忆."""
         if self._persistent_memory is None:
-            from novel_memory.persistent import PersistentMemory
-            self._persistent_memory = PersistentMemory(self.novel_id_str)
+            from backend.services.agentmesh_memory_adapter import NovelMemoryStorage
+            self._persistent_memory = NovelMemoryStorage(self.novel_id_str)
         return self._persistent_memory
 
     async def get_chapter_context(
