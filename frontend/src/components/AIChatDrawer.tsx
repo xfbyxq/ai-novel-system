@@ -380,7 +380,7 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
         setChapterSelectModalOpen(false);
         setPendingSuggestion(null);
       } else {
-        message.error(result.error || '应用失败');
+        message.error('应用失败，请稍后重试');
       }
     } catch (error) {
       console.error('应用建议失败:', error);

@@ -117,8 +117,17 @@ class PlotOutline(Base):
     version = Column(Integer, default=1)  # 大纲版本号，每次动态更新 +1
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     novel = relationship("Novel", back_populates="plot_outline")
+    versions = relationship(
+        "PlotOutlineVersion",
+        back_populates="plot_outline",
+        cascade="all, delete-orphan",
+        order_by="PlotOutlineVersion.version_number.desc()",
+    )
+    chapters = relationship(
+        "Chapter",
+        back_populates="plot_outline",
+        foreign_keys="Chapter.plot_outline_id",
+    )

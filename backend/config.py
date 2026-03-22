@@ -25,7 +25,7 @@ from pydantic_settings import BaseSettings
 def get_version_from_pyproject() -> str:
     """
     从 pyproject.toml 动态读取版本号.
-    
+
     Returns:
         str: 版本号字符串，如果读取失败则返回 "2.0.0"
     """
@@ -48,10 +48,10 @@ def get_version_from_pyproject() -> str:
 class Settings(BaseSettings):
     """
     系统配置类.
-    
+
     管理所有系统配置项，包括 LLM、数据库、Redis、应用设置等。
     支持自动环境检测（Docker/本地）和配置验证。
-    
+
     Attributes:
         DASHSCOPE_API_KEY: 通义千问 API 密钥
         DASHSCOPE_MODEL: LLM 模型名称
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
         ENABLE_WORLD_REVIEW: 世界观审查开关
         ENABLE_CHARACTER_REVIEW: 角色审查开关
         ENABLE_CHAPTER_REVIEW: 章节审查开关
-    
+
     Note:
         - 敏感配置（如密码）必须通过环境变量设置
         - 生产环境会自动启用更严格的验证
@@ -79,15 +79,16 @@ class Settings(BaseSettings):
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
     DB_NAME: str = "novel_system"
-    
+
     def model_post_init(self, __context) -> None:
         """初始化后验证：确保敏感配置已设置."""
         # 跳过验证，因为密码会从 DATABASE_URL 中提取
         pass
-    
+
     def _get_db_password_from_url(self) -> str:
         """从 DATABASE_URL 中提取密码."""
         import os
+
         # __file__ 是 backend/config.py，需要向上两级到项目根目录
         config_dir = os.path.dirname(os.path.abspath(__file__))  # backend/
         project_root = os.path.dirname(config_dir)  # 项目根目录
@@ -99,11 +100,12 @@ class Settings(BaseSettings):
                     if line.startswith("DATABASE_URL="):
                         url = line.split("=", 1)[1]
                         import re
+
                         match = re.search(r"://([^:]+):([^@]+)@", url)
                         if match:
                             return match.group(2)
         return ""
-    
+
     @property
     def _effective_db_password(self) -> str:
         """获取有效的数据库密码."""
@@ -114,15 +116,21 @@ class Settings(BaseSettings):
     @property
     def DB_HOST(self) -> str:
         """自动检测是否在Docker环境中."""
-        if os.environ.get("DOCKER_ENV") == "true":
-            return "postgres"  # Docker服务名
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "postgres_dev"  # 开发 Docker 服务名
+        elif docker_env in ("true", "1"):
+            return "postgres"  # 生产 Docker 服务名
         return "localhost"  # 本地开发
 
     @property
     def DB_PORT(self) -> int:
         """自动检测是否在Docker环境中."""
-        if os.environ.get("DOCKER_ENV") == "true":
-            return 5432  # Docker内部端口
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return 5432  # 开发 Docker 内部端口
+        elif docker_env in ("true", "1"):
+            return 5432  # 生产 Docker 内部端口
         return 5434  # 本地开发映射端口
 
     @property
@@ -135,25 +143,34 @@ class Settings(BaseSettings):
         """动态构建同步数据库连接URL."""
         return f"postgresql://{self.DB_USER}:{self._effective_db_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
-    # Redis
+    # Redis - 使用环境变量或自动检测
     @property
     def REDIS_URL(self) -> str:
         """自动检测Redis URL."""
-        if os.environ.get("DOCKER_ENV") == "true":
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "redis://redis_dev:6379/0"
+        elif docker_env in ("true", "1"):
             return "redis://redis:6379/0"
         return "redis://localhost:6379/0"
 
     @property
     def CELERY_BROKER_URL(self) -> str:
         """自动检测Celery Broker URL."""
-        if os.environ.get("DOCKER_ENV") == "true":
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "redis://redis_dev:6379/1"
+        elif docker_env in ("true", "1"):
             return "redis://redis:6379/1"
         return "redis://localhost:6379/1"
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
         """自动检测Celery Result Backend URL."""
-        if os.environ.get("DOCKER_ENV") == "true":
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "redis://redis_dev:6379/2"
+        elif docker_env in ("true", "1"):
             return "redis://redis:6379/2"
         return "redis://localhost:6379/2"
 
@@ -162,7 +179,7 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
-    
+
     # CORS 配置（安全加固）
     # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
     CORS_ALLOWED_ORIGINS: str = ""  # 逗号分隔的允许来源列表，为空则使用默认开发环境配置
@@ -236,7 +253,7 @@ class Settings(BaseSettings):
     CHARACTER_REVIEW_TIMEOUT: int = 120  # 角色审查超时
     PLOT_REVIEW_TIMEOUT: int = 180  # 大纲审查超时
     CHAPTER_REVIEW_TIMEOUT: int = 90  # 章节审查超时
-    
+
     # --- 重试策略 ---
     # LLM 调用失败时的重试次数（不含首次尝试）
     # 建议：2-3 次，过多会导致延迟累积
@@ -249,9 +266,7 @@ class Settings(BaseSettings):
     # --- 角色自动检测 ---
     # 每章生成后自动检测内容中的新角色并注册到角色库
     ENABLE_CHARACTER_AUTO_DETECTION: bool = True
-    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = (
-        0.6  # 置信度阈值，低于此值的角色不注册
-    )
+    CHARACTER_DETECTION_CONFIDENCE_THRESHOLD: float = 0.6  # 置信度阈值，低于此值的角色不注册
     CHARACTER_DETECTION_MAX_CONTENT_LENGTH: int = 6000  # 传入 LLM 的内容最大字符数
 
     # --- 大纲动态更新 ---
@@ -265,12 +280,8 @@ class Settings(BaseSettings):
     # 短期反思：纯 Python 统计，零 LLM 开销
     # 长期反思：每 N 章调用 1 次 LLM 做跨章节模式分析
     ENABLE_REFLECTION: bool = True  # 反思机制总开关
-    ENABLE_REFLECTION_SHORT_TERM: bool = (
-        True  # 短期反思开关（每次审查循环后的统计分析）
-    )
-    ENABLE_REFLECTION_LONG_TERM: bool = (
-        True  # 长期反思开关（跨章节模式分析，需调用 LLM）
-    )
+    ENABLE_REFLECTION_SHORT_TERM: bool = True  # 短期反思开关（每次审查循环后的统计分析）
+    ENABLE_REFLECTION_LONG_TERM: bool = True  # 长期反思开关（跨章节模式分析，需调用 LLM）
     REFLECTION_ANALYSIS_INTERVAL: int = 3  # 长期反思触发间隔（每 N 章分析一次）
     REFLECTION_MIN_CHAPTERS: int = 3  # 启动长期反思所需的最少章节数
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限
@@ -283,20 +294,13 @@ class Settings(BaseSettings):
             self.CHARACTER_DETECTION_CONFIDENCE_THRESHOLD < 0
             or self.CHARACTER_DETECTION_CONFIDENCE_THRESHOLD > 1
         ):
-            raise ValueError(
-                "CHARACTER_DETECTION_CONFIDENCE_THRESHOLD must be between 0 and 1"
-            )
-        if (
-            self.OUTLINE_DEVIATION_THRESHOLD < 0
-            or self.OUTLINE_DEVIATION_THRESHOLD > 10
-        ):
+            raise ValueError("CHARACTER_DETECTION_CONFIDENCE_THRESHOLD must be between 0 and 1")
+        if self.OUTLINE_DEVIATION_THRESHOLD < 0 or self.OUTLINE_DEVIATION_THRESHOLD > 10:
             raise ValueError("OUTLINE_DEVIATION_THRESHOLD must be between 0 and 10")
         if self.OUTLINE_UPDATE_INTERVAL < 1:
             raise ValueError("OUTLINE_UPDATE_INTERVAL must be at least 1")
         if self.CHARACTER_DETECTION_MAX_CONTENT_LENGTH < 100:
-            raise ValueError(
-                "CHARACTER_DETECTION_MAX_CONTENT_LENGTH must be at least 100"
-            )
+            raise ValueError("CHARACTER_DETECTION_MAX_CONTENT_LENGTH must be at least 100")
 
         # 生产环境必须配置 API Key
         if self.APP_ENV == "production" and not self.DASHSCOPE_API_KEY:
@@ -304,26 +308,30 @@ class Settings(BaseSettings):
                 "生产环境必须配置 DASHSCOPE_API_KEY！\n"
                 "请通过环境变量设置：export DASHSCOPE_API_KEY='your_api_key'"
             )
-        
+
         # 验证质量阈值范围 (1-10)
         self._validate_threshold("WORLD_QUALITY_THRESHOLD", self.WORLD_QUALITY_THRESHOLD)
         self._validate_threshold("CHARACTER_QUALITY_THRESHOLD", self.CHARACTER_QUALITY_THRESHOLD)
         self._validate_threshold("PLOT_QUALITY_THRESHOLD", self.PLOT_QUALITY_THRESHOLD)
         self._validate_threshold("CHAPTER_QUALITY_THRESHOLD", self.CHAPTER_QUALITY_THRESHOLD)
-        
+
         # 验证迭代次数 (>0)
         self._validate_positive_int("MAX_WORLD_REVIEW_ITERATIONS", self.MAX_WORLD_REVIEW_ITERATIONS)
-        self._validate_positive_int("MAX_CHARACTER_REVIEW_ITERATIONS", self.MAX_CHARACTER_REVIEW_ITERATIONS)
+        self._validate_positive_int(
+            "MAX_CHARACTER_REVIEW_ITERATIONS", self.MAX_CHARACTER_REVIEW_ITERATIONS
+        )
         self._validate_positive_int("MAX_PLOT_REVIEW_ITERATIONS", self.MAX_PLOT_REVIEW_ITERATIONS)
-        self._validate_positive_int("MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS)
+        self._validate_positive_int(
+            "MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS
+        )
         self._validate_positive_int("MAX_FIX_ITERATIONS", self.MAX_FIX_ITERATIONS)
-        
+
         # 验证超时时间 (>0)
         self._validate_positive_int("WORLD_REVIEW_TIMEOUT", self.WORLD_REVIEW_TIMEOUT)
         self._validate_positive_int("CHARACTER_REVIEW_TIMEOUT", self.CHARACTER_REVIEW_TIMEOUT)
         self._validate_positive_int("PLOT_REVIEW_TIMEOUT", self.PLOT_REVIEW_TIMEOUT)
         self._validate_positive_int("CHAPTER_REVIEW_TIMEOUT", self.CHAPTER_REVIEW_TIMEOUT)
-        
+
         # 验证重试策略
         self._validate_non_negative_int("REVIEW_LLM_MAX_RETRIES", self.REVIEW_LLM_MAX_RETRIES)
         if self.REVIEW_RETRY_BASE_DELAY <= 0:
@@ -332,7 +340,7 @@ class Settings(BaseSettings):
             raise ValueError("REVIEW_RETRY_MAX_DELAY must be positive")
         if self.REVIEW_RETRY_MAX_DELAY < self.REVIEW_RETRY_BASE_DELAY:
             raise ValueError("REVIEW_RETRY_MAX_DELAY must be >= REVIEW_RETRY_BASE_DELAY")
-        
+
         # 验证反思机制配置
         if self.REFLECTION_ANALYSIS_INTERVAL < 1:
             raise ValueError("REFLECTION_ANALYSIS_INTERVAL must be at least 1")
@@ -340,7 +348,7 @@ class Settings(BaseSettings):
             raise ValueError("REFLECTION_MIN_CHAPTERS must be at least 1")
         if self.REFLECTION_LESSON_BUDGET < 100:
             raise ValueError("REFLECTION_LESSON_BUDGET must be at least 100")
-        
+
         # 验证爬虫配置
         if self.CRAWLER_REQUEST_DELAY <= 0:
             raise ValueError("CRAWLER_REQUEST_DELAY must be positive")
@@ -348,32 +356,32 @@ class Settings(BaseSettings):
             raise ValueError("CRAWLER_MAX_RETRIES must be non-negative")
         if self.CRAWLER_TIMEOUT <= 0:
             raise ValueError("CRAWLER_TIMEOUT must be positive")
-        
+
         # 生产环境验证加密密钥
         if self.APP_ENV == "production" and not self.ENCRYPTION_KEY:
             raise ValueError(
                 "生产环境必须配置 ENCRYPTION_KEY！\n"
                 "请通过环境变量设置：export ENCRYPTION_KEY='your_32_char_key'"
             )
-        
+
         # 验证配置依赖关系
         self._validate_config_dependencies()
-    
+
     def _validate_threshold(self, name: str, value: float):
         """验证质量阈值在有效范围内 (1-10)."""
         if value < 1 or value > 10:
             raise ValueError(f"{name} must be between 1 and 10, got {value}")
-    
+
     def _validate_positive_int(self, name: str, value: int):
         """验证正整数配置."""
         if value < 1:
             raise ValueError(f"{name} must be at least 1, got {value}")
-    
+
     def _validate_non_negative_int(self, name: str, value: int):
         """验证非负整数配置."""
         if value < 0:
             raise ValueError(f"{name} must be non-negative, got {value}")
-    
+
     def _validate_config_dependencies(self):
         """验证配置项之间的依赖关系."""
         # 如果启用章节审查，必须配置有效的阈值
@@ -383,13 +391,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ENABLE_CHAPTER_REVIEW=True 时，CHAPTER_QUALITY_THRESHOLD 必须在 1-10 之间"
             )
-        
+
         # 如果启用大纲动态更新，OUTLINE_UPDATE_INTERVAL 必须合理
         if self.ENABLE_DYNAMIC_OUTLINE_UPDATE and self.OUTLINE_UPDATE_INTERVAL > 10:
             raise ValueError(
                 "ENABLE_DYNAMIC_OUTLINE_UPDATE=True 时，OUTLINE_UPDATE_INTERVAL 建议不超过 10"
             )
-        
+
         # 如果启用反思机制，相关配置必须合理
         if self.ENABLE_REFLECTION:
             if not self.ENABLE_REFLECTION_SHORT_TERM and not self.ENABLE_REFLECTION_LONG_TERM:

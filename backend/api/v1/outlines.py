@@ -5,6 +5,7 @@ WorldSetting and PlotOutline API endpoints.
 import logging
 import time
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,6 +37,7 @@ import logging
 core_logger = logging.getLogger(__name__)
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
+from core.models.plot_outline_version import PlotOutlineVersion
 from core.models.world_setting import WorldSetting
 from core.models.character import Character
 from core.models.chapter import Chapter
@@ -44,11 +46,11 @@ from backend.services.outline_service import OutlineService
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
 
-@router.get("/world-setting", response_model=WorldSettingResponse)
+@router.get("/world-setting")
 async def get_world_setting(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说世界观设定.
 
@@ -68,9 +70,7 @@ async def get_world_setting(
     world_setting = result.scalar_one_or_none()
 
     if not world_setting:
-        raise HTTPException(
-            status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到"
-        )
+        return None
 
     return world_setting
 
@@ -116,11 +116,11 @@ async def update_world_setting(
     return world_setting
 
 
-@router.get("/outline", response_model=PlotOutlineResponse)
+@router.get("/outline")
 async def get_plot_outline(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说情节大纲.
 
@@ -140,7 +140,7 @@ async def get_plot_outline(
     plot_outline = result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
+        return None
 
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)
@@ -323,18 +323,14 @@ async def decompose_outline_to_chapters(
             existing_chapter.volume_number = chapter_config.get(
                 "volume_number", request.volume_number
             )
-            existing_chapter.outline_version = (
-                f"v{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            )
+            existing_chapter.outline_version = f"v{datetime.now().strftime('%Y%m%d%H%M%S')}"
             persisted_chapters.append(existing_chapter)
         else:
             # 创建新章节
             new_chapter = Chapter(
                 novel_id=novel_id,
                 chapter_number=chapter_num,
-                volume_number=chapter_config.get(
-                    "volume_number", request.volume_number
-                ),
+                volume_number=chapter_config.get("volume_number", request.volume_number),
                 outline_task=chapter_config,
                 outline_version=f"v{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 title=f"第{chapter_num}章",
@@ -357,9 +353,7 @@ async def decompose_outline_to_chapters(
     }
 
 
-@router.get(
-    "/chapters/{chapter_number}/outline-task", response_model=ChapterOutlineTaskResponse
-)
+@router.get("/chapters/{chapter_number}/outline-task", response_model=ChapterOutlineTaskResponse)
 async def get_chapter_outline_task(
     novel_id: UUID,
     chapter_number: int,
@@ -389,9 +383,7 @@ async def get_chapter_outline_task(
     chapter = chapter_result.scalar_one_or_none()
 
     if not chapter:
-        raise HTTPException(
-            status_code=404, detail=f"小说 {novel_id} 的第{chapter_number}章未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的第{chapter_number}章未找到")
 
     # Return chapter outline task
     outline_task = chapter.outline_task or {}
@@ -590,21 +582,41 @@ async def get_outline_versions(
     if not plot_outline:
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
-    # FIXME: 从版本历史表中获取版本信息 - 跟踪于 GitHub Issue #24
-    # 目前返回一个示例版本列表
-    # 实际实现需要创建 PlotOutlineVersion 模型来存储版本历史
-    versions = [
-        OutlineVersionInfo(
-            version_id="v1.0.0",
-            novel_id=novel_id,
-            version_number=1,
-            change_summary="初始版本",
-            changes={"structure_type": "创建", "volumes": "创建", "main_plot": "创建"},
-            created_by="system",
-            created_at=plot_outline.created_at,
-            is_current=True,
-        )
-    ]
+    versions_query = (
+        select(PlotOutlineVersion)
+        .where(PlotOutlineVersion.plot_outline_id == plot_outline.id)
+        .order_by(PlotOutlineVersion.version_number.desc())
+    )
+    versions_result = await db.execute(versions_query)
+    version_records = versions_result.scalars().all()
+
+    if not version_records:
+        versions = [
+            OutlineVersionInfo(
+                version_id=str(plot_outline.id),
+                novel_id=novel_id,
+                version_number=1,
+                change_summary="初始版本",
+                changes={"structure_type": "创建", "volumes": "创建", "main_plot": "创建"},
+                created_by="system",
+                created_at=plot_outline.created_at,
+                is_current=True,
+            )
+        ]
+    else:
+        versions = [
+            OutlineVersionInfo(
+                version_id=str(v.id),
+                novel_id=novel_id,
+                version_number=v.version_number,
+                change_summary=v.change_summary or "",
+                changes=v.changes or {},
+                created_by=v.created_by or "system",
+                created_at=v.created_at,
+                is_current=(v.version_number == plot_outline.version),
+            )
+            for v in version_records
+        ]
 
     return versions
 
@@ -630,7 +642,6 @@ async def update_plot_outline_with_version(
     plot_outline = result.scalar_one_or_none()
 
     if not plot_outline:
-        # Create new plot outline if it doesn't exist
         novel_query = select(Novel).where(Novel.id == novel_id)
         novel_result = await db.execute(novel_query)
         novel = novel_result.scalar_one_or_none()
@@ -642,21 +653,54 @@ async def update_plot_outline_with_version(
             novel_id=novel_id, **plot_outline_in.model_dump(exclude_unset=True)
         )
         db.add(plot_outline)
+        await db.flush()
+
+        if create_version:
+            version_record = PlotOutlineVersion(
+                plot_outline_id=plot_outline.id,
+                version_number=1,
+                version_data={
+                    "structure_type": plot_outline.structure_type,
+                    "volumes": plot_outline.volumes or [],
+                    "main_plot": plot_outline.main_plot or {},
+                    "sub_plots": plot_outline.sub_plots or [],
+                    "key_turning_points": plot_outline.key_turning_points or [],
+                },
+                change_summary=version_summary or "初始版本",
+                changes=plot_outline_in.model_dump(exclude_unset=True),
+                created_by="system",
+            )
+            db.add(version_record)
+            plot_outline.version = 1
     else:
-        # Update existing plot outline
+        if create_version:
+            version_count_query = select(PlotOutlineVersion).where(
+                PlotOutlineVersion.plot_outline_id == plot_outline.id
+            )
+            version_count_result = await db.execute(version_count_query)
+            existing_versions = version_count_result.scalars().all()
+            new_version_number = max([v.version_number for v in existing_versions], default=0) + 1
+
+            version_record = PlotOutlineVersion(
+                plot_outline_id=plot_outline.id,
+                version_number=new_version_number,
+                version_data={
+                    "structure_type": plot_outline.structure_type,
+                    "volumes": plot_outline.volumes or [],
+                    "main_plot": plot_outline.main_plot or {},
+                    "sub_plots": plot_outline.sub_plots or [],
+                    "key_turning_points": plot_outline.key_turning_points or [],
+                },
+                change_summary=version_summary,
+                changes=plot_outline_in.model_dump(exclude_unset=True),
+                created_by="system",
+            )
+            db.add(version_record)
+            plot_outline.version = new_version_number
+
         update_data = plot_outline_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(plot_outline, field, value)
-
-    # FIXME: 创建版本历史记录 - 跟踪于 GitHub Issue #25
-    # if create_version and plot_outline.id:
-    #     version_record = PlotOutlineVersion(
-    #         plot_outline_id=plot_outline.id,
-    #         version_data=plot_outline.__dict__,
-    #         change_summary=version_summary,
-    #         changes=update_data
-    #     )
-    #     db.add(version_record)
 
     await db.commit()
     await db.refresh(plot_outline)
@@ -690,9 +734,7 @@ async def enhance_outline_preview(
         )
         plot_outline = outline_result.scalar_one_or_none()
         if not plot_outline:
-            raise HTTPException(
-                status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到"
-            )
+            raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
 
         # 获取世界观设定
         world_result = await db.execute(
@@ -720,9 +762,7 @@ async def enhance_outline_preview(
         enhancement_result = await crew_manager.refine_outline_comprehensive(
             outline=initial_outline,
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=(
-                [model_to_dict(char) for char in characters] if characters else []
-            ),
+            characters=([model_to_dict(char) for char in characters] if characters else []),
             options=options.dict(),
             max_rounds=options.max_iterations,
         )
@@ -731,17 +771,13 @@ async def enhance_outline_preview(
         original_quality = await evaluator.evaluate_outline_comprehensively(
             outline=model_to_dict(plot_outline),
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=(
-                [model_to_dict(char) for char in characters] if characters else []
-            ),
+            characters=([model_to_dict(char) for char in characters] if characters else []),
         )
 
         enhanced_quality = await evaluator.evaluate_outline_comprehensively(
             outline=enhancement_result["enhancement_result"]["enhanced_outline"],
             world_setting=model_to_dict(world_setting) if world_setting else {},
-            characters=(
-                [model_to_dict(char) for char in characters] if characters else []
-            ),
+            characters=([model_to_dict(char) for char in characters] if characters else []),
         )
 
         processing_time = time.time() - start_time
@@ -759,9 +795,7 @@ async def enhance_outline_preview(
                 for idx, vol in enumerate(fixed_original_outline["volumes"])
             ]
 
-        fixed_enhanced_outline = enhancement_result["enhancement_result"][
-            "enhanced_outline"
-        ].copy()
+        fixed_enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"].copy()
         if "volumes" in fixed_enhanced_outline and fixed_enhanced_outline["volumes"]:
             fixed_enhanced_outline["volumes"] = [
                 (
@@ -778,17 +812,14 @@ async def enhance_outline_preview(
             quality_comparison={
                 "original_score": original_quality.overall_score,
                 "enhanced_score": enhanced_quality.overall_score,
-                "improvement": enhanced_quality.overall_score
-                - original_quality.overall_score,
+                "improvement": enhanced_quality.overall_score - original_quality.overall_score,
                 "dimension_improvements": {
                     dim: enhanced_quality.dimension_scores[dim]
                     - original_quality.dimension_scores[dim]
                     for dim in original_quality.dimension_scores.keys()
                 },
             },
-            improvements_made=enhancement_result["enhancement_result"].get(
-                "improvements_made", []
-            )[
+            improvements_made=enhancement_result["enhancement_result"].get("improvements_made", [])[
                 :3
             ],  # 限制改进数量
             processing_time=processing_time,
@@ -884,3 +915,72 @@ def model_to_dict(model_instance):
 
 
 __all__ = ["router"]
+
+
+@router.post("/outline/versions/{version_id}/rollback", response_model=PlotOutlineResponse)
+async def rollback_outline_version(
+    novel_id: UUID,
+    version_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    回滚大纲到指定版本.
+
+    - 获取指定版本的完整大纲数据
+    - 恢复到当前大纲
+    - 创建新的版本记录
+    """
+    outline_query = select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    outline_result = await db.execute(outline_query)
+    plot_outline = outline_result.scalar_one_or_none()
+
+    if not plot_outline:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的大纲未找到")
+
+    version_query = select(PlotOutlineVersion).where(
+        PlotOutlineVersion.id == version_id,
+        PlotOutlineVersion.plot_outline_id == plot_outline.id,
+    )
+    version_result = await db.execute(version_query)
+    version_record = version_result.scalar_one_or_none()
+
+    if not version_record:
+        raise HTTPException(status_code=404, detail=f"版本 {version_id} 未找到")
+
+    version_data = version_record.version_data
+    if version_data:
+        if "structure_type" in version_data:
+            plot_outline.structure_type = version_data["structure_type"]
+        if "volumes" in version_data:
+            plot_outline.volumes = version_data["volumes"]
+        if "main_plot" in version_data:
+            plot_outline.main_plot = version_data["main_plot"]
+        if "sub_plots" in version_data:
+            plot_outline.sub_plots = version_data["sub_plots"]
+        if "key_turning_points" in version_data:
+            plot_outline.key_turning_points = version_data["key_turning_points"]
+
+    version_count_query = select(PlotOutlineVersion).where(
+        PlotOutlineVersion.plot_outline_id == plot_outline.id
+    )
+    version_count_result = await db.execute(version_count_query)
+    existing_versions = version_count_result.scalars().all()
+    new_version_number = max([v.version_number for v in existing_versions], default=0) + 1
+
+    rollback_version = PlotOutlineVersion(
+        plot_outline_id=plot_outline.id,
+        version_number=new_version_number,
+        version_data=version_data,
+        change_summary=f"回滚到版本 {version_record.version_number}",
+        changes={"action": "rollback", "rollback_from_version": version_record.version_number},
+        created_by="system",
+    )
+    db.add(rollback_version)
+    plot_outline.version = new_version_number
+
+    await db.commit()
+    await db.refresh(plot_outline)
+
+    plot_outline = fix_plot_outline_volumes(plot_outline)
+
+    return plot_outline

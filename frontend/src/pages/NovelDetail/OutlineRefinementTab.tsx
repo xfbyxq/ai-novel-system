@@ -79,6 +79,11 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
       const data = await getPlotOutline(novelId);
       setOutline(data);
       
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
       const mainPlot = (data.main_plot || {}) as MainPlot;
       const formValues: Record<string, string> = {};
       
@@ -229,9 +234,9 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
       });
 
       // 创建离线任务
-      const taskPayload = {
+      const taskPayload: { novel_id: string; task_type: 'planning' | 'writing' | 'batch_writing' | 'outline_refinement'; input_data: any; } = {
         novel_id: novelId,
-        task_type: 'outline_refinement',
+        task_type: 'outline_refinement' as const,
         input_data: {
           outline_data: {
             structure_type: outline?.structure_type || 'three_act',

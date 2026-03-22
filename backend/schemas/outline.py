@@ -389,4 +389,14 @@ class AIAssistResponse(BaseModel):
     )
     alternatives: Optional[list] = Field(default=None, description="备选建议列表")
     reasoning: Optional[str] = Field(default=None, description="生成理由说明")
+
+
+class OutlineSyncResponse(BaseModel):
+    """大纲同步响应模型."""
+
+    success: bool = Field(..., description="是否成功")
+    affected_chapters: int = Field(..., description="受影响的章节数量")
+    chapter_numbers: list[int] = Field(default_factory=list, description="受影响的章节号列表")
+
+    model_config = ConfigDict(from_attributes=True)
     generated_at: datetime = Field(..., description="生成时间")
