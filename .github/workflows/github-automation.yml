@@ -2,9 +2,9 @@ name: GitHub Automation
 
 on:
   push:
-    branches: [v2.0.0-release, main, develop]
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [main]
+    branches: [ "main", "develop" ]
   schedule:
     # 每天 23:00（北京时间）生成日报
     - cron: '0 15 * * *'
