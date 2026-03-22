@@ -692,9 +692,11 @@ class GenerationService:
                     "key_turning_points": po.key_turning_points or [],
                 }
 
-            # 构建前几章摘要（优先使用持久化记忆，回退到内存缓存）
-            previous_summary = await self._build_previous_context_enhanced(
-                novel_id=novel_id, novel=novel, chapter_number=chapter_number
+            # 构建前几章摘要（使用统一上下文管理器）
+            context_manager = self._get_context_manager(novel_id)
+            previous_summary = await context_manager.build_previous_context(
+                chapter_number=chapter_number,
+                count=3,
             )
 
             # 获取角色状态（优先从持久化记忆获取）
