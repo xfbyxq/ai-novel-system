@@ -21,6 +21,8 @@ from backend.schemas.outline import (
     ChapterOutlineTaskResponse,
     EnhancementOptions,
     EnhancementPreviewResponse,
+    OutlineCompareRequest,
+    OutlineCompareResponse,
     OutlineDecomposeRequest,
     OutlineGenerateRequest,
     OutlineValidationRequest,
@@ -984,3 +986,42 @@ async def rollback_outline_version(
     plot_outline = fix_plot_outline_volumes(plot_outline)
 
     return plot_outline
+
+
+@router.post("/outline/compare", response_model=OutlineCompareResponse)
+async def compare_outline_versions(
+    novel_id: UUID,
+    request: OutlineCompareRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    对比两个大纲版本的差异.
+    
+    计算两个版本之间的新增、删除、修改内容，并识别受影响的章节范围。
+    
+    Args:
+        novel_id: 小说 ID
+        request: 对比请求，包含 version_1 和 version_2
+    
+    Returns:
+        对比结果，包括差异内容和受影响章节
+    """
+    from backend.services.outline_diff_service import OutlineDiffService
+    
+    service = OutlineDiffService(db)
+    result = await service.compare_versions(
+        novel_id=novel_id,
+        version_1=request.version_1,
+        version_2=request.version_2,
+    )
+    
+    return OutlineCompareResponse(
+        success=True,
+        version_1=result["version_1"],
+        version_2=result["version_2"],
+        added=result["added"],
+        removed=result["removed"],
+        modified=result["modified"],
+        affected_chapters=result["affected_chapters"],
+        summary=result["summary"],
+    )
