@@ -72,7 +72,8 @@ async def get_world_setting(
     if not world_setting:
         return None
 
-    return world_setting
+    # 将 ORM 对象转换为字典返回
+    return model_to_dict(world_setting)
 
 
 @router.patch("/world-setting", response_model=WorldSettingResponse)
