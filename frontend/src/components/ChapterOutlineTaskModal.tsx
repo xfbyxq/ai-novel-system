@@ -1,4 +1,4 @@
-import { Modal, Typography, Tag, Space, Divider, Row, Col, Card, Badge } from 'antd';
+import { Modal, Typography, Space, Divider, Row, Col, Card, Badge, Button } from 'antd';
 import {
   CheckCircleOutlined,
   MinusCircleOutlined,
@@ -68,7 +68,7 @@ export default function ChapterOutlineTaskModal({
           </Typography.Text>
         </Space>
       }
-      onConfirm={onConfirm}
+      onOk={onConfirm}
       onCancel={onCancel}
       okText="我已了解本章任务"
       okButtonProps={{ size: 'large' }}
@@ -116,7 +116,7 @@ export default function ChapterOutlineTaskModal({
           </Card>
         )}
 
-        <Divider orientation="left">强制性事件</Divider>
+        <Divider>强制性事件</Divider>
 
         {task.mandatory_events && task.mandatory_events.length > 0 ? (
           <Card type="inner" size="small">
@@ -135,7 +135,7 @@ export default function ChapterOutlineTaskModal({
           <Typography.Text type="secondary">无强制性事件</Typography.Text>
         )}
 
-        <Divider orientation="left" orientationMargin="0">可选事件</Divider>
+        <Divider>可选事件</Divider>
 
         {task.optional_events && task.optional_events.length > 0 ? (
           <Card type="inner" size="small">
@@ -154,7 +154,7 @@ export default function ChapterOutlineTaskModal({
           <Typography.Text type="secondary">无可选事件</Typography.Text>
         )}
 
-        <Divider orientation="left">伏笔任务</Divider>
+        <Divider>伏笔任务</Divider>
 
         {task.foreshadowing_tasks && task.foreshadowing_tasks.length > 0 ? (
           <Card type="inner" size="small">
@@ -176,5 +176,3 @@ export default function ChapterOutlineTaskModal({
     </Modal>
   );
 }
-
-import { Button } from 'antd';

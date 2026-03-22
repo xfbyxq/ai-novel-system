@@ -5,6 +5,7 @@ from core.models.world_setting import WorldSetting
 from core.models.character import Character, RoleType, Gender, CharacterStatus
 from core.models.character_name_version import CharacterNameVersion
 from core.models.plot_outline import PlotOutline
+from core.models.plot_outline_version import PlotOutlineVersion
 from core.models.chapter import Chapter, ChapterStatus
 from core.models.generation_task import GenerationTask, TaskType, TaskStatus
 from core.models.token_usage import TokenUsage
@@ -25,6 +26,7 @@ __all__ = [
     "CharacterStatus",
     "CharacterNameVersion",
     "PlotOutline",
+    "PlotOutlineVersion",
     "Chapter",
     "ChapterStatus",
     "GenerationTask",

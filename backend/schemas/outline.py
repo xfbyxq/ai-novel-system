@@ -389,4 +389,38 @@ class AIAssistResponse(BaseModel):
     )
     alternatives: Optional[list] = Field(default=None, description="备选建议列表")
     reasoning: Optional[str] = Field(default=None, description="生成理由说明")
+
+
+class OutlineSyncResponse(BaseModel):
+    """大纲同步响应模型."""
+
+    success: bool = Field(..., description="是否成功")
+    affected_chapters: int = Field(..., description="受影响的章节数量")
+    chapter_numbers: list[int] = Field(default_factory=list, description="受影响的章节号列表")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OutlineCompareRequest(BaseModel):
+    """大纲对比请求模型."""
+
+    version_1: str = Field(..., description="第一个版本号 (如 'v1.0.0' 或 'current')")
+    version_2: str = Field(..., description="第二个版本号 (如 'v1.1.0' 或 'current')")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OutlineCompareResponse(BaseModel):
+    """大纲对比响应模型."""
+
+    success: bool = Field(..., description="是否成功")
+    version_1: str = Field(..., description="第一个版本号")
+    version_2: str = Field(..., description="第二个版本号")
+    added: dict = Field(default_factory=dict, description="新增内容")
+    removed: dict = Field(default_factory=dict, description="删除内容")
+    modified: dict = Field(default_factory=dict, description="修改内容")
+    affected_chapters: list[int] = Field(default_factory=list, description="受影响的章节号列表")
+    summary: str = Field(..., description="对比摘要")
+
+    model_config = ConfigDict(from_attributes=True)
     generated_at: datetime = Field(..., description="生成时间")

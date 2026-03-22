@@ -69,4 +69,37 @@ markers = [
     "real_crawl: real crawl scenario tests",
     "integration: integration tests requiring database",
     "slow: slow tests",
+    "smoke: smoke tests for quick verification",
+    "regression: regression tests",
+    "ui: UI interaction tests",
+    "edge_case: edge case tests",
+    "creation: novel creation flow tests",
 ]
+
+[tool.coverage.run]
+source = ["backend", "core", "agents"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/alembic/*",
+    "*/node_modules/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"

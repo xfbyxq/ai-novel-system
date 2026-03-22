@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: m.daocloud.io/docker.io/postgres:17
+    container_name: novel_postgres_prod
+    environment:
+      POSTGRES_USER: novel_user
+      POSTGRES_PASSWORD: novel_pass
+      POSTGRES_DB: novel_system
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novel_user -d novel_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: m.daocloud.io/docker.io/redis:6-alpine
+    container_name: novel_redis_prod
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: novel_backend_prod
+    environment:
+      - DOCKER_ENV=true
+      - ENCRYPTION_KEY=da0bbd2d47d9070ef3302561a9a9a72e
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=novel_user
+      - DB_PASSWORD=novel_pass
+      - DB_NAME=novel_system
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-sk-258842ec972f46149b7364ccffb50ed2}
+      - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen3.5-plus}
+      - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+    ports:
+      - "8080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: novel_nginx_prod
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge

@@ -16,6 +16,7 @@ from backend.schemas.outline import (
     ChapterListResponse,
     ChapterResponse,
     ChapterUpdate,
+    OutlineSyncResponse,
 )
 from backend.utils.concurrency import (
     ConcurrentOperationError,
@@ -252,6 +253,37 @@ async def delete_chapter(
 
     await db.commit()
     return None
+
+
+@router.post("/sync-outline", response_model=OutlineSyncResponse)
+async def sync_outline_to_chapters(
+    novel_id: UUID,
+    outline_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    批量同步大纲到章节.
+    
+    当大纲更新后，调用此端点将大纲变更同步到所有关联的章节。
+    会更新章节的大纲版本标记，以便追踪章节基于哪个版本的大纲。
+    
+    Args:
+        novel_id: 小说 ID
+        outline_id: 大纲 ID
+    
+    Returns:
+        同步结果，包括受影响的章节数量和章节号列表
+    """
+    from backend.services.outline_service import OutlineService
+    
+    service = OutlineService(db)
+    result = await service.sync_outline_to_chapters(outline_id)
+    
+    return OutlineSyncResponse(
+        success=True,
+        affected_chapters=result["affected_chapters"],
+        chapter_numbers=result["chapter_numbers"],
+    )
 
 
 @router.post("/batch-delete", status_code=204)

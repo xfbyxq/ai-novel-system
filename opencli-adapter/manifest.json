@@ -1,0 +1,149 @@
+{
+  "name": "novel-system",
+  "version": "1.0.0",
+  "description": "AI 小说系统 CLI 适配器",
+  "author": "易大哥",
+  "base_url": "http://127.0.0.1:3000",
+  "commands": [
+    {
+      "name": "list",
+      "description": "列出所有小说",
+      "type": "api",
+      "method": "GET",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels",
+      "output": "table"
+    },
+    {
+      "name": "get",
+      "description": "获取小说详情",
+      "type": "api",
+      "method": "GET",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels/{novel_id}",
+      "params": [
+        {
+          "name": "novel_id",
+          "type": "string",
+          "required": true,
+          "description": "小说 ID"
+        }
+      ],
+      "output": "json"
+    },
+    {
+      "name": "create",
+      "description": "创建新小说",
+      "type": "api",
+      "method": "POST",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels",
+      "body": {
+        "title": "{title}",
+        "genre": "{genre}",
+        "description": "{description}"
+      },
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "小说标题"
+        },
+        {
+          "name": "genre",
+          "type": "string",
+          "required": false,
+          "description": "小说类型",
+          "default": "玄幻"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "小说简介"
+        }
+      ],
+      "output": "json"
+    },
+    {
+      "name": "chapters",
+      "description": "获取小说章节列表",
+      "type": "api",
+      "method": "GET",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels/{novel_id}/chapters",
+      "params": [
+        {
+          "name": "novel_id",
+          "type": "string",
+          "required": true,
+          "description": "小说 ID"
+        }
+      ],
+      "output": "table"
+    },
+    {
+      "name": "generate",
+      "description": "AI 生成章节",
+      "type": "api",
+      "method": "POST",
+      "endpoint": "http://127.0.0.1:3000/api/v1/chapters/generate",
+      "body": {
+        "novel_id": "{novel_id}",
+        "chapter_number": "{chapter}",
+        "outline": "{outline}"
+      },
+      "params": [
+        {
+          "name": "novel_id",
+          "type": "string",
+          "required": true,
+          "description": "小说 ID"
+        },
+        {
+          "name": "chapter",
+          "type": "number",
+          "required": true,
+          "description": "章节编号"
+        },
+        {
+          "name": "outline",
+          "type": "string",
+          "required": false,
+          "description": "章节大纲"
+        }
+      ],
+      "output": "json",
+      "timeout": 120
+    },
+    {
+      "name": "characters",
+      "description": "获取角色列表",
+      "type": "api",
+      "method": "GET",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels/{novel_id}/characters",
+      "params": [
+        {
+          "name": "novel_id",
+          "type": "string",
+          "required": true,
+          "description": "小说 ID"
+        }
+      ],
+      "output": "table"
+    },
+    {
+      "name": "status",
+      "description": "获取小说状态统计",
+      "type": "api",
+      "method": "GET",
+      "endpoint": "http://127.0.0.1:3000/api/v1/novels/{novel_id}/stats",
+      "params": [
+        {
+          "name": "novel_id",
+          "type": "string",
+          "required": true,
+          "description": "小说 ID"
+        }
+      ],
+      "output": "table"
+    }
+  ]
+}

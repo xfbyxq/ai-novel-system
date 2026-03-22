@@ -98,11 +98,7 @@ class RevenueAnalysisService:
             "publishing_statistics": {
                 "total_publish_attempts": len(publish_tasks),
                 "successful_publishes": len(
-                    [
-                        p
-                        for p in chapter_publishes
-                        if p.status == PublishStatus.published
-                    ]
+                    [p for p in chapter_publishes if p.status == PublishStatus.published]
                 ),
                 "failed_publishes": len(
                     [p for p in chapter_publishes if p.status == PublishStatus.failed]
@@ -111,7 +107,7 @@ class RevenueAnalysisService:
             },
             "cost_analysis": {
                 "total_tokens_used": sum(t.total_tokens for t in token_usages),
-                "total_cost": sum(t.estimated_cost for t in token_usages),
+                "total_cost": sum(float(t.cost or 0) for t in token_usages),
                 "cost_per_chapter": 0,
             },
             "performance_metrics": {
@@ -126,10 +122,7 @@ class RevenueAnalysisService:
         for task in publish_tasks:
             platform = task.platform
             analysis["publishing_statistics"]["platform_distribution"][platform] = (
-                analysis["publishing_statistics"]["platform_distribution"].get(
-                    platform, 0
-                )
-                + 1
+                analysis["publishing_statistics"]["platform_distribution"].get(platform, 0) + 1
             )
 
         # 计算性能指标
@@ -157,9 +150,7 @@ class RevenueAnalysisService:
             analysis["cost_analysis"]["cost_per_chapter"] = total_cost / len(chapters)
 
         # 生成优化建议
-        analysis["optimization_suggestions"] = self._generate_optimization_suggestions(
-            analysis
-        )
+        analysis["optimization_suggestions"] = self._generate_optimization_suggestions(analysis)
 
         return analysis
 
@@ -210,9 +201,7 @@ class RevenueAnalysisService:
             "analysis_period": f"最近{days}天",
             "total_accounts": len(accounts),
             "total_publish_tasks": len(publish_tasks),
-            "successful_tasks": len(
-                [t for t in publish_tasks if t.status == "completed"]
-            ),
+            "successful_tasks": len([t for t in publish_tasks if t.status == "completed"]),
             "failed_tasks": len([t for t in publish_tasks if t.status == "failed"]),
             "total_chapter_publishes": len(chapter_publishes),
             "successful_chapter_publishes": len(
@@ -228,9 +217,7 @@ class RevenueAnalysisService:
 
         # 计算成功率
         if publish_tasks:
-            analysis["task_success_rate"] = (
-                analysis["successful_tasks"] / len(publish_tasks) * 100
-            )
+            analysis["task_success_rate"] = analysis["successful_tasks"] / len(publish_tasks) * 100
 
         if chapter_publishes:
             analysis["publish_success_rate"] = (
@@ -238,8 +225,8 @@ class RevenueAnalysisService:
             )
 
         # 生成优化建议
-        analysis["optimization_suggestions"] = (
-            self._generate_platform_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = self._generate_platform_optimization_suggestions(
+            analysis
         )
 
         return analysis
@@ -272,20 +259,14 @@ class RevenueAnalysisService:
             "historical_data": {
                 "total_chapters": performance_data.get("total_chapters"),
                 "total_word_count": performance_data.get("total_word_count"),
-                "total_cost": performance_data.get("cost_analysis", {}).get(
-                    "total_cost"
+                "total_cost": performance_data.get("cost_analysis", {}).get("total_cost"),
+                "publishing_success_rate": performance_data.get("performance_metrics", {}).get(
+                    "publishing_success_rate"
                 ),
-                "publishing_success_rate": performance_data.get(
-                    "performance_metrics", {}
-                ).get("publishing_success_rate"),
             },
             "forecast": {
-                "expected_chapters": int(
-                    performance_data.get("total_chapters", 0) * days / 60
-                ),
-                "expected_word_count": int(
-                    performance_data.get("total_word_count", 0) * days / 60
-                ),
+                "expected_chapters": int(performance_data.get("total_chapters", 0) * days / 60),
+                "expected_word_count": int(performance_data.get("total_word_count", 0) * days / 60),
                 "expected_cost": float(
                     performance_data.get("cost_analysis", {}).get("total_cost", 0)
                 )
@@ -298,9 +279,7 @@ class RevenueAnalysisService:
         }
 
         # 生成优化建议
-        forecast["optimization_tips"] = self._generate_revenue_optimization_tips(
-            forecast
-        )
+        forecast["optimization_tips"] = self._generate_revenue_optimization_tips(forecast)
 
         return forecast
 
@@ -326,9 +305,7 @@ class RevenueAnalysisService:
             }
 
         # 获取章节信息
-        chapters_result = await self.db.execute(
-            select(Chapter).where(Chapter.novel_id == novel_id)
-        )
+        chapters_result = await self.db.execute(select(Chapter).where(Chapter.novel_id == novel_id))
         chapters = chapters_result.scalars().all()
 
         # 分析内容
@@ -344,8 +321,8 @@ class RevenueAnalysisService:
         }
 
         # 生成内容优化建议
-        analysis["optimization_suggestions"] = (
-            self._generate_content_optimization_suggestions(analysis)
+        analysis["optimization_suggestions"] = self._generate_content_optimization_suggestions(
+            analysis
         )
 
         return analysis
@@ -372,9 +349,7 @@ class RevenueAnalysisService:
             suggestions.append("发布成功率较低，建议检查平台账号状态和网络连接")
 
         # 基于成本效率的建议
-        cost_efficiency = analysis.get("performance_metrics", {}).get(
-            "cost_efficiency", 0
-        )
+        cost_efficiency = analysis.get("performance_metrics", {}).get("cost_efficiency", 0)
         if cost_efficiency < 1000:
             suggestions.append("成本效率较低，建议优化提示词和生成参数以减少Token使用")
 
@@ -425,9 +400,7 @@ class RevenueAnalysisService:
         # 基于账号数量的建议
         total_accounts = analysis.get("total_accounts", 0)
         if total_accounts == 0:
-            suggestions.append(
-                f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能"
-            )
+            suggestions.append(f"未发现{analysis['platform']}平台账号，建议添加账号以启用发布功能")
         elif total_accounts < 2:
             suggestions.append(
                 f"{analysis['platform']}平台账号数量较少，建议添加备用账号以提高发布稳定性"
@@ -484,9 +457,7 @@ class RevenueAnalysisService:
         if avg_chapter_length < 1500:
             suggestions.append("章节长度偏短，建议增加每章内容以提供更丰富的阅读体验")
         elif avg_chapter_length > 4000:
-            suggestions.append(
-                "章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率"
-            )
+            suggestions.append("章节长度偏长，建议适当缩短章节或增加章节数量以提高更新频率")
 
         # 基于类型的建议
         genre = analysis.get("genre", "")
