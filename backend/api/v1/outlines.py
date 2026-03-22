@@ -5,6 +5,7 @@ WorldSetting and PlotOutline API endpoints.
 import logging
 import time
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,11 +46,11 @@ from backend.services.outline_service import OutlineService
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
 
-@router.get("/world-setting", response_model=WorldSettingResponse)
+@router.get("/world-setting")
 async def get_world_setting(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说世界观设定.
 
@@ -115,11 +116,11 @@ async def update_world_setting(
     return world_setting
 
 
-@router.get("/outline", response_model=PlotOutlineResponse)
+@router.get("/outline")
 async def get_plot_outline(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说情节大纲.
 

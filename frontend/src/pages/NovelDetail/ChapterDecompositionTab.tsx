@@ -90,6 +90,11 @@ export default function ChapterDecompositionTab({ novelId, onDecompositionConfir
     try {
       const data = await getPlotOutline(novelId);
       
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
       const volumes = (data.volumes || []) as VolumeInfo[];
       
       if (volumes.length > 0) {

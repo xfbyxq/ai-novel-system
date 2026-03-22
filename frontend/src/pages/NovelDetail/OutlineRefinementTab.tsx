@@ -79,6 +79,11 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
       const data = await getPlotOutline(novelId);
       setOutline(data);
       
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
       const mainPlot = (data.main_plot || {}) as MainPlot;
       const formValues: Record<string, string> = {};
       
