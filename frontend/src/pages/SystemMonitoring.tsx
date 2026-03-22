@@ -370,14 +370,7 @@ const SystemMonitoring = () => {
                         {agent.current_task}
                       </Text>
                     </Descriptions.Item>
-                  )}
-                  {agent.error_message && (
-                    <Descriptions.Item label="错误信息" style={{ color: '#ff4d4f' }}>
-                      <Text ellipsis={{ tooltip: agent.error_message }}>
-                        {agent.error_message}
-                      </Text>
-                    </Descriptions.Item>
-                  )}
+                    )}
                 </Descriptions>
               </Card>
             </Col>

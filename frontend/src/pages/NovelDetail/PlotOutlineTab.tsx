@@ -110,7 +110,7 @@ export default function PlotOutlineTab({ novelId }: Props) {
     );
   }
 
-  const volumes = (outline.volumes || []) as VolumeItem[];
+  const volumes = (outline.volumes || []) as unknown as VolumeItem[];
 
   const treeData = volumes.map((vol, i) => ({
     key: `vol-${i}`,

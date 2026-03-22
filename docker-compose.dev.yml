@@ -1,102 +1,82 @@
-version: '3.8'
-
-# 开发环境配置 - 使用挂载卷实现代码热更新
-# 用法：docker-compose -f docker-compose.dev.yml up
-
 services:
-  postgres:
+  postgres_dev:
     image: m.daocloud.io/docker.io/postgres:17
-    container_name: novel_postgres
+    container_name: novel_postgres_dev
     environment:
       POSTGRES_USER: novel_user
       POSTGRES_PASSWORD: novel_pass
       POSTGRES_DB: novel_system
     ports:
-      - "5434:5432"
+      - "5436:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U novel_user -d novel_system"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dev-network
 
-  redis:
+  redis_dev:
     image: m.daocloud.io/docker.io/redis:6-alpine
-    container_name: novel_redis
+    container_name: novel_redis_dev
     ports:
-      - "6379:6379"
+      - "6382:6379"
     volumes:
-      - redis_data:/data
+      - redis_data_dev:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    networks:
+      - dev-network
 
-  backend:
-    image: m.daocloud.io/docker.io/python:3.12-slim
-    container_name: novel_backend
+  backend_dev:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: novel_backend_dev
     working_dir: /app
     environment:
-      - DB_HOST=postgres
+      - DOCKER_ENV=dev
+      - DB_HOST=postgres_dev
       - DB_PORT=5432
       - DB_USER=novel_user
       - DB_PASSWORD=novel_pass
       - DB_NAME=novel_system
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDIS_URL=redis://redis_dev:6379/0
+      - CELERY_BROKER_URL=redis://redis_dev:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis_dev:6379/2
       - APP_ENV=development
       - APP_DEBUG=true
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-      - DASHSCOPE_API_KEY=sk-258842ec972f46149b7364ccffb50ed2
-      - DASHSCOPE_MODEL=qwen3.5-plus
-      - DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-sk-your-key-here}
+      - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen3.5-plus}
+      - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-32char_default_key_12345678901234}
     ports:
       - "8000:8000"
     volumes:
-      # 挂载所有源代码目录，实现热更新
       - ./:/app:cached
-      # 挂载依赖包到单独目录，避免覆盖
-      - backend_packages:/usr/local/lib/python3.12/site-packages
     depends_on:
-      postgres:
+      postgres_dev:
         condition: service_healthy
-      redis:
+      redis_dev:
         condition: service_healthy
+    networks:
+      - dev-network
     command: >
-      bash -c "pip install -e . &&
-               uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
-
-  frontend:
-    image: m.daocloud.io/docker.io/node:20-alpine
-    container_name: novel_frontend
-    working_dir: /app
-    environment:
-      - NODE_ENV=development
-      - API_PROXY_TARGET=http://backend:8000
-    ports:
-      - "3000:3000"
-    volumes:
-      # 挂载前端源代码，实现热更新
-      - ./frontend/src:/app/src:cached
-      - ./frontend/public:/app/public:cached
-      - ./frontend/package.json:/app/package.json:cached
-      - ./frontend/vite.config.ts:/app/vite.config.ts:cached
-      - ./frontend/tsconfig.json:/app/tsconfig.json:cached
-      - ./frontend/tsconfig.app.json:/app/tsconfig.app.json:cached
-      - ./frontend/index.html:/app/index.html:cached
-      # 挂载 node_modules 到单独目录
-      - frontend_node_modules:/app/node_modules
-    depends_on:
-      - backend
-    command: >
-      sh -c "cd /app && npm install --registry=https://registry.npmmirror.com && npm run dev -- --host 0.0.0.0 --port 3000"
+      bash -c "pip install --no-cache-dir -r requirements.txt &&
+               PYTHONPATH=/app python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
-  postgres_data:
-  redis_data:
-  backend_packages:  # 持久化后端依赖
-  frontend_node_modules:  # 持久化前端依赖
+  postgres_data_dev:
+  redis_data_dev:
+
+networks:
+  dev-network:
+    name: novel_dev_network
+    driver: bridge

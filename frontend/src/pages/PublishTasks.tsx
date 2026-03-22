@@ -452,11 +452,6 @@ export default function PublishTasks() {
                 </pre>
               </Descriptions.Item>
             )}
-            {selectedTask.error_message && (
-              <Descriptions.Item label="错误信息" span={2}>
-                <Text type="danger">{selectedTask.error_message}</Text>
-              </Descriptions.Item>
-            )}
           </Descriptions>
         )}
       </Modal>

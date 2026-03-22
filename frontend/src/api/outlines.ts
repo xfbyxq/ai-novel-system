@@ -1,7 +1,7 @@
 import apiClient from './client';
 import type { WorldSetting, PlotOutline } from './types';
 
-export async function getWorldSetting(novelId: string): Promise<WorldSetting> {
+export async function getWorldSetting(novelId: string): Promise<WorldSetting | null> {
   const { data } = await apiClient.get(`/novels/${novelId}/world-setting`);
   return data;
 }
@@ -14,7 +14,7 @@ export async function updateWorldSetting(
   return data;
 }
 
-export async function getPlotOutline(novelId: string): Promise<PlotOutline> {
+export async function getPlotOutline(novelId: string): Promise<PlotOutline | null> {
   const { data } = await apiClient.get(`/novels/${novelId}/outline`);
   return data;
 }

@@ -348,7 +348,19 @@ class OutlineService:
         auto_split = config.get("auto_split", True)
         config.get("flexible", True)
 
-        # 1. 从大纲中提取卷信息
+        # 1. 获取大纲对象，记录大纲 ID
+        outline_result = await self.db.execute(
+            select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+        )
+        outline = outline_result.scalar_one_or_none()
+        outline_id = outline.id if outline else None
+        
+        # 2. 获取最新版本的大纲版本 ID
+        outline_version_id = None
+        if outline and outline.versions:
+            outline_version_id = outline.versions[0].id
+
+        # 3. 从大纲中提取卷信息
         volumes = outline_data.get("volumes", [])
 
         if not volumes:
@@ -393,6 +405,11 @@ class OutlineService:
                     climax_chapter=global_climax_chapter,
                     volume_is_climax=volume.get("is_climax", False),
                 )
+                # 添加大纲 ID 关联
+                if outline_id:
+                    chapter_config["plot_outline_id"] = str(outline_id)
+                if outline_version_id:
+                    chapter_config["outline_version_id"] = str(outline_version_id)
                 volume_chapter_configs.append(chapter_config)
 
             chapter_configs.extend(volume_chapter_configs)
@@ -954,6 +971,76 @@ class OutlineService:
             )
 
         await self.db.commit()
+
+    async def sync_outline_to_chapters(
+        self, outline_id: UUID, updated_fields: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        大纲更新后，同步到受影响的章节.
+        
+        Args:
+            outline_id: 大纲 ID
+            updated_fields: 更新的字段列表（可选）
+        
+        Returns:
+            同步结果：{"affected_chapters": int, "chapter_numbers": List[int]}
+        """
+        logger.info(f"Syncing outline {outline_id} to chapters")
+        
+        # 1. 获取大纲
+        outline_result = await self.db.execute(
+            select(PlotOutline)
+            .where(PlotOutline.id == outline_id)
+            .options(selectinload(PlotOutline.versions))
+        )
+        outline = outline_result.scalar_one_or_none()
+        
+        if not outline:
+            logger.warning(f"Outline {outline_id} not found")
+            return {"affected_chapters": 0, "chapter_numbers": []}
+        
+        # 2. 获取最新版本 ID
+        latest_version_id = None
+        if outline.versions:
+            latest_version_id = outline.versions[0].id
+        
+        # 3. 查找所有关联的章节
+        chapters_result = await self.db.execute(
+            select(Chapter)
+            .where(Chapter.plot_outline_id == outline_id)
+            .order_by(Chapter.chapter_number)
+        )
+        chapters = chapters_result.scalars().all()
+        
+        # 4. 更新章节的大纲版本标记
+        affected_chapters = []
+        for chapter in chapters:
+            old_version = chapter.outline_version
+            # 生成新版本号
+            new_version = f"v{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+            chapter.outline_version = new_version
+            
+            # 如果有关联的版本 ID，也更新
+            if latest_version_id:
+                chapter.outline_version_id = latest_version_id
+            
+            affected_chapters.append(chapter.chapter_number)
+            
+            logger.info(
+                f"Updated chapter {chapter.chapter_number} outline version "
+                f"from {old_version} to {new_version}"
+            )
+        
+        await self.db.commit()
+        
+        logger.info(
+            f"Synced outline {outline_id} to {len(chapters)} chapters: {affected_chapters}"
+        )
+        
+        return {
+            "affected_chapters": len(chapters),
+            "chapter_numbers": affected_chapters,
+        }
 
 
 # 便捷函数

@@ -5,6 +5,7 @@ WorldSetting and PlotOutline API endpoints.
 import logging
 import time
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,11 +46,11 @@ from backend.services.outline_service import OutlineService
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
 
-@router.get("/world-setting", response_model=WorldSettingResponse)
+@router.get("/world-setting")
 async def get_world_setting(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说世界观设定.
 
@@ -69,7 +70,7 @@ async def get_world_setting(
     world_setting = result.scalar_one_or_none()
 
     if not world_setting:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的世界观设定未找到")
+        return None
 
     return world_setting
 
@@ -115,11 +116,11 @@ async def update_world_setting(
     return world_setting
 
 
-@router.get("/outline", response_model=PlotOutlineResponse)
+@router.get("/outline")
 async def get_plot_outline(
     novel_id: UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> Optional[dict]:
     """
     获取小说情节大纲.
 
@@ -139,7 +140,7 @@ async def get_plot_outline(
     plot_outline = result.scalar_one_or_none()
 
     if not plot_outline:
-        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 的情节大纲未找到")
+        return None
 
     # 修复数据格式：确保volumes中的每个卷都有number字段
     plot_outline = fix_plot_outline_volumes(plot_outline)

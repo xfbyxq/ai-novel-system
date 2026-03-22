@@ -111,14 +111,11 @@ class MonitoringService:
                 "task_type": random.choice(task_types),
                 "status": random.choice(statuses),
                 "start_time": start_time.isoformat(),
-                "end_time": (
-                    end_time.isoformat() if random.choice([True, False]) else None
-                ),
+                "end_time": (end_time.isoformat() if random.choice([True, False]) else None),
                 "duration": duration if random.choice([True, False]) else None,
                 "error_message": (
                     "模拟错误信息"
-                    if random.choice([True, False])
-                    and random.choice(statuses) == "failed"
+                    if random.choice([True, False]) and random.choice(statuses) == "failed"
                     else None
                 ),
             }
@@ -208,9 +205,9 @@ class MonitoringService:
                 func.sum(TokenUsage.prompt_tokens),
                 func.sum(TokenUsage.completion_tokens),
                 func.sum(TokenUsage.total_tokens),
-                func.sum(TokenUsage.estimated_cost),
+                func.sum(TokenUsage.cost),
             ).where(
-                TokenUsage.created_at >= cutoff_date,
+                TokenUsage.timestamp >= cutoff_date,
             )
         )
         token_usage = token_usage_result.first()
@@ -219,12 +216,8 @@ class MonitoringService:
         generation_tasks_result = await self.db.execute(
             select(
                 func.count(GenerationTask.id),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.completed, 1), else_=0)
-                ),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.failed, 1), else_=0)
-                ),
+                func.sum(case((GenerationTask.status == TaskStatus.completed, 1), else_=0)),
+                func.sum(case((GenerationTask.status == TaskStatus.failed, 1), else_=0)),
             ).where(
                 GenerationTask.created_at >= cutoff_date,
             )
@@ -235,14 +228,8 @@ class MonitoringService:
         publish_tasks_result = await self.db.execute(
             select(
                 func.count(PublishTask.id),
-                func.sum(
-                    case(
-                        (PublishTask.status == PublishTaskStatus.completed, 1), else_=0
-                    )
-                ),
-                func.sum(
-                    case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)
-                ),
+                func.sum(case((PublishTask.status == PublishTaskStatus.completed, 1), else_=0)),
+                func.sum(case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)),
             ).where(
                 PublishTask.created_at >= cutoff_date,
             )
@@ -273,17 +260,13 @@ class MonitoringService:
                 "total": int(publish_stats[0] or 0),
                 "completed": int(publish_stats[1] or 0),
                 "failed": int(publish_stats[2] or 0),
-                "success_rate": self._calculate_success_rate(
-                    publish_stats[1], publish_stats[0]
-                ),
+                "success_rate": self._calculate_success_rate(publish_stats[1], publish_stats[0]),
             },
             "crawler_tasks": {
                 "total": int(crawler_stats[0] or 0),
                 "completed": int(crawler_stats[1] or 0),
                 "failed": int(crawler_stats[2] or 0),
-                "success_rate": self._calculate_success_rate(
-                    crawler_stats[1], crawler_stats[0]
-                ),
+                "success_rate": self._calculate_success_rate(crawler_stats[1], crawler_stats[0]),
             },
         }
 
@@ -415,15 +398,11 @@ class MonitoringService:
         # 生成调优建议
         suggestions = {
             "timestamp": datetime.now().isoformat(),
-            "system_suggestions": self._generate_system_optimization_suggestions(
-                system_status
-            ),
+            "system_suggestions": self._generate_system_optimization_suggestions(system_status),
             "performance_suggestions": self._generate_performance_optimization_suggestions(
                 performance_metrics
             ),
-            "error_suggestions": self._generate_error_optimization_suggestions(
-                error_analysis
-            ),
+            "error_suggestions": self._generate_error_optimization_suggestions(error_analysis),
             "priority_suggestions": self._prioritize_suggestions(
                 system_status,
                 performance_metrics,
@@ -460,9 +439,7 @@ class MonitoringService:
                 "performance": performance_metrics,
                 "errors": error_analysis,
             },
-            "recommendations": system_status.get("health", {}).get(
-                "recommendations", []
-            ),
+            "recommendations": system_status.get("health", {}).get("recommendations", []),
         }
 
         return health_check
@@ -497,18 +474,10 @@ class MonitoringService:
         generation_result = await self.db.execute(
             select(
                 func.count(GenerationTask.id),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.pending, 1), else_=0)
-                ),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.running, 1), else_=0)
-                ),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.completed, 1), else_=0)
-                ),
-                func.sum(
-                    case((GenerationTask.status == TaskStatus.failed, 1), else_=0)
-                ),
+                func.sum(case((GenerationTask.status == TaskStatus.pending, 1), else_=0)),
+                func.sum(case((GenerationTask.status == TaskStatus.running, 1), else_=0)),
+                func.sum(case((GenerationTask.status == TaskStatus.completed, 1), else_=0)),
+                func.sum(case((GenerationTask.status == TaskStatus.failed, 1), else_=0)),
             )
         )
         gen_stats = generation_result.first()
@@ -517,20 +486,10 @@ class MonitoringService:
         publish_result = await self.db.execute(
             select(
                 func.count(PublishTask.id),
-                func.sum(
-                    case((PublishTask.status == PublishTaskStatus.pending, 1), else_=0)
-                ),
-                func.sum(
-                    case((PublishTask.status == PublishTaskStatus.running, 1), else_=0)
-                ),
-                func.sum(
-                    case(
-                        (PublishTask.status == PublishTaskStatus.completed, 1), else_=0
-                    )
-                ),
-                func.sum(
-                    case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)
-                ),
+                func.sum(case((PublishTask.status == PublishTaskStatus.pending, 1), else_=0)),
+                func.sum(case((PublishTask.status == PublishTaskStatus.running, 1), else_=0)),
+                func.sum(case((PublishTask.status == PublishTaskStatus.completed, 1), else_=0)),
+                func.sum(case((PublishTask.status == PublishTaskStatus.failed, 1), else_=0)),
             )
         )
         pub_stats = publish_result.first()
@@ -682,12 +641,10 @@ class MonitoringService:
 
         # 分析Token使用情况
         token_usage = performance_metrics.get("token_usage", {})
-        estimated_cost = token_usage.get("estimated_cost", 0)
+        estimated_cost = token_usage.get("cost", 0)
 
         if estimated_cost > 100:
-            suggestions.append(
-                "Token使用成本较高，建议优化提示词和生成参数以减少Token消耗"
-            )
+            suggestions.append("Token使用成本较高，建议优化提示词和生成参数以减少Token消耗")
 
         # 分析任务成功率
         generation_tasks = performance_metrics.get("generation_tasks", {})
@@ -755,18 +712,12 @@ class MonitoringService:
         # 收集所有建议
         all_suggestions = []
 
-        all_suggestions.extend(
-            system_status.get("health", {}).get("recommendations", [])
-        )
-        all_suggestions.extend(
-            self._generate_system_optimization_suggestions(system_status)
-        )
+        all_suggestions.extend(system_status.get("health", {}).get("recommendations", []))
+        all_suggestions.extend(self._generate_system_optimization_suggestions(system_status))
         all_suggestions.extend(
             self._generate_performance_optimization_suggestions(performance_metrics)
         )
-        all_suggestions.extend(
-            self._generate_error_optimization_suggestions(error_analysis)
-        )
+        all_suggestions.extend(self._generate_error_optimization_suggestions(error_analysis))
 
         # 去重
         unique_suggestions = list(set(all_suggestions))
@@ -776,10 +727,7 @@ class MonitoringService:
 
         # 优先处理严重问题
         for suggestion in unique_suggestions:
-            if any(
-                keyword in suggestion
-                for keyword in ["异常", "过高", "失败率", "错误较多"]
-            ):
+            if any(keyword in suggestion for keyword in ["异常", "过高", "失败率", "错误较多"]):
                 priority_suggestions.append(suggestion)
 
         # 然后处理一般建议
@@ -803,12 +751,8 @@ class MonitoringService:
         metrics = {
             "timestamp": system_status.get("timestamp"),
             "cpu_percent": system_status.get("system", {}).get("cpu_percent", 0),
-            "memory_percent": system_status.get("system", {})
-            .get("memory", {})
-            .get("percent", 0),
-            "disk_percent": system_status.get("system", {})
-            .get("disk", {})
-            .get("percent", 0),
+            "memory_percent": system_status.get("system", {}).get("memory", {}).get("percent", 0),
+            "disk_percent": system_status.get("system", {}).get("disk", {}).get("percent", 0),
             "health_score": system_status.get("health", {}).get("score", 0),
             "health_status": system_status.get("health", {}).get("status", "unknown"),
         }
@@ -848,9 +792,7 @@ class MonitoringService:
         patterns = []
 
         # 分析生成错误模式
-        generation_errors = [
-            t.error_message for t in failed_generation_tasks if t.error_message
-        ]
+        generation_errors = [t.error_message for t in failed_generation_tasks if t.error_message]
         if generation_errors:
             error_counts = {}
             for error in generation_errors:
@@ -859,9 +801,7 @@ class MonitoringService:
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
             # 提取频率最高的错误模式
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
-                :3
-            ]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
             for error_pattern, count in top_errors:
                 patterns.append(
                     {
@@ -872,18 +812,14 @@ class MonitoringService:
                 )
 
         # 分析发布错误模式
-        publish_errors = [
-            t.error_message for t in failed_publish_tasks if t.error_message
-        ]
+        publish_errors = [t.error_message for t in failed_publish_tasks if t.error_message]
         if publish_errors:
             error_counts = {}
             for error in publish_errors:
                 error_key = error[:100]
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
-                :3
-            ]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
             for error_pattern, count in top_errors:
                 patterns.append(
                     {
@@ -894,18 +830,14 @@ class MonitoringService:
                 )
 
         # 分析爬虫错误模式
-        crawler_errors = [
-            t.error_message for t in failed_crawler_tasks if t.error_message
-        ]
+        crawler_errors = [t.error_message for t in failed_crawler_tasks if t.error_message]
         if crawler_errors:
             error_counts = {}
             for error in crawler_errors:
                 error_key = error[:100]
                 error_counts[error_key] = error_counts.get(error_key, 0) + 1
 
-            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[
-                :3
-            ]
+            top_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:3]
             for error_pattern, count in top_errors:
                 patterns.append(
                     {

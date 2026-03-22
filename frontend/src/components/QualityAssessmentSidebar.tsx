@@ -162,7 +162,7 @@ export default function QualityAssessmentSidebar({
         <Progress
           type="circle"
           percent={Math.round(qualityReport.overall_score * 10)}
-          format={(percent) => `${percent / 10}分`}
+          format={(percent) => `${(percent ?? 0) / 10}分`}
           strokeColor={getOverallScoreColor(qualityReport.overall_score)}
           width={120}
         />
@@ -239,7 +239,7 @@ export default function QualityAssessmentSidebar({
           <List
             size="small"
             dataSource={qualityReport.improvement_suggestions}
-            renderItem={(suggestion, index) => (
+            renderItem={(suggestion) => (
               <List.Item style={{ padding: '8px 0' }}>
                 <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <div>
