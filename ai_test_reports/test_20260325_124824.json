@@ -1,0 +1,42 @@
+{
+  "mode": "autonomous",
+  "goal": "验证系统仪表盘页面正常显示",
+  "success": false,
+  "goal_achieved": false,
+  "steps_count": 5,
+  "execution_time": 47.44125580787659,
+  "actions": [
+    {
+      "type": "wait",
+      "target": "body",
+      "reason": "页面显示无可交互元素，可能页面还在加载中，需要等待页面完全加载后再进行分析",
+      "confidence": 0.8
+    },
+    {
+      "type": "wait",
+      "target": "body",
+      "reason": "页面刚加载，可能还在渲染中。等待3秒让React等前端框架完成渲染，然后分析页面内容。",
+      "confidence": 0.8
+    },
+    {
+      "type": "screenshot",
+      "target": "full_page",
+      "reason": "页面可交互元素显示为'无'，需要先截图分析页面实际内容和结构，确认是否为仪表盘页面或页面是否正常加载",
+      "confidence": 0.9
+    },
+    {
+      "type": "get_text",
+      "target": "body",
+      "reason": "获取页面完整文本内容，分析当前页面实际显示状态和结构",
+      "confidence": 0.9
+    },
+    {
+      "type": "get_text",
+      "target": "body",
+      "reason": "页面显示无可交互元素，需要先获取页面实际内容来了解当前状态，可能是页面未完全加载或需要登录",
+      "confidence": 0.8
+    }
+  ],
+  "error": null,
+  "timestamp": "2026-03-25T12:48:24.117946"
+}

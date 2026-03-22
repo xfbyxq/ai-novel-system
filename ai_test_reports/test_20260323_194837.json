@@ -1,0 +1,30 @@
+{
+  "mode": "autonomous",
+  "goal": "打开小说列表页面",
+  "success": false,
+  "goal_achieved": false,
+  "steps_count": 3,
+  "execution_time": 21.396991968154907,
+  "actions": [
+    {
+      "type": "get_text",
+      "target": "body",
+      "reason": "获取页面主体内容，确认小说列表是否已成功加载显示",
+      "confidence": 0.8
+    },
+    {
+      "type": "get_text",
+      "target": "body",
+      "reason": "获取页面文本内容，确认当前页面是否确实是小说列表页面，检查是否有小说列表内容显示",
+      "confidence": 0.8
+    },
+    {
+      "type": "stop",
+      "target": "",
+      "reason": "当前页面URL为http://localhost:3000/novels，标题为'AI 小说生成系统'，且页面包含小说列表页面的典型元素（'创建小说'按钮、'状态筛选'下拉框）。测试目标'打开小说列表页面'已达成。",
+      "confidence": 1.0
+    }
+  ],
+  "error": null,
+  "timestamp": "2026-03-23T19:48:37.049316"
+}

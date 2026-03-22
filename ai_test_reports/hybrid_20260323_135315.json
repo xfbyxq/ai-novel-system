@@ -1,0 +1,24 @@
+{
+  "mode": "hybrid",
+  "success": false,
+  "test_report": {
+    "total_steps": 1,
+    "successful_steps": 0,
+    "failed_steps": 1,
+    "healed_count": 1,
+    "self_healing_rate": 1.0,
+    "steps": [
+      {
+        "step_id": 1,
+        "action": "click",
+        "selector": "button:has-text(\"创建小说\")",
+        "healed_selector": "button:has-text(\"创建小说\")",
+        "success": false,
+        "error": "重试失败: Page.click: Timeout 10ms exceeded.\nCall log:\n  - waiting for locator(\"button:has-text(\\\"创建小说\\\")\")\n    - locator resolved to <button type=\"button\" class=\"ant-btn css-dev-only-do-not-override-1iftmj9 css-var-root ant-btn-primary ant-btn-color-primary ant-btn-variant-solid\">…</button>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n"
+      }
+    ],
+    "selector_cache": {}
+  },
+  "execution_time": 4.467165231704712,
+  "timestamp": "2026-03-23T13:53:15.955985"
+}

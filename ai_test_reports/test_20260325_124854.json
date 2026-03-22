@@ -1,0 +1,24 @@
+{
+  "mode": "autonomous",
+  "goal": "验证发布任务页面正常显示",
+  "success": false,
+  "goal_achieved": false,
+  "steps_count": 2,
+  "execution_time": 24.133702039718628,
+  "actions": [
+    {
+      "type": "get_text",
+      "target": "body",
+      "reason": "获取页面完整文本内容，验证发布任务页面是否正常显示，包括检查页面标题、表单元素、任务列表等其他关键内容",
+      "confidence": 0.8
+    },
+    {
+      "type": "stop",
+      "target": "",
+      "reason": "页面已正常显示。URL显示在/publish路径（发布任务页面），页面标题为'AI 小说生成系统'，且页面包含'刷新'和'新建任务'两个可交互按钮，说明发布任务页面已正常渲染显示，测试目标达成。",
+      "confidence": 0.95
+    }
+  ],
+  "error": null,
+  "timestamp": "2026-03-25T12:48:54.966741"
+}

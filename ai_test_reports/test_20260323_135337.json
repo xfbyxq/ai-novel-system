@@ -1,0 +1,18 @@
+{
+  "mode": "autonomous",
+  "goal": "测试登录功能",
+  "success": false,
+  "goal_achieved": false,
+  "steps_count": 1,
+  "execution_time": 3.7322847843170166,
+  "actions": [
+    {
+      "type": "stop",
+      "target": "",
+      "reason": "",
+      "confidence": 0.5
+    }
+  ],
+  "error": null,
+  "timestamp": "2026-03-23T13:53:37.502206"
+}

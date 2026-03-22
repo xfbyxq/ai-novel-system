@@ -1,0 +1,24 @@
+{
+  "mode": "generation",
+  "feature": "小说管理",
+  "page_url": "/novels",
+  "success": true,
+  "test_cases_count": 3,
+  "output_dir": "ai_test_reports/generated_tests",
+  "test_cases": [
+    {
+      "name": "test_测试功能入口是否可见",
+      "steps_count": 0
+    },
+    {
+      "name": "test_测试功能是否可以正常操作",
+      "steps_count": 0
+    },
+    {
+      "name": "test_测试操作结果是否符合预期",
+      "steps_count": 0
+    }
+  ],
+  "execution_time": 4.021140098571777,
+  "timestamp": "2026-03-23T13:54:03.847051"
+}

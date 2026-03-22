@@ -1,0 +1,27 @@
+{
+  "mode": "healing",
+  "original_selector": ".ant-btn-primary",
+  "page_url": "/",
+  "action": "click",
+  "success": true,
+  "healed_selector": "text=ant-btn-primary",
+  "method": "fallback_strategy",
+  "confidence": 0.6,
+  "alternatives": [],
+  "error": null,
+  "healer_stats": {
+    "total_attempts": 1,
+    "successful_heals": 1,
+    "failed_heals": 0,
+    "success_rate": 1.0,
+    "method_statistics": {
+      "fallback": {
+        "total": 1,
+        "success": 1
+      }
+    },
+    "history_count": 1
+  },
+  "execution_time": 3.368617057800293,
+  "timestamp": "2026-03-23T13:53:02.097863"
+}
