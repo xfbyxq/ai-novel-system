@@ -36,6 +36,71 @@ class CharacterStatus(str, enum.Enum):
     unknown = "unknown"
 
 
+class RelationshipType(str, enum.Enum):
+    """标准角色关系类型枚举."""
+
+    # 情感关系
+    lover = "lover"  # 恋人
+    spouse = "spouse"  # 配偶
+    crush = "crush"  # 暗恋
+    ex_lover = "ex_lover"  # 前任
+    
+    # 家庭关系
+    parent = "parent"  # 父母
+    child = "child"  # 子女
+    sibling = "sibling"  # 兄弟姐妹
+    grandparent = "grandparent"  # 祖父母
+    grandchild = "grandchild"  # 孙子女
+    
+    # 社会关系
+    friend = "friend"  # 朋友
+    best_friend = "best_friend"  # 挚友
+    enemy = "enemy"  # 敌人
+    rival = "rival"  # 对手
+    master = "master"  # 师父
+    apprentice = "apprentice"  # 徒弟
+    colleague = "colleague"  # 同事
+    classmate = "classmate"  # 同学
+    
+    # 组织关系
+    leader = "leader"  # 上级/首领
+    subordinate = "subordinate"  # 下属
+    member = "member"  # 组织成员
+    
+    # 其他
+    ally = "ally"  # 盟友
+    neutral = "neutral"  # 中立
+    unknown = "unknown"  # 未知关系
+
+
+# 关系类型的反向映射
+RELATIONSHIP_REVERSE_MAP = {
+    RelationshipType.lover: RelationshipType.lover,
+    RelationshipType.spouse: RelationshipType.spouse,
+    RelationshipType.crush: RelationshipType.crush,  # 暗恋保持单向
+    RelationshipType.ex_lover: RelationshipType.ex_lover,
+    RelationshipType.parent: RelationshipType.child,
+    RelationshipType.child: RelationshipType.parent,
+    RelationshipType.sibling: RelationshipType.sibling,
+    RelationshipType.grandparent: RelationshipType.grandchild,
+    RelationshipType.grandchild: RelationshipType.grandparent,
+    RelationshipType.friend: RelationshipType.friend,
+    RelationshipType.best_friend: RelationshipType.best_friend,
+    RelationshipType.enemy: RelationshipType.enemy,
+    RelationshipType.rival: RelationshipType.rival,
+    RelationshipType.master: RelationshipType.apprentice,
+    RelationshipType.apprentice: RelationshipType.master,
+    RelationshipType.colleague: RelationshipType.colleague,
+    RelationshipType.classmate: RelationshipType.classmate,
+    RelationshipType.leader: RelationshipType.subordinate,
+    RelationshipType.subordinate: RelationshipType.leader,
+    RelationshipType.member: RelationshipType.member,
+    RelationshipType.ally: RelationshipType.ally,
+    RelationshipType.neutral: RelationshipType.neutral,
+    RelationshipType.unknown: RelationshipType.unknown,
+}
+
+
 class Character(Base):
     """Character 类."""
 
