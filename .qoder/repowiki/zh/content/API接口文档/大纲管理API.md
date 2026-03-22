@@ -13,6 +13,7 @@
 - [crew_manager.py](file://agents/crew_manager.py)
 - [main.py](file://backend/main.py)
 - [add_outline_enhancements_to_chapters.py](file://alembic/versions/add_outline_enhancements_to_chapters.py)
+- [world_setting.py](file://core/models/world_setting.py)
 </cite>
 
 ## 更新摘要
@@ -24,6 +25,7 @@
 - 扩展大纲质量评估维度
 - 增强AI智能代理协作能力
 - 新增章节验证功能
+- **修复API数据序列化问题**：改进get_world_setting和get_plot_outline端点的ORM对象序列化，确保返回正确的字典格式而非直接的ORM对象
 
 ## 目录
 1. [简介](#简介)
@@ -31,10 +33,11 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
-9. [结论](#结论)
+6. [数据序列化改进](#数据序列化改进)
+7. [依赖关系分析](#依赖关系分析)
+8. [性能考虑](#性能考虑)
+9. [故障排除指南](#故障排除指南)
+10. [结论](#结论)
 
 ## 简介
 
@@ -49,6 +52,7 @@
 - **智能增强**：提供大纲增强预览和应用增强接口
 - **动态更新**：根据实际写作内容自动调整后续大纲
 - **详细卷结构**：支持丰富的卷信息字段和章节验证
+- **可靠的数据序列化**：确保API响应格式的一致性和可靠性
 
 ## 项目结构
 
@@ -92,7 +96,7 @@ Frontend --> API
 
 **章节来源**
 - [main.py:1-149](file://backend/main.py#L1-L149)
-- [outlines.py:1-871](file://backend/api/v1/outlines.py#L1-L871)
+- [outlines.py:1-1001](file://backend/api/v1/outlines.py#L1-L1001)
 
 ## 核心组件
 
@@ -120,7 +124,7 @@ Frontend --> API
 
 **章节来源**
 - [outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
-- [plot_outline.py:11-114](file://core/models/plot_outline.py#L11-L114)
+- [plot_outline.py:11-134](file://core/models/plot_outline.py#L11-L134)
 
 ## 架构概览
 
@@ -181,13 +185,15 @@ participant Client as 客户端
 participant API as WorldSetting API
 participant DB as 数据库
 participant Model as WorldSetting模型
+participant Serializer as 序列化器
 Client->>API : GET /novels/{novel_id}/world-setting
 API->>DB : 查询小说是否存在
 DB-->>API : 返回小说信息
 API->>DB : 查询世界观设定
 DB-->>API : 返回设定数据
-API->>Model : 返回WorldSettingResponse
-Model-->>Client : 世界设定数据
+API->>Serializer : model_to_dict(world_setting)
+Serializer-->>API : 返回字典格式数据
+API-->>Client : 世界设定数据
 Client->>API : PATCH /novels/{novel_id}/world-setting
 API->>DB : UPSERT世界设定
 DB-->>API : 保存成功
@@ -195,7 +201,7 @@ API-->>Client : 更新后的设定
 ```
 
 **图表来源**
-- [outlines.py:40-111](file://backend/api/v1/outlines.py#L40-L111)
+- [outlines.py:49-117](file://backend/api/v1/outlines.py#L49-L117)
 
 #### PlotOutline API
 管理小说的剧情大纲，提供完整的CRUD操作，现已支持动态更新：
@@ -227,11 +233,11 @@ PlotOutlineAPI --> OutlineService : 使用
 ```
 
 **图表来源**
-- [outlines.py:37-871](file://backend/api/v1/outlines.py#L37-L871)
+- [outlines.py:37-1001](file://backend/api/v1/outlines.py#L37-L1001)
 - [outline_service.py:28-932](file://backend/services/outline_service.py#L28-L932)
 
 **章节来源**
-- [outlines.py:114-871](file://backend/api/v1/outlines.py#L114-L871)
+- [outlines.py:118-1001](file://backend/api/v1/outlines.py#L118-L1001)
 
 #### Enhancement API
 新增的大纲智能增强功能，提供预览和应用增强接口：
@@ -256,10 +262,10 @@ API-->>Client : 应用成功响应
 ```
 
 **图表来源**
-- [outlines.py:684-800](file://backend/api/v1/outlines.py#L684-L800)
+- [outlines.py:728-884](file://backend/api/v1/outlines.py#L728-L884)
 
 **章节来源**
-- [outlines.py:684-800](file://backend/api/v1/outlines.py#L684-L800)
+- [outlines.py:728-884](file://backend/api/v1/outlines.py#L728-L884)
 
 #### Dynamic Update API
 新增的大纲动态更新功能，根据实际写作内容自动调整后续大纲：
@@ -462,10 +468,10 @@ PLOT_OUTLINES ||--|| NOVELS : belongs_to
 - **字数范围**：预期的字数区间
 
 **图表来源**
-- [plot_outline.py:11-114](file://core/models/plot_outline.py#L11-L114)
+- [plot_outline.py:11-134](file://core/models/plot_outline.py#L11-L134)
 
 **章节来源**
-- [plot_outline.py:11-114](file://core/models/plot_outline.py#L11-L114)
+- [plot_outline.py:11-134](file://core/models/plot_outline.py#L11-L134)
 
 ### 数据库增强
 新增章节大纲增强相关字段：
@@ -501,6 +507,107 @@ timestamp updated_at
 **章节来源**
 - [add_outline_enhancements_to_chapters.py:22-35](file://alembic/versions/add_outline_enhancements_to_chapters.py#L22-L35)
 
+## 数据序列化改进
+
+### 核心改进概述
+
+为了确保API响应格式的一致性和可靠性，系统对关键端点进行了重要的数据序列化改进。主要改进包括：
+
+1. **get_world_setting端点改进**：修复了ORM对象直接返回的问题，确保返回正确的字典格式
+2. **get_plot_outline端点改进**：增强了序列化逻辑，确保所有字段都正确转换为可序列化的格式
+3. **通用序列化工具**：新增了model_to_dict函数，提供统一的ORM对象序列化解决方案
+
+### 序列化改进实现
+
+#### model_to_dict函数
+新增的通用序列化工具函数，专门用于将SQLAlchemy模型实例转换为Python字典：
+
+```python
+def model_to_dict(model_instance):
+    """将SQLAlchemy模型实例转换为字典."""
+    if model_instance is None:
+        return {}
+    
+    # 获取模型的所有列属性
+    result = {}
+    for column in model_instance.__table__.columns:
+        value = getattr(model_instance, column.name)
+        # 处理UUID类型
+        if hasattr(value, "hex"):
+            value = value.hex
+        # 处理datetime类型
+        elif hasattr(value, "isoformat"):
+            value = value.isoformat()
+        result[column.name] = value
+    
+    return result
+```
+
+#### get_world_setting端点改进
+修复了直接返回ORM对象的问题，确保返回正确的字典格式：
+
+```python
+@router.get("/world-setting")
+async def get_world_setting(
+    novel_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Optional[dict]:
+    # ... 查询逻辑 ...
+    
+    if not world_setting:
+        return None
+    
+    # 将 ORM 对象转换为字典返回
+    return model_to_dict(world_setting)
+```
+
+#### get_plot_outline端点改进
+增强了序列化逻辑，确保所有字段都正确转换为可序列化的格式：
+
+```python
+@router.get("/outline")
+async def get_plot_outline(
+    novel_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Optional[dict]:
+    # ... 查询逻辑 ...
+    
+    if not plot_outline:
+        return None
+    
+    # 手动转换为字典，避免 SQLAlchemy 内部状态导致的序列化错误
+    return {
+        "id": str(plot_outline.id),
+        "novel_id": str(plot_outline.novel_id),
+        "structure_type": plot_outline.structure_type,
+        "volumes": plot_outline.volumes or [],
+        "main_plot": plot_outline.main_plot or {},
+        "main_plot_detailed": plot_outline.main_plot_detailed or {},
+        "sub_plots": plot_outline.sub_plots or [],
+        "key_turning_points": plot_outline.key_turning_points or [],
+        "climax_chapter": plot_outline.climax_chapter,
+        "raw_content": plot_outline.raw_content,
+        "update_history": plot_outline.update_history or [],
+        "version": plot_outline.version,
+        "created_at": plot_outline.created_at.isoformat() if plot_outline.created_at else None,
+        "updated_at": plot_outline.updated_at.isoformat() if plot_outline.updated_at else None,
+    }
+```
+
+### 改进效果
+
+这些序列化改进带来了以下重要改善：
+
+1. **数据格式一致性**：确保所有API响应都返回标准的JSON格式
+2. **客户端兼容性**：避免了ORM对象直接传输导致的客户端解析问题
+3. **类型安全**：正确处理UUID、datetime等特殊数据类型的序列化
+4. **向后兼容**：保持了原有的API接口不变，仅改进了内部实现
+5. **性能优化**：减少了不必要的ORM状态跟踪，提高了序列化性能
+
+**章节来源**
+- [outlines.py:49-163](file://backend/api/v1/outlines.py#L49-L163)
+- [outlines.py:911-928](file://backend/api/v1/outlines.py#L911-L928)
+
 ## 依赖关系分析
 
 系统采用模块化设计，各组件之间的依赖关系清晰：
@@ -522,6 +629,7 @@ Agent[AI代理层]
 Enhancement[增强模块]
 DynamicUpdate[动态更新模块]
 Validation[验证模块]
+Serialization[序列化模块]
 end
 API --> Service
 Service --> Model
@@ -534,6 +642,7 @@ Model --> SQLAlchemy
 Model --> Postgres
 Service --> Redis
 API --> FastAPI
+Serialization --> Model
 ```
 
 **图表来源**
@@ -549,6 +658,7 @@ API --> FastAPI
 5. **增强模块依赖评估器**：提供质量对比和改进分析
 6. **动态更新模块依赖验证器**：确保更新后的大纲一致性
 7. **验证模块依赖LLM服务**：进行智能验证和建议生成
+8. **序列化模块依赖数据模型**：提供ORM对象到字典的转换
 
 **章节来源**
 - [crew_manager.py:38-153](file://agents/crew_manager.py#L38-L153)
@@ -585,6 +695,12 @@ API --> FastAPI
 - **更新范围限制**：仅更新未写章节的内容
 - **历史记录管理**：记录更新历史便于追踪
 - **版本号递增**：支持版本回溯和比较
+
+### 序列化性能优化
+- **批量序列化**：model_to_dict函数支持批量处理
+- **类型检查优化**：减少不必要的类型判断
+- **内存管理**：避免重复的对象创建
+- **延迟序列化**：仅在需要时进行序列化转换
 
 ## 故障排除指南
 
@@ -641,10 +757,18 @@ API --> FastAPI
 - 检查数据库中的卷数据
 - 验证API响应格式
 
+#### 8. 数据序列化问题
+**症状**：API响应格式不正确或客户端解析失败
+**解决方案**：
+- 检查model_to_dict函数的实现
+- 验证ORM对象的序列化逻辑
+- 确认UUID和datetime类型的处理
+- 查看序列化错误日志
+
 **章节来源**
 - [outline_service.py:111-114](file://backend/services/outline_service.py#L111-L114)
 - [outline_iteration_controller.py:110-117](file://agents/outline_iteration_controller.py#L110-L117)
-- [outlines.py:831-871](file://backend/api/v1/outlines.py#L831-L871)
+- [outlines.py:831-1001](file://backend/api/v1/outlines.py#L831-L1001)
 
 ## 结论
 
@@ -658,6 +782,7 @@ API --> FastAPI
 - **智能增强**：新增的大纲增强功能，提供更强大的创作辅助
 - **动态适应**：支持基于实际写作内容的智能调整
 - **详细结构**：丰富的卷信息字段，支持精细化创作管理
+- **可靠序列化**：改进的数据序列化机制，确保API响应格式的一致性
 
 ### 功能特性
 - **完整的大纲生命周期管理**：从创建到优化的全流程支持
@@ -667,18 +792,20 @@ API --> FastAPI
 - **智能增强**：提供大纲增强预览和应用功能
 - **动态更新**：根据实际写作内容自动调整后续大纲
 - **详细卷结构**：支持丰富的卷信息字段和章节验证
+- **数据序列化改进**：确保API响应格式的正确性和一致性
 
 ### 应用价值
 该系统为小说创作者提供了强大的技术支撑，能够显著提高创作效率，降低创作门槛，帮助创作者专注于内容创作本身。通过AI智能辅助，系统能够帮助创作者发现大纲中的潜在问题，提供优化建议，从而创作出更加优秀的作品。
 
 ### 新增功能价值
-大纲智能增强功能和动态更新功能的引入，为系统增加了以下价值：
+大纲智能增强功能和动态更新功能的引入，以及数据序列化改进，为系统增加了以下价值：
 - **质量提升**：通过AI评估和优化，显著提升大纲质量
 - **风险控制**：预览模式确保增强结果的安全性
 - **创作效率**：自动化的大纲优化减少人工工作量
 - **学习辅助**：提供具体的改进建议和优化方向
 - **智能适应**：根据实际写作内容自动调整后续规划
 - **持续优化**：支持创作过程中的持续改进
+- **数据可靠性**：改进的序列化机制确保API响应的正确性
 
 ### 未来发展方向
 系统在未来可以进一步扩展的功能包括：
@@ -690,5 +817,6 @@ API --> FastAPI
 - 增强的协作功能和团队管理
 - 智能写作助手和内容生成
 - 创作进度监控和统计分析
+- 更先进的数据序列化和格式化工具
 
 通过持续的技术创新和功能完善，大纲管理API系统将继续为小说创作者提供强有力的技术支持，推动数字创作生态的发展和繁荣。

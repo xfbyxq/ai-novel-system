@@ -27,7 +27,7 @@
 - 更新了部署脚本章节，反映新的生产环境部署流程
 - 新增生产环境健康检查和负载均衡配置说明
 - 移除了 PYTHONPATH 环境变量配置，简化依赖安装流程
-- 优化了 Docker 镜像构建流程，提高容器化部署效率
+- 优化了 Docker 镜像构建流程，提高容器化部署效率和可靠性
 
 ## 目录
 1. [简介](#简介)
@@ -66,13 +66,13 @@
 graph TB
 subgraph "生产环境网络架构"
 subgraph "应用层"
-NGINX[Nginx 反向代理<br/>Port: 80]
-FRONTEND[前端服务<br/>Port: 80]
-BACKEND[后端服务<br/>Port: 8000]
+NGINX[Nginx 反向代理<br/>端口: 80]
+FRONTEND[前端服务<br/>端口: 80]
+BACKEND[后端服务<br/>端口: 8000]
 end
 subgraph "数据层"
-POSTGRES[PostgreSQL<br/>Port: 5432]
-REDIS[Redis<br/>Port: 6379]
+POSTGRES[PostgreSQL<br/>端口: 5432]
+REDIS[Redis<br/>端口: 6379]
 end
 subgraph "生产环境优化"
 SECURITY[安全头配置]

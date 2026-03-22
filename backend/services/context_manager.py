@@ -178,13 +178,13 @@ class UnifiedContextManager:
             return cached
         
         # 2. 查 MemoryService 缓存
-        memory_service_context = self.memory_service_cache.get_chapter_summary(chapter_number)
+        memory_service_context = self.memory_service_cache.get_chapter_summary(self.novel_id_str, chapter_number)
         if memory_service_context:
             self.memory_cache.set(cache_key, memory_service_context)
             return memory_service_context
         
         # 3. 查 SQLite 持久化
-        persistent_context = await self.persistent_memory.get_chapter_summary(chapter_number)
+        persistent_context = await self.persistent_memory.get_chapter_summary(self.novel_id_str, chapter_number)
         if persistent_context:
             # 同步到上层缓存
             self.memory_cache.set(cache_key, persistent_context)
