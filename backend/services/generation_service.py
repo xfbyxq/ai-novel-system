@@ -695,7 +695,7 @@ class GenerationService:
             # 构建前几章摘要（使用统一上下文管理器）
             context_manager = self._get_context_manager(novel_id)
             previous_summary = await context_manager.build_previous_context(
-                chapter_number=chapter_number,
+                current_chapter=chapter_number,
                 count=3,
             )
 
@@ -1243,7 +1243,7 @@ class GenerationService:
         # 构建前几章摘要（使用统一上下文管理器）
         context_manager = self._get_context_manager(novel_id)
         previous_summary = await context_manager.build_previous_context(
-            chapter_number=chapter_number,
+            current_chapter=chapter_number,
             count=3,
         )
 
@@ -1498,6 +1498,54 @@ class GenerationService:
         finally:
             # 定期清理过期的计数器，防止内存泄漏
             self._cleanup_expired_counters()
+
+    # ==================== 团队上下文管理 ====================
+
+    def _get_or_create_team_context(
+        self,
+        novel_id: str,
+        novel_title: str,
+        novel_data: dict,
+    ) -> "NovelTeamContext":
+        """获取或创建小说团队共享上下文.
+
+        Args:
+            novel_id: 小说ID
+            novel_title: 小说标题
+            novel_data: 小说数据字典
+
+        Returns:
+            NovelTeamContext 实例
+        """
+        if novel_id not in self._context_managers:
+            from agents.team_context import NovelTeamContext
+            # 创建新的 TeamContext
+            team_context = NovelTeamContext(novel_id=novel_id, novel_title=novel_title)
+            # 初始化小说元数据
+            team_context.novel_metadata = {
+                "title": novel_data.get("title", ""),
+                "genre": novel_data.get("genre", ""),
+                "world_setting": novel_data.get("world_setting", {}),
+                "characters": novel_data.get("characters", []),
+                "plot_outline": novel_data.get("plot_outline", {}),
+            }
+            return team_context
+
+        # 返回现有的上下文管理器（包含 TeamContext）
+        context_manager = self._context_managers[novel_id]
+        if not hasattr(context_manager, "_team_context"):
+            from agents.team_context import NovelTeamContext
+            context_manager._team_context = NovelTeamContext(
+                novel_id=novel_id, novel_title=novel_title
+            )
+            context_manager._team_context.novel_metadata = {
+                "title": novel_data.get("title", ""),
+                "genre": novel_data.get("genre", ""),
+                "world_setting": novel_data.get("world_setting", {}),
+                "characters": novel_data.get("characters", []),
+                "plot_outline": novel_data.get("plot_outline", {}),
+            }
+        return context_manager._team_context
 
     # ==================== 辅助方法 ====================
 
