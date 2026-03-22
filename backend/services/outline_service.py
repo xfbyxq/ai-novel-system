@@ -368,8 +368,15 @@ class OutlineService:
             logger.warning(f"No volumes found in outline for novel {novel_id}")
             return {"chapters": [], "volumes": []}
 
-        # 2. 为每卷生成章节配置
+        # 2. 为每卷生成章节配置（批量处理优化 - Issue #38）
         chapter_configs = []
+        total_chapters = sum(
+            v.get("chapters", [0, 0])[1] - v.get("chapters", [0, 0])[0] + 1
+            for v in volumes
+            if len(v.get("chapters", [])) == 2
+        )
+        
+        logger.info(f"Will decompose {total_chapters} chapters from {len(volumes)} volumes")
 
         for volume in volumes:
             volume_number = volume.get("number", 1)
@@ -380,31 +387,40 @@ class OutlineService:
                 continue
 
             start_ch, end_ch = chapters_range
-            end_ch - start_ch + 1
+            chapter_count = end_ch - start_ch + 1
 
-            # 3. 解析张力循环
+            # 3. 解析张力循环（预处理优化）
             tension_cycles = volume.get("tension_cycles", [])
-
-            # 4. 提取关键事件
+            
+            # 4. 提取关键事件（预处理优化）
             key_events = volume.get("key_events", [])
+            key_events_map = {
+                event["chapter"]: event 
+                for event in key_events 
+                if "chapter" in event
+            }
 
-            # 5. 生成章节配置
+            # 5. 生成章节配置（批量处理）
             volume_chapter_configs = []
 
             # 获取全局高潮章节号
             global_climax_chapter = outline_data.get("climax_chapter")
+            volume_is_climax = volume.get("is_climax", False)
+            volume_summary = volume.get("summary", "")
 
+            # 批量生成章节配置（优化：减少函数调用开销）
             for ch_num in range(start_ch, end_ch + 1):
                 chapter_config = self._generate_chapter_config(
                     chapter_number=ch_num,
                     volume_number=volume_number,
                     tension_cycles=tension_cycles,
                     key_events=key_events,
-                    volume_summary=volume.get("summary", ""),
+                    key_events_map=key_events_map,  # 优化：使用预处理的映射
+                    volume_summary=volume_summary,
                     auto_split=auto_split,
                     end_ch=end_ch,
                     climax_chapter=global_climax_chapter,
-                    volume_is_climax=volume.get("is_climax", False),
+                    volume_is_climax=volume_is_climax,
                 )
                 # 添加大纲 ID 关联
                 if outline_id:
@@ -447,9 +463,24 @@ class OutlineService:
         end_ch: int = 0,
         climax_chapter: Optional[int] = None,
         volume_is_climax: bool = False,
+        key_events_map: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """生成单章配置."""
-        # 1. 找到当前章所属的张力循环
+        """
+        生成单章配置.
+        
+        Args:
+            chapter_number: 章节号
+            volume_number: 卷号
+            tension_cycles: 张力循环列表
+            key_events: 关键事件列表
+            volume_summary: 卷概要
+            auto_split: 是否自动拆分
+            end_ch: 卷末章节号
+            climax_chapter: 高潮章节号
+            volume_is_climax: 是否为高潮卷
+            key_events_map: 关键事件映射（优化用，key=chapter_number）
+        """
+        # 1. 找到当前章所属的张力循环（优化：提前终止查找）
         current_cycle = None
         cycle_position = None
 
@@ -458,16 +489,16 @@ class OutlineService:
             if len(chapters_range) != 2:
                 continue
 
-            start_ch, end_ch = chapters_range
+            start_ch, end_ch_cycle = chapters_range
 
-            if start_ch <= chapter_number <= end_ch:
+            if start_ch <= chapter_number <= end_ch_cycle:
                 current_cycle = cycle
                 # 判断在循环中的位置
                 cycle.get("suppress_events", [])
                 cycle.get("release_event", "")
 
                 # 简化：前 70% 为压制期，最后为释放期
-                cycle_length = end_ch - start_ch + 1
+                cycle_length = end_ch_cycle - start_ch + 1
                 suppress_length = int(cycle_length * 0.7)
 
                 if chapter_number <= start_ch + suppress_length:
@@ -476,11 +507,15 @@ class OutlineService:
                     cycle_position = "release"
                 break
 
-        # 2. 检查是否有关键事件
+        # 2. 检查是否有关键事件（优化：使用映射快速查找）
         chapter_events = []
-        for event in key_events:
-            if event.get("chapter") == chapter_number:
-                chapter_events.append(event)
+        if key_events_map and chapter_number in key_events_map:
+            chapter_events = [key_events_map[chapter_number]]
+        else:
+            # 回退到线性查找（向后兼容）
+            for event in key_events:
+                if event.get("chapter") == chapter_number:
+                    chapter_events.append(event)
 
         # 3. 生成配置
         config = {
