@@ -1,15 +1,11 @@
-version: '3.8'
-
 services:
   postgres:
     image: m.daocloud.io/docker.io/postgres:17
-    container_name: novel_postgres
+    container_name: novel_postgres_prod
     environment:
       POSTGRES_USER: novel_user
       POSTGRES_PASSWORD: novel_pass
       POSTGRES_DB: novel_system
-    ports:
-      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,12 +13,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
 
   redis:
     image: m.daocloud.io/docker.io/redis:6-alpine
-    container_name: novel_redis
-    ports:
-      - "6379:6379"
+    container_name: novel_redis_prod
     volumes:
       - redis_data:/data
     healthcheck:
@@ -30,13 +27,15 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
 
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: novel_backend
-    working_dir: /app
+    container_name: novel_backend_prod
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -46,27 +45,42 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - APP_ENV=development
-      - APP_DEBUG=true
+      - APP_ENV=production
+      - APP_DEBUG=false
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-sk-your-key-here}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen3.5-plus}
       - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-32char_default_key_12345678901234}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     ports:
-      - "8000:8000"
-    volumes:
-      - ./:/app:cached
+      - "8080:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: >
-      bash -c "pip install -e . &&
-               uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: novel_nginx_prod
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  app-network:
+    driver: bridge
