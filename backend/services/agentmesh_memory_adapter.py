@@ -219,7 +219,7 @@ class NovelMemoryStorage:
                 )
             """)
 
-            # 创建索引
+            # 创建索引 - 单列索引
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_chapter_novel ON chapter_summaries(novel_id)"
             )
@@ -258,6 +258,29 @@ class NovelMemoryStorage:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_lessons_type ON writing_lessons(novel_id, lesson_type, status)"
+            )
+            
+            # 创建复合索引 - 优化高频查询性能 (Issue #42)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chapter_composite ON chapter_summaries(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_character_composite ON character_states(novel_id, character_name)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memory_chunks_composite ON memory_chunks(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reflection_chapter ON reflection_entries(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_foreshadowing_composite ON foreshadowing(novel_id, status, planted_chapter)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_patterns_composite ON chapter_patterns(novel_id, status, pattern_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lessons_composite ON writing_lessons(novel_id, lesson_type, status, priority)"
             )
 
             conn.commit()
