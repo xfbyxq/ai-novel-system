@@ -1,29 +1,48 @@
 """全局测试 fixtures."""
 
-import asyncio
 import os
+import glob
+from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.config import settings
 from core.database import Base
+
+TEST_TEMP_PATTERNS = [
+    "*.png",
+    "*.log",
+    "*.tmp",
+    "*.json",
+]
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """测试会话结束后清理测试产生的临时文件."""
+    root = Path.cwd()
+    test_dirs = [root, root / "tests" / "e2e", root / "tests" / "screenshots"]
+
+    for base_dir in test_dirs:
+        if not base_dir.exists():
+            continue
+        for pattern in TEST_TEMP_PATTERNS:
+            for f in base_dir.glob(pattern):
+                try:
+                    if f.is_file():
+                        f.unlink()
+                except OSError:
+                    pass
+
 
 # ---------------------------------------------------------------------------
 # 数据库 fixtures（集成测试用）
 # ---------------------------------------------------------------------------
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", settings.DATABASE_URL)
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """创建 session 级别的 event loop，解决 asyncpg 事件循环问题."""
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(scope="function")
@@ -41,14 +60,10 @@ async def db_engine():
 @pytest.fixture
 async def db_session(db_engine):
     """提供隔离的异步数据库 session，测试结束后回滚."""
-    async with db_engine.connect() as conn:
-        trans = await conn.begin()
-        session = AsyncSession(bind=conn, expire_on_commit=False)
+    async_session = async_sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
 
+    async with async_session() as session:
         yield session
-
-        await session.close()
-        await trans.rollback()
 
 
 @pytest.fixture
