@@ -2,6 +2,7 @@
 Character CRUD API endpoints.
 """
 
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,7 +30,7 @@ async def sync_character_relationships(
 ):
     """
     同步角色关系，建立双向关联.
-    
+
     Args:
         db: 数据库会话
         character: 当前角色
@@ -39,30 +40,31 @@ async def sync_character_relationships(
     all_chars_query = select(Character).where(Character.novel_id == character.novel_id)
     all_chars_result = await db.execute(all_chars_query)
     all_characters = all_chars_result.scalars().all()
-    
+
     # 创建名称到角色的映射
     name_to_char = {char.name: char for char in all_characters}
-    
+
     # 建立双向关系
     for target_name, rel_type in relationships.items():
         target_char = name_to_char.get(target_name)
         if not target_char:
             continue  # 目标角色不存在，跳过
-        
+
         # 在当前角色的 relationships 中设置关系
         if character.relationships is None:
             character.relationships = {}
         character.relationships[target_name] = rel_type
-        
+
         # 在目标角色的 relationships 中设置反向关系
         if target_char.relationships is None:
             target_char.relationships = {}
-        
+
         # 获取反向关系类型
         reverse_rel = RELATIONSHIP_REVERSE_MAP.get(
-            rel_type if rel_type in RelationshipType.__members__.values() 
+            rel_type
+            if rel_type in RelationshipType.__members__.values()
             else RelationshipType(rel_type),
-            RelationshipType.unknown
+            RelationshipType.unknown,
         )
         target_char.relationships[character.name] = reverse_rel.value
 
@@ -74,7 +76,7 @@ async def clear_character_relationships(
 ):
     """
     清理角色关系.
-    
+
     Args:
         db: 数据库会话
         character: 要清理的角色
@@ -82,17 +84,17 @@ async def clear_character_relationships(
     """
     # 清理当前角色的 relationships
     character.relationships = {}
-    
+
     if cleanup_others:
         # 清理其他角色中对此角色的引用
         all_chars_query = select(Character).where(Character.novel_id == character.novel_id)
         all_chars_result = await db.execute(all_chars_query)
         all_characters = all_chars_result.scalars().all()
-        
+
         for other_char in all_characters:
             if other_char.id == character.id:
                 continue
-            
+
             if other_char.relationships and character.name in other_char.relationships:
                 del other_char.relationships[character.name]
 
@@ -107,16 +109,16 @@ async def list_characters(
 ):
     """
     获取指定小说的角色列表（分页）.
-    
+
     返回角色列表，支持分页和状态筛选。默认每页 20 个角色，最多 100 个。
-    
+
     Args:
         novel_id: 小说 ID
         page: 页码（从 1 开始）
         page_size: 每页数量（1-100）
         status: 角色状态筛选（alive/dead/unknown）
         db: 数据库会话
-    
+
     Returns:
         角色列表（不包含分页元数据，简单列表）
     """
@@ -130,22 +132,22 @@ async def list_characters(
 
     # Build query
     query = select(Character).where(Character.novel_id == novel_id)
-    
+
     # Apply filters
     if status:
         query = query.where(Character.status == status)
-    
+
     # Apply ordering
     query = query.order_by(Character.created_at)
-    
+
     # Apply pagination
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
-    
+
     # Execute query
     result = await db.execute(query)
     characters = result.scalars().all()
-    
+
     return characters
 
 
@@ -185,11 +187,11 @@ async def create_character(
     character = Character(**character_in.model_dump(), novel_id=novel_id)
     db.add(character)
     await db.flush()  # 先获取 character.id
-    
+
     # 如果有 relationships，建立双向关系
     if character_in.relationships:
         await sync_character_relationships(db, character, character_in.relationships)
-    
+
     await db.commit()
     await db.refresh(character)
     return character
@@ -218,11 +220,7 @@ async def get_character_relationships(
         raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
 
     # Get all characters
-    query = (
-        select(Character)
-        .where(Character.novel_id == novel_id)
-        .order_by(Character.created_at)
-    )
+    query = select(Character).where(Character.novel_id == novel_id).order_by(Character.created_at)
     result = await db.execute(query)
     all_characters = result.scalars().all()
 
@@ -317,14 +315,14 @@ async def update_character(
 
     # Update only provided fields
     update_data = character_in.model_dump(exclude_unset=True)
-    
+
     # 如果更新了 relationships，需要同步双向关系
     if "relationships" in update_data:
         # 先清理旧关系
         await clear_character_relationships(db, character)
         # 建立新关系
         await sync_character_relationships(db, character, update_data["relationships"])
-    
+
     for field, value in update_data.items():
         setattr(character, field, value)
 
@@ -356,7 +354,7 @@ async def delete_character(
 
     # 清理其他角色中对此角色的关系引用
     await clear_character_relationships(db, character, cleanup_others=True)
-    
+
     await db.delete(character)
     await db.commit()
 
@@ -512,9 +510,7 @@ async def revert_character_name_version(
     )
 
     if not reverted_version:
-        raise HTTPException(
-            status_code=404, detail=f"目标版本 {target_version_id} 未找到"
-        )
+        raise HTTPException(status_code=404, detail=f"目标版本 {target_version_id} 未找到")
 
     return {
         "id": str(reverted_version.id),
