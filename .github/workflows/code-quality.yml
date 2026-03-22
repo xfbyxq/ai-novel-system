@@ -2,9 +2,9 @@ name: Code Quality Automation
 
 on:
   push:
-    branches: [main, develop, v2.0.0-release]
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [main]
+    branches: [ "main", "develop" ]
   schedule:
     - cron: '0 2 * * *'  # 每天 UTC 2:00 执行（北京时间 10:00）
   workflow_dispatch:  # 支持手动触发

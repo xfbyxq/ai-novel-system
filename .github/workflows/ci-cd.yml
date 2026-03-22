@@ -3,9 +3,9 @@ name: AI Novel System CI/CD
 on:
   # 触发条件
   push:
-    branches: [ "1.1.0", "main", "develop" ]
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [ "1.1.0", "main", "develop" ]
+    branches: [ "main", "develop" ]
   # 手动触发
   workflow_dispatch:
 
