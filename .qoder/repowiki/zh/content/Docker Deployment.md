@@ -14,6 +14,9 @@
 - [rebuild_docker.sh](file://rebuild_docker.sh)
 - [backend/main.py](file://backend/main.py)
 - [backend/config.py](file://backend/config.py)
+- [requirements.txt](file://requirements.txt)
+- [requirements-dev.txt](file://requirements-dev.txt)
+- [pyproject.toml](file://pyproject.toml)
 </cite>
 
 ## 更新摘要
@@ -23,6 +26,8 @@
 - 增强了生产环境部署章节，详细介绍 Nginx 配置和容器网络优化
 - 更新了部署脚本章节，反映新的生产环境部署流程
 - 新增生产环境健康检查和负载均衡配置说明
+- 移除了 PYTHONPATH 环境变量配置，简化依赖安装流程
+- 优化了 Docker 镜像构建流程，提高容器化部署效率
 
 ## 目录
 1. [简介](#简介)
@@ -49,8 +54,9 @@
 - **智能环境检测**：自动适配不同部署环境的配置需求
 - **健康检查**：内置服务健康状态监控
 - **数据库迁移**：集成 Alembic 数据库版本管理
+- **简化依赖管理**：移除 PYTHONPATH 环境变量，优化依赖安装流程
 
-**更新** 新增的生产环境配置 docker-compose.prod.yml 提供了企业级的部署方案，包含 Nginx 反向代理、优化的容器网络设置和增强的安全配置。简化后的开发环境配置专注于开发效率和调试便利性。
+**更新** 新增的生产环境配置 docker-compose.prod.yml 提供了企业级的部署方案，包含 Nginx 反向代理、优化的容器网络设置和增强的安全配置。简化后的开发环境配置专注于开发效率和调试便利性。移除 PYTHONPATH 环境变量后，依赖安装流程更加简洁高效。
 
 ## 项目结构
 
@@ -109,10 +115,11 @@ BACKEND --> REDIS
 - PostgreSQL 数据库连接
 - Redis 缓存支持
 - Celery 异步任务队列
+- **移除** PYTHONPATH 环境变量配置
 
 **章节来源**
 - [backend/main.py:1-159](file://backend/main.py#L1-L159)
-- [backend/config.py:1-200](file://backend/config.py#L1-L200)
+- [backend/config.py:1-417](file://backend/config.py#L1-L417)
 
 ### 前端服务 (Frontend)
 
@@ -227,8 +234,7 @@ NGINX -.-> SPA_ROUTING
 ```mermaid
 flowchart TD
 START[开始构建] --> BASE_IMAGE[基础镜像: python:3.12-slim]
-BASE_IMAGE --> MIRROR[配置阿里云镜像源]
-MIRROR --> SYSTEM_DEPS[安装系统依赖<br/>gcc, postgresql-client, curl]
+BASE_IMAGE --> SYSTEM_DEPS[安装系统依赖<br/>gcc, postgresql-client, curl]
 SYSTEM_DEPS --> POETRY[安装 Poetry 1.8.2]
 POETRY --> CONFIG[配置国内镜像源]
 CONFIG --> COPY_DEPS[复制依赖文件<br/>pyproject.toml, poetry.lock]
@@ -240,12 +246,13 @@ CMD --> END[构建完成]
 ```
 
 **图表来源**
-- [backend/Dockerfile:1-57](file://backend/Dockerfile#L1-L57)
+- [backend/Dockerfile:1-54](file://backend/Dockerfile#L1-L54)
 
 **构建优化策略：**
 - 使用阿里云镜像源加速依赖下载
 - 多次重试确保依赖安装稳定性
 - 分层构建优化缓存利用率
+- **移除** PYTHONPATH 环境变量设置，简化依赖路径配置
 
 #### 前端镜像构建
 
@@ -275,7 +282,7 @@ CMD --> END[构建完成]
 - 内置 Nginx 配置文件
 
 **章节来源**
-- [backend/Dockerfile:1-57](file://backend/Dockerfile#L1-L57)
+- [backend/Dockerfile:1-54](file://backend/Dockerfile#L1-L54)
 - [frontend/Dockerfile:1-33](file://frontend/Dockerfile#L1-L33)
 
 ### 服务编排配置
@@ -622,6 +629,33 @@ end
 - **独立网络**：novel_dev_network 隔离
 - **端口映射**：开发端口与生产分离
 
+### 依赖管理优化
+
+**更新** 移除 PYTHONPATH 环境变量后，依赖管理流程更加简洁：
+
+#### 依赖安装流程
+
+```mermaid
+flowchart TD
+PYPROJECT[pyproject.toml] --> POETRY[Poetry 依赖管理]
+POETRY --> INSTALL[安装依赖]
+INSTALL --> OPTIMIZE[优化安装流程]
+OPTIMIZE --> CLEAN[移除 PYTHONPATH]
+CLEAN --> EFFICIENT[高效依赖管理]
+```
+
+**优化效果：**
+- **简化路径配置**：移除 PYTHONPATH 环境变量
+- **减少配置复杂度**：降低依赖管理复杂度
+- **提高安装效率**：优化依赖安装流程
+- **增强兼容性**：改善不同环境下的兼容性
+
+**章节来源**
+- [backend/Dockerfile:35-46](file://backend/Dockerfile#L35-L46)
+- [requirements.txt:1-28](file://requirements.txt#L1-L28)
+- [requirements-dev.txt:1-7](file://requirements-dev.txt#L1-L7)
+- [pyproject.toml:1-106](file://pyproject.toml#L1-L106)
+
 ## 故障排除指南
 
 ### 生产环境常见问题
@@ -807,10 +841,60 @@ sudo ufw status
 docker-compose -f docker-compose.prod.yml restart nginx
 ```
 
+### 依赖管理问题
+
+**新增** 移除 PYTHONPATH 后的依赖管理问题和解决方案
+
+#### 依赖安装失败
+
+**症状**：容器启动时报导入错误
+
+**诊断方法：**
+1. 检查依赖安装日志
+2. 验证 pyproject.toml 配置
+3. 确认 Poetry 安装状态
+
+**解决步骤：**
+```bash
+# 检查依赖安装状态
+docker-compose logs backend
+
+# 重新构建镜像
+docker-compose build --no-cache
+
+# 验证依赖配置
+cat pyproject.toml | grep dependencies
+
+# 检查 Python 包安装
+docker-compose exec backend python -c "import sys; print(sys.path)"
+```
+
+#### 模块导入错误
+
+**症状**：运行时导入模块失败
+
+**解决方法：**
+1. 确认依赖正确安装
+2. 检查 Python 环境配置
+3. 验证虚拟环境设置
+
+**调试命令：**
+```bash
+# 检查已安装包
+docker-compose exec backend pip list
+
+# 验证模块导入
+docker-compose exec backend python -c "import backend.main"
+
+# 查看 Python 路径
+docker-compose exec backend python -c "import sys; print('\\n'.join(sys.path))"
+```
+
 **章节来源**
 - [docker-stop.sh:1-23](file://docker-stop.sh#L1-L23)
 - [nginx/nginx.conf:1-79](file://nginx/nginx.conf#L1-L79)
 - [docker-compose.prod.yml:1-88](file://docker-compose.prod.yml#L1-L88)
+- [backend/Dockerfile:35-46](file://backend/Dockerfile#L35-L46)
 
 ## 结论
 
@@ -826,8 +910,10 @@ docker-compose -f docker-compose.prod.yml restart nginx
 6. **优秀的开发体验**：热重载和调试支持
 7. **网络安全防护**：Nginx 提供安全头配置和防护
 8. **性能优化**：Gzip 压缩和静态资源缓存
+9. **简化依赖管理**：移除 PYTHONPATH 环境变量，优化依赖安装流程
+10. **容器化部署效率**：提高镜像构建和部署效率
 
-**更新** 最新的生产环境配置 docker-compose.prod.yml 提供了企业级的部署能力，包含 Nginx 反向代理、优化的容器网络设置和增强的安全配置。简化后的开发环境配置专注于开发效率和调试便利性。
+**更新** 最新的生产环境配置 docker-compose.prod.yml 提供了企业级的部署能力，包含 Nginx 反向代理、优化的容器网络设置和增强的安全配置。简化后的开发环境配置专注于开发效率和调试便利性。移除 PYTHONPATH 环境变量后，依赖管理流程更加简洁高效，显著提高了容器化部署的整体效率。
 
 ### 技术亮点
 
@@ -839,6 +925,7 @@ docker-compose -f docker-compose.prod.yml restart nginx
 - **网络隔离**：专用 Docker 网络提供安全的服务通信
 - **安全头配置**：增强应用安全性
 - **静态资源优化**：提升前端性能
+- **依赖管理简化**：移除 PYTHONPATH，优化安装流程
 
 ### 未来改进方向
 
@@ -849,5 +936,6 @@ docker-compose -f docker-compose.prod.yml restart nginx
 5. **备份策略**：完善的数据备份和恢复机制
 6. **部署脚本优化**：进一步提升自动化程度和用户体验
 7. **多环境管理**：支持更多环境的配置管理
+8. **依赖管理优化**：持续改进依赖安装和管理流程
 
-该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。新增的生产环境配置特别适合企业级部署，提供了更好的性能、安全性和可维护性。简化的开发环境配置提升了开发效率，为开发者提供了更好的开发体验。
+该部署方案为小说生成系统的稳定运行和持续发展奠定了坚实的基础，为后续的功能扩展和技术演进提供了良好的基础设施支持。新增的生产环境配置特别适合企业级部署，提供了更好的性能、安全性和可维护性。简化的开发环境配置提升了开发效率，为开发者提供了更好的开发体验。移除 PYTHONPATH 环境变量后，整体部署流程更加简洁高效，为系统的长期维护和发展提供了更好的基础。
