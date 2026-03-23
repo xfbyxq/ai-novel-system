@@ -20,18 +20,17 @@
 - [agent_mesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
 - [memory_service.py](file://backend/services/memory_service.py)
 - [team_context.py](file://agents/team_context.py)
+- [context_manager.py](file://backend/services/context_manager.py)
+- [outlines.py](file://backend/api/v1/outlines.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 实施三层并发控制机制（API层、服务层、Worker层），防止同一小说同时执行多个企划任务
-- 扩展支持编辑任务，包括编辑Agent调度和审查循环
-- 增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理
-- 新增字符年龄字段的类型转换机制
-- 实现情节大纲的多卷结构支持
-- 改进了成本跟踪和错误处理机制
-- 新增Agent活动记录功能
-- 增强了持久化记忆系统
+- 新增_get_or_create_team_context方法支持团队协作工作流
+- 章节编号参数从chapter_number更新为current_chapter保持一致性
+- API序列化机制通过model_to_dict工具函数得到重大改进
+- UnifiedContextManager统一上下文管理器替代分散的上下文管理
+- 增强了团队上下文的序列化和持久化能力
 
 ## 目录
 1. [简介](#简介)
@@ -54,7 +53,7 @@
 - **批量写作**：并行生成多个章节内容
 - **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 实施了三层并发控制机制（API层、服务层、Worker层），防止同一小说同时执行多个企划任务；扩展支持编辑任务，包括编辑Agent调度和审查循环；增强了规划阶段的数据处理能力，包括对复杂LLM响应数据结构的处理、字符年龄字段的类型转换、情节大纲的多卷结构支持，以及改进的成本跟踪和错误处理机制
+**更新** 新增了团队协作工作流支持，通过_unified_context_manager统一管理上下文，改进了API序列化机制，增强了团队上下文的持久化和序列化能力
 
 ## 项目结构
 
@@ -69,11 +68,14 @@ end
 subgraph "API层"
 API[FastAPI路由<br/>/generation]
 Schema[Pydantic模型<br/>任务定义]
+ModelToDict[model_to_dict工具<br/>序列化机制]
 end
 subgraph "服务层"
 GS[生成服务<br/>GenerationService]
 AD[代理调度器<br/>AgentDispatcher]
 AAR[Agent活动记录器<br/>AgentActivityRecorder]
+UCM[统一上下文管理器<br/>UnifiedContextManager]
+TC[团队上下文<br/>NovelTeamContext]
 end
 subgraph "AI层"
 QC[Qwen客户端<br/>LLM接口]
@@ -94,6 +96,8 @@ Store --> API
 API --> GS
 GS --> AD
 GS --> AAR
+GS --> UCM
+GS --> TC
 AD --> QC
 AD --> CM
 GS --> DB
@@ -108,6 +112,8 @@ Celery --> Worker
 - [agent_dispatcher.py:17-87](file://agents/agent_dispatcher.py#L17-L87)
 - [agent_activity_recorder.py:14-25](file://backend/services/agent_activity_recorder.py#L14-L25)
 - [celery_app.py:21-22](file://workers/celery_app.py#L21-L22)
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+- [team_context.py:173-242](file://agents/team_context.py#L173-L242)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -125,6 +131,8 @@ Celery --> Worker
 - **状态管理**：维护任务的生命周期状态
 - **Agent活动记录**：记录详细的Agent执行活动
 - **并发控制**：实施三层并发控制机制
+- **团队协作**：管理团队上下文和协作流程
+- **统一上下文**：通过UnifiedContextManager管理上下文
 
 ```mermaid
 classDiagram
@@ -135,40 +143,56 @@ class GenerationService {
 +AgentDispatcher dispatcher
 +MemoryService memory_service
 +AgentActivityRecorder activity_recorder
-+dict _team_contexts
++dict _context_managers
++UnifiedContextManager _get_context_manager(novel_id)
 +run_planning(novel_id, task_id) dict
-+run_chapter_writing(novel_id, task_id, chapter_number, volume_number) dict
++run_chapter_writing(novel_id, task_id, current_chapter, volume_number) dict
 +run_batch_writing(novel_id, task_id, from_chapter, to_chapter, volume_number) dict
-+_build_previous_context_enhanced(novel_id, novel, chapter_number) str
++_build_previous_context_enhanced(novel_id, novel, current_chapter) str
 +_initialize_novel_persistent_memory(novel_id, planning_result) void
 +_record_planning_activities(novel_id, task_id, planning_result, cost_summary) void
-+run_editing_task(novel_id, task_id, draft_content, chapter_number) dict
++run_editing_task(novel_id, task_id, draft_content, current_chapter) dict
+}
+class UnifiedContextManager {
++AsyncSession db
++dict cache
++dict ttl_cache
++build_previous_context(current_chapter, count) str
++get_context_data() dict
++clear_expired() void
 }
 class AgentDispatcher {
 +QwenClient client
 +CostTracker cost_tracker
 +initialize() void
 +run_planning(novel_id, task_id, **kwargs) dict
-+run_chapter_writing(novel_id, task_id, chapter_number, volume_number, **kwargs) dict
++run_chapter_writing(novel_id, task_id, current_chapter, volume_number, **kwargs) dict
 +run_batch_writing(novel_id, task_id, from_chapter, to_chapter, volume_number, **kwargs) dict
-+run_editing_task(novel_id, task_id, draft_content, chapter_number, **kwargs) dict
++run_editing_task(novel_id, task_id, draft_content, current_chapter, **kwargs) dict
 }
-class QwenClient {
-+str api_key
-+str model
-+chat(prompt, system, temperature) dict
-+stream_chat(prompt, system) AsyncIterator
+class NovelTeamContext {
++str novel_id
++str novel_title
++dict novel_metadata
++dict world_setting
++list characters
++dict plot_outline
++list agent_outputs
++dict character_states
++list timeline
++int current_story_day
++int current_chapter_number
++int current_volume_number
++add_agent_output_async(agent_name, output, subtask) void
++update_character_state_async(char_name, **kwargs) void
++add_timeline_event_async(chapter_number, event, characters, location) void
++build_enhanced_context(current_chapter) str
++to_dict() dict
++from_dict(data) NovelTeamContext
 }
-class AgentActivityRecorder {
-+AsyncSession db
-+record_activity(...) AgentActivity
-+record_planning_activity(...) AgentActivity
-+record_writing_activity(...) AgentActivity
-+record_review_activity(...) AgentActivity
-}
+GenerationService --> UnifiedContextManager : "使用"
 GenerationService --> AgentDispatcher : "使用"
-GenerationService --> QwenClient : "依赖"
-GenerationService --> AgentActivityRecorder : "使用"
+GenerationService --> NovelTeamContext : "管理"
 AgentDispatcher --> QwenClient : "使用"
 ```
 
@@ -177,6 +201,8 @@ AgentDispatcher --> QwenClient : "使用"
 - [agent_dispatcher.py:17-87](file://agents/agent_dispatcher.py#L17-L87)
 - [qwen_client.py:16-27](file://llm/qwen_client.py#L16-L27)
 - [agent_activity_recorder.py:14-25](file://backend/services/agent_activity_recorder.py#L14-L25)
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+- [team_context.py:173-242](file://agents/team_context.py#L173-L242)
 
 ### API接口层
 
@@ -233,6 +259,7 @@ Queue->>Worker : 分发任务
 Worker->>Worker : 检查并发控制
 Worker->>Service : 执行生成任务
 Service->>Service : 检查并发控制
+Service->>Service : 获取统一上下文
 Service->>LLM : 调用AI模型
 LLM-->>Service : 返回生成结果
 Service->>Service : 保存到数据库
@@ -284,7 +311,7 @@ RecordActivities --> End([完成])
 ```mermaid
 flowchart TD
 Start([开始章节写作]) --> LoadData["加载小说数据"]
-LoadData --> BuildContext["构建上下文<br/>- 增强版前几章摘要<br/>- 持久化记忆集成"]
+LoadData --> BuildContext["构建上下文<br/>- 统一上下文管理器<br/>- 增强版前几章摘要<br/>- 持久化记忆集成"]
 BuildContext --> InitTask["初始化任务"]
 InitTask --> InitAgent["初始化代理"]
 InitAgent --> GetStates["获取角色状态<br/>- 优先持久化记忆<br/>- 回退到内存缓存"]
@@ -442,6 +469,131 @@ AgentActivityRecorder --> AgentActivity : "创建"
 **章节来源**
 - [agent_activity_recorder.py:1-316](file://backend/services/agent_activity_recorder.py#L1-L316)
 
+### 统一上下文管理器 (UnifiedContextManager)
+
+**新增** 统一上下文管理器替代了分散的上下文管理，提供了一致的上下文访问接口：
+
+```mermaid
+classDiagram
+class UnifiedContextManager {
++AsyncSession db
++str novel_id
++dict cache
++dict ttl_cache
++int cache_max_size
++int cache_ttl_minutes
++build_previous_context(current_chapter, count) str
++get_context_data() dict
++clear_expired() void
++_cleanup_expired() void
+}
+class ContextCache {
++dict cache
++dict ttl_cache
++datetime last_cleanup
++get(key) Any
++set(key, value) void
++is_expired(key) bool
++cleanup_expired() void
+}
+UnifiedContextManager --> ContextCache : "使用"
+```
+
+**图表来源**
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+
+**章节来源**
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+
+### 团队上下文管理 (NovelTeamContext)
+
+**新增** 团队上下文管理支持多Agent协作工作流：
+
+```mermaid
+classDiagram
+class NovelTeamContext {
++str novel_id
++str novel_title
++dict novel_metadata
++dict world_setting
++list characters
++dict plot_outline
++list agent_outputs
++dict character_states
++list timeline
++int current_story_day
++int current_chapter_number
++int current_volume_number
++add_agent_output_async(agent_name, output, subtask) void
++update_character_state_async(char_name, **kwargs) void
++add_timeline_event_async(chapter_number, event, characters, location) void
++build_enhanced_context(current_chapter) str
++to_dict() dict
++from_dict(data) NovelTeamContext
+}
+class CharacterState {
++str name
++int last_appearance_chapter
++str current_location
++str cultivation_level
++str emotional_state
++dict relationships
++str status
++list pending_events
++str updated_at
++update(**kwargs) void
++to_dict() dict
+}
+class TimelineEvent {
++str id
++int chapter_number
++int story_day
++str event
++list characters
++str location
++str created_at
++to_dict() dict
+}
+class AgentOutput {
++str agent_name
++dict output
++str subtask
++str timestamp
++to_dict() dict
+}
+NovelTeamContext --> CharacterState : "管理"
+NovelTeamContext --> TimelineEvent : "管理"
+NovelTeamContext --> AgentOutput : "管理"
+```
+
+**图表来源**
+- [team_context.py:173-242](file://agents/team_context.py#L173-L242)
+- [team_context.py:41-89](file://agents/team_context.py#L41-L89)
+- [team_context.py:91-121](file://agents/team_context.py#L91-L121)
+- [team_context.py:22-39](file://agents/team_context.py#L22-L39)
+
+**章节来源**
+- [team_context.py:1-638](file://agents/team_context.py#L1-L638)
+
+### API序列化机制 (model_to_dict)
+
+**更新** API序列化机制通过model_to_dict工具函数得到重大改进：
+
+```mermaid
+flowchart LR
+Model[SQLAlchemy模型实例] --> Serializer[model_to_dict函数]
+Serializer --> UUID[UUID处理<br/>hex转换]
+Serializer --> DateTime[DateTime处理<br/>isoformat转换]
+Serializer --> Dict[字典输出]
+Dict --> Response[API响应]
+```
+
+**图表来源**
+- [outlines.py:911-928](file://backend/api/v1/outlines.py#L911-L928)
+
+**章节来源**
+- [outlines.py:911-928](file://backend/api/v1/outlines.py#L911-L928)
+
 ## 依赖关系分析
 
 生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能和编辑任务支持：
@@ -462,6 +614,8 @@ AgentDispatcher[代理调度器]
 QwenClient[Qwen客户端]
 CostTracker[成本追踪器]
 AgentActivityRecorder[Agent活动记录器]
+UnifiedContextManager[统一上下文管理器]
+NovelTeamContext[团队上下文]
 end
 subgraph "数据模型"
 GenerationTask[生成任务模型<br/>支持editing类型]
@@ -473,7 +627,9 @@ end
 subgraph "记忆系统"
 MemoryService[内存记忆服务]
 PersistentMemory[持久化记忆适配器]
-TeamContext[团队上下文]
+end
+subgraph "工具函数"
+ModelToDict[model_to_dict序列化]
 end
 FastAPI --> GenerationService
 Celery --> GenerationService
@@ -489,14 +645,19 @@ GenerationService --> Character
 GenerationService --> PlotOutline
 GenerationService --> MemoryService
 GenerationService --> PersistentMemory
-GenerationService --> TeamContext
+GenerationService --> UnifiedContextManager
+GenerationService --> NovelTeamContext
 GenerationService --> AgentActivityRecorder
+ModelToDict --> GenerationService
 ```
 
 **图表来源**
 - [generation_service.py:12-76](file://backend/services/generation_service.py#L12-L76)
 - [agent_dispatcher.py:7-11](file://agents/agent_dispatcher.py#L7-L11)
 - [generation_task.py:12-16](file://core/models/generation_task.py#L12-L16)
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+- [team_context.py:173-242](file://agents/team_context.py#L173-L242)
+- [outlines.py:911-928](file://backend/api/v1/outlines.py#L911-L928)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -535,6 +696,7 @@ Pause --> End
 
 ### 缓存策略
 
+- **统一上下文缓存**：使用LRU缓存和TTL过期机制
 - **记忆系统**：使用Redis缓存章节摘要和角色状态
 - **上下文优化**：智能选择结构化摘要而非全文内容
 - **任务状态缓存**：快速查询任务执行状态
@@ -559,10 +721,21 @@ Pause --> End
 - 防止Worker级别的重复执行
 - 保证系统资源的合理分配
 
+### 团队协作优化
+
+**新增** 团队协作工作流的性能优化：
+
+- **异步上下文管理**：使用asyncio.Lock保证线程安全
+- **增量更新**：只更新变更的角色状态和时间线
+- **批量序列化**：通过model_to_dict优化大量数据的序列化
+- **缓存策略**：统一上下文管理器减少重复计算
+
 **章节来源**
 - [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
 - [generation_worker.py:29-42](file://workers/generation_worker.py#L29-L42)
 - [generation_service.py:87-100](file://backend/services/generation_service.py#L87-L100)
+- [team_context.py:244-268](file://agents/team_context.py#L244-L268)
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 
 ## 故障排除指南
 
@@ -579,6 +752,8 @@ Pause --> End
 | 角色状态不一致 | 写作阶段角色信息错误 | 检查持久化记忆同步机制 |
 | 并发控制错误 | "已有企划任务在运行中" | 等待现有任务完成后重试 |
 | 编辑任务失败 | 编辑阶段内容质量不佳 | 检查编辑Agent配置和提示词 |
+| 团队上下文冲突 | 多Agent协作时数据不一致 | 检查异步锁和序列化机制 |
+| 上下文缓存失效 | 前置章节上下文丢失 | 检查缓存TTL和清理机制 |
 
 ### 日志监控
 
@@ -589,6 +764,8 @@ Pause --> End
 - **错误信息**：保存详细的异常堆栈信息
 - **Agent活动**：记录详细的Agent执行过程
 - **并发控制**：记录并发检查的结果和拒绝原因
+- **团队协作**：记录Agent输出和状态变更
+- **上下文管理**：记录缓存命中率和清理操作
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
@@ -609,5 +786,9 @@ Pause --> End
 8. **持久化记忆**：长期记忆支持和状态同步
 9. **三层并发控制**：严格的并发限制防止资源竞争
 10. **编辑任务支持**：完整的润色和质量提升流程
+11. **团队协作**：NovelTeamContext支持多Agent协作工作流
+12. **统一上下文**：UnifiedContextManager提供一致的上下文访问
+13. **优化序列化**：model_to_dict工具函数提升API性能
+14. **异步锁机制**：确保团队上下文的线程安全
 
-**更新** 该系统现已显著增强了并发控制能力和编辑任务支持。三层并发控制机制（API层、服务层、Worker层）有效防止了资源竞争和系统过载；编辑任务的引入为内容质量提升提供了完整的自动化流程。这些增强为AI驱动的小说创作提供了更加稳健和智能化的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程。
+**更新** 该系统现已显著增强了并发控制能力和编辑任务支持。三层并发控制机制（API层、服务层、Worker层）有效防止了资源竞争和系统过载；编辑任务的引入为内容质量提升提供了完整的自动化流程；新增的团队协作工作流通过NovelTeamContext实现了多Agent的协同工作；统一上下文管理器和优化的API序列化机制进一步提升了系统的性能和可维护性。这些增强为AI驱动的小说创作提供了更加稳健和智能化的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程。
