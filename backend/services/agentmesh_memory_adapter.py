@@ -992,7 +992,7 @@ class NovelMemoryStorage:
         conn = self._get_connection()
 
         rows = conn.execute(
-            """SELECT chapter_number, key_events, plot_progress.
+            """SELECT chapter_number, key_events, plot_progress
                FROM chapter_summaries
                WHERE novel_id = ?
                ORDER BY chapter_number DESC
