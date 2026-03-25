@@ -251,13 +251,15 @@ class QwenClient:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        async for chunk in self.openai_client.chat.completions.create(
+        # 需要先 await 获取流式响应对象
+        stream = await self.openai_client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
-        ):
+        )
+        async for chunk in stream:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
