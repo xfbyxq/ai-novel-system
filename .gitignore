@@ -20,6 +20,7 @@ node_modules/
 *.log
 
 # Playwright
+ai_test_reports/
 test-results/
 playwright-report/
 blob-report/
