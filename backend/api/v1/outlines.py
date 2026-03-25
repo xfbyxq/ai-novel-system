@@ -72,7 +72,8 @@ async def get_world_setting(
     if not world_setting:
         return None
 
-    return world_setting
+    # 将 ORM 对象转换为字典返回
+    return model_to_dict(world_setting)
 
 
 @router.patch("/world-setting", response_model=WorldSettingResponse)
@@ -142,11 +143,24 @@ async def get_plot_outline(
     if not plot_outline:
         return None
 
-    # 修复数据格式：确保volumes中的每个卷都有number字段
-    plot_outline = fix_plot_outline_volumes(plot_outline)
 
-    return plot_outline
-
+    # 手动转换为字典，避免 SQLAlchemy 内部状态导致的序列化错误
+    return {
+        "id": str(plot_outline.id),
+        "novel_id": str(plot_outline.novel_id),
+        "structure_type": plot_outline.structure_type,
+        "volumes": plot_outline.volumes or [],
+        "main_plot": plot_outline.main_plot or {},
+        "main_plot_detailed": plot_outline.main_plot_detailed or {},
+        "sub_plots": plot_outline.sub_plots or [],
+        "key_turning_points": plot_outline.key_turning_points or [],
+        "climax_chapter": plot_outline.climax_chapter,
+        "raw_content": plot_outline.raw_content,
+        "update_history": plot_outline.update_history or [],
+        "version": plot_outline.version,
+        "created_at": plot_outline.created_at.isoformat() if plot_outline.created_at else None,
+        "updated_at": plot_outline.updated_at.isoformat() if plot_outline.updated_at else None,
+    }
 
 @router.patch("/outline", response_model=PlotOutlineResponse)
 async def update_plot_outline(
