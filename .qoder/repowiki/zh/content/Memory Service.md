@@ -63,7 +63,7 @@ subgraph "数据层"
 DB[(SQLite数据库)]
 MODELS[ORM模型]
 PERSISTENT_DB[(增强持久化数据库)]
-REFLECTION_TABLES[反思机制表组]
+REFLECTION_TABLES[反思机制表]
 end
 FE --> API
 API --> AI_CHAT_SERVICE
