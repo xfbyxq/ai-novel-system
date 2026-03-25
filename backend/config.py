@@ -180,6 +180,14 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 
+    # 日志配置
+    LOG_DIR: str = "logs"  # 日志目录（相对于项目根目录）
+    LOG_FILE_MAX_BYTES: int = 10 * 1024 * 1024  # 单个日志文件大小（默认10MB）
+    LOG_FILE_BACKUP_COUNT: int = 5  # 轮转备份数量
+    LOG_RETENTION_DAYS: int = 7  # 日志保留天数
+    LOG_FILE_NAME: str = "app.log"  # 后端日志文件名
+    LOG_WORKER_FILE_NAME: str = "worker.log"  # Worker日志文件名
+
     # CORS 配置（安全加固）
     # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
     CORS_ALLOWED_ORIGINS: str = ""  # 逗号分隔的允许来源列表，为空则使用默认开发环境配置
