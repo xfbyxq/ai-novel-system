@@ -12,15 +12,16 @@
 - [qwen_client.py](file://llm/qwen_client.py)
 - [ai_chat.py](file://backend/schemas/ai_chat.py)
 - [reflection_agent.py](file://agents/reflection_agent.py)
+- [add_memory_query_indexes.py](file://migrations/add_memory_query_indexes.py)
+- [test_memory_query_performance.py](file://tests/performance/test_memory_query_performance.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新了架构概览，反映新的NovelMemoryStorage适配器替代了旧的PersistentMemory类
-- 新增了SQLite持久化层、FTS5全文搜索能力和线程安全连接池的详细分析
-- 更新了依赖关系分析，包含增强的持久化记忆适配器
-- 保持了内存缓存功能的完整描述
-- 新增了反思代理与内存适配器的集成分析
+- 修复了agentmesh_memory_adapter中的SQL语法问题，修正了SELECT语句结构以正确检索章节摘要数据
+- 新增了复合索引优化方案，解决了Issue #42中提到的记忆系统查询性能问题
+- 更新了SQL查询语句的语法规范，确保与SQLite数据库的兼容性
+- 增强了章节摘要查询的性能优化，通过复合索引提升查询效率
 
 ## 目录
 1. [简介](#简介)
@@ -38,6 +39,8 @@
 内存服务是小说创作系统中的核心记忆管理模块，负责高效存储和管理小说相关信息。该服务提供了智能的内存缓存机制、深度变化检测、版本控制以及专门针对小说创作场景的数据结构化管理。
 
 **更新** 系统当前采用增强的混合架构，新的NovelMemoryStorage适配器替代了旧的PersistentMemory类，实现了更强大的SQLite持久化层、FTS5全文搜索能力和线程安全连接池。该适配器借鉴AgentMesh的设计思想，提供分层记忆管理，支持章节摘要、角色状态、伏笔追踪等多维度记忆存储。
+
+**更新** 为了解决Issue #42中提到的记忆系统查询性能问题，系统现已实现复合索引优化方案，通过专门的迁移脚本为高频查询添加了复合索引，显著提升了章节摘要、角色状态和记忆块的查询性能。
 
 ## 项目结构
 
@@ -64,6 +67,7 @@ DB[(SQLite数据库)]
 MODELS[ORM模型]
 PERSISTENT_DB[(增强持久化数据库)]
 REFLECTION_TABLES[反思机制表]
+COMPOSITE_INDEXES[复合索引优化]
 end
 FE --> API
 API --> AI_CHAT_SERVICE
@@ -75,6 +79,7 @@ UNIFIED_CONTEXT --> MEMORY_SERVICE
 UNIFIED_CONTEXT --> PERSISTENT_ADAPTER
 PERSISTENT_ADAPTER --> PERSISTENT_DB
 PERSISTENT_DB --> REFLECTION_TABLES
+PERSISTENT_DB --> COMPOSITE_INDEXES
 DB --> MODELS
 ```
 
@@ -107,6 +112,7 @@ DB --> MODELS
 - **全文搜索支持**：集成FTS5全文搜索引擎
 - **分层记忆管理**：支持章节摘要、角色状态、伏笔追踪等多维度记忆
 - **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
+- **复合索引优化**：通过Issue #42优化方案提升查询性能
 
 ### 4. NovelMemoryAdapter 高层记忆适配器
 - **统一API接口**：提供高层API，集成持久化存储与现有系统
@@ -303,6 +309,7 @@ class NovelMemoryStorage {
 -FTS5全文搜索 memory_fts
 -多表结构 chapter_summaries, character_states, novel_metadata
 -反思机制表 reflection_entries, chapter_patterns, writing_lessons
+-复合索引优化 提升查询性能
 }
 class SQLiteConnection {
 -row_factory sqlite3.Row
@@ -329,7 +336,8 @@ ThreadLocalPool <|-- NovelMemoryStorage : "线程安全"
 4. **FTS5全文搜索**：集成FTS5全文搜索引擎支持关键词搜索
 5. **多表结构设计**：支持章节摘要、角色状态、小说元数据等多维度存储
 6. **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
-7. **索引优化**：为常用查询建立索引提升性能
+7. **复合索引优化**：通过Issue #42优化方案提升查询性能
+8. **SQL语法规范**：修复了SELECT语句结构问题，确保查询正确性
 
 **章节来源**
 - [agentmesh_memory_adapter.py:20-287](file://backend/services/agentmesh_memory_adapter.py#L20-L287)
@@ -350,7 +358,7 @@ CHARACTER[角色状态操作<br/>- update_character_state()]
 STATS[统计和管理<br/>- get_statistics()<br/>- close()]
 end
 subgraph "底层存储"
-STORAGE[NovelMemoryStorage<br/>SQLite + FTS5]
+STORAGE[NovelMemoryStorage<br/>SQLite + FTS5 + 复合索引]
 end
 CHAPTER_MEM --> STORAGE
 NOVEL_MEM --> STORAGE
@@ -384,7 +392,7 @@ graph TD
 subgraph "UnifiedContextManager"
 LRU_CACHE[LRUCache<br/>- max_size: 100<br/>- TTL: 30分钟]
 MEMORY_SERVICE[MemoryService<br/>兼容层]
-PERSISTENT_MEMORY[NovelMemoryStorage<br/>SQLite持久化]
+PERSISTENT_MEMORY[NovelMemoryStorage<br/>SQLite持久化 + 复合索引]
 end
 subgraph "存储层"
 MEMORY_CACHE[内存缓存]
@@ -435,6 +443,7 @@ MEMORY_SERVICE[内存缓存服务]
 PERSISTENT_ADAPTER[增强适配器]
 UNIFIED_CONTEXT[统一上下文管理器]
 NOVEL_MEMORY_STORAGE[NovelMemoryStorage]
+COMPOSITE_INDEXES[复合索引优化]
 end
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
@@ -446,6 +455,7 @@ REFLECTION_AGENT --> PERSISTENT_ADAPTER
 MEMORY_SERVICE --> DATABASE_MODELS
 PERSISTENT_ADAPTER --> NOVEL_MEMORY_STORAGE
 NOVEL_MEMORY_STORAGE --> DATABASE_MODELS
+NOVEL_MEMORY_STORAGE --> COMPOSITE_INDEXES
 MEMORY_SERVICE --> UUID
 MEMORY_SERVICE --> SQLALCHEMY
 PERSISTENT_ADAPTER --> SQLite
@@ -525,9 +535,10 @@ ChatService-->>ChatService : 返回响应
 1. **WAL模式**：启用SQLite WAL模式提升并发性能
 2. **线程本地连接**：使用threading.local()避免线程安全问题
 3. **FTS5全文搜索**：使用FTS5进行高效的全文检索
-4. **复合索引优化**：为高频查询建立复合索引
-5. **反思机制索引**：为反思表建立专用索引提升查询性能
-6. **连接池管理**：自动管理数据库连接生命周期
+4. **复合索引优化**：通过Issue #42优化方案为高频查询添加复合索引
+5. **SQL语法修复**：修正了SELECT语句结构问题，确保查询正确性
+6. **反思机制索引**：为反思表建立专用索引提升查询性能
+7. **连接池管理**：自动管理数据库连接生命周期
 
 ### 数据结构优化
 
@@ -543,6 +554,39 @@ ChatService-->>ChatService : 返回响应
 2. **长期反思按需触发**：每N章分析一次，减少LLM调用成本
 3. **反思数据缓存**：活跃的反思记录和经验规则在内存中缓存
 4. **批量操作优化**：反思代理批量处理多个章节的分析结果
+
+### 复合索引优化方案
+
+**更新** 为了解决Issue #42中提到的记忆系统查询性能问题，系统实现了专门的复合索引优化方案：
+
+```mermaid
+graph TD
+subgraph "复合索引优化"
+CHAPTER_SUMMARIES[章节摘要表<br/>- idx_chapter_composite<br/>- novel_id + chapter_number]
+CHARACTER_STATES[角色状态表<br/>- idx_character_composite<br/>- novel_id + character_name]
+MEMORY_CHUNKS[记忆块表<br/>- idx_memory_chunks_composite<br/>- novel_id + chapter_number]
+REFLECTION_ENTRIES[反思记录表<br/>- idx_reflection_chapter<br/>- novel_id + chapter_number]
+FORESHADOWING[伏笔表<br/>- idx_foreshadowing_composite<br/>- novel_id + status + planted_chapter]
+CHAPTER_PATTERNS[章节模式表<br/>- idx_patterns_composite<br/>- novel_id + status + pattern_type]
+WRITING_LESSONS[经验规则表<br/>- idx_lessons_composite<br/>- novel_id + lesson_type + status + priority]
+end
+subgraph "性能提升"
+PERFORMANCE[查询性能提升<br/>- 30-50% 查询速度<br/>- 减少索引扫描<br/>- 优化执行计划]
+end
+CHAPTER_SUMMARIES --> PERFORMANCE
+CHARACTER_STATES --> PERFORMANCE
+MEMORY_CHUNKS --> PERFORMANCE
+REFLECTION_ENTRIES --> PERFORMANCE
+FORESHADOWING --> PERFORMANCE
+CHAPTER_PATTERNS --> PERFORMANCE
+WRITING_LESSONS --> PERFORMANCE
+```
+
+**图表来源**
+- [add_memory_query_indexes.py:38-87](file://migrations/add_memory_query_indexes.py#L38-L87)
+
+**章节来源**
+- [add_memory_query_indexes.py:1-202](file://migrations/add_memory_query_indexes.py#L1-L202)
 
 ## 故障排除指南
 
@@ -593,11 +637,22 @@ ChatService-->>ChatService : 返回响应
 - **原因**：自动同步机制失效
 - **解决方案**：检查同步逻辑和错误处理
 
+#### SQL语法问题
+- **症状**：章节摘要查询失败或返回空结果
+- **原因**：SELECT语句结构不正确
+- **解决方案**：检查SQL语法，确保正确的列名和表结构
+
+#### 复合索引问题
+- **症状**：查询性能未得到预期改善
+- **原因**：复合索引未正确创建或使用
+- **解决方案**：运行迁移脚本创建复合索引，检查索引使用情况
+
 **章节来源**
 - [memory_service.py:15-18](file://backend/services/memory_service.py#L15-L18)
 - [agentmesh_memory_adapter.py:34-44](file://backend/services/agentmesh_memory_adapter.py#L34-L44)
 - [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
 - [context_manager.py:226-251](file://backend/services/context_manager.py#L226-L251)
+- [add_memory_query_indexes.py:92-130](file://migrations/add_memory_query_indexes.py#L92-L130)
 
 ## 结论
 
@@ -613,7 +668,11 @@ ChatService-->>ChatService : 返回响应
 8. **反思机制支持**：集成反思记录、跨章节模式和写作经验规则管理
 9. **统一上下文管理**：提供三层存储的统一管理接口
 10. **高性能架构**：与AI聊天服务和反思代理无缝集成，提供流畅的用户体验
+11. **复合索引优化**：通过Issue #42优化方案显著提升查询性能
+12. **SQL语法修复**：修正了SELECT语句结构问题，确保查询正确性
 
 **更新** 系统当前采用增强的三层架构设计，新的NovelMemoryStorage适配器替代了旧的PersistentMemory类，实现了更强大的SQLite持久化层、FTS5全文搜索能力和线程安全连接池。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
+
+**更新** 通过Issue #42的复合索引优化方案，系统显著提升了高频查询的性能，特别是在章节摘要、角色状态和记忆块查询方面，查询速度提升了30-50%，为长篇小说的创作提供了更好的性能支撑。
 
 该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，包括反思机制和经验学习，是系统能够高效运行的关键保障。

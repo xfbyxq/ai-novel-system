@@ -131,7 +131,7 @@ class Settings(BaseSettings):
             return 5432  # 开发 Docker 内部端口
         elif docker_env in ("true", "1"):
             return 5432  # 生产 Docker 内部端口
-        return 5434  # 本地开发映射端口
+        return 5436  # 本地开发映射端口（开发环境容器映射到5436）
 
     @property
     def DATABASE_URL(self) -> str:
@@ -152,7 +152,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/0"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/0"
-        return "redis://localhost:6379/0"
+        return "redis://localhost:6382/0"  # 本地开发映射端口（开发环境容器映射到6382）
 
     @property
     def CELERY_BROKER_URL(self) -> str:
@@ -162,7 +162,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/1"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/1"
-        return "redis://localhost:6379/1"
+        return "redis://localhost:6382/1"  # 本地开发映射端口
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
@@ -172,7 +172,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/2"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/2"
-        return "redis://localhost:6379/2"
+        return "redis://localhost:6382/2"  # 本地开发映射端口
 
     # Application
     APP_ENV: str = "development"

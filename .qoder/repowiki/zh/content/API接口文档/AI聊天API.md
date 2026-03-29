@@ -6,8 +6,8 @@
 - [backend/schemas/ai_chat.py](file://backend/schemas/ai_chat.py)
 - [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py)
 - [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py)
-- [alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py](file://alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py)
-- [alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py)
+- [alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py](file://alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py)
+- [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py)
 - [llm/qwen_client.py](file://llm/qwen_client.py)
 - [backend/main.py](file://backend/main.py)
 - [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts)
@@ -17,10 +17,11 @@
 
 ## 更新摘要
 **变更内容**
-- 新增按小说ID过滤会话列表的API支持，通过novel_id查询参数实现
-- 数据库模型新增novel_id和title字段，支持会话按小说隔离和动态标题显示
-- 前端集成动态会话标题显示，提升用户体验
-- 会话标题自动生成机制，基于对话内容智能生成标题
+- 新增AI聊天数据库模式，包括`ai_chat_sessions`和`ai_chat_messages`表结构
+- 支持WebSocket流式对话和实时消息传输
+- 实现结构化修订建议提取与数据库应用功能
+- 新增按小说ID过滤会话列表的API支持
+- 增强会话标题自动生成与动态显示能力
 
 ## 目录
 1. [简介](#简介)
@@ -37,7 +38,7 @@
 ## 简介
 本文件面向"AI聊天API"的使用者与维护者，系统性阐述会话管理、消息处理、上下文与历史记录、实时流式传输、会话持久化等能力，并结合创作助手、内容审核、创意讨论等典型场景，提供端到端的使用说明与最佳实践。
 
-**更新** 本版本新增了按小说ID过滤会话列表的功能，支持会话按小说隔离，同时增强了前端动态标题显示能力，提升了用户交互体验。
+**更新** 本版本新增了完整的AI聊天数据库模式支持，包括会话与消息的持久化存储；实现了WebSocket流式对话功能，支持实时消息传输；引入了结构化修订建议提取与应用机制，为小说创作和修订提供智能化支持。
 
 ## 项目结构
 - 后端采用FastAPI，路由集中在backend/api/v1/ai_chat.py，业务逻辑在backend/services/ai_chat_service.py，数据模型位于core/models/ai_chat_session.py，LLM客户端封装在llm/qwen_client.py。
@@ -58,8 +59,8 @@ FE_API["前端API封装<br/>frontend/src/api/aiChat.ts"]
 FE_UI["聊天抽屉组件<br/>frontend/src/components/AIChatDrawer.tsx"]
 end
 subgraph "数据库"
-MIG["迁移脚本<br/>alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py"]
-MIG2["迁移脚本<br/>alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py"]
+MIG["迁移脚本<br/>alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py"]
+MIG2["迁移脚本<br/>alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py"]
 end
 FE_API --> API
 FE_UI --> FE_API
@@ -72,14 +73,14 @@ MODEL --> MIG2
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L421)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L2045)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L1-L38)
-- [alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py](file://alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py#L1-L59)
-- [alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L1-L44)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L1-L232)
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L1-L212)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L690-L723)
+- [backend/api/v1/ai_chat.py:1-497](file://backend/api/v1/ai_chat.py#L1-L497)
+- [backend/services/ai_chat_service.py:1-2689](file://backend/services/ai_chat_service.py#L1-L2689)
+- [core/models/ai_chat_session.py:1-53](file://core/models/ai_chat_session.py#L1-L53)
+- [alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py:1-96](file://alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py#L1-L96)
+- [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:1-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L1-L53)
+- [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
+- [frontend/src/api/aiChat.ts:1-212](file://frontend/src/api/aiChat.ts#L1-L212)
+- [frontend/src/components/AIChatDrawer.tsx:120-319](file://frontend/src/components/AIChatDrawer.tsx#L120-L319)
 
 ## 核心组件
 - API路由层：提供会话创建、列表查询、详情获取、消息发送、会话删除、WebSocket流式对话、意图解析与修订建议等接口，现支持按novel_id过滤。
@@ -90,13 +91,13 @@ MODEL --> MIG2
 - 前端API与UI：封装HTTP与WebSocket调用，展示实时流式消息和动态会话标题。
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L251)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L545-L679)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L232)
-- [backend/services/memory_service.py](file://backend/services/memory_service.py#L72-L232)
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L150-L175)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L690-L723)
+- [backend/api/v1/ai_chat.py:58-497](file://backend/api/v1/ai_chat.py#L58-L497)
+- [backend/services/ai_chat_service.py:214-225](file://backend/services/ai_chat_service.py#L214-L225)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
+- [llm/qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
+- [backend/services/memory_service.py:72-232](file://backend/services/memory_service.py#L72-L232)
+- [frontend/src/api/aiChat.ts:150-175](file://frontend/src/api/aiChat.ts#L150-L175)
+- [frontend/src/components/AIChatDrawer.tsx:120-319](file://frontend/src/components/AIChatDrawer.tsx#L120-L319)
 
 ## 架构总览
 下图展示了从HTTP请求到WebSocket流式响应的端到端流程，以及与数据库、LLM与记忆服务的交互，现支持按小说ID的会话过滤。
@@ -146,11 +147,11 @@ API-->>Client : "实时流式输出"
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L180-L251)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L480-L679)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L232)
-- [backend/services/memory_service.py](file://backend/services/memory_service.py#L72-L138)
+- [backend/api/v1/ai_chat.py:128-190](file://backend/api/v1/ai_chat.py#L128-L190)
+- [backend/services/ai_chat_service.py:421-534](file://backend/services/ai_chat_service.py#L421-L534)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
+- [llm/qwen_client.py:163-232](file://llm/qwen_client.py#L163-L232)
+- [backend/services/memory_service.py:72-138](file://backend/services/memory_service.py#L72-L138)
 
 ## 详细组件分析
 
@@ -181,14 +182,14 @@ FillMem --> Return
 ```
 
 **图表来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L545-L599)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L604-L679)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L180-L251)
+- [backend/services/ai_chat_service.py:614-683](file://backend/services/ai_chat_service.py#L614-L683)
+- [backend/services/ai_chat_service.py:421-534](file://backend/services/ai_chat_service.py#L421-L534)
+- [backend/api/v1/ai_chat.py:58-94](file://backend/api/v1/ai_chat.py#L58-L94)
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L251)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L480-L679)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
+- [backend/api/v1/ai_chat.py:58-94](file://backend/api/v1/ai_chat.py#L58-L94)
+- [backend/services/ai_chat_service.py:421-683](file://backend/services/ai_chat_service.py#L421-L683)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
 
 ### 2) 消息格式与历史记录
 - 消息结构：包含role（user/assistant）与content。
@@ -196,9 +197,9 @@ FillMem --> Return
 - 上下文注入：当场景为小说修订/分析时，会在提示词中注入小说信息（标题、类型、角色、大纲、章节等），并支持按修订类型生成针对性提示词。
 
 **章节来源**
-- [backend/schemas/ai_chat.py](file://backend/schemas/ai_chat.py#L21-L35)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L111-L180)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1004-L1288)
+- [backend/schemas/ai_chat.py:21-35](file://backend/schemas/ai_chat.py#L21-L35)
+- [backend/services/ai_chat_service.py:130-212](file://backend/services/ai_chat_service.py#L130-L212)
+- [backend/services/ai_chat_service.py:1485-1716](file://backend/services/ai_chat_service.py#L1485-L1716)
 
 ### 3) 实时聊天与流式传输
 - HTTP消息：send_message返回完整回复。
@@ -224,16 +225,16 @@ WS-->>FE : "结束标记"
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L106-L151)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1158-L1323)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L232)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L124-L153)
+- [backend/api/v1/ai_chat.py:128-190](file://backend/api/v1/ai_chat.py#L128-L190)
+- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [llm/qwen_client.py:163-232](file://llm/qwen_client.py#L163-L232)
+- [frontend/src/components/AIChatDrawer.tsx:120-160](file://frontend/src/components/AIChatDrawer.tsx#L120-L160)
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L106-L151)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1158-L1323)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L163-L232)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L124-L153)
+- [backend/api/v1/ai_chat.py:128-190](file://backend/api/v1/ai_chat.py#L128-L190)
+- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [llm/qwen_client.py:163-232](file://llm/qwen_client.py#L163-L232)
+- [frontend/src/components/AIChatDrawer.tsx:120-160](file://frontend/src/components/AIChatDrawer.tsx#L120-L160)
 
 ### 4) 场景与意图处理
 - 场景类型：novel_creation、crawler_task、novel_revision、novel_analysis。
@@ -241,9 +242,9 @@ WS-->>FE : "结束标记"
 - 修订提示词：针对世界设定、角色、大纲、章节等类型生成定制化提示词，必要时注入小说关键信息。
 
 **章节来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L53-L108)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L565-L748)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L812-L1002)
+- [backend/services/ai_chat_service.py:60-120](file://backend/services/ai_chat_service.py#L60-L120)
+- [backend/services/ai_chat_service.py:773-800](file://backend/services/ai_chat_service.py#L773-L800)
+- [backend/services/ai_chat_service.py:1300-1483](file://backend/services/ai_chat_service.py#L1300-L1483)
 
 ### 5) 结构化修订建议与数据库应用
 **更新** 新增了完整的结构化修订建议功能，支持从AI回复中自动提取可执行的修订建议。
@@ -270,12 +271,12 @@ Invalidate --> End(["结束"])
 ```
 
 **图表来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1469-L1750)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1759-L1796)
+- [backend/services/ai_chat_service.py:2054-2156](file://backend/services/ai_chat_service.py#L2054-L2156)
+- [backend/services/ai_chat_service.py:2158-2492](file://backend/services/ai_chat_service.py#L2158-L2492)
 
 **章节来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1469-L1750)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1759-L1796)
+- [backend/services/ai_chat_service.py:2054-2156](file://backend/services/ai_chat_service.py#L2054-L2156)
+- [backend/services/ai_chat_service.py:2158-2492](file://backend/services/ai_chat_service.py#L2158-L2492)
 
 ### 6) 数据模型与迁移
 - 表结构：ai_chat_sessions（会话主表）、ai_chat_messages（消息明细表），支持session_id唯一索引与外键约束。
@@ -305,13 +306,13 @@ AIChatSession --> AIChatMessage : "一对多关联"
 ```
 
 **图表来源**
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
-- [alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L21-L44)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
+- [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:22-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L22-L53)
 
 **章节来源**
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
-- [alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py](file://alembic/versions/b5dd1dd83814_add_ai_chat_session_models.py#L21-L59)
-- [alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L21-L44)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
+- [alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py:21-96](file://alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py#L21-L96)
+- [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:22-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L22-L53)
 
 ### 7) 前端集成要点
 - HTTP接口：封装会话创建、消息发送、会话列表、详情与删除，现支持novel_id参数过滤。
@@ -320,9 +321,9 @@ AIChatSession --> AIChatMessage : "一对多关联"
 - **新增** 动态标题显示：优先显示会话标题，如不存在则显示场景对应的默认标题。
 
 **章节来源**
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L150-L175)
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L113-L117)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L690-L723)
+- [frontend/src/api/aiChat.ts:150-175](file://frontend/src/api/aiChat.ts#L150-L175)
+- [frontend/src/api/aiChat.ts:113-117](file://frontend/src/api/aiChat.ts#L113-L117)
+- [frontend/src/components/AIChatDrawer.tsx:690-730](file://frontend/src/components/AIChatDrawer.tsx#L690-L730)
 
 ### 8) 改进的日志记录与错误处理
 **更新** 新增了详细的修订建议处理日志记录和错误处理机制。
@@ -334,9 +335,9 @@ AIChatSession --> AIChatMessage : "一对多关联"
 - **会话标题管理**：记录会话标题生成和更新的日志，便于调试和监控。
 
 **章节来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1558-L1564)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L1524-L1529)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L293-L294)
+- [backend/services/ai_chat_service.py:2183-2191](file://backend/services/ai_chat_service.py#L2183-L2191)
+- [backend/services/ai_chat_service.py:2151-2156](file://backend/services/ai_chat_service.py#L2151-L2156)
+- [backend/api/v1/ai_chat.py:364-365](file://backend/api/v1/ai_chat.py#L364-L365)
 
 ### 9) 按小说ID过滤会话列表
 **新增** 会话列表现在支持按novel_id参数过滤，实现会话按小说的隔离管理。
@@ -360,13 +361,13 @@ NoFilter --> Result
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L180-L196)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L489-L496)
+- [backend/api/v1/ai_chat.py:226-242](file://backend/api/v1/ai_chat.py#L226-L242)
+- [backend/services/ai_chat_service.py:535-586](file://backend/services/ai_chat_service.py#L535-L586)
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L180-L196)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L489-L496)
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L169-L175)
+- [backend/api/v1/ai_chat.py:226-242](file://backend/api/v1/ai_chat.py#L226-L242)
+- [backend/services/ai_chat_service.py:535-586](file://backend/services/ai_chat_service.py#L535-L586)
+- [frontend/src/api/aiChat.ts:169-175](file://frontend/src/api/aiChat.ts#L169-L175)
 
 ### 10) 会话标题自动生成与显示
 **新增** 会话标题管理功能，提供智能的会话标题生成和动态显示。
@@ -377,8 +378,8 @@ NoFilter --> Result
 - **AI生成**：使用LLM生成标题，支持自定义提示词和温度参数
 
 **章节来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L604-L679)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L700-L704)
+- [backend/services/ai_chat_service.py:688-772](file://backend/services/ai_chat_service.py#L688-L772)
+- [frontend/src/components/AIChatDrawer.tsx:700-704](file://frontend/src/components/AIChatDrawer.tsx#L700-L704)
 
 ## 依赖关系分析
 
@@ -438,15 +439,15 @@ AiChatService --> AIChatMessage : "持久化"
 ```
 
 **图表来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L182-L190)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L480-L679)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L44)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
+- [backend/services/ai_chat_service.py:214-225](file://backend/services/ai_chat_service.py#L214-L225)
+- [backend/services/ai_chat_service.py:421-683](file://backend/services/ai_chat_service.py#L421-L683)
+- [llm/qwen_client.py:16-44](file://llm/qwen_client.py#L16-L44)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
 
 **章节来源**
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L182-L190)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L44)
-- [core/models/ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L38)
+- [backend/services/ai_chat_service.py:214-225](file://backend/services/ai_chat_service.py#L214-L225)
+- [llm/qwen_client.py:16-44](file://llm/qwen_client.py#L16-L44)
+- [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
 
 ## 性能与可扩展性
 - 内存与数据库双缓存：会话优先驻留内存，减少数据库压力；数据库仅存储变更与历史，支持增量保存。
@@ -470,10 +471,10 @@ AiChatService --> AIChatMessage : "持久化"
 - **按小说过滤失败**：确认novel_id格式正确（UUID格式），检查数据库中是否存在该小说ID。
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L115-L151)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L98-L103)
-- [llm/qwen_client.py](file://llm/qwen_client.py#L16-L44)
-- [backend/services/ai_chat_service.py](file://backend/services/ai_chat_service.py#L359-L412)
+- [backend/api/v1/ai_chat.py:128-190](file://backend/api/v1/ai_chat.py#L128-L190)
+- [backend/api/v1/ai_chat.py:96-126](file://backend/api/v1/ai_chat.py#L96-L126)
+- [llm/qwen_client.py:16-44](file://llm/qwen_client.py#L16-L44)
+- [backend/services/ai_chat_service.py:588-612](file://backend/services/ai_chat_service.py#L588-L612)
 
 ## 结论
 本AI聊天API围绕"会话生命周期管理 + 上下文与历史 + 实时流式 + 结构化建议 + 数据持久化"构建，既满足创作助手、内容审核、创意讨论等场景，又具备良好的扩展性与稳定性。通过前端与后端的协同，实现了从HTTP到WebSocket的无缝体验。最新的增强功能进一步提升了建议提取的准确性和应用的可靠性，为小说创作和修订提供了更强大的智能化支持。
@@ -558,8 +559,7 @@ AiChatService --> AIChatMessage : "持久化"
   - 响应体字段：sessions（包含过滤后的会话列表）
 
 **章节来源**
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L251)
-- [backend/api/v1/ai_chat.py](file://backend/api/v1/ai_chat.py#L253-L421)
-- [backend/schemas/ai_chat.py](file://backend/schemas/ai_chat.py#L9-L139)
-- [frontend/src/api/aiChat.ts](file://frontend/src/api/aiChat.ts#L150-L212)
-- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx#L690-L723)
+- [backend/api/v1/ai_chat.py:58-497](file://backend/api/v1/ai_chat.py#L58-L497)
+- [backend/schemas/ai_chat.py:9-139](file://backend/schemas/ai_chat.py#L9-L139)
+- [frontend/src/api/aiChat.ts:150-212](file://frontend/src/api/aiChat.ts#L150-L212)
+- [frontend/src/components/AIChatDrawer.tsx:690-889](file://frontend/src/components/AIChatDrawer.tsx#L690-L889)
