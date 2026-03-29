@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import dashscope
 from dashscope import Generation
@@ -30,10 +30,7 @@ class QwenClient:
         # 判断是否使用 OpenAI 兼容模式
         self.use_openai_mode = bool(
             self.base_url
-            and (
-                "coding.dashscope" in self.base_url
-                or "dashscope.aliyuncs.com" in self.base_url
-            )
+            and ("coding.dashscope" in self.base_url or "dashscope.aliyuncs.com" in self.base_url)
         )
 
         if self.use_openai_mode:
@@ -74,9 +71,7 @@ class QwenClient:
             dict: {"content": str, "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}}
         """
         if self.use_openai_mode:
-            return await self._chat_openai(
-                prompt, system, temperature, max_tokens, retries
-            )
+            return await self._chat_openai(prompt, system, temperature, max_tokens, retries)
         else:
             return await self._chat_dashscope(
                 prompt, system, temperature, max_tokens, top_p, retries
@@ -116,9 +111,7 @@ class QwenClient:
 
             except Exception as e:
                 last_error = str(e)
-                logger.warning(
-                    f"Attempt {attempt + 1}/{retries} exception: {last_error}"
-                )
+                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
 
             if attempt < retries - 1:
                 wait = 2**attempt
@@ -166,30 +159,23 @@ class QwenClient:
                     usage = {
                         "prompt_tokens": response.usage.input_tokens,
                         "completion_tokens": response.usage.output_tokens,
-                        "total_tokens": response.usage.input_tokens
-                        + response.usage.output_tokens,
+                        "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
                     }
                     return {"content": content, "usage": usage}
                 else:
                     last_error = f"API error {response.status_code}: {response.message}"
-                    logger.warning(
-                        f"Attempt {attempt + 1}/{retries} failed: {last_error}"
-                    )
+                    logger.warning(f"Attempt {attempt + 1}/{retries} failed: {last_error}")
 
             except Exception as e:
                 last_error = str(e)
-                logger.warning(
-                    f"Attempt {attempt + 1}/{retries} exception: {last_error}"
-                )
+                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
 
             if attempt < retries - 1:
                 wait = 2**attempt
                 logger.info(f"Retrying in {wait}s...")
                 await asyncio.sleep(wait)
 
-        raise RuntimeError(
-            f"QwenClient.chat failed after {retries} attempts: {last_error}"
-        )
+        raise RuntimeError(f"QwenClient.chat failed after {retries} attempts: {last_error}")
 
     async def stream_chat(
         self,
@@ -207,9 +193,7 @@ class QwenClient:
         # 处理不同模式的流式调用
         if self.use_openai_mode:
             # 使用 OpenAI 兼容模式的流式调用
-            async for chunk in self._stream_chat_openai(
-                prompt, system, temperature, max_tokens
-            ):
+            async for chunk in self._stream_chat_openai(prompt, system, temperature, max_tokens):
                 yield chunk
         else:
             # 使用标准 DashScope SDK 的流式调用
@@ -234,9 +218,7 @@ class QwenClient:
                     if content:
                         yield content
                 else:
-                    raise RuntimeError(
-                        f"Stream error {response.status_code}: {response.message}"
-                    )
+                    raise RuntimeError(f"Stream error {response.status_code}: {response.message}")
 
     async def _stream_chat_openai(
         self,
@@ -262,6 +244,105 @@ class QwenClient:
         async for chunk in stream:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    async def chat_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        tool_choice: str = "auto",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        retries: int = 3,
+    ) -> dict:
+        """调用模型并支持工具调用.
+
+        Args:
+            messages: 消息列表，格式如 [{"role": "user", "content": "..."}]
+            tools: 工具定义列表，格式如 [{
+                "type": "function",
+                "function": {
+                    "name": "func_name",
+                    "description": "...",
+                    "parameters": {...}
+                }
+            }]
+            tool_choice: 工具选择策略，"auto", "none" 或 {"type": "function", "function": {"name": "xxx"}}
+            temperature: 温度参数
+            max_tokens: 最大token数
+            retries: 重试次数
+
+        Returns:
+            dict: {"type": "tool_call", "tool_calls": [...]} 或 {"type": "text", "content": str}
+        """
+        if self.use_openai_mode:
+            return await self._chat_with_tools_openai(
+                messages, tools, tool_choice, temperature, max_tokens, retries
+            )
+        else:
+            raise NotImplementedError(
+                "chat_with_tools 仅支持 OpenAI 兼容模式，当前为 DashScope 模式"
+            )
+
+    async def _chat_with_tools_openai(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        tool_choice: str = "auto",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        retries: int = 3,
+    ) -> dict:
+        """使用 OpenAI 兼容模式调用工具."""
+        last_error = None
+        for attempt in range(retries):
+            try:
+                response = await self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,  # type: ignore[arg-type]
+                    tools=tools,  # type: ignore[arg-type]
+                    tool_choice=tool_choice,  # type: ignore[arg-type]
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+
+                message = response.choices[0].message
+
+                # 检查是否有工具调用
+                if message.tool_calls:
+                    tool_calls = []
+                    for tc in message.tool_calls:
+                        # 处理 function 类型的工具调用
+                        tc_any: Any = tc
+                        if hasattr(tc_any, "function") and tc_any.function:
+                            tool_calls.append(
+                                {
+                                    "id": tc_any.id,
+                                    "type": tc_any.type,
+                                    "function": {
+                                        "name": tc_any.function.name,
+                                        "arguments": tc_any.function.arguments,
+                                    },
+                                }
+                            )
+                    if tool_calls:
+                        return {"type": "tool_call", "tool_calls": tool_calls}
+
+                # 返回文本内容
+                content = message.content or ""
+                return {"type": "text", "content": str(content)}
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
+
+            if attempt < retries - 1:
+                wait = 2**attempt
+                logger.info(f"Retrying in {wait}s...")
+                await asyncio.sleep(wait)
+
+        raise RuntimeError(
+            f"QwenClient.chat_with_tools failed after {retries} attempts: {last_error}"
+        )
 
 
 # Module-level singleton

@@ -209,3 +209,60 @@ export const getNovelChaptersForRevision = async (novelId: string): Promise<Nove
   const response = await apiClient.get<NovelChaptersResponse>(`/ai-chat/novels/${novelId}/chapters-list`);
   return response.data;
 };
+
+// ==================== 智能章节摘要API ====================
+
+export interface SmartSummaryRequest {
+  novel_id: string;
+  chapter_numbers: number[];
+  force_regenerate?: boolean;
+}
+
+export interface ChapterSummaryData {
+  chapter_number: number;
+  title: string;
+  summary: {
+    key_events?: string[];
+    plot_summary?: string;
+    character_interactions?: string[];
+    emotional_arc?: string;
+    foreshadowing?: string[];
+    ending_state?: string;
+    word_count?: number;
+  };
+  source: 'generated' | 'cached' | 'truncated';
+}
+
+export interface SmartSummaryResponse {
+  novel_id: string;
+  novel_title?: string;
+  summaries: ChapterSummaryData[];
+  total_chapters_requested: number;
+  generated_count: number;
+  cached_count: number;
+}
+
+export interface ChapterSummaryQuery {
+  novel_id: string;
+  chapter_start?: number;
+  chapter_end?: number;
+  use_smart_summary?: boolean;
+}
+
+/**
+ * 生成智能章节摘要
+ * 使用AI读取完整章节内容并提炼关键点，生成结构化的章节摘要
+ */
+export const generateSmartSummary = async (data: SmartSummaryRequest): Promise<SmartSummaryResponse> => {
+  const response = await apiClient.post<SmartSummaryResponse>('/ai-chat/smart-summary', data);
+  return response.data;
+};
+
+/**
+ * 获取章节摘要（支持智能摘要模式）
+ * @param data 查询参数
+ */
+export const getChaptersSummary = async (data: ChapterSummaryQuery): Promise<SmartSummaryResponse> => {
+  const response = await apiClient.post<SmartSummaryResponse>('/ai-chat/chapters-summary', data);
+  return response.data;
+};
