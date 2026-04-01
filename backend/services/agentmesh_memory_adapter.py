@@ -1129,14 +1129,14 @@ class NovelMemoryStorage:
 
         if loop_type:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries.
+                """SELECT * FROM reflection_entries
                    WHERE novel_id = ? AND loop_type = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, loop_type, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries.
+                """SELECT * FROM reflection_entries
                    WHERE novel_id = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, limit),
@@ -1210,7 +1210,7 @@ class NovelMemoryStorage:
         """获取活跃的模式列表."""
         conn = self._get_connection()
         rows = conn.execute(
-            """SELECT * FROM chapter_patterns.
+            """SELECT * FROM chapter_patterns
                WHERE novel_id = ? AND status = 'active'
                ORDER BY confidence DESC, occurrence_count DESC
                LIMIT ?""",
@@ -1278,7 +1278,7 @@ class NovelMemoryStorage:
 
         if lesson_type:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons.
+                """SELECT * FROM writing_lessons
                    WHERE novel_id = ? AND lesson_type = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",
@@ -1286,7 +1286,7 @@ class NovelMemoryStorage:
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons.
+                """SELECT * FROM writing_lessons
                    WHERE novel_id = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",

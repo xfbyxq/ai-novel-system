@@ -11,30 +11,29 @@ import json
 import re
 from typing import Any, Dict, Optional
 
-from llm.cost_tracker import CostTracker
-from llm.prompt_manager import PromptManager
-from llm.qwen_client import QwenClient
+from agents.agent_query_service import AgentQueryService
+from agents.chapter_summary_generator import ChapterSummaryGenerator
+from agents.character_review_loop import CharacterReviewHandler
 
-# Use the project-wide logger
-from core.logging_config import logger
-
-# TeamContext 用于 Agent 间信息共享
-from agents.team_context import NovelTeamContext
+# 反思机制
+# 章节连续性增强组件
+from agents.context_compressor import ContextCompressor
+from agents.plot_review_loop import PlotReviewHandler
 
 # Agent 间协作组件
 from agents.review_loop import ReviewLoopHandler
-from agents.voting_manager import VotingManager
-from agents.agent_query_service import AgentQueryService
-from agents.character_review_loop import CharacterReviewHandler
-from agents.world_review_loop import WorldReviewHandler
-from agents.plot_review_loop import PlotReviewHandler
-
-# 反思机制
-
-# 章节连续性增强组件
-from agents.context_compressor import ContextCompressor
 from agents.similarity_detector import SimilarityDetector
-from agents.chapter_summary_generator import ChapterSummaryGenerator
+
+# TeamContext 用于 Agent 间信息共享
+from agents.team_context import NovelTeamContext
+from agents.voting_manager import VotingManager
+from agents.world_review_loop import WorldReviewHandler
+
+# Use the project-wide logger
+from core.logging_config import logger
+from llm.cost_tracker import CostTracker
+from llm.prompt_manager import PromptManager
+from llm.qwen_client import QwenClient
 
 
 class NovelCrewManager:
@@ -104,6 +103,13 @@ class NovelCrewManager:
         self.enable_world_review = enable_world_review
         self.enable_plot_review = enable_plot_review
         self.enable_outline_refinement = enable_outline_refinement
+
+        # 图数据库上下文注入开关（从配置读取）
+        from backend.config import settings
+        self.enable_graph_context = (
+            settings.ENABLE_GRAPH_DATABASE
+            and getattr(settings, "ENABLE_GRAPH_CONTEXT_INJECTION", True)
+        )
 
         # 初始化协作组件
         self.review_handler = ReviewLoopHandler(
@@ -831,6 +837,25 @@ class NovelCrewManager:
         characters = novel_data.get("characters", [])
         plot_outline = novel_data.get("plot_outline", {})
 
+        # 类型兼容性处理：确保各参数是正确的类型
+        if isinstance(world_setting, list):
+            world_setting = world_setting[0] if world_setting else {}
+            logger.warning("world_setting 是列表格式，已转换为字典")
+        if not isinstance(world_setting, dict):
+            world_setting = {}
+
+        if isinstance(characters, dict):
+            characters = characters.get("characters", [])
+            logger.warning("characters 是字典格式，已提取角色列表")
+        if not isinstance(characters, list):
+            characters = []
+
+        if isinstance(plot_outline, list):
+            plot_outline = {"volumes": plot_outline}
+            logger.warning("plot_outline 是列表格式，已转换为字典格式")
+        if not isinstance(plot_outline, dict):
+            plot_outline = {}
+
         # 获取小说标题和类型
         novel_title = novel_data.get("title", "未命名小说")
         genre = novel_data.get("genre") or world_setting.get("world_type", "玄幻")
@@ -890,6 +915,11 @@ class NovelCrewManager:
             temperature=0.7,
             expect_json=True,
         )
+
+        # 如果返回的是列表，自动转换为字典格式
+        if isinstance(chapter_plan, list):
+            chapter_plan = {"scenes": chapter_plan}
+            logger.warning("章节策划师返回了列表格式，已自动转换为字典格式")
 
         # 记录到 TeamContext
         if team_context:
@@ -961,7 +991,7 @@ class NovelCrewManager:
             # 如果返回的是列表，自动转换为字典格式
             if isinstance(detailed_outline, list):
                 detailed_outline = {"detailed_scenes": detailed_outline}
-                logger.warning(f"大纲细化师返回了列表格式，已自动转换为字典格式")
+                logger.warning("大纲细化师返回了列表格式，已自动转换为字典格式")
 
             # 缓存细化大纲
             self._chapter_detailed_outlines[chapter_number] = detailed_outline
@@ -995,6 +1025,19 @@ class NovelCrewManager:
             if isinstance(char, dict) and char.get("name") in chapter_characters:
                 character_info += f"\n- {char.get('name')}：{char.get('personality', '')}，{char.get('background', '')[:50]}..."
 
+        # ── [新增] 图数据库上下文查询 ────────────────────────
+        # 为 Writer Agent 注入图数据库查询结果，包括：
+        # - 角色关系网络
+        # - 待回收伏笔
+        # - 一致性冲突警告
+        graph_context = ""
+        if self.enable_graph_context:
+            graph_context = await self._build_graph_context_for_writer(
+                novel_id=novel_data.get("id", ""),
+                chapter_number=chapter_number,
+                chapter_characters=chapter_characters,
+            )
+
         # ── 构建前章关键事件列表（防止重复） ────────────────
         previous_key_events = self._build_previous_key_events(chapter_number)
 
@@ -1027,6 +1070,7 @@ class NovelCrewManager:
                 detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
+                graph_context=graph_context,
                 previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers="",
@@ -1041,6 +1085,7 @@ class NovelCrewManager:
                 detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
+                graph_context=graph_context,
                 previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
                 previous_key_events=previous_key_events,
@@ -1807,21 +1852,96 @@ class NovelCrewManager:
 
         return has_positive_words or few_issues
 
-    def setup_reflection(self, storage, novel_id: str = "unknown", config=None):
-        """设置反思代理.
+    # =========================================================================
+    # 图数据库上下文方法
+    # =========================================================================
+
+    async def _build_graph_context_for_writer(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        chapter_characters: list,
+    ) -> str:
+        """构建图数据库上下文，注入到 Writer prompt.
+
+        查询内容包括：
+        1. 本章出场角色的关系网络
+        2. 待回收的伏笔提醒
+        3. 一致性冲突警告
 
         Args:
-            storage: 存储实例（如 NovelMemoryStorage）
             novel_id: 小说ID
-            config: ReflectionConfig 配置，如果为 None 则使用默认配置
-        """
-        from agents.reflection_agent import ReflectionAgent, ReflectionConfig
+            chapter_number: 当前章节号
+            chapter_characters: 本章出场角色名称列表
 
-        self.reflection_agent = ReflectionAgent(
-            client=self.client,
-            cost_tracker=self.cost_tracker,
-            novel_id=novel_id,
-            storage=storage,
-            config=config or ReflectionConfig(),
-        )
-        return self.reflection_agent
+        Returns:
+            格式化的上下文字符串，可插入到 prompt 中
+            如果图数据库未启用或查询失败，返回空字符串
+        """
+        from backend.config import settings
+
+        if not self.enable_graph_context:
+            return ""
+
+        try:
+            from agents.graph_query_mixin import GraphQueryMixin
+
+            mixin = GraphQueryMixin()
+            mixin.set_graph_context(novel_id)
+
+            sections = []
+
+            # 1. 查询本章出场角色的关系网络（限制数量）
+            max_chars = getattr(settings, "GRAPH_CONTEXT_MAX_CHARACTERS", 5)
+            network_contexts = []
+            for char_name in chapter_characters[:max_chars]:
+                try:
+                    network = await mixin.query_character_network(char_name, depth=1)
+                    if network:
+                        network_contexts.append(mixin.format_network_context(network))
+                except Exception as e:
+                    logger.debug(f"[GraphContext] 角色{char_name}网络查询失败: {e}")
+
+            if network_contexts:
+                sections.append("## 角色关系网络\n" + "\n".join(network_contexts))
+
+            # 2. 查询待回收伏笔
+            try:
+                foreshadowings = await mixin.query_pending_foreshadowings(
+                    chapter_number
+                )
+                if foreshadowings:
+                    max_f = getattr(settings, "GRAPH_CONTEXT_MAX_FORESHADOWINGS", 3)
+                    sections.append(
+                        mixin.format_foreshadowings_context(foreshadowings[:max_f])
+                    )
+            except Exception as e:
+                logger.debug(f"[GraphContext] 伏笔查询失败: {e}")
+
+            # 3. 检测一致性冲突（仅包含本章出场角色相关的冲突）
+            try:
+                conflicts = await mixin.check_conflicts()
+                if conflicts:
+                    # 过滤出与本章角色相关的冲突
+                    char_conflicts = [
+                        c
+                        for c in conflicts
+                        if any(ch in c.characters for ch in chapter_characters)
+                    ]
+                    if char_conflicts:
+                        sections.append(mixin.format_conflicts_context(char_conflicts))
+            except Exception as e:
+                logger.debug(f"[GraphContext] 冲突检测失败: {e}")
+
+            if sections:
+                logger.info(
+                    f"[GraphContext] 第{chapter_number}章注入图上下文: "
+                    f"{len(sections)}个部分"
+                )
+                return "\n\n".join(sections)
+
+            return ""
+
+        except Exception as e:
+            logger.warning(f"[GraphContext] 图查询失败: {e}")
+            return ""

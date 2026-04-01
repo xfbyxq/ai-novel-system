@@ -149,7 +149,9 @@ class UnifiedContextManager:
         """延迟加载持久化记忆."""
         if self._persistent_memory is None:
             from backend.services.agentmesh_memory_adapter import NovelMemoryStorage
-            self._persistent_memory = NovelMemoryStorage(self.novel_id_str)
+            # 使用正确的数据库路径，而不是 novel_id 作为文件名
+            db_path = "./novel_memory/novel_memory.db"
+            self._persistent_memory = NovelMemoryStorage(db_path)
         return self._persistent_memory
 
     async def get_chapter_context(
@@ -184,11 +186,11 @@ class UnifiedContextManager:
             return memory_service_context
         
         # 3. 查 SQLite 持久化
-        persistent_context = await self.persistent_memory.get_chapter_summary(self.novel_id_str, chapter_number)
+        persistent_context = self.persistent_memory.get_chapter_summary(self.novel_id_str, chapter_number)
         if persistent_context:
             # 同步到上层缓存
             self.memory_cache.set(cache_key, persistent_context)
-            self.memory_service_cache.set_chapter_summary(chapter_number, persistent_context)
+            self.memory_service_cache.set_chapter_summary(self.novel_id_str, chapter_number, persistent_context)
             return persistent_context
         
         # 4. 从数据库加载章节
@@ -205,9 +207,9 @@ class UnifiedContextManager:
         query = select(Chapter).where(
             Chapter.novel_id == self.novel_id,
             Chapter.chapter_number == chapter_number,
-        )
+        ).order_by(Chapter.created_at.desc()).limit(1)
         result = await self.db.execute(query)
-        chapter = result.scalar_one_or_none()
+        chapter = result.scalars().first()
         
         if not chapter:
             return None
@@ -235,16 +237,13 @@ class UnifiedContextManager:
         self.memory_cache.set(cache_key, context)
         
         # 2. MemoryService
-        self.memory_service_cache.set_chapter_summary(chapter_number, context)
+        self.memory_service_cache.set_chapter_summary(self.novel_id_str, chapter_number, context)
         
         # 3. SQLite 持久化
-        await self.persistent_memory.save_chapter_summary(
-            chapter_number,
-            context,
-            metadata={
-                "word_count": context.get("word_count", 0),
-                "characters": context.get("characters_appeared", []),
-            },
+        self.persistent_memory.save_chapter_summary(
+            novel_id=self.novel_id_str,
+            chapter_number=chapter_number,
+            summary=context,
         )
         
         logger.debug(f"Synced chapter {chapter_number} context to all layers")
@@ -269,17 +268,14 @@ class UnifiedContextManager:
         self.memory_cache.set(cache_key, context)
         
         # 2. 更新 MemoryService
-        self.memory_service_cache.set_chapter_summary(chapter_number, context)
+        self.memory_service_cache.set_chapter_summary(self.novel_id_str, chapter_number, context)
         
         # 3. 同步到持久化
         if sync_immediately:
-            await self.persistent_memory.save_chapter_summary(
-                chapter_number,
-                context,
-                metadata={
-                    "word_count": context.get("word_count", 0),
-                    "characters": context.get("characters_appeared", []),
-                },
+            self.persistent_memory.save_chapter_summary(
+                novel_id=self.novel_id_str,
+                chapter_number=chapter_number,
+                summary=context,
             )
         
         self._context_version += 1

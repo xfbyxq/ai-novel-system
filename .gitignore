@@ -51,3 +51,6 @@ novel_memory/
 *.db
 *.db-*
 *.db.*
+# SQLite WAL 文件（可能不带 .db 后缀）
+*-shm
+*-wal
