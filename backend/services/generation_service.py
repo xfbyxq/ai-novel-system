@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agents.agent_dispatcher import AgentDispatcher
-from agents.foreshadowing_tracker import ForeshadowingTracker
 from agents.team_context import NovelTeamContext
 from backend.config import settings
 
@@ -26,10 +25,10 @@ from core.models.world_setting import WorldSetting
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-from .agentmesh_memory_adapter import get_novel_memory_adapter
-from .memory_service import get_novel_memory_service
 from .agent_activity_recorder import get_agent_activity_recorder
+from .agentmesh_memory_adapter import get_novel_memory_adapter
 from .context_manager import UnifiedContextManager
+from .memory_service import get_novel_memory_service
 
 
 class GenerationService:
@@ -91,7 +90,7 @@ class GenerationService:
             UnifiedContextManager 实例
         """
         novel_id_str = str(novel_id)
-        
+
         if novel_id_str not in self._context_managers:
             self._context_managers[novel_id_str] = UnifiedContextManager(
                 db=self.db,
@@ -100,10 +99,10 @@ class GenerationService:
                 cache_ttl_minutes=30,
             )
             logger.info(f"Created context manager for novel {novel_id}")
-        
+
         # 更新活跃时间
         self._last_active_time[novel_id_str] = datetime.now(timezone.utc)
-        
+
         return self._context_managers[novel_id_str]
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
@@ -350,11 +349,12 @@ class GenerationService:
 
     async def run_outline_refinement(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行大纲完善任务并保存结果到数据库."""
+        from sqlalchemy import select
+
         from agents.crew_manager import NovelCrewManager
+        from core.models.character import Character
         from core.models.plot_outline import PlotOutline
         from core.models.world_setting import WorldSetting
-        from core.models.character import Character
-        from sqlalchemy import select
 
         # 加载小说和相关数据
         result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
@@ -743,7 +743,7 @@ class GenerationService:
                 team_context=team_context,
             )
 
-            # 保存章节
+            # 保存章节（使用 upsert 避免重复记录）
             final_content = writing_result.get("final_content", "")
             word_count = len(final_content)
             chapter_plan = writing_result.get("chapter_plan", {})
@@ -761,22 +761,49 @@ class GenerationService:
                 # 没有标题，使用默认值
                 title = f"第{chapter_number}章"
 
-            chapter = Chapter(
-                novel_id=novel_id,
-                chapter_number=chapter_number,
-                volume_number=volume_number,
-                title=title,
-                content=final_content,
-                word_count=word_count,
-                status=ChapterStatus.draft,
-                outline=chapter_plan,
-                plot_points=chapter_plan.get("plot_points", []),
-                foreshadowing=chapter_plan.get("foreshadowing", []),
-                quality_score=writing_result.get("quality_score", 0),
-                continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
-                detailed_outline=writing_result.get("detailed_outline", {}),
+            # 检查是否已存在该章节，存在则更新，不存在则创建
+            existing_chapter_result = await self.db.execute(
+                select(Chapter).where(
+                    Chapter.novel_id == novel_id,
+                    Chapter.chapter_number == chapter_number,
+                )
             )
-            self.db.add(chapter)
+            chapter = existing_chapter_result.scalar_one_or_none()
+
+            if chapter:
+                # 更新现有章节
+                chapter.title = title
+                chapter.content = final_content
+                chapter.word_count = word_count
+                chapter.outline = chapter_plan
+                chapter.plot_points = chapter_plan.get("plot_points", [])
+                chapter.foreshadowing = chapter_plan.get("foreshadowing", [])
+                chapter.quality_score = writing_result.get("quality_score", 0)
+                chapter.continuity_issues = writing_result.get("continuity_report", {}).get(
+                    "issues", []
+                )
+                chapter.detailed_outline = writing_result.get("detailed_outline", {})
+                logger.info(f"更新已存在的第{chapter_number}章记录")
+            else:
+                # 创建新章节
+                chapter = Chapter(
+                    novel_id=novel_id,
+                    chapter_number=chapter_number,
+                    volume_number=volume_number,
+                    title=title,
+                    content=final_content,
+                    word_count=word_count,
+                    status=ChapterStatus.draft,
+                    outline=chapter_plan,
+                    plot_points=chapter_plan.get("plot_points", []),
+                    foreshadowing=chapter_plan.get("foreshadowing", []),
+                    quality_score=writing_result.get("quality_score", 0),
+                    continuity_issues=writing_result.get("continuity_report", {}).get(
+                        "issues", []
+                    ),
+                    detailed_outline=writing_result.get("detailed_outline", {}),
+                )
+                self.db.add(chapter)
 
             # 提取并存储章节摘要到记忆系统
             chapter_summary = self._extract_chapter_summary(
@@ -884,6 +911,25 @@ class GenerationService:
                 ):
                     await self._try_dynamic_outline_update(novel_id, chapter_number)
             # ===== 大纲动态更新触发结束 =====
+
+            # ===== 新增：图数据库同步 =====
+            # 章节生成后异步同步实体到Neo4j图数据库
+            # 使用 asyncio.create_task 实现非阻塞执行
+            if settings.ENABLE_GRAPH_DATABASE and settings.ENABLE_GRAPH_SYNC_ON_CHAPTER:
+                try:
+                    import asyncio
+                    asyncio.create_task(
+                        self._sync_chapter_to_graph_safe(
+                            novel_id=novel_id,
+                            chapter_number=chapter_number,
+                            chapter_content=final_content,
+                            chapter_plan=chapter_plan,
+                        )
+                    )
+                    logger.debug(f"[GraphSync] 第{chapter_number}章同步任务已提交")
+                except Exception as e:
+                    logger.warning(f"[GraphSync] 同步任务提交失败: {e}")
+            # ===== 图数据库同步结束 =====
 
             logger.info(
                 f"第{chapter_number}章写作完成，"
@@ -1840,14 +1886,14 @@ class GenerationService:
                         "total_tokens", 0
                     )
                     agent_costs[agent_name]["cost"] += record.get("cost", 0)
-    
+
             # 辅助函数：获取 Agent 的 token 消耗
             def get_agent_cost(agent_name: str) -> tuple:
                 if agent_name in agent_costs:
                     c = agent_costs[agent_name]
                     return c["total_tokens"], c["cost"]
                 return 0, 0
-    
+
             # 记录主题分析活动
             if "topic_analysis" in planning_result:
                 tokens, cost = get_agent_cost("主题分析师")
@@ -1866,7 +1912,7 @@ class GenerationService:
                     total_tokens=tokens,
                     cost=cost,
                 )
-    
+
             # 记录世界观构建活动
             if "world_setting" in planning_result:
                 tokens, cost = get_agent_cost("世界观架构师")
@@ -1887,7 +1933,7 @@ class GenerationService:
                     total_tokens=tokens,
                     cost=cost,
                 )
-    
+
             # 记录角色设计活动
             if "characters" in planning_result:
                 tokens, cost = get_agent_cost("角色设计师")
@@ -1910,7 +1956,7 @@ class GenerationService:
                     cost=cost,
                     output_data={"characters_count": len(planning_result.get("characters", []))},
                 )
-    
+
             # 记录情节架构活动
             if "plot_outline" in planning_result:
                 tokens, cost = get_agent_cost("情节架构师")
@@ -1940,7 +1986,90 @@ class GenerationService:
                     total_tokens=tokens,
                     cost=cost,
                 )
-    
-            logger.info(f"✅ 企划阶段 Agent 活动记录完成")
+
+            logger.info("✅ 企划阶段 Agent 活动记录完成")
         except Exception as e:
             logger.error(f"记录企划阶段 Agent 活动失败：{e}")
+
+    # =========================================================================
+    # 图数据库同步方法
+    # =========================================================================
+
+    async def _sync_chapter_to_graph_safe(
+        self,
+        novel_id: UUID,
+        chapter_number: int,
+        chapter_content: str,
+        chapter_plan: dict,
+    ) -> None:
+        """后台执行的图同步任务，失败不影响主流程.
+
+        将章节中的实体（角色、事件、伏笔）同步到Neo4j图数据库，
+        为后续Agent查询提供数据基础。
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            chapter_content: 章节内容
+            chapter_plan: 章节计划（包含plot_points, foreshadowing等）
+
+        Note:
+            - 使用独立的数据库会话，避免与主事务冲突
+            - 完整的异常处理，失败不影响章节生成结果
+            - 需要 ENABLE_GRAPH_DATABASE=True 才会执行
+        """
+        try:
+            from uuid import uuid4
+
+            from backend.services.graph_sync_service import GraphSyncService
+            from core.database import async_session_factory
+            from core.graph.neo4j_client import get_neo4j_client
+
+            # 检查图数据库连接
+            client = get_neo4j_client()
+            if not client:
+                logger.debug("[GraphSync] 图数据库客户端不可用，跳过同步")
+                return
+            
+            # 尝试连接
+            if not client.is_connected:
+                try:
+                    client.connect()
+                except Exception as conn_err:
+                    logger.warning(f"[GraphSync] 图数据库连接失败: {conn_err}")
+                    return
+
+            # 使用独立的数据库会话
+            async with async_session_factory() as session:
+                sync_service = GraphSyncService(client, session)
+
+                # 1. 同步章节实体（角色、事件等）
+                result = await sync_service.sync_chapter_entities(
+                    novel_id, chapter_number, chapter_content
+                )
+
+                # 2. 同步伏笔
+                foreshadowings = chapter_plan.get("foreshadowing", [])
+                for f in foreshadowings[:3]:  # 限制数量避免过多API调用
+                    try:
+                        await sync_service.sync_foreshadowing(
+                            novel_id=novel_id,
+                            foreshadowing_id=str(uuid4()),
+                            content=f.get("content", ""),
+                            planted_chapter=chapter_number,
+                            ftype=f.get("type", "plot"),
+                            status="pending",
+                            related_characters=f.get("characters", []),
+                        )
+                    except Exception as fe:
+                        logger.warning(f"[GraphSync] 伏笔同步失败: {fe}")
+
+                logger.info(
+                    f"[GraphSync] 第{chapter_number}章同步完成: "
+                    f"实体{result.entities_created}个, "
+                    f"关系{result.relationships_created}条"
+                )
+
+        except Exception as e:
+            # 记录错误但不抛出异常，避免影响主流程
+            logger.error(f"[GraphSync] 第{chapter_number}章同步失败: {e}")

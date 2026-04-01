@@ -9,7 +9,7 @@
 - [ai_chat.py](file://backend/schemas/ai_chat.py)
 - [memory_service.py](file://backend/services/memory_service.py)
 - [cost_tracker.py](file://llm/cost_tracker.py)
-- [5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py)
+- [5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py)
 - [aiChat.ts](file://frontend/src/api/aiChat.ts)
 - [config.py](file://backend/config.py)
 - [pyproject.toml](file://pyproject.toml)
@@ -78,14 +78,14 @@ Qwen --> Cost
 ```
 
 **图表来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L50)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L189-L200)
-- [qwen_client.py](file://llm/qwen_client.py#L16-L45)
+- [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
+- [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
+- [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 
 **章节来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L50)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L50)
-- [pyproject.toml](file://pyproject.toml#L8-L37)
+- [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
+- [ai_chat_service.py:1-50](file://backend/services/ai_chat_service.py#L1-L50)
+- [pyproject.toml:8-37](file://pyproject.toml#L8-L37)
 
 ## 核心组件
 
@@ -141,9 +141,9 @@ ChatSession --> ChatMessage : contains
 ```
 
 **图表来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L189-L200)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L128-L187)
-- [qwen_client.py](file://llm/qwen_client.py#L16-L45)
+- [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
+- [ai_chat_service.py:128-187](file://backend/services/ai_chat_service.py#L128-L187)
+- [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 
 ### 数据模型
 
@@ -172,11 +172,11 @@ AI_CHAT_SESSIONS ||--o{ AI_CHAT_MESSAGES : contains
 ```
 
 **图表来源**
-- [ai_chat_session.py](file://core/models/ai_chat_session.py#L17-L36)
+- [ai_chat_session.py:17-36](file://core/models/ai_chat_session.py#L17-L36)
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L189-L200)
-- [ai_chat_session.py](file://core/models/ai_chat_session.py#L1-L36)
+- [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
+- [ai_chat_session.py:1-36](file://core/models/ai_chat_session.py#L1-L36)
 
 ## 架构概览
 
@@ -210,8 +210,8 @@ API-->>Client : 消息响应
 ```
 
 **图表来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L104)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
+- [ai_chat.py:54-104](file://backend/api/v1/ai_chat.py#L54-L104)
+- [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
 
 ## 详细组件分析
 
@@ -250,12 +250,12 @@ stateDiagram-v2
 ```
 
 **图表来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L572-L574)
+- [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
+- [ai_chat_service.py:572-574](file://backend/services/ai_chat_service.py#L572-L574)
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L53-L115)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L526-L570)
+- [ai_chat_service.py:53-115](file://backend/services/ai_chat_service.py#L53-L115)
+- [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
 
 ### 智能标题生成功能
 
@@ -292,7 +292,7 @@ Error --> |否| CleanTitle
 3. **长度限制**：确保标题不超过50个字符，保持简洁性
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L604-L682)
+- [ai_chat_service.py:999-1046](file://backend/services/ai_chat_service.py#L999-L1046)
 
 ### 会话隔离与组织导航
 
@@ -332,8 +332,8 @@ Session5 --> Filter2
 | 组合过滤 | scene + novel_id | 同时按场景和小说过滤 | 精确查找特定会话 |
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L476-L518)
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L180-L196)
+- [ai_chat_service.py:854-899](file://backend/services/ai_chat_service.py#L854-L899)
+- [ai_chat.py:227-243](file://backend/api/v1/ai_chat.py#L227-L243)
 
 ### LLM集成与流式处理
 
@@ -366,8 +366,8 @@ QwenClient --> CostTracker : uses
 ```
 
 **图表来源**
-- [qwen_client.py](file://llm/qwen_client.py#L16-L45)
-- [cost_tracker.py](file://llm/cost_tracker.py#L16-L25)
+- [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
+- [cost_tracker.py:16-25](file://llm/cost_tracker.py#L16-L25)
 
 #### 流式对话处理流程
 
@@ -391,11 +391,11 @@ Error --> |否| ProcessChunk
 ```
 
 **图表来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L106-L151)
+- [ai_chat.py:129-191](file://backend/api/v1/ai_chat.py#L129-L191)
 
 **章节来源**
-- [qwen_client.py](file://llm/qwen_client.py#L16-L232)
-- [cost_tracker.py](file://llm/cost_tracker.py#L1-L74)
+- [qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
+- [cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
 
 ### 内存缓存与数据管理
 
@@ -423,7 +423,7 @@ Version --> Cache
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L72-L139)
+- [memory_service.py:72-139](file://backend/services/memory_service.py#L72-L139)
 
 #### 缓存策略
 
@@ -438,8 +438,8 @@ Version --> Cache
 **更新** 增强了变化检测机制，现在内存服务会比较关键字段和章节、角色数量来判断内容是否发生变化，并返回相应的`has_changes`状态。
 
 **章节来源**
-- [memory_service.py](file://backend/services/memory_service.py#L10-L70)
-- [memory_service.py](file://backend/services/memory_service.py#L72-L232)
+- [memory_service.py:10-70](file://backend/services/memory_service.py#L10-L70)
+- [memory_service.py:72-232](file://backend/services/memory_service.py#L72-L232)
 
 ### API接口设计
 
@@ -481,11 +481,11 @@ WS->>Client : 关闭连接
 ```
 
 **图表来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L106-L151)
+- [ai_chat.py:129-191](file://backend/api/v1/ai_chat.py#L129-L191)
 
 **章节来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L54-L415)
-- [aiChat.ts](file://frontend/src/api/aiChat.ts#L97-L207)
+- [ai_chat.py:59-621](file://backend/api/v1/ai_chat.py#L59-L621)
+- [aiChat.ts:97-207](file://frontend/src/api/aiChat.ts#L97-L207)
 
 ### 小说信息刷新逻辑增强
 
@@ -543,11 +543,11 @@ NovelMemoryService --> MemoryCache : uses
 ```
 
 **图表来源**
-- [memory_service.py](file://backend/services/memory_service.py#L72-L164)
+- [memory_service.py:72-164](file://backend/services/memory_service.py#L72-L164)
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L206-L368)
-- [memory_service.py](file://backend/services/memory_service.py#L84-L138)
+- [ai_chat_service.py:316-482](file://backend/services/ai_chat_service.py#L316-L482)
+- [memory_service.py:84-138](file://backend/services/memory_service.py#L84-L138)
 
 ### 新增功能详解
 
@@ -609,8 +609,8 @@ AiChatService --> AnalysisResult : generates
 ```
 
 **章节来源**
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L869-L923)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L925-L985)
+- [ai_chat_service.py:1451-1507](file://backend/services/ai_chat_service.py#L1451-L1507)
+- [ai_chat_service.py:1508-1575](file://backend/services/ai_chat_service.py#L1508-L1575)
 
 ## 依赖关系分析
 
@@ -652,7 +652,7 @@ Celery --> Redis
 ```
 
 **图表来源**
-- [pyproject.toml](file://pyproject.toml#L8-L37)
+- [pyproject.toml:8-37](file://pyproject.toml#L8-L37)
 
 ### 内部模块依赖
 
@@ -684,12 +684,12 @@ Qwen --> Cost
 ```
 
 **图表来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L37)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py#L1-L15)
+- [ai_chat.py:1-37](file://backend/api/v1/ai_chat.py#L1-L37)
+- [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
 
 **章节来源**
-- [pyproject.toml](file://pyproject.toml#L8-L37)
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L1-L37)
+- [pyproject.toml:8-37](file://pyproject.toml#L8-L37)
+- [ai_chat.py:1-37](file://backend/api/v1/ai_chat.py#L1-L37)
 
 ## 性能考虑
 
@@ -811,8 +811,8 @@ Qwen --> Cost
 4. 验证安全访问方法的使用
 
 **章节来源**
-- [ai_chat.py](file://backend/api/v1/ai_chat.py#L98-L104)
-- [qwen_client.py](file://llm/qwen_client.py#L97-L106)
+- [ai_chat.py:98-104](file://backend/api/v1/ai_chat.py#L98-L104)
+- [qwen_client.py:97-106](file://llm/qwen_client.py#L97-L106)
 
 ## 结论
 

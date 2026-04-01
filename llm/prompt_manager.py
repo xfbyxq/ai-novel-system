@@ -509,6 +509,8 @@ class PromptManager:
 角色信息：
 {character_info}
 
+{graph_context}
+
 前一章的结尾（你必须从这里接续写起）：
 {previous_ending}
 
@@ -679,6 +681,8 @@ class PromptManager:
 
 角色信息：
 {character_info}
+
+{graph_context}
 
 前一章的结尾：
 {previous_ending}

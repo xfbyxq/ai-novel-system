@@ -380,6 +380,18 @@ class NovelMemoryService:
         summaries = self.get_chapter_summaries(novel_id)
         return summaries.get(str(chapter_number))
 
+    def set_chapter_summary(
+        self, novel_id: str, chapter_number: int, summary: Dict[str, Any]
+    ) -> None:
+        """设置章节摘要（便捷方法，等同于 update_chapter_summary）.
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            summary: 章节摘要内容
+        """
+        self.update_chapter_summary(novel_id, chapter_number, summary)
+
     # ==================== 角色状态管理方法 ====================
 
     def update_character_state(

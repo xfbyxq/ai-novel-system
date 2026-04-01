@@ -16,13 +16,17 @@
 - [core/models/novel.py](file://core/models/novel.py)
 - [workers/generation_worker.py](file://workers/generation_worker.py)
 - [backend/main.py](file://backend/main.py)
+- [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx)
+- [backend/utils/retry.py](file://backend/utils/retry.py)
+- [backend/utils/concurrency.py](file://backend/utils/concurrency.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
 - 更新QwenClient异步流处理实现，修复了正确的异步await实现和流式响应处理机制
-- 新增WebSocket流式对话的完整实现分析
+- 新增WebSocket流式对话的完整实现分析，包括前后端协同
 - 补充异步流式调用的最佳实践和错误处理策略
+- 增强并发控制和重试机制，提升系统稳定性
 
 ## 目录
 1. [引言](#引言)
@@ -52,11 +56,13 @@
 - backend：FastAPI应用、API路由、服务层、数据库模型
 - core：通用模型、数据库、日志配置
 - workers：Celery工作进程（可选的异步执行路径）
+- frontend：React前端应用，支持WebSocket实时对话
 
 ```mermaid
 graph TB
 subgraph "前端"
 FE["浏览器/客户端"]
+AI_CHAT_DRAWER["AIChatDrawer.tsx"]
 end
 subgraph "后端"
 API["FastAPI 应用"]
@@ -71,7 +77,8 @@ QWEN["QwenClient"]
 COST["CostTracker"]
 DB[("数据库")]
 end
-FE --> API
+FE --> AI_CHAT_DRAWER
+AI_CHAT_DRAWER --> API
 API --> GEN_API
 API --> CHAT_API
 CHAT_API --> CHAT_SVC
@@ -91,9 +98,9 @@ COST --> DB
 **图表来源**
 - [backend/main.py:15-33](file://backend/main.py#L15-L33)
 - [backend/api/v1/generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
 - [backend/services/generation_service.py:27-35](file://backend/services/generation_service.py#L27-L35)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 - [agents/agent_dispatcher.py:17-32](file://agents/agent_dispatcher.py#L17-L32)
 - [agents/crew_manager.py:19-36](file://agents/crew_manager.py#L19-L36)
 - [agents/specific_agents.py:15-36](file://agents/specific_agents.py#L15-L36)
@@ -103,7 +110,7 @@ COST --> DB
 **章节来源**
 - [backend/main.py:15-33](file://backend/main.py#L15-L33)
 - [backend/api/v1/generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
 
 ## 核心组件
 - QwenClient：统一的DashScope/Qwen客户端，支持OpenAI兼容模式与标准SDK模式；提供同步阻塞调用的线程池封装，避免事件循环阻塞；内置指数退避重试与流式输出。
@@ -114,17 +121,19 @@ COST --> DB
 - NovelCrewManager：以"直接调用QwenClient"的方式实现的Crew编排，负责提示词模板调用、JSON提取、成本追踪与阶段串联。
 - SpecificAgents：市场分析、内容策划、创作、编辑、发布等Agent，均通过PromptManager注入模板与参数，并调用QwenClient与CostTracker。
 - 数据模型：TokenUsage、Novel等，承载成本与统计的持久化。
+- AIChatDrawer：前端WebSocket组件，实现实时对话界面。
 
 **章节来源**
-- [llm/qwen_client.py:16-269](file://llm/qwen_client.py#L16-L269)
+- [llm/qwen_client.py:16-350](file://llm/qwen_client.py#L16-L350)
 - [llm/cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
 - [backend/services/generation_service.py:27-35](file://backend/services/generation_service.py#L27-L35)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 - [agents/agent_dispatcher.py:17-32](file://agents/agent_dispatcher.py#L17-L32)
 - [agents/crew_manager.py:19-36](file://agents/crew_manager.py#L19-L36)
 - [agents/specific_agents.py:15-36](file://agents/specific_agents.py#L15-L36)
 - [core/models/token_usage.py:11-25](file://core/models/token_usage.py#L11-L25)
 - [core/models/novel.py:37-66](file://core/models/novel.py#L37-L66)
+- [frontend/src/components/AIChatDrawer.tsx:146-201](file://frontend/src/components/AIChatDrawer.tsx#L146-L201)
 
 ## 架构总览
 下图展示从API到LLM调用与成本追踪的关键交互路径：
@@ -172,13 +181,13 @@ API-->>Client : 任务ID/状态
 
 **图表来源**
 - [backend/api/v1/generation.py:73-103](file://backend/api/v1/generation.py#L73-L103)
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
 - [backend/services/generation_service.py:68-196](file://backend/services/generation_service.py#L68-L196)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 - [agents/agent_dispatcher.py:33-68](file://agents/agent_dispatcher.py#L33-L68)
 - [agents/crew_manager.py:104-163](file://agents/crew_manager.py#L104-L163)
 - [agents/specific_agents.py:37-113](file://agents/specific_agents.py#L37-L113)
-- [llm/qwen_client.py:46-161](file://llm/qwen_client.py#L46-L161)
+- [llm/qwen_client.py:180-269](file://llm/qwen_client.py#L180-L269)
 - [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
 - [core/models/token_usage.py:11-25](file://core/models/token_usage.py#L11-L25)
 
@@ -209,10 +218,10 @@ class QwenClient {
 ```
 
 **图表来源**
-- [llm/qwen_client.py:16-269](file://llm/qwen_client.py#L16-L269)
+- [llm/qwen_client.py:16-350](file://llm/qwen_client.py#L16-L350)
 
 **章节来源**
-- [llm/qwen_client.py:19-269](file://llm/qwen_client.py#L19-L269)
+- [llm/qwen_client.py:19-350](file://llm/qwen_client.py#L19-L350)
 
 ### CostTracker：Token使用与成本追踪
 - 定价表：按模型区分输入/输出单价（元/千tokens），支持qwen-plus/turbo/max等。
@@ -297,13 +306,13 @@ ChatSvc-->>WS : {"chunk" : "", "done" : true}
 ```
 
 **图表来源**
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
-- [llm/qwen_client.py:194-265](file://llm/qwen_client.py#L194-L265)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
+- [llm/qwen_client.py:180-269](file://llm/qwen_client.py#L180-L269)
 
 **章节来源**
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 
 ### AgentDispatcher：调度与模式切换
 - 模式：默认使用CrewAI风格（NovelCrewManager）；可切换至"基于调度器的Agent系统"，当前仅部分流程实现。
@@ -368,14 +377,14 @@ Crew->>Crew : _extract_json_from_response(content)
 - [backend/api/v1/generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
 - [backend/api/v1/generation.py:106-134](file://backend/api/v1/generation.py#L106-L134)
 - [backend/api/v1/generation.py:137-171](file://backend/api/v1/generation.py#L137-L171)
-- [backend/api/v1/ai_chat.py:128-189](file://backend/api/v1/ai_chat.py#L128-L189)
+- [backend/api/v1/ai_chat.py:129-189](file://backend/api/v1/ai_chat.py#L129-L189)
 
 ### 配置与环境
 - 设置项：DashScope API密钥、模型、base_url；数据库、Redis、Celery等。
 - 环境变量：通过Settings读取.env文件，支持缓存。
 
 **章节来源**
-- [backend/config.py:5-59](file://backend/config.py#L5-L59)
+- [backend/config.py:5-204](file://backend/config.py#L5-L204)
 
 ### 数据模型与持久化
 - TokenUsage：记录每次调用的agent名、tokens与成本，关联小说与任务。
@@ -391,6 +400,27 @@ Crew->>Crew : _extract_json_from_response(content)
 
 **章节来源**
 - [workers/generation_worker.py:21-69](file://workers/generation_worker.py#L21-L69)
+
+### 前端WebSocket实现
+- AIChatDrawer：完整的WebSocket客户端实现，支持实时消息流、错误处理和连接管理。
+- 实时渲染：通过onmessage事件实时更新UI，支持流式文本增量显示。
+- 用户体验：提供流畅的对话体验，包括滚动定位、状态指示等。
+
+**新增** 前端WebSocket组件的完整实现
+
+**章节来源**
+- [frontend/src/components/AIChatDrawer.tsx:146-201](file://frontend/src/components/AIChatDrawer.tsx#L146-L201)
+
+### 并发控制与重试机制
+- 分布式锁：使用Redis实现分布式锁，防止并发操作冲突。
+- 异步重试：提供通用的异步重试包装器，支持指数退避和抖动。
+- 并发装饰器：为API端点添加并发控制，防止竞态条件。
+
+**新增** 增强的并发控制和重试机制
+
+**章节来源**
+- [backend/utils/concurrency.py:1-223](file://backend/utils/concurrency.py#L1-L223)
+- [backend/utils/retry.py:75-190](file://backend/utils/retry.py#L75-L190)
 
 ## 依赖关系分析
 - 组件耦合：GenerationService与AiChatService均依赖QwenClient与CostTracker；AgentDispatcher协调CrewManager与SpecificAgents；CrewManager与SpecificAgents均依赖QwenClient与CostTracker。
@@ -409,43 +439,53 @@ SVC --> COST["CostTracker"]
 CHAT_SVC --> COST
 SVC --> DB[("数据库")]
 CHAT_SVC --> DB
+AI_CHAT_DRAWER["AIChatDrawer"] --> CHAT_API["WebSocket API"]
 ```
 
 **图表来源**
 - [backend/services/generation_service.py:27-35](file://backend/services/generation_service.py#L27-L35)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 - [agents/agent_dispatcher.py:17-32](file://agents/agent_dispatcher.py#L17-L32)
 - [agents/crew_manager.py:19-36](file://agents/crew_manager.py#L19-L36)
 - [agents/specific_agents.py:15-36](file://agents/specific_agents.py#L15-L36)
 - [llm/qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 - [llm/cost_tracker.py:16-25](file://llm/cost_tracker.py#L16-L25)
+- [frontend/src/components/AIChatDrawer.tsx:146-201](file://frontend/src/components/AIChatDrawer.tsx#L146-L201)
 
 ## 性能考量
 - 请求批处理与并发控制
   - 批量写作：GenerationService提供批量执行接口，内部逐章调用，适合顺序稳定场景；可结合Celery队列实现并行化与限速。
   - 并发与限流：QwenClient内置指数退避；建议在API层增加速率限制与队列缓冲，避免瞬时峰值导致限流。
   - **异步流式优化**：WebSocket流式对话使用高效的异步迭代器，避免阻塞事件循环，提升响应速度。
+  - **并发控制**：使用分布式锁防止多用户同时操作导致的数据不一致问题。
 - 缓存策略
   - Prompt模板与参数：可在Agent侧缓存常用模板格式化结果，减少重复拼接开销。
   - 历史摘要：对前几章摘要进行本地缓存，避免重复构造。
   - **会话缓存**：AiChatService维护会话状态，减少重复的上下文构建。
+  - **Redis缓存**：使用Redis缓存热点数据，提升响应速度。
 - 预热机制
   - 在部署初期预热常用模型与提示词，降低首帧延迟。
   - **流式预热**：提前初始化QwenClient实例，确保流式调用的快速响应。
+  - **连接池预热**：预热数据库和Redis连接池，避免首次请求延迟。
 - 成本控制与模型选择
   - 根据任务复杂度选择合适模型：简单推理用turbo，结构化输出与JSON解析用max。
   - 动态调整temperature与max_tokens，平衡质量与成本。
+  - **成本追踪**：实时追踪Token使用情况，提供成本预警。
 - 质量评估
   - 连续性检查与质量评分：CrewManager内置连续性检查Agent，输出质量评分与问题清单，便于持续改进。
+  - **异步重试**：使用通用重试机制提升系统稳定性，减少失败率。
 
 ## 故障排查指南
 - 网络异常与超时
   - QwenClient在异常时记录警告并指数退避重试；若多次失败，抛出运行时错误。建议在上层增加熔断与降级策略。
   - **流式连接**：WebSocket连接异常时，确保正确的错误处理和连接重连机制。
+  - **超时配置**：OpenAI兼容模式设置了较长的超时时间（300秒），适合复杂任务。
 - API限流与配额
   - 当DashScope返回非200状态码时，QwenClient记录错误并重试；建议监控429/402等状态码并触发限速。
+  - **重试机制**：使用指数退避重试，避免雪崩效应。
 - 模型过载与不稳定
   - 通过降低temperature、缩短max_tokens、拆分长提示词等方式缓解；必要时切换更稳定的模型。
+  - **并发控制**：使用分布式锁防止多个请求同时访问同一资源。
 - 任务取消与状态不一致
   - API层支持取消未完成任务；若出现状态不一致，检查任务状态更新逻辑与数据库事务。
 - JSON解析失败
@@ -454,17 +494,24 @@ CHAT_SVC --> DB
   - **异步await实现**：确保在调用stream_chat时正确使用async for循环，避免忘记await导致的协程对象问题。
   - **WebSocket连接**：检查客户端连接状态，确保正确的消息格式和错误处理。
   - **内存泄漏**：监控流式对话过程中的内存使用，及时清理会话状态。
+  - **前端处理**：确保WebSocket消息的正确解析和UI更新。
+- **并发冲突**
+  - **分布式锁**：使用Redis分布式锁防止并发操作冲突。
+  - **重试策略**：实现指数退避重试，避免频繁重试导致系统压力。
+  - **连接池管理**：合理配置数据库和Redis连接池，避免连接耗尽。
 
-**更新** 新增异步流式对话的故障排查指南
+**更新** 新增异步流式对话的故障排查指南和并发控制相关的故障排查
 
 **章节来源**
 - [llm/qwen_client.py:79-106](file://llm/qwen_client.py#L79-L106)
 - [llm/qwen_client.py:123-161](file://llm/qwen_client.py#L123-L161)
-- [backend/services/ai_chat_service.py:1718-1909](file://backend/services/ai_chat_service.py#L1718-L1909)
+- [backend/services/ai_chat_service.py:2155-2349](file://backend/services/ai_chat_service.py#L2155-L2349)
 - [agents/crew_manager.py:37-103](file://agents/crew_manager.py#L37-L103)
+- [backend/utils/concurrency.py:1-223](file://backend/utils/concurrency.py#L1-L223)
+- [backend/utils/retry.py:75-190](file://backend/utils/retry.py#L75-L190)
 
 ## 结论
-本项目通过QwenClient与CostTracker实现了对DashScope/Qwen的统一接入与成本可控；GenerationService与AgentDispatcher提供清晰的服务编排与任务生命周期管理；AiChatService扩展了实时流式对话能力，支持WebSocket双向通信；CrewManager与SpecificAgents以提示词模板为核心，形成可扩展的Agent协作框架。**最新的异步流式处理修复**确保了流式响应的可靠性和性能。建议在生产环境中引入Celery并行化、速率限制与熔断、模板缓存与预热，持续优化成本与质量的平衡。
+本项目通过QwenClient与CostTracker实现了对DashScope/Qwen的统一接入与成本可控；GenerationService与AgentDispatcher提供清晰的服务编排与任务生命周期管理；AiChatService扩展了实时流式对话能力，支持WebSocket双向通信；CrewManager与SpecificAgents以提示词模板为核心，形成可扩展的Agent协作框架。**最新的异步流式处理修复**确保了流式响应的可靠性和性能。**增强的并发控制和重试机制**提升了系统的稳定性和可靠性。建议在生产环境中引入Celery并行化、速率限制与熔断、模板缓存与预热、分布式锁和异步重试，持续优化成本与质量的平衡。
 
 ## 附录
 - 提示词管理建议
@@ -478,5 +525,14 @@ CHAT_SVC --> DB
   - **错误处理**：为流式调用提供完善的异常捕获和错误恢复机制。
   - **资源管理**：及时清理流式连接和会话状态，防止内存泄漏。
   - **性能监控**：监控流式对话的延迟、吞吐量和错误率，持续优化性能。
-
-**更新** 新增异步流式开发最佳实践建议
+  - **前端实现**：确保WebSocket消息的正确解析和UI更新，提供良好的用户体验。
+- **并发控制最佳实践**
+  - **分布式锁使用**：合理使用Redis分布式锁，避免死锁和性能问题。
+  - **重试策略**：实现指数退避重试，避免频繁重试导致系统压力。
+  - **连接池管理**：合理配置数据库和Redis连接池，避免连接耗尽。
+  - **超时控制**：设置合理的超时时间，防止长时间阻塞。
+- **成本控制最佳实践**
+  - **Token监控**：实时监控Token使用情况，提供成本预警。
+  - **模型选择**：根据任务复杂度选择合适的模型，平衡质量和成本。
+  - **参数调优**：动态调整temperature与max_tokens，优化成本效益。
+  - **缓存策略**：合理使用缓存，减少不必要的API调用。
