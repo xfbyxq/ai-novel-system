@@ -54,11 +54,11 @@ class ReviewLoopConfig:
     # Builder 调用温度
     builder_temperature: float = 0.7
 
-    # Reviewer 最大 token 数
-    reviewer_max_tokens: int = 4096
+    # Reviewer 最大 token 数（None 表示不限制，避免 JSON 截断）
+    reviewer_max_tokens: Optional[int] = None
 
-    # Builder 最大 token 数
-    builder_max_tokens: int = 6000
+    # Builder 最大 token 数（None 表示不限制，避免输出截断）
+    builder_max_tokens: Optional[int] = None
 
     # ── 增强功能配置 ──────────────────────────────────────────
 

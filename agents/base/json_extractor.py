@@ -118,7 +118,7 @@ class JsonExtractor:
         except json.JSONDecodeError:
             pass
 
-        # 策略2：代码块提取
+        # 策略2：代码块提取（完整匹配，有闭合标记）
         match = cls.CODE_BLOCK_PATTERN.search(text)
         if match:
             json_str = match.group(1).strip()
@@ -126,6 +126,28 @@ class JsonExtractor:
                 return json.loads(json_str)
             except json.JSONDecodeError:
                 pass
+
+        # 策略2b：未闭合的代码块（截断场景）
+        # 如果响应以 ```json 或 ``` 开头但没有闭合的 ```，尝试提取代码块内的 JSON
+        code_block_start = text.find("```")
+        if code_block_start != -1:
+            # 跳过 ```json 或 ```
+            after_code_block = text[code_block_start + 3:]
+            # 跳过语言标识（如 json）
+            newline_pos = after_code_block.find("\n")
+            if newline_pos != -1:
+                json_content = after_code_block[newline_pos + 1:]
+            else:
+                json_content = after_code_block
+            # 找到 JSON 对象边界
+            obj_start = json_content.find("{")
+            if obj_start != -1:
+                obj_end = json_content.rfind("}")
+                if obj_end > obj_start:
+                    try:
+                        return json.loads(json_content[obj_start:obj_end + 1])
+                    except json.JSONDecodeError:
+                        pass
 
         # 策略3a：尝试找 JSON 数组
         array_start = text.find("[")
