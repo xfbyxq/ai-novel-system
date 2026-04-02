@@ -237,6 +237,14 @@ class Settings(BaseSettings):
     # 章节大纲细化：在 ChapterPlanner 之后、Writer 之前，将章节计划展开为详细大纲
     ENABLE_OUTLINE_REFINEMENT: bool = True
 
+    # --- 详细评估报告配置 ---
+    # 启用详细问题报告：输出包含位置定位、具体表现、优先级分类的问题列表
+    ENABLE_DETAILED_ISSUE_REPORT: bool = True
+    # 启用优先级分类修订：按优先级（影响阅读体验/提升精彩度/细节打磨）分组输出修订建议
+    ENABLE_PRIORITY_REVISION: bool = True
+    # 启用聚合维度评分：输出连贯性、合理性、趣味性三个聚合维度的星级评分
+    ENABLE_AGGREGATE_RATINGS: bool = True
+
     # --- 质量阈值 (1-10分) ---
     # 评分达到阈值即停止迭代，分数越高要求越严格
     # 建议范围：6.0(宽松) - 8.0(严格)
@@ -435,7 +443,9 @@ class Settings(BaseSettings):
                     "请通过环境变量设置：export NEO4J_PASSWORD='your_password'"
                 )
             # 验证连接池和超时配置
-            self._validate_positive_int("NEO4J_MAX_CONNECTION_POOL_SIZE", self.NEO4J_MAX_CONNECTION_POOL_SIZE)
+            self._validate_positive_int(
+                "NEO4J_MAX_CONNECTION_POOL_SIZE", self.NEO4J_MAX_CONNECTION_POOL_SIZE
+            )
             self._validate_positive_int("NEO4J_CONNECTION_TIMEOUT", self.NEO4J_CONNECTION_TIMEOUT)
 
         # 验证实体抽取配置

@@ -6,8 +6,11 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from backend.services.entity_extractor_service import ExtractionResult
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -314,6 +317,153 @@ class GraphSyncService:
 
             logger.info(
                 f"[GraphSync] 第{chapter_number}章同步完成: "
+                f"实体{result.entities_created}个, 关系{result.relationships_created}条"
+            )
+
+        except Exception as e:
+            result.success = False
+            result.errors.append(str(e))
+            logger.error(f"[GraphSync] 第{chapter_number}章同步失败: {e}")
+
+        finally:
+            result.completed_at = datetime.now()
+
+        return result
+
+    async def sync_extraction_result_only(
+        self,
+        novel_id: UUID,
+        chapter_number: int,
+        extraction_result: "ExtractionResult",
+    ) -> SyncResult:
+        """仅同步已抽取的实体结果到图数据库（不执行LLM抽取）.
+
+        用于已获取抽取结果的场景，避免重复LLM调用。
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            extraction_result: 已抽取的实体结果
+
+        Returns:
+            SyncResult
+        """
+        result = SyncResult(
+            success=True,
+            novel_id=str(novel_id),
+            sync_type="extraction_only",
+        )
+
+        try:
+            # 1. 同步角色节点
+            for char in extraction_result.characters:
+                try:
+                    char_node = CharacterNode(
+                        id=str(uuid4()),
+                        novel_id=str(novel_id),
+                        name=char.name,
+                        role_type=char.role_type,
+                        gender=char.gender or "unknown",
+                        first_appearance_chapter=chapter_number,
+                    )
+                    await self.client.create_node(
+                        char_node.label, char_node.to_neo4j_properties()
+                    )
+                    result.entities_created += 1
+                except Exception as e:
+                    logger.warning(f"创建角色节点失败 {char.name}: {e}")
+
+            # 2. 同步地点节点
+            for loc in extraction_result.locations:
+                try:
+                    loc_node = LocationNode(
+                        id=str(uuid4()),
+                        novel_id=str(novel_id),
+                        name=loc.name,
+                        location_type=loc.location_type,
+                        description=loc.description or "",
+                    )
+                    await self.client.create_node(
+                        loc_node.label, loc_node.to_neo4j_properties()
+                    )
+                    result.entities_created += 1
+                except Exception as e:
+                    logger.warning(f"创建地点节点失败 {loc.name}: {e}")
+
+            # 3. 同步事件节点
+            for event in extraction_result.events:
+                try:
+                    event_node = EventNode(
+                        id=str(uuid4()),
+                        novel_id=str(novel_id),
+                        name=event.name,
+                        chapter_number=chapter_number,
+                        event_type=event.event_type,
+                        description=event.description or "",
+                        importance=event.significance,
+                    )
+                    await self.client.create_node(
+                        event_node.label, event_node.to_neo4j_properties()
+                    )
+                    result.entities_created += 1
+                except Exception as e:
+                    logger.warning(f"创建事件节点失败 {event.name}: {e}")
+
+            # 4. 同步伏笔节点
+            for foreshadow in extraction_result.foreshadowings:
+                try:
+                    fs_node = ForeshadowingNode(
+                        id=str(uuid4()),
+                        novel_id=str(novel_id),
+                        name=foreshadow.name,
+                        chapter_number=chapter_number,
+                        foreshadow_type=foreshadow.foreshadow_type,
+                        description=foreshadow.description or "",
+                        resolved=foreshadow.resolved,
+                        resolved_chapter=foreshadow.resolved_chapter,
+                    )
+                    await self.client.create_node(
+                        fs_node.label, fs_node.to_neo4j_properties()
+                    )
+                    result.entities_created += 1
+                except Exception as e:
+                    logger.warning(f"创建伏笔节点失败 {foreshadow.name}: {e}")
+
+            # 5. 同步关系
+            for rel in extraction_result.relationships:
+                try:
+                    from_result = await self.client.execute_query(
+                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) "
+                        f"RETURN c.id",
+                        {"novel_id": str(novel_id), "name": rel.from_character},
+                    )
+                    to_result = await self.client.execute_query(
+                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) "
+                        f"RETURN c.id",
+                        {"novel_id": str(novel_id), "name": rel.to_character},
+                    )
+
+                    if from_result and to_result:
+                        from_id = from_result[0].get("c.id")
+                        to_id = to_result[0].get("c.id")
+
+                        if from_id and to_id:
+                            await self.client.create_relationship(
+                                "Character",
+                                from_id,
+                                "Character",
+                                to_id,
+                                rel.relation_type.upper(),
+                                {"strength": rel.strength},
+                            )
+                            result.relationships_created += 1
+                except Exception as e:
+                    logger.debug(
+                        f"创建关系失败 {rel.from_character}->{rel.to_character}: {e}"
+                    )
+
+            logger.info(
+                f"[GraphSync] 第{chapter_number}章同步完成(仅同步): "
                 f"实体{result.entities_created}个, 关系{result.relationships_created}条"
             )
 

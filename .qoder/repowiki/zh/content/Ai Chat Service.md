@@ -13,16 +13,21 @@
 - [aiChat.ts](file://frontend/src/api/aiChat.ts)
 - [config.py](file://backend/config.py)
 - [pyproject.toml](file://pyproject.toml)
+- [graph.py](file://backend/api/v1/graph.py)
+- [graph_query_service.py](file://backend/services/graph_query_service.py)
+- [neo4j_client.py](file://core/graph/neo4j_client.py)
+- [graph_query_mixin.py](file://agents/graph_query_mixin.py)
+- [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
+- [context_manager.py](file://backend/services/context_manager.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增增量分析合并功能（_merge_analysis），支持分析结果的增量更新
-- 新增安全字段访问功能（_safe_get），提供健壮的嵌套字典访问
-- 增强了小说分析功能，提供更智能的内容分析和建议
-- 实现了智能会话标题生成功能，自动为对话生成简洁标题
-- 支持会话隔离和更好的组织导航，通过novel_id字段实现
-- 优化了内存缓存机制，增强了变化检测和增量更新能力
+- 新增图数据库智能章节分析功能，支持基于Neo4j的章节内容分析
+- 集成智能章节摘要生成功能，提供结构化的内容分析结果
+- 增强持久化记忆系统，支持章节摘要的长期存储和检索
+- 新增图查询混入类，为AI聊天服务提供图数据库查询能力
+- 扩展AI聊天服务的章节分析能力，支持图数据库上下文集成
 
 ## 目录
 1. [简介](#简介)
@@ -30,16 +35,19 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
-9. [结论](#结论)
+6. [图数据库集成](#图数据库集成)
+7. [智能章节分析功能](#智能章节分析功能)
+8. [持久化记忆系统](#持久化记忆系统)
+9. [依赖关系分析](#依赖关系分析)
+10. [性能考虑](#性能考虑)
+11. [故障排除指南](#故障排除指南)
+12. [结论](#结论)
 
 ## 简介
 
 AI聊天服务是一个基于FastAPI构建的智能对话系统，专门为网络小说创作提供AI辅助功能。该系统集成了通义千问大模型，支持多种创作场景，包括小说创作、爬虫任务规划、小说修订和内容分析。系统采用内存缓存机制和数据库持久化相结合的方式，提供了高效的会话管理和内容存储能力。
 
-**更新** 系统现已显著增强了分析能力和稳定性，新增了增量分析合并功能、安全字段访问机制、智能标题生成和会话隔离等特性。这些改进大幅提升了系统的智能化水平和用户体验。
+**更新** 系统现已显著增强了分析能力和稳定性，新增了图数据库智能章节分析功能、智能章节摘要生成、持久化记忆系统等特性。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析和关系网络查询方面。
 
 ## 项目结构
 
@@ -58,21 +66,33 @@ end
 subgraph "服务层"
 Service[AI聊天服务<br/>AiChatService]
 Memory[内存服务<br/>MemoryService]
+Context[上下文管理<br/>ContextManager]
 Cost[成本追踪<br/>CostTracker]
+end
+subgraph "图数据库层"
+GraphAPI[图数据库API<br/>/api/v1/graph]
+GraphService[图查询服务<br/>GraphQueryService]
+Neo4j[Neo4j客户端<br/>Neo4jClient]
 end
 subgraph "LLM层"
 Qwen[通义千问客户端<br/>QwenClient]
 end
 subgraph "数据层"
 Models[数据库模型<br/>AIChatSession/AIChatMessage]
+Persist[持久化存储<br/>SQLite/AgentMesh]
 DB[(PostgreSQL数据库)]
 end
 FE --> API
 API --> Router
 Router --> Service
 Service --> Memory
+Service --> Context
 Service --> Qwen
 Service --> Models
+Service --> GraphAPI
+GraphAPI --> GraphService
+GraphService --> Neo4j
+Neo4j --> Persist
 Models --> DB
 Qwen --> Cost
 ```
@@ -81,6 +101,7 @@ Qwen --> Cost
 - [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
 - [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
 - [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
+- [graph.py:29-30](file://backend/api/v1/graph.py#L29-L30)
 
 **章节来源**
 - [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
@@ -100,6 +121,7 @@ class AiChatService {
 +QwenClient client
 +dict sessions
 +NovelMemoryService memory_service
++ContextManager context_manager
 +create_session(scene, context) ChatSession
 +send_message(session_id, message) str
 +send_message_stream(session_id, message) AsyncIterator~str~
@@ -110,6 +132,7 @@ class AiChatService {
 +_merge_analysis(existing, new) dict
 +_safe_get(data, path, default) Any
 +_generate_session_title(session) str
++_analyze_novel_content(novel_info) dict
 }
 class ChatSession {
 +str session_id
@@ -135,8 +158,16 @@ class QwenClient {
 +chat(prompt, system) dict
 +stream_chat(prompt, system) AsyncIterator~str~
 }
+class ContextManager {
++AsyncSession db
++NoveLMemoryService memory_service
++NovelMemoryStorage persistent_memory
++get_chapter_context() Dict
++save_chapter_context() void
+}
 AiChatService --> ChatSession : creates
 AiChatService --> QwenClient : uses
+AiChatService --> ContextManager : uses
 ChatSession --> ChatMessage : contains
 ```
 
@@ -144,6 +175,7 @@ ChatSession --> ChatMessage : contains
 - [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
 - [ai_chat_service.py:128-187](file://backend/services/ai_chat_service.py#L128-L187)
 - [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
+- [context_manager.py:110-149](file://backend/services/context_manager.py#L110-L149)
 
 ### 数据模型
 
@@ -187,13 +219,16 @@ sequenceDiagram
 participant Client as 客户端
 participant API as FastAPI接口
 participant Service as AI聊天服务
+participant Context as 上下文管理
 participant Memory as 内存服务
+participant Graph as 图数据库
 participant LLM as 通义千问
 participant DB as 数据库
 Client->>API : POST /ai-chat/sessions
 API->>Service : create_session()
-Service->>Memory : get_novel_memory()
-Memory-->>Service : 缓存数据
+Service->>Context : 获取章节上下文
+Context->>Memory : 读取章节摘要
+Memory-->>Context : 返回摘要数据
 Service->>LLM : 获取小说分析
 LLM-->>Service : 分析结果
 Service->>DB : 保存会话含novel_id和title
@@ -202,7 +237,10 @@ Service-->>API : 会话信息
 API-->>Client : 会话创建成功
 Client->>API : POST /ai-chat/sessions/{id}/messages
 API->>Service : send_message()
-Service->>LLM : 生成回复
+Service->>Context : 构建图数据库上下文
+Context->>Graph : 查询角色网络/关系
+Graph-->>Context : 返回图数据
+Service->>LLM : 生成回复(含图上下文)
 LLM-->>Service : AI回复
 Service->>DB : 保存消息
 Service-->>API : 回复内容
@@ -212,6 +250,7 @@ API-->>Client : 消息响应
 **图表来源**
 - [ai_chat.py:54-104](file://backend/api/v1/ai_chat.py#L54-L104)
 - [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
+- [context_manager.py:157-190](file://backend/services/context_manager.py#L157-L190)
 
 ## 详细组件分析
 
@@ -236,10 +275,12 @@ API-->>Client : 消息响应
 stateDiagram-v2
 [*] --> 创建会话
 创建会话 --> 初始化上下文 : 加载小说信息
-初始化上下文 --> 生成标题 : AI智能生成
+初始化上下文 --> 获取章节摘要 : 查询持久化存储
+获取章节摘要 --> 生成标题 : AI智能生成
 生成标题 --> 等待消息 : 生成欢迎消息
 等待消息 --> 处理消息 : 用户发送消息
-处理消息 --> 生成回复 : AI生成回复
+处理消息 --> 构建图上下文 : 查询图数据库
+构建图上下文 --> 生成回复 : AI生成回复
 生成回复 --> 保存会话 : 异步保存到数据库含novel_id和title
 保存会话 --> 等待消息 : 继续对话
 处理消息 --> 需要澄清 : 意图不明确
@@ -414,11 +455,13 @@ Base[基础信息<br/>title, genre, status]
 Details[详细信息<br/>world_setting, characters, plot_outline]
 Chapters[章节数据<br/>chapter_list]
 Analysis[分析结果<br/>strengths, weaknesses, suggestions]
+ChapterSummaries[章节摘要<br/>key_events, character_changes, plot_progress]
 end
 Cache --> Base
 Cache --> Details
 Cache --> Chapters
 Cache --> Analysis
+Cache --> ChapterSummaries
 Version --> Cache
 ```
 
@@ -526,9 +569,9 @@ class NovelMemoryService {
 +update_novel_memory(novel_id, updated_data) bool
 +invalidate_novel_memory(novel_id) void
 +get_novel_version(novel_id) int
--_compare_fields(current, new) bool
--_structure_novel_data(novel_data) dict
--_merge_memory(current, updated) dict
++_compare_fields(current, new) bool
++_structure_novel_data(novel_data) dict
++_merge_memory(current, updated) dict
 }
 class MemoryCache {
 +dict cache
@@ -612,6 +655,304 @@ AiChatService --> AnalysisResult : generates
 - [ai_chat_service.py:1451-1507](file://backend/services/ai_chat_service.py#L1451-L1507)
 - [ai_chat_service.py:1508-1575](file://backend/services/ai_chat_service.py#L1508-L1575)
 
+## 图数据库集成
+
+### 图数据库架构
+
+**更新** 系统新增了完整的图数据库集成，支持基于Neo4j的智能章节分析和关系查询：
+
+```mermaid
+graph TB
+subgraph "图数据库层"
+Neo4j[Neo4j数据库]
+Client[Neo4jClient]
+Service[GraphQueryService]
+API[GraphAPI]
+end
+subgraph "AI聊天服务集成"
+Mixin[GraphQueryMixin]
+Context[图上下文构建]
+Analysis[智能分析]
+end
+subgraph "数据模型"
+Character[角色节点]
+Location[地点节点]
+Event[事件节点]
+Relationship[关系边]
+end
+Neo4j --> Client
+Client --> Service
+Service --> API
+API --> Mixin
+Mixin --> Context
+Context --> Analysis
+Character --> Relationship
+Location --> Relationship
+Event --> Relationship
+```
+
+**图表来源**
+- [graph.py:29-30](file://backend/api/v1/graph.py#L29-L30)
+- [graph_query_service.py:135-148](file://backend/services/graph_query_service.py#L135-L148)
+- [neo4j_client.py:81-92](file://core/graph/neo4j_client.py#L81-L92)
+
+### 图查询混入类
+
+**更新** 新增了`GraphQueryMixin`类，为AI聊天服务提供图数据库查询能力：
+
+```mermaid
+classDiagram
+class GraphQueryMixin {
++bool _graph_enabled
++Optional[str] _novel_id
++set_graph_context(novel_id) void
++query_character_network(name, depth) CharacterNetwork
++query_character_path(from, to) CharacterPath
++query_influence(name) InfluenceReport
++check_conflicts() List[ConflictReport]
++query_pending_foreshadowings(chapter) List[Dict]
++query_event_timeline(name) List[Dict]
++query_all_relationships(type) List[Dict]
++format_network_context(network) str
++format_path_context(path) str
++format_conflicts_context(conflicts) str
++format_foreshadowings_context(fos) str
++format_influence_context(influence) str
++get_full_character_context(name, include) str
++get_novel_graph_summary() str
+}
+class GraphQueryService {
++Neo4jClient client
++get_character_network(novel_id, name, depth) CharacterNetwork
++find_shortest_path(novel_id, from, to) CharacterPath
++find_character_influence(novel_id, name) InfluenceReport
++check_consistency_conflicts(novel_id) List[ConflictReport]
++find_pending_foreshadowings(novel_id, chapter) List[Dict]
++get_event_timeline(novel_id, name) List[Dict]
++get_all_relationships(novel_id, type) List[Dict]
+}
+GraphQueryMixin --> GraphQueryService : uses
+```
+
+**图表来源**
+- [graph_query_mixin.py:26-44](file://agents/graph_query_mixin.py#L26-L44)
+- [graph_query_service.py:135-148](file://backend/services/graph_query_service.py#L135-L148)
+
+**章节来源**
+- [graph_query_mixin.py:1-498](file://agents/graph_query_mixin.py#L1-L498)
+- [graph_query_service.py:135-537](file://backend/services/graph_query_service.py#L135-L537)
+
+### 图数据库API接口
+
+**更新** 新增了完整的图数据库API接口，支持各种查询和同步操作：
+
+| 端点 | 方法 | 功能 | 返回类型 |
+|------|------|------|----------|
+| /novels/{novel_id}/graph/health | GET | 检查图数据库健康状态 | GraphHealthResponse |
+| /novels/{novel_id}/graph/init | POST | 初始化图数据库连接 | InitResponse |
+| /novels/{novel_id}/graph/sync | POST | 同步小说数据到图数据库 | SyncResponse |
+| /novels/{novel_id}/graph/network/{character_name} | GET | 获取角色关系网络 | NetworkResponse |
+| /novels/{novel_id}/graph/path | GET | 查找角色关系路径 | PathResponse |
+| /novels/{novel_id}/graph/conflicts | GET | 检测一致性冲突 | ConflictsResponse |
+| /novels/{novel_id}/graph/influence/{character_name} | GET | 获取角色影响力分析 | InfluenceResponse |
+| /novels/{novel_id}/graph/timeline | GET | 获取事件时间线 | TimelineResponse |
+| /novels/{novel_id}/graph/foreshadowings/pending | GET | 获取待回收伏笔 | ForeshadowingsResponse |
+
+**章节来源**
+- [graph.py:35-581](file://backend/api/v1/graph.py#L35-L581)
+
+## 智能章节分析功能
+
+### 章节摘要生成
+
+**更新** 系统新增了智能章节摘要生成功能，支持结构化的章节内容分析：
+
+```mermaid
+flowchart TD
+Start([开始章节摘要生成]) --> LoadContext[加载章节上下文]
+LoadContext --> AnalyzeContent[分析章节内容]
+AnalyzeContent --> ExtractEvents[提取关键事件]
+ExtractEvents --> TrackCharacters[追踪角色变化]
+TrackCharacters --> AnalyzePlot[分析情节进展]
+AnalyzePlot --> CheckForeshadowing[检查伏笔暗示]
+CheckForeshadowing --> SummarizeEnding[总结结尾状态]
+SummarizeEnding --> FormatOutput[格式化输出]
+FormatOutput --> SaveToMemory[保存到持久化存储]
+SaveToMemory --> ReturnResult[返回摘要结果]
+```
+
+#### 章节摘要结构
+
+智能摘要包含以下结构化信息：
+
+| 摘要字段 | 描述 | 示例 |
+|---------|------|------|
+| key_events | 关键事件列表 | 主角获得神秘力量、与反派首次交锋 |
+| character_changes | 角色变化描述 | 主角性格变得更加谨慎、配角身份暴露 |
+| plot_progress | 情节进展概述 | 推进主线剧情、埋下重要伏笔 |
+| foreshadowing | 伏笔暗示列表 | 未来冲突的预兆、重要物品的出现 |
+| ending_state | 结尾状态描述 | 悬念设置、角色关系变化 |
+
+**章节来源**
+- [ai_chat_service.py:1862-1910](file://backend/services/ai_chat_service.py#L1862-L1910)
+- [context_manager.py:157-249](file://backend/services/context_manager.py#L157-L249)
+
+### 图数据库上下文集成
+
+**更新** 系统将图数据库查询结果集成到章节分析中，提供更丰富的上下文信息：
+
+```mermaid
+sequenceDiagram
+participant AI as AI聊天服务
+participant Graph as 图数据库
+participant Memory as 持久化存储
+AI->>Graph : 查询角色关系网络
+Graph-->>AI : 返回关系数据
+AI->>Graph : 查询角色影响力
+Graph-->>AI : 返回影响力报告
+AI->>Graph : 检测一致性冲突
+Graph-->>AI : 返回冲突报告
+AI->>Memory : 获取章节摘要
+Memory-->>AI : 返回摘要数据
+AI->>AI : 构建综合分析上下文
+AI-->>AI : 生成智能章节分析
+```
+
+#### 图上下文信息
+
+系统从图数据库获取以下信息用于章节分析：
+
+1. **角色关系网络**：角色之间的直接和间接关系
+2. **角色影响力**：角色在网络中的重要程度和影响范围
+3. **一致性冲突检测**：角色行为、关系、时间线等方面的冲突
+4. **伏笔追踪**：待回收的伏笔及其相关信息
+5. **事件时间线**：按章节排序的重要事件
+
+**章节来源**
+- [graph_query_mixin.py:362-445](file://agents/graph_query_mixin.py#L362-L445)
+- [graph_query_service.py:320-522](file://backend/services/graph_query_service.py#L320-L522)
+
+## 持久化记忆系统
+
+### AgentMesh存储架构
+
+**更新** 系统采用了AgentMesh设计理念，建立了完整的持久化记忆系统：
+
+```mermaid
+graph TB
+subgraph "持久化存储层"
+SQLite[SQLite数据库]
+FTS[FTS5全文搜索引擎]
+end
+subgraph "存储表结构"
+ChapterSummaries[章节摘要表]
+CharacterStates[角色状态表]
+NovelMetadata[小说元数据表]
+Foreshadowing[伏笔追踪表]
+MemoryChunks[记忆块表]
+ReflectionEntries[反思记录表]
+ChapterPatterns[章节模式表]
+WritingLessons[写作经验规则表]
+end
+subgraph "索引系统"
+CompositeIndex[复合索引]
+FullTextIndex[全文索引]
+end
+SQLite --> ChapterSummaries
+SQLite --> CharacterStates
+SQLite --> NovelMetadata
+SQLite --> Foreshadowing
+SQLite --> MemoryChunks
+SQLite --> ReflectionEntries
+SQLite --> ChapterPatterns
+SQLite --> WritingLessons
+FTS --> FullTextIndex
+ChapterSummaries --> CompositeIndex
+CharacterStates --> CompositeIndex
+MemoryChunks --> FullTextIndex
+```
+
+**图表来源**
+- [agentmesh_memory_adapter.py:46-287](file://backend/services/agentmesh_memory_adapter.py#L46-L287)
+
+### 章节摘要存储
+
+**更新** 新增了专门的章节摘要存储功能，支持结构化的内容分析结果：
+
+#### 章节摘要表结构
+
+| 字段名 | 类型 | 描述 | 索引 |
+|--------|------|------|------|
+| id | TEXT | 主键标识 | PRIMARY KEY |
+| novel_id | TEXT | 小说ID | INDEX |
+| chapter_number | INTEGER | 章节号 | INDEX, COMPOSITE |
+| key_events | TEXT | 关键事件JSON数组 | - |
+| character_changes | TEXT | 角色变化描述 | - |
+| plot_progress | TEXT | 情节进展描述 | - |
+| foreshadowing | TEXT | 伏笔JSON数组 | - |
+| ending_state | TEXT | 结尾状态描述 | - |
+| full_content_hash | TEXT | 完整内容哈希 | - |
+| word_count | INTEGER | 字数统计 | - |
+| created_at | TEXT | 创建时间 | - |
+| updated_at | TEXT | 更新时间 | - |
+
+#### 存储流程
+
+```mermaid
+flowchart TD
+Start([开始存储章节摘要]) --> ValidateInput[验证输入数据]
+ValidateInput --> ComputeHash[计算内容哈希]
+ComputeHash --> CheckExisting[检查是否已存在]
+CheckExisting --> |存在| CompareHash[比较哈希值]
+CompareHash --> |相同| SkipUpdate[跳过更新]
+CompareHash --> |不同| UpdateRecord[更新记录]
+CheckExisting --> |不存在| InsertRecord[插入新记录]
+UpdateRecord --> UpdateFTS[更新全文索引]
+InsertRecord --> UpdateFTS
+SkipUpdate --> End([结束])
+UpdateFTS --> End
+```
+
+**章节来源**
+- [agentmesh_memory_adapter.py:51-88](file://backend/services/agentmesh_memory_adapter.py#L51-L88)
+- [agentmesh_memory_adapter.py:301-391](file://backend/services/agentmesh_memory_adapter.py#L301-L391)
+
+### 上下文管理器
+
+**更新** 新增了上下文管理器，统一管理多层缓存和持久化存储：
+
+```mermaid
+classDiagram
+class ContextManager {
++AsyncSession db
++NoveLMemoryService memory_service
++NovelMemoryStorage persistent_memory
++Dict[str, Any] _current_context
++int _context_version
++get_chapter_context(chapter, include_prev) Dict
++save_chapter_context(chapter, context) void
++get_recent_contexts(n) List[Dict]
++invalidate_context() void
+}
+class NovelMemoryStorage {
++Path db_path
++sqlite3.Connection _get_connection()
++save_chapter_summary(novel_id, chapter, summary) str
++get_chapter_summary(novel_id, chapter) Dict
++get_chapter_summaries(novel_id, start, end) List[Dict]
++get_recent_chapter_summaries(novel_id, current, count) List[Dict]
+}
+ContextManager --> NovelMemoryStorage : uses
+```
+
+**图表来源**
+- [context_manager.py:110-149](file://backend/services/context_manager.py#L110-L149)
+- [agentmesh_memory_adapter.py:20-33](file://backend/services/agentmesh_memory_adapter.py#L20-L33)
+
+**章节来源**
+- [context_manager.py:110-249](file://backend/services/context_manager.py#L110-L249)
+- [agentmesh_memory_adapter.py:20-800](file://backend/services/agentmesh_adapter.py#L20-L800)
+
 ## 依赖关系分析
 
 ### 外部依赖
@@ -628,6 +969,7 @@ end
 subgraph "数据库"
 AsyncPG[asyncpg]
 Alembic[Alembic 1.14.0]
+Neo4j[neo4j 5.0.0]
 end
 subgraph "LLM服务"
 DashScope[DashScope 1.20.0]
@@ -660,14 +1002,18 @@ Celery --> Redis
 graph TD
 subgraph "接口层"
 API[backend/api/v1/ai_chat.py]
+GraphAPI[backend/api/v1/graph.py]
 end
 subgraph "服务层"
 Service[backend/services/ai_chat_service.py]
 Memory[backend/services/memory_service.py]
+Context[backend/services/context_manager.py]
+GraphService[backend/services/graph_query_service.py]
 Cost[llm/cost_tracker.py]
 end
 subgraph "模型层"
 Models[core/models/ai_chat_session.py]
+Neo4jClient[core/graph/neo4j_client.py]
 end
 subgraph "LLM层"
 Qwen[llm/qwen_client.py]
@@ -676,10 +1022,13 @@ subgraph "配置层"
 Config[backend/config.py]
 end
 API --> Service
+GraphAPI --> GraphService
 Service --> Memory
+Service --> Context
 Service --> Qwen
 Service --> Models
 Service --> Config
+GraphService --> Neo4jClient
 Qwen --> Cost
 ```
 
@@ -700,6 +1049,7 @@ Qwen --> Cost
 1. **内存缓存**：使用LRU算法，支持30分钟过期
 2. **数据库缓存**：异步保存，避免阻塞主流程
 3. **版本控制**：跟踪内容变化，及时更新缓存
+4. **持久化存储**：SQLite + FTS5，支持全文搜索
 
 **更新** 增强了变化检测机制，现在内存服务会智能地比较关键字段和章节、角色数量来判断内容是否发生变化，从而减少不必要的缓存更新操作。
 
@@ -710,6 +1060,7 @@ Qwen --> Cost
 - **异步数据库操作**：使用SQLAlchemy异步引擎
 - **异步WebSocket处理**：支持高并发实时通信
 - **异步LLM调用**：避免阻塞事件循环
+- **异步图数据库查询**：支持高并发关系查询
 
 ### 成本控制
 
@@ -718,6 +1069,15 @@ Qwen --> Cost
 - **Token统计**：精确记录输入输出tokens
 - **成本计算**：根据模型定价自动计算费用
 - **预算控制**：可配置的成本上限
+
+### 图数据库性能优化
+
+**更新** 图数据库查询进行了专门的性能优化：
+
+- **连接池管理**：Neo4jClient支持连接池复用
+- **查询优化**：使用白名单验证防止Cypher注入
+- **事务处理**：支持批量操作的原子性
+- **索引优化**：创建复合索引提升查询性能
 
 ## 故障排除指南
 
@@ -810,9 +1170,45 @@ Qwen --> Cost
 3. 查看合并过程的日志信息
 4. 验证安全访问方法的使用
 
+#### 图数据库连接失败
+
+**问题症状**：图数据库查询返回None或报错
+
+**可能原因**：
+1. Neo4j服务不可用
+2. 认证信息错误
+3. 图数据库功能未启用
+4. 连接池耗尽
+
+**解决步骤**：
+1. 检查Neo4j服务状态和网络连接
+2. 验证NEO4J_USER和NEO4J_PASSWORD配置
+3. 确认ENABLE_GRAPH_DATABASE设置为True
+4. 检查连接池配置和最大连接数
+5. 查看Neo4jClient的连接日志
+
+#### 章节摘要生成失败
+
+**问题症状**：智能摘要功能返回空结果或错误
+
+**可能原因**：
+1. SQLite数据库连接失败
+2. 章节摘要表结构异常
+3. FTS5全文索引损坏
+4. 内存存储服务异常
+
+**解决步骤**：
+1. 检查SQLite数据库文件权限和磁盘空间
+2. 验证chapter_summaries表结构完整性
+3. 重建FTS5全文索引
+4. 检查AgentMesh存储服务日志
+5. 清理损坏的索引数据
+
 **章节来源**
 - [ai_chat.py:98-104](file://backend/api/v1/ai_chat.py#L98-L104)
 - [qwen_client.py:97-106](file://llm/qwen_client.py#L97-L106)
+- [neo4j_client.py:133-172](file://core/graph/neo4j_client.py#L133-L172)
+- [agentmesh_memory_adapter.py:46-88](file://backend/services/agentmesh_memory_adapter.py#L46-L88)
 
 ## 结论
 
@@ -823,7 +1219,11 @@ AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过
 3. **成本控制**：完善的Token统计和成本追踪
 4. **易扩展性**：模块化设计，便于功能扩展和维护
 5. **智能组织**：新增的会话隔离和智能标题生成功能，提升了用户体验
+6. **图数据库集成**：全新的图数据库智能章节分析功能
+7. **持久化记忆**：基于AgentMesh理念的完整记忆系统
 
-**更新** 系统现已显著增强了分析能力和稳定性，通过新增的增量分析合并功能、安全字段访问机制、智能标题生成和会话隔离等特性，大幅提升了系统的智能化水平和用户体验。这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务。
+**更新** 系统现已显著增强了分析能力和稳定性，通过新增的图数据库智能章节分析功能、智能章节摘要生成、持久化记忆系统等特性，大幅提升了系统的智能化水平和用户体验。特别是图数据库的集成，使得系统能够深入分析小说中的角色关系网络、事件时间线和伏笔追踪，为用户提供更加精准和全面的创作辅助。
 
-该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量。
+这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务，特别是在处理章节内容分析、角色关系理解和情节发展预测等方面表现出色。系统现在不仅能够理解文本内容，还能够利用图数据库的强大查询能力，为用户提供深层次的创作洞察和建议。
+
+该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量，是现代AI驱动的创作工具的重要代表。

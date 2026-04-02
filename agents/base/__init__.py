@@ -9,8 +9,17 @@
 - QualityLevel: 质量级别枚举
 - IssueRecord / IssueTracker: 跨轮次问题追踪
 - ReviewProgressSummary: 审查进度摘要
+- DetailedIssue / PriorityCategory: 详细问题报告数据结构
 """
 
+from agents.base.detailed_issue import (
+    DetailedIssue,
+    IssueLocation,
+    IssueLocationType,
+    PriorityCategory,
+    group_issues_by_priority,
+    format_issues_table,
+)
 from agents.base.json_extractor import JsonExtractor, extract_json
 from agents.base.quality_report import (
     BaseQualityReport,
@@ -59,4 +68,11 @@ __all__ = [
     "IssueRecord",
     "IssueTracker",
     "ReviewProgressSummary",
+    # 详细问题报告
+    "DetailedIssue",
+    "IssueLocation",
+    "IssueLocationType",
+    "PriorityCategory",
+    "group_issues_by_priority",
+    "format_issues_table",
 ]

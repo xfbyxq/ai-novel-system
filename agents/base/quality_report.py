@@ -8,6 +8,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from agents.base.detailed_issue import DetailedIssue
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,9 +37,7 @@ def _safe_extract_score(data: Dict[str, Any], quality_threshold: float) -> float
         except (ValueError, TypeError):
             pass
 
-    logger.warning(
-        f"overall_score和dimension_scores均缺失，使用阈值: {quality_threshold}"
-    )
+    logger.warning(f"overall_score和dimension_scores均缺失，使用阈值: {quality_threshold}")
     return quality_threshold
 
 
@@ -152,18 +152,12 @@ class BaseQualityReport:
         if severity is None:
             return len(self.issues)
         return sum(
-            1
-            for issue in self.issues
-            if issue.get("severity", "").lower() == severity.lower()
+            1 for issue in self.issues if issue.get("severity", "").lower() == severity.lower()
         )
 
     def get_high_severity_issues(self) -> List[Dict[str, Any]]:
         """获取高严重度问题."""
-        return [
-            issue
-            for issue in self.issues
-            if issue.get("severity", "").lower() == "high"
-        ]
+        return [issue for issue in self.issues if issue.get("severity", "").lower() == "high"]
 
     def get_dimension_average(self) -> float:
         """计算维度评分平均值."""
@@ -179,9 +173,7 @@ class BaseQualityReport:
         Args:
             other: 另一个质量报告
         """
-        existing_issues = {
-            (issue.get("area", ""), issue.get("issue", "")) for issue in self.issues
-        }
+        existing_issues = {(issue.get("area", ""), issue.get("issue", "")) for issue in self.issues}
         for issue in other.issues:
             key = (issue.get("area", ""), issue.get("issue", ""))
             if key not in existing_issues:
@@ -283,22 +275,67 @@ class ChapterQualityReport(BaseQualityReport):
     """章节质量评估报告.
 
     在基类基础上添加修订建议和加权总分计算。
-    权重设计：爽感设计 30%，其他维度共 70%
+    精确维度权重设计（8维度）：
+    - 爽感设计 20%（最高权重）
+    - 伏笔设计 15%（新增）
+    - 角色辨识度 15%（新增）
+    - 情节逻辑 12%
+    - 角色一致性 12%
+    - 设定一致性 10%（新增）
+    - 节奏把控 8%
+    - 语言流畅 8%
+
+    聚合维度（3个）：
+    - 连贯性 (coherence): 情节衔接、设定一致、角色行为逻辑
+    - 合理性 (plausibility): 动机合理、因果关系、伏笔铺垫
+    - 趣味性 (engagement): 爽点设计、悬念布局、角色吸引力
     """
 
-    # 修订建议列表
+    # 修订建议列表（旧格式，保留向后兼容）
     suggestions: List[Dict[str, Any]] = field(default_factory=list)
 
-    # 维度权重配置
+    # 精确维度权重配置（8维度）
     _weights: Dict[str, float] = field(
         default_factory=lambda: {
-            "fluency": 0.15,
-            "plot_logic": 0.20,
-            "character_consistency": 0.20,
-            "pacing": 0.15,
-            "satisfaction_design": 0.30,  # 爽感设计权重最高
+            "satisfaction_design": 0.20,  # 爽感设计
+            "foreshadowing": 0.15,  # 伏笔设计（新增）
+            "character_distinctiveness": 0.15,  # 角色辨识度（新增）
+            "plot_logic": 0.12,  # 情节逻辑
+            "character_consistency": 0.12,  # 角色一致性
+            "setting_consistency": 0.10,  # 设定一致性（新增）
+            "pacing": 0.08,  # 节奏把控
+            "fluency": 0.08,  # 语言流畅
         }
     )
+
+    # 聚合维度权重配置
+    _aggregate_weights: Dict[str, Dict[str, float]] = field(
+        default_factory=lambda: {
+            "coherence": {
+                "plot_logic": 0.40,
+                "character_consistency": 0.35,
+                "setting_consistency": 0.25,
+            },
+            "plausibility": {
+                "plot_logic": 0.35,
+                "character_consistency": 0.30,
+                "setting_consistency": 0.20,
+                "foreshadowing": 0.15,
+            },
+            "engagement": {
+                "satisfaction_design": 0.50,
+                "foreshadowing": 0.25,
+                "pacing": 0.15,
+                "character_distinctiveness": 0.10,
+            },
+        }
+    )
+
+    # 新增字段：详细问题报告
+    detailed_issues: List[DetailedIssue] = field(default_factory=list)
+    revision_by_priority: Dict[str, List[str]] = field(default_factory=dict)
+    aggregate_dimension_ratings: Dict[str, str] = field(default_factory=dict)  # 星级格式
+    overall_assessment: str = ""
 
     @property
     def weighted_score(self) -> float:
@@ -317,18 +354,108 @@ class ChapterQualityReport(BaseQualityReport):
 
         return weighted_sum
 
+    @property
+    def aggregate_scores(self) -> Dict[str, float]:
+        """计算聚合维度评分（连贯性、合理性、趣味性）.
+
+        Returns:
+            聚合维度评分字典
+        """
+        if not self.dimension_scores:
+            return {"coherence": 0.0, "plausibility": 0.0, "engagement": 0.0}
+
+        aggregate = {}
+        for agg_name, weights in self._aggregate_weights.items():
+            agg_score = 0.0
+            for dim, weight in weights.items():
+                dim_score = self.dimension_scores.get(dim, 0.0)
+                agg_score += dim_score * weight
+            aggregate[agg_name] = agg_score
+
+        return aggregate
+
+    def _score_to_star(self, score: float) -> str:
+        """将分数转换为星级表示 ★★★☆☆.
+
+        Args:
+            score: 分数（0-10）
+
+        Returns:
+            星级字符串
+        """
+        if score >= 9.0:
+            return "★★★★★"
+        elif score >= 7.0:
+            return "★★★★☆"
+        elif score >= 5.0:
+            return "★★★☆☆"
+        elif score >= 3.0:
+            return "★★☆☆☆"
+        else:
+            return "★☆☆☆☆"
+
+    def calculate_aggregate_ratings(self) -> Dict[str, str]:
+        """计算并设置聚合维度星级评分.
+
+        Returns:
+            聚合维度星级字典
+        """
+        self.aggregate_dimension_ratings = {
+            name: self._score_to_star(score) for name, score in self.aggregate_scores.items()
+        }
+        return self.aggregate_dimension_ratings
+
+    def get_issues_by_priority(self, priority: str) -> List[DetailedIssue]:
+        """按优先级获取问题列表.
+
+        Args:
+            priority: 优先级分类（reading_experience/excitement/polish）
+
+        Returns:
+            对应优先级的问题列表
+        """
+        return [issue for issue in self.detailed_issues if issue.priority_category == priority]
+
     def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式."""
         data = super().to_dict()
         data["suggestions"] = self.suggestions
         data["weighted_score"] = self.weighted_score
         data["weights"] = self._weights
+        data["aggregate_scores"] = self.aggregate_scores
+        data["aggregate_dimension_ratings"] = self.aggregate_dimension_ratings
+        data["overall_assessment"] = self.overall_assessment
+        data["detailed_issues"] = [issue.to_dict() for issue in self.detailed_issues]
+        data["revision_by_priority"] = self.revision_by_priority
         return data
 
     @classmethod
     def from_llm_response(
         cls, data: Dict[str, Any], quality_threshold: float = 7.5
     ) -> "ChapterQualityReport":
+        """从 LLM 响应创建报告.
+
+        支持新旧两种格式的解析：
+        - 新格式：包含 detailed_issues, aggregate_dimension_ratings 等
+        - 旧格式：包含 revision_suggestions, 5维度评分
+        """
         score = _safe_extract_score(data, quality_threshold)
+
+        # 解析详细问题列表（新格式）
+        detailed_issues = []
+        if "detailed_issues" in data:
+            for issue_data in data.get("detailed_issues", []):
+                detailed_issues.append(DetailedIssue.from_dict(issue_data))
+
+        # 解析聚合维度评分
+        aggregate_ratings = data.get("aggregate_dimension_ratings", {})
+
+        # 解析整体评价
+        overall_assessment = data.get("overall_assessment", "")
+
+        # 解析按优先级分类的修订建议
+        revision_by_priority = data.get("revision_by_priority", {})
+
         return cls(
             overall_score=score,
             dimension_scores=data.get("dimension_scores", {}),
@@ -336,4 +463,8 @@ class ChapterQualityReport(BaseQualityReport):
             issues=data.get("critical_issues", []),
             summary=data.get("summary", ""),
             suggestions=data.get("revision_suggestions", []),
+            detailed_issues=detailed_issues,
+            revision_by_priority=revision_by_priority,
+            aggregate_dimension_ratings=aggregate_ratings,
+            overall_assessment=overall_assessment,
         )
