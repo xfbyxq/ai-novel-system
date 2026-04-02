@@ -30,17 +30,19 @@
 - [graph_models.py](file://core/graph/graph_models.py)
 - [relationship_mapper.py](file://core/graph/relationship_mapper.py)
 - [graph_query_mixin.py](file://agents/graph_query_mixin.py)
+- [foreshadowing_auto_injector.py](file://agents/foreshadowing_auto_injector.py)
+- [chapter_outline_mapper.py](file://agents/chapter_outline_mapper.py)
+- [enhanced_context_manager.py](file://agents/enhanced_context_manager.py)
+- [test_graph_sync_service.py](file://tests/unit/test_graph_sync_service.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增图数据库同步功能，支持章节生成后的实体同步
-- 新增实体抽取服务，使用LLM从章节内容中抽取角色、地点、事件等实体
-- 新增图查询服务，提供角色网络、路径分析、影响力计算等功能
-- 新增Agent图查询混入，为AI代理提供图数据库查询能力
-- 新增完整的图数据库API接口，支持健康检查、同步、查询等操作
-- 新增图数据库配置支持，包括连接配置和功能开关
-- 新增实体抽取配置，支持LLM模型选择和置信度阈值设置
+- 改进了章节生成后的图数据库同步功能，增强了foreshadowing数据处理的健壮性
+- 解决了AttributeError问题，优化了章节生成流程的稳定性
+- 增强了伏笔同步的兼容性，支持字符串列表和字典列表两种格式
+- 完善了图同步服务的错误处理和日志记录机制
+- 优化了实体抽取服务的JSON解析和错误处理
 
 ## 目录
 1. [简介](#简介)
@@ -63,7 +65,7 @@
 - **批量写作**：并行生成多个章节内容
 - **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 新增了图数据库同步和实体抽取功能，通过GraphSyncService实现章节生成后的实体同步，通过EntityExtractorService使用LLM从章节内容中抽取角色、地点、事件等实体信息。新增了GraphQueryService提供图分析查询能力，以及GraphQueryMixin为Agent提供图数据库查询支持。
+**更新** 新增了图数据库同步和实体抽取功能，通过GraphSyncService实现章节生成后的实体同步，通过EntityExtractorService使用LLM从章节内容中抽取角色、地点、事件等实体信息。新增了GraphQueryService提供图分析查询能力，以及GraphQueryMixin为Agent提供图数据库查询支持。特别增强了章节生成后的图同步功能，改进了foreshadowing数据处理的健壮性，解决了AttributeError问题，确保了系统的稳定性和可靠性。
 
 ## 项目结构
 
@@ -90,6 +92,7 @@ TC[团队上下文<br/>NovelTeamContext]
 GSS[图同步服务<br/>GraphSyncService]
 EES[实体抽取服务<br/>EntityExtractorService]
 GQS[图查询服务<br/>GraphQueryService]
+FI[伏笔注入器<br/>ForeshadowingAutoInjector]
 end
 subgraph "AI层"
 QC[Qwen客户端<br/>LLM接口]
@@ -116,6 +119,7 @@ GS --> UCM
 GS --> TC
 GS --> GSS
 GS --> EES
+GS --> FI
 AD --> QC
 AD --> CM
 GS --> DB
@@ -139,6 +143,7 @@ GraphAPI --> GQS
 - [graph_sync_service.py:61-125](file://backend/services/graph_sync_service.py#L61-L125)
 - [entity_extractor_service.py:235-316](file://backend/services/entity_extractor_service.py#L235-L316)
 - [graph_query_service.py:135-218](file://backend/services/graph_query_service.py#L135-L218)
+- [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -160,6 +165,7 @@ GraphAPI --> GQS
 - **统一上下文**：通过UnifiedContextManager管理上下文
 - **图数据库同步**：章节生成后异步同步实体到图数据库
 - **实体抽取**：使用LLM从章节内容中抽取实体信息
+- **伏笔处理**：增强的foreshadowing数据处理和同步
 
 ```mermaid
 classDiagram
@@ -244,11 +250,22 @@ class GraphQueryService {
 +get_event_timeline(novel_id, character_name) List[Dict[str, Any]]
 +find_pending_foreshadowings(novel_id, current_chapter) List[Dict[str, Any]]
 }
+class ForeshadowingAutoInjector {
++dict foreshadowings
++list resolution_history
++list injection_history
++add_foreshadowing(foreshadowing) void
++mark_as_resolved(foreshadowing_id, resolve_chapter, payoff_content) void
++get_chapter_foreshadowing_tasks(current_chapter, plot_outline) ForeshadowingReport
++build_foreshadowing_prompt(current_chapter, plot_outline) str
++inject_to_prompt(existing_prompt, current_chapter, plot_outline) str
+}
 GenerationService --> UnifiedContextManager : "使用"
 GenerationService --> AgentDispatcher : "使用"
 GenerationService --> NovelTeamContext : "管理"
 GenerationService --> GraphSyncService : "使用"
 GenerationService --> EntityExtractorService : "使用"
+GenerationService --> ForeshadowingAutoInjector : "使用"
 AgentDispatcher --> QwenClient : "使用"
 ```
 
@@ -262,6 +279,7 @@ AgentDispatcher --> QwenClient : "使用"
 - [graph_sync_service.py:61-125](file://backend/services/graph_sync_service.py#L61-L125)
 - [entity_extractor_service.py:235-316](file://backend/services/entity_extractor_service.py#L235-L316)
 - [graph_query_service.py:135-218](file://backend/services/graph_query_service.py#L135-L218)
+- [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 
 ### 图数据库API接口
 
@@ -388,7 +406,7 @@ SaveChapter --> UpdateMemory["更新记忆系统<br/>- 章节摘要<br/>- 角色
 UpdateMemory --> UpdateStats["更新统计信息"]
 UpdateStats --> SaveTokens["保存Token记录"]
 SaveTokens --> UpdateTask["更新任务状态"]
-UpdateTask --> GraphSync["异步图数据库同步<br/>- 实体抽取<br/>- 关系同步<br/>- 伏笔处理"]
+UpdateTask --> GraphSync["异步图数据库同步<br/>- 实体抽取<br/>- 关系同步<br/>- 伏笔处理<br/>- 错误处理增强"]
 GraphSync --> End([完成])
 ```
 
@@ -717,6 +735,74 @@ GraphQueryMixin --> InfluenceReport : "查询"
 **章节来源**
 - [graph_query_mixin.py:1-498](file://agents/graph_query_mixin.py#L1-L498)
 
+### 伏笔自动注入器 (ForeshadowingAutoInjector)
+
+**新增** 伏笔自动注入器负责管理和追踪小说中的伏笔系统：
+
+```mermaid
+classDiagram
+class ForeshadowingAutoInjector {
++dict foreshadowings
++list resolution_history
++list injection_history
++add_foreshadowing(foreshadowing) void
++mark_as_resolved(foreshadowing_id, resolve_chapter, payoff_content) void
++get_chapter_foreshadowing_tasks(current_chapter, plot_outline) ForeshadowingReport
++build_foreshadowing_prompt(current_chapter, plot_outline) str
++inject_to_prompt(existing_prompt, current_chapter, plot_outline) str
+}
+class Foreshadowing {
++str id
++str content
++int planted_chapter
++int expected_resolve_chapter
++int importance
++str category
++List[str] related_characters
++List[str] related_plot_points
++ForeshadowingStatus status
++str payoff_content
++int reminder_count
++int last_reminder_chapter
++urgency_score() int
++is_overdue() bool
++to_dict() Dict[str, Any]
+}
+class ForeshadowingReport {
++int chapter_number
++List[ForeshadowingTask] must_payoff_tasks
++List[ForeshadowingTask] should_payoff_tasks
++List[ForeshadowingTask] can_plant_tasks
++int total_pending
++int total_overdue
++int total_resolved_this_chapter
++List[str] suggestions
++to_prompt() str
++to_dict() Dict[str, Any]
+}
+class ForeshadowingTask {
++str foreshadowing_id
++str task_type
++str content
++int priority
++int due_chapter
++str description
++str related_plot_point
++to_prompt() str
+}
+ForeshadowingAutoInjector --> Foreshadowing : "管理"
+ForeshadowingAutoInjector --> ForeshadowingReport : "生成"
+ForeshadowingReport --> ForeshadowingTask : "包含"
+```
+
+**图表来源**
+- [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
+- [foreshadowing_auto_injector.py:32-94](file://agents/foreshadowing_auto_injector.py#L32-L94)
+- [foreshadowing_auto_injector.py:130-192](file://agents/foreshadowing_auto_injector.py#L130-L192)
+
+**章节来源**
+- [foreshadowing_auto_injector.py:1-641](file://agents/foreshadowing_auto_injector.py#L1-L641)
+
 ### 代理调度器 (Agent Dispatcher)
 
 代理调度器负责协调不同类型的AI代理，现已增强配置管理、错误处理、编辑任务支持和图数据库查询能力：
@@ -958,6 +1044,9 @@ GraphSyncService[图同步服务]
 EntityExtractorService[实体抽取服务]
 GraphQueryService[图查询服务]
 GraphQueryMixin[图查询混入]
+ForeshadowingAutoInjector[伏笔自动注入器]
+ChapterOutlineMapper[章节大纲映射器]
+EnhancedContextManager[增强上下文管理器]
 end
 subgraph "数据模型"
 GenerationTask[生成任务模型<br/>支持editing类型]
@@ -996,6 +1085,7 @@ GenerationService --> NovelTeamContext
 GenerationService --> AgentActivityRecorder
 GenerationService --> GraphSyncService
 GenerationService --> EntityExtractorService
+GenerationService --> ForeshadowingAutoInjector
 GraphQueryService --> Neo4jClient
 GraphQueryMixin --> Neo4jClient
 ModelToDict --> GenerationService
@@ -1012,6 +1102,9 @@ ModelToDict --> GenerationService
 - [entity_extractor_service.py:12-14](file://backend/services/entity_extractor_service.py#L12-L14)
 - [graph_query_service.py:10](file://backend/services/graph_query_service.py#L10)
 - [graph_query_mixin.py:14-23](file://agents/graph_query_mixin.py#L14-L23)
+- [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
+- [chapter_outline_mapper.py:640-680](file://agents/chapter_outline_mapper.py#L640-L680)
+- [enhanced_context_manager.py:316-329](file://agents/enhanced_context_manager.py#L316-L329)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -1087,6 +1180,7 @@ Pause --> End
 - **查询缓存**：图查询结果支持缓存，减少重复查询开销
 - **白名单验证**：防止Cypher注入攻击，确保查询安全性
 - **事务管理**：支持批量操作的事务原子性保证
+- **错误处理增强**：改进的异常捕获和日志记录机制
 
 ### 团队协作优化
 
@@ -1098,6 +1192,16 @@ Pause --> End
 - **缓存策略**：统一上下文管理器减少重复计算
 - **图数据模型**：支持丰富的实体关系类型和属性
 
+### 伏笔处理优化
+
+**更新** 伏笔处理系统现已增强：
+
+- **兼容性增强**：支持字符串列表和字典列表两种格式的foreshadowing数据
+- **错误处理**：改进的AttributeError处理，确保系统稳定性
+- **数据验证**：增强的数据格式验证和默认值处理
+- **日志记录**：详细的同步过程日志和错误信息
+- **性能优化**：限制同步数量避免过多API调用
+
 **章节来源**
 - [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
 - [generation_worker.py:29-42](file://workers/generation_worker.py#L29-L42)
@@ -1105,6 +1209,7 @@ Pause --> End
 - [team_context.py:244-268](file://agents/team_context.py#L244-L268)
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 - [graph_sync_service.py:2061-2108](file://backend/services/generation_service.py#L2061-L2108)
+- [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 
 ## 故障排除指南
 
@@ -1127,6 +1232,8 @@ Pause --> End
 | 实体抽取失败 | 章节内容未同步到图数据库 | 检查LLM配置和内容长度限制 |
 | 图查询超时 | 角色网络查询响应慢 | 检查查询深度和索引配置 |
 | 伏笔同步错误 | 伏笔状态更新失败 | 检查角色名称匹配和关系映射 |
+| AttributeError | 章节生成后图同步异常 | 检查foreshadowing数据格式和字段完整性 |
+| 数据格式不兼容 | 字符串列表vs字典列表 | 使用兼容性处理逻辑 |
 
 ### 日志监控
 
@@ -1142,6 +1249,7 @@ Pause --> End
 - **图数据库操作**：记录同步结果和错误信息
 - **实体抽取**：记录抽取结果和处理时间
 - **图查询**：记录查询性能和结果格式化
+- **伏笔处理**：记录伏笔状态变更和同步过程
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
@@ -1172,5 +1280,10 @@ Pause --> End
 18. **配置灵活性**：支持图数据库和实体抽取的灵活配置
 19. **性能优化**：异步操作、缓存策略和连接池管理
 20. **安全防护**：图查询白名单验证和异常处理机制
+21. **伏笔管理系统**：完整的伏笔追踪、注入和验证机制
+22. **错误处理增强**：改进的AttributeError处理和数据格式兼容性
+23. **稳定性保障**：异步图同步、错误隔离和日志记录
+24. **智能上下文**：增强的上下文管理和信息提取
+25. **测试覆盖**：完善的单元测试确保代码质量
 
-**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成和实体抽取功能。新增的GraphSyncService实现了章节生成后的实体同步，EntityExtractorService通过LLM实现了智能实体抽取，GraphQueryService提供了丰富的图分析查询能力，GraphQueryMixin为AI代理集成了图数据库查询功能。这些增强为AI驱动的小说创作提供了更加稳健、智能化和可扩展的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘和智能推荐奠定了坚实的技术基础。
+**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成和实体抽取功能。新增的GraphSyncService实现了章节生成后的实体同步，EntityExtractorService通过LLM实现了智能实体抽取，GraphQueryService提供了丰富的图分析查询能力，GraphQueryMixin为AI代理集成了图数据库查询功能。特别增强了章节生成后的图同步功能，改进了foreshadowing数据处理的健壮性，解决了AttributeError问题，确保了系统的稳定性和可靠性。ForeshadowingAutoInjector提供了完整的伏笔管理系统，支持智能追踪、注入和验证。这些增强为AI驱动的小说创作提供了更加稳健、智能化和可扩展的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘和智能推荐奠定了坚实的技术基础。
