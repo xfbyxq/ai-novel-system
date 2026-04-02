@@ -165,7 +165,7 @@ class JsonExtractor:
         处理：
         - 移除注释
         - 移除尾部逗号
-        - 处理单引号
+        - 处理单引号（转换为双引号）
         """
         # 移除单行注释
         text = re.sub(r"//.*$", "", text, flags=re.MULTILINE)
@@ -188,6 +188,12 @@ class JsonExtractor:
 
         # 移除尾部逗号（如 [1, 2, 3,] 或 {"a": 1,}）
         json_part = re.sub(r",\s*([}\]])", r"\1", json_part)
+
+        # 处理单引号：将键和字符串值的单引号转换为双引号
+        # 匹配键名：'key': -> "key":
+        json_part = re.sub(r"'([^']+)'\s*:", r'"\1":', json_part)
+        # 匹配字符串值：: 'value' -> : "value" (简单场景)
+        json_part = re.sub(r":\s*'([^']*)'(,|}|\])", r':"\1"\2', json_part)
 
         return json_part
 

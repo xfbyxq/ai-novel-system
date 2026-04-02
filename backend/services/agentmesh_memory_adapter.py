@@ -1416,7 +1416,8 @@ class NovelMemoryAdapter:
                 if summary["character_changes"]:
                     chapter_text += f"\n- 角色变化：{summary['character_changes']}"
                 if summary["plot_progress"]:
-                    chapter_text += f"\n- 情节：{summary['plot_progress'][:300]}"
+                    # 保留完整情节，由统一压缩处理
+                    chapter_text += f"\n- 情节：{summary['plot_progress']}"
                 parts.append(chapter_text)
 
         # 2. 获取角色状态

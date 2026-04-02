@@ -289,6 +289,8 @@ class UnifiedContextManager:
         """
         构建前文章节上下文.
         
+        保留完整内容，由调用方统一压缩处理。
+        
         Args:
             current_chapter: 当前章节号
             count: 需要的前文章节数量
@@ -301,9 +303,10 @@ class UnifiedContextManager:
         for ch_num in range(max(1, current_chapter - count), current_chapter):
             context = await self.get_chapter_context(ch_num, include_previous=False)
             if context:
+                # 保留完整内容，由统一压缩处理
                 previous_contexts.append(
                     f"第{ch_num}章 {context.get('title', '')}:\n"
-                    f"{context.get('content', '')[:500]}..."  # 限制长度
+                    f"{context.get('content', '')}"
                 )
         
         return "\n\n".join(previous_contexts)

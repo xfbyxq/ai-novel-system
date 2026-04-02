@@ -1041,6 +1041,31 @@ class NovelCrewManager:
         # ── 构建前章关键事件列表（防止重复） ────────────────
         previous_key_events = self._build_previous_key_events(chapter_number)
 
+        # ── 提取卷级摘要（用于冷记忆）─────────────────────────
+        volume_summaries = None
+        if plot_outline:
+            volumes = plot_outline.get("volumes", [])
+            if volumes and isinstance(volumes, list):
+                volume_summaries = {}
+                for vol in volumes:
+                    vol_num = vol.get("number")
+                    vol_summary = vol.get("summary", "")
+                    vol_chapters = vol.get("chapters", [])  # [start, end]
+                    if vol_num and vol_summary:
+                        # 包含摘要和章节范围，用于准确判断冷记忆范围
+                        volume_summaries[vol_num] = {
+                            "summary": vol_summary,
+                            "chapters": vol_chapters if isinstance(vol_chapters, list) else [],
+                        }
+                # 如果没有有效的卷摘要，置回None
+                if not volume_summaries:
+                    volume_summaries = None
+                else:
+                    logger.info(
+                        f"[VolumeSummary] 提取到 {len(volume_summaries)} 个卷摘要: "
+                        f"{list(volume_summaries.keys())}"
+                    )
+
         # ── 使用分层压缩构建前章结尾 ─────────────────────
         compressed = self.context_compressor.compress(
             chapter_number=chapter_number,
@@ -1049,10 +1074,11 @@ class NovelCrewManager:
             world_setting=world_setting,
             characters=characters,
             plot_outline=plot_outline,
+            volume_summaries=volume_summaries,
         )
-        # 前章结尾优先使用压缩器提取的 500 字
+        # 前章结尾优先使用压缩器提取的完整结尾
         previous_ending = compressed.previous_ending or (
-            previous_chapters_summary[-500:]
+            previous_chapters_summary
             if previous_chapters_summary
             else "（本章为开篇）"
         )

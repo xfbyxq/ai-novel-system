@@ -112,7 +112,8 @@ class CompressedContext:
 class ContextCompressor:
     """分层上下文压缩器.
 
-    确保无论小说写到第几章，上下文大小保持在 ~8K tokens。
+    采用动态压缩策略：先构建完整内容，总量超阈值时按优先级逐步压缩。
+    优先级从高到低：core > ending > hot > warm > cold
     """
 
     # 配置参数
@@ -121,21 +122,39 @@ class ContextCompressor:
     MAX_EVENTS_PER_CHAPTER = 3  # 每章最多保留 N 个关键事件
     CHAPTERS_PER_VOLUME = 10  # 每卷章节数（用于冷记忆分组）
 
-    PREVIOUS_ENDING_LENGTH = 500  # 前章结尾字数
-    MAX_SUMMARY_LENGTH = 300  # 单章摘要最大字数
-    MAX_VOLUME_SUMMARY_LENGTH = 200  # 卷摘要最大字数
-    MAX_CORE_MEMORY_LENGTH = 2000  # 核心记忆最大字数
+    # 动态压缩配置
+    MAX_TOTAL_TOKENS = 8000  # 总上下文token阈值（超出时启动压缩）
+    PREVIOUS_ENDING_LENGTH = 800  # 前章结尾完整长度（增大以保留更多内容）
+    SAFETY_MARGIN = 0.95  # 安全系数，避免边界溢出
+
+    # 优先级定义（数值越小优先级越高，压缩时优先保留）
+    PRIORITY_LEVELS = {
+        'core': 1,      # 世界观、角色卡、主线 - 最高优先，始终保留
+        'ending': 2,    # 前章结尾 - 高优先，影响衔接连贯性
+        'hot': 3,       # 前2章摘要 - 中高优先，近期剧情
+        'warm': 4,      # 前3-10章关键事件 - 中优先
+        'cold': 5,      # 卷级摘要 - 低优先，最早被压缩
+    }
 
     def __init__(
         self,
         hot_chapters: int = 2,
         warm_chapters: int = 8,
         max_events_per_chapter: int = 3,
+        max_total_tokens: int = 8000,
     ):
-        """初始化方法."""
+        """初始化方法.
+
+        Args:
+            hot_chapters: 热记忆章节数
+            warm_chapters: 温记忆章节数
+            max_events_per_chapter: 每章最大事件数
+            max_total_tokens: 总token阈值
+        """
         self.HOT_CHAPTERS = hot_chapters
         self.WARM_CHAPTERS = warm_chapters
         self.MAX_EVENTS_PER_CHAPTER = max_events_per_chapter
+        self.MAX_TOTAL_TOKENS = max_total_tokens
 
     def compress(
         self,
@@ -145,64 +164,185 @@ class ContextCompressor:
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
         plot_outline: Any,
-        volume_summaries: Optional[Dict[int, str]] = None,
+        volume_summaries: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> CompressedContext:
-        """压缩上下文.
+        """压缩上下文 - 动态策略版本.
+
+        核心改进：先构建完整内容，总量超阈值时才按优先级逐步压缩。
 
         Args:
             chapter_number: 当前要写的章节号
             chapter_summaries: {章节号: {key_events, plot_progress, ending_state, ...}}
-            chapter_contents: {章节号: 完整内容} - 仅用于提取前章结尾
+            chapter_contents: {章节号: 完整内容} - 用于提取前章结尾
             world_setting: 世界观设定
             characters: 角色列表
             plot_outline: 情节大纲
-            volume_summaries: {卷号: 卷摘要} - 可选，用于冷记忆
+            volume_summaries: {卷号: {"summary": 摘要, "chapters": [start, end]}} - 可选
 
         Returns:
-            CompressedContext
+            CompressedContext - 压缩后的上下文，控制在MAX_TOTAL_TOKENS内
         """
         logger.info(
-            f"[ContextCompressor] 压缩第 {chapter_number} 章上下文, "
-            f"可用摘要: {len(chapter_summaries)} 章"
+            f"[ContextCompressor] 构建第 {chapter_number} 章上下文, "
+            f"可用摘要: {len(chapter_summaries)} 章, 可用内容: {len(chapter_contents)} 章"
         )
 
         ctx = CompressedContext()
 
-        # 1. 核心记忆（始终携带）
-        ctx.core_memory = self._build_core_memory(
+        # ===== 步骤1：构建完整内容（不截取） =====
+        # 1. 核心记忆（始终携带，优先级最高）
+        ctx.core_memory = self._build_core_memory_full(
             world_setting, characters, plot_outline
         )
 
-        # 2. 热记忆：前 2 章完整摘要
-        ctx.hot_memory = self._build_hot_memory(chapter_number, chapter_summaries)
+        # 2. 热记忆：前 N 章完整摘要（不截取）
+        ctx.hot_memory = self._build_hot_memory_full(chapter_number, chapter_summaries)
 
-        # 3. 温记忆：前 3-10 章关键事件
-        ctx.warm_memory = self._build_warm_memory(chapter_number, chapter_summaries)
+        # 3. 温记忆：前章节关键事件（完整描述）
+        ctx.warm_memory = self._build_warm_memory_full(chapter_number, chapter_summaries)
 
-        # 4. 冷记忆：更早章节的卷级摘要
-        ctx.cold_memory = self._build_cold_memory(
+        # 4. 冷记忆：卷级摘要（完整摘要）
+        ctx.cold_memory = self._build_cold_memory_full(
             chapter_number, chapter_summaries, volume_summaries
         )
 
-        # 5. 前章结尾
+        # 5. 前章结尾（完整结尾段落）
         prev_chapter = chapter_number - 1
         if prev_chapter in chapter_contents:
             content = chapter_contents[prev_chapter]
-            ctx.previous_ending = self._extract_ending(content)
+            ctx.previous_ending = self._extract_ending_full(content)
         elif prev_chapter in chapter_summaries:
-            # 如果没有完整内容，使用摘要中的 ending_state
+            # 使用摘要中的 ending_state
             summary = chapter_summaries[prev_chapter]
             ctx.previous_ending = summary.get("ending_state", "")
 
-        # 估算 token 数（粗略：中文 1.5 字符 ≈ 1 token）
-        total_len = len(ctx.to_prompt())
-        ctx.total_tokens_estimate = int(total_len / 1.5)
+        # ===== 步骤2：计算总token估算 =====
+        ctx.total_tokens_estimate = self._estimate_tokens(ctx.to_prompt())
 
         logger.info(
-            f"[ContextCompressor] 压缩完成，估算 ~{ctx.total_tokens_estimate} tokens"
+            f"[ContextCompressor] 完整上下文构建完成，估算 ~{ctx.total_tokens_estimate} tokens"
         )
 
+        # ===== 步骤3：动态压缩（仅在超阈值时启动） =====
+        target_tokens = int(self.MAX_TOTAL_TOKENS * self.SAFETY_MARGIN)
+        if ctx.total_tokens_estimate > target_tokens:
+            logger.info(
+                f"[ContextCompressor] 启动动态压缩，目标 ~{target_tokens} tokens"
+            )
+            ctx = self._adaptive_compress(ctx, target_tokens)
+            ctx.total_tokens_estimate = self._estimate_tokens(ctx.to_prompt())
+            logger.info(
+                f"[ContextCompressor] 动态压缩完成，最终 ~{ctx.total_tokens_estimate} tokens"
+            )
+
         return ctx
+
+    def _estimate_tokens(self, text: str) -> int:
+        """估算文本的token数量.
+
+        中文约1.5字符≈1token，英文约4字符≈1token。
+        采用保守估算，取较大值。
+        """
+        # 简化估算：中文为主，取字符数/1.3（保守值）
+        return int(len(text) / 1.3)
+
+    def _adaptive_compress(
+        self, ctx: CompressedContext, target_tokens: int
+    ) -> CompressedContext:
+        """按优先级逐步压缩，直到满足目标token数.
+
+        压缩优先级（从低到高，优先压缩低优先级内容）：
+        1. cold_memory - 卷级摘要，最早被压缩
+        2. warm_memory - 关键事件列表
+        3. hot_memory - 前章摘要细节
+        4. previous_ending - 结尾（压缩幅度最小）
+        5. core_memory - 核心记忆（极少情况才压缩）
+        """
+        compression_round = 0
+        max_rounds = 10  # 最多10轮压缩，避免无限循环
+
+        while ctx.total_tokens_estimate > target_tokens and compression_round < max_rounds:
+            compression_round += 1
+            current_tokens = ctx.total_tokens_estimate
+
+            # 按优先级从低到高压缩
+            # 第1优先：压缩cold_memory
+            if ctx.cold_memory and len(ctx.cold_memory) > 100:
+                ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, 0.6)
+                logger.debug(f"压缩cold_memory: {len(ctx.cold_memory)}字")
+
+            # 第2优先：压缩warm_memory
+            elif ctx.warm_memory and len(ctx.warm_memory) > 200:
+                ctx.warm_memory = self._truncate_events(ctx.warm_memory, 0.7)
+                logger.debug(f"压缩warm_memory: {len(ctx.warm_memory)}字")
+
+            # 第3优先：压缩hot_memory细节
+            elif ctx.hot_memory and len(ctx.hot_memory) > 500:
+                ctx.hot_memory = self._simplify_summary(ctx.hot_memory, 0.8)
+                logger.debug(f"压缩hot_memory: {len(ctx.hot_memory)}字")
+
+            # 第4优先：压缩ending长度
+            elif ctx.previous_ending and len(ctx.previous_ending) > 400:
+                ctx.previous_ending = self._truncate_by_ratio(ctx.previous_ending, 0.7)
+                logger.debug(f"压缩previous_ending: {len(ctx.previous_ending)}字")
+
+            # 第5优先（最后）：压缩核心记忆（极端情况）
+            elif ctx.core_memory and len(ctx.core_memory) > 800:
+                ctx.core_memory = self._truncate_by_ratio(ctx.core_memory, 0.8)
+                logger.debug(f"压缩core_memory: {len(ctx.core_memory)}字")
+
+            # 如果所有内容都很短但仍超限，强制整体压缩
+            else:
+                # 按比例同时压缩所有内容
+                if ctx.cold_memory:
+                    ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, 0.5)
+                if ctx.warm_memory:
+                    ctx.warm_memory = self._truncate_by_ratio(ctx.warm_memory, 0.5)
+                if ctx.hot_memory:
+                    ctx.hot_memory = self._truncate_by_ratio(ctx.hot_memory, 0.5)
+                if ctx.previous_ending:
+                    ctx.previous_ending = self._truncate_by_ratio(ctx.previous_ending, 0.5)
+                logger.debug("强制整体压缩")
+
+            # 更新token估算
+            ctx.total_tokens_estimate = self._estimate_tokens(ctx.to_prompt())
+
+            # 检查是否有效压缩
+            if ctx.total_tokens_estimate >= current_tokens:
+                logger.warning(
+                    f"压缩效果不明显，第{compression_round}轮: "
+                    f"{current_tokens} -> {ctx.total_tokens_estimate}"
+                )
+                break
+
+        return ctx
+
+    def _truncate_by_ratio(self, text: str, ratio: float) -> str:
+        """按比例截取文本，优先保留完整句子."""
+        target_len = int(len(text) * ratio)
+        if target_len >= len(text):
+            return text
+
+        # 尝试在句子边界截取
+        truncated = text[:target_len]
+        last_period = truncated.rfind("。")
+        if last_period > target_len * 0.7:  # 句号位置合理
+            return truncated[:last_period + 1]
+        return truncated.strip()
+
+    def _truncate_events(self, events_text: str, ratio: float) -> str:
+        """截取事件列表，保留重要事件."""
+        lines = events_text.split("\n")
+        target_count = int(len(lines) * ratio)
+        if target_count >= len(lines):
+            return events_text
+        # 保留前N个事件（通常是最重要的）
+        return "\n".join(lines[:target_count])
+
+    def _simplify_summary(self, summary: str, ratio: float) -> str:
+        """简化摘要，保留关键信息."""
+        # 按比例截取，优先保留句子完整性
+        return self._truncate_by_ratio(summary, ratio)
 
     def _extract_foreshadowing(
         self,
@@ -394,42 +534,138 @@ class ContextCompressor:
 
         return conflicts
 
+    def _build_core_memory_full(
+        self,
+        world_setting: Dict[str, Any],
+        characters: List[Dict[str, Any]],
+        plot_outline: Any,
+    ) -> str:
+        """构建完整核心记忆：世界观 + 主要角色 + 主线（不截取）."""
+        parts = []
+
+        # 世界观完整描述
+        if world_setting:
+            world_brief = self._build_world_setting_full(world_setting)
+            if world_brief:
+                parts.append(f"世界观：{world_brief}")
+
+        # 主要角色完整信息
+        if characters:
+            main_chars = self._build_characters_full(characters)
+            if main_chars:
+                parts.append(f"主要角色：{main_chars}")
+
+        # 主线情节完整描述
+        if plot_outline:
+            main_plot = self._build_plot_outline_full(plot_outline)
+            if main_plot:
+                parts.append(f"主线：{main_plot}")
+
+        return "\n".join(parts)
+
+    def _build_world_setting_full(self, world_setting: Dict[str, Any]) -> str:
+        """构建完整世界观描述."""
+        parts = []
+
+        world_type = world_setting.get("world_type", "")
+        if world_type:
+            parts.append(world_type)
+
+        power_system = world_setting.get("power_system", {})
+        if isinstance(power_system, dict):
+            system_name = power_system.get("name", "")
+            system_desc = power_system.get("description", "")
+            if system_name:
+                parts.append(f"力量体系:{system_name}" + (f" - {system_desc}" if system_desc else ""))
+        elif isinstance(power_system, str):
+            parts.append(f"力量体系:{power_system}")
+
+        factions = world_setting.get("factions", [])
+        if factions:
+            faction_info = []
+            for f in factions[:5]:  # 保留更多势力信息
+                if isinstance(f, dict):
+                    name = f.get("name", "")
+                    desc = f.get("description", "")
+                    faction_info.append(name + (f":{desc}" if desc else ""))
+                else:
+                    faction_info.append(str(f))
+            parts.append(f"势力:{', '.join(faction_info)}")
+
+        return "；".join(parts)
+
+    def _build_characters_full(self, characters: List[Dict[str, Any]]) -> str:
+        """构建完整角色信息."""
+        main_chars = []
+
+        for char in characters:
+            role_type = char.get("role_type", "")
+            name = char.get("name", "")
+
+            # 保留主角和重要配角
+            if role_type in ("protagonist", "主角", "supporting", "配角") or not role_type:
+                # 完整角色信息
+                char_parts = [name]
+                personality = char.get("personality", "")
+                if personality:
+                    char_parts.append(f"性格:{personality}")
+                background = char.get("background", "")
+                if background:
+                    char_parts.append(f"背景:{background}")
+                # 正确格式：张三(性格:坚毅不拔, 背景:出身平凡)
+                if len(char_parts) > 1:
+                    main_chars.append(f"{char_parts[0]}({', '.join(char_parts[1:3])})")
+                else:
+                    main_chars.append(char_parts[0])
+
+            if len(main_chars) >= 8:  # 增加到8个角色
+                break
+
+        return "、".join(main_chars)
+
+    def _build_plot_outline_full(self, plot_outline: Any) -> str:
+        """构建完整情节大纲."""
+        if isinstance(plot_outline, str):
+            return plot_outline
+
+        if isinstance(plot_outline, list):
+            parts = []
+            for vol in plot_outline[:5]:  # 保留更多卷信息
+                if isinstance(vol, dict):
+                    title = vol.get("title", "")
+                    summary = vol.get("summary", "")
+                    parts.append(f"{title}:{summary}" if summary else title)
+            return "；".join(parts)
+
+        if isinstance(plot_outline, dict):
+            main_plot = plot_outline.get("main_plot", "")
+            if isinstance(main_plot, str):
+                return main_plot
+            if isinstance(main_plot, dict):
+                return main_plot.get("summary", str(main_plot))
+
+            volumes = plot_outline.get("volumes", [])
+            if volumes:
+                return self._build_plot_outline_full(volumes)
+
+        return ""
+
+    # 保留原方法名以兼容旧调用，但使用完整构建
     def _build_core_memory(
         self,
         world_setting: Dict[str, Any],
         characters: List[Dict[str, Any]],
         plot_outline: Any,
     ) -> str:
-        """构建核心记忆：世界观 + 主要角色 + 主线."""
-        parts = []
+        """构建核心记忆（兼容旧调用，内部使用完整构建）."""
+        return self._build_core_memory_full(world_setting, characters, plot_outline)
 
-        # 世界观精简
-        if world_setting:
-            world_brief = self._compress_world_setting(world_setting)
-            if world_brief:
-                parts.append(f"世界观：{world_brief}")
-
-        # 主要角色（只保留主角和重要配角）
-        if characters:
-            main_chars = self._compress_characters(characters)
-            if main_chars:
-                parts.append(f"主要角色：{main_chars}")
-
-        # 主线情节
-        if plot_outline:
-            main_plot = self._compress_plot_outline(plot_outline)
-            if main_plot:
-                parts.append(f"主线：{main_plot}")
-
-        result = "\n".join(parts)
-        return result[: self.MAX_CORE_MEMORY_LENGTH]
-
-    def _build_hot_memory(
+    def _build_hot_memory_full(
         self,
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建热记忆：前 2 章完整摘要."""
+        """构建热记忆：前N章完整摘要（不截取）."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         parts = []
 
@@ -438,17 +674,64 @@ class ContextCompressor:
                 continue
 
             summary = chapter_summaries[ch]
-            chapter_text = self._format_chapter_summary(ch, summary)
+            chapter_text = self._format_chapter_summary_full(ch, summary)
             parts.append(chapter_text)
 
         return "\n".join(parts)
 
-    def _build_warm_memory(
+    def _format_chapter_summary_full(
+        self, chapter_number: int, summary: Dict[str, Any]
+    ) -> str:
+        """格式化单章完整摘要（不截取）."""
+        parts = [f"第{chapter_number}章"]
+
+        # 情节进展 - 完整内容
+        plot_progress = summary.get("plot_progress", "")
+        if plot_progress:
+            parts.append(f"剧情: {plot_progress}")
+
+        # 关键事件 - 完整列表
+        key_events = summary.get("key_events", [])
+        if key_events:
+            events_text = "、".join(
+                str(e) if isinstance(e, str) else e.get("event", e.get("description", str(e)))
+                for e in key_events
+            )
+            parts.append(f"事件: {events_text}")
+
+        # 角色变化 - 完整内容
+        char_changes = summary.get("character_changes", "")
+        if char_changes:
+            parts.append(f"角色: {char_changes}")
+
+        # 结尾状态
+        ending_state = summary.get("ending_state", "")
+        if ending_state:
+            parts.append(f"结尾: {ending_state}")
+
+        return " | ".join(parts)
+
+    # 保留原方法名以兼容旧调用
+    def _build_hot_memory(
         self,
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
     ) -> str:
-        """构建温记忆：前 3-10 章关键事件."""
+        """构建热记忆（兼容旧调用，内部使用完整构建）."""
+        return self._build_hot_memory_full(chapter_number, chapter_summaries)
+
+    def _format_chapter_summary(
+        self, chapter_number: int, summary: Dict[str, Any]
+    ) -> str:
+        """格式化单章摘要（兼容旧调用，内部使用完整格式）."""
+        return self._format_chapter_summary_full(chapter_number, summary)
+
+    def _build_warm_memory_full(
+        self,
+        chapter_number: int,
+        chapter_summaries: Dict[int, Dict[str, Any]],
+    ) -> str:
+        """构建温记忆：前章节关键事件完整描述."""
         hot_start = max(1, chapter_number - self.HOT_CHAPTERS)
         warm_start = max(1, hot_start - self.WARM_CHAPTERS)
         warm_end = hot_start
@@ -464,44 +747,72 @@ class ContextCompressor:
             summary = chapter_summaries[ch]
             key_events = summary.get("key_events", [])
 
-            # 每章最多取 N 个关键事件
-            for event in key_events[: self.MAX_EVENTS_PER_CHAPTER]:
+            # 保留所有关键事件的完整描述
+            for event in key_events:
                 if isinstance(event, str):
                     events.append(f"第{ch}章: {event}")
                 elif isinstance(event, dict):
-                    events.append(
-                        f"第{ch}章: {event.get('event', event.get('description', str(event)))}"
-                    )
+                    event_desc = event.get("event", event.get("description", str(event)))
+                    events.append(f"第{ch}章: {event_desc}")
 
         if not events:
             return ""
 
         return "\n".join(events)
 
-    def _build_cold_memory(
+    # 保留原方法名以兼容旧调用
+    def _build_warm_memory(
         self,
         chapter_number: int,
         chapter_summaries: Dict[int, Dict[str, Any]],
-        volume_summaries: Optional[Dict[int, str]] = None,
     ) -> str:
-        """构建冷记忆：更早章节的卷级摘要."""
+        """构建温记忆（兼容旧调用）."""
+        return self._build_warm_memory_full(chapter_number, chapter_summaries)
+
+    def _build_cold_memory_full(
+        self,
+        chapter_number: int,
+        chapter_summaries: Dict[int, Dict[str, Any]],
+        volume_summaries: Optional[Dict[int, Dict[str, Any]]] = None,
+    ) -> str:
+        """构建冷记忆：更早章节的卷级摘要（完整内容）.
+
+        Args:
+            chapter_number: 当前章节号
+            chapter_summaries: 章节摘要字典
+            volume_summaries: 卷摘要字典，格式：
+                {卷号: {"summary": 摘要, "chapters": [start, end]}}
+        """
         # 冷记忆起始点：跳过热+温记忆覆盖的章节
         cold_end = max(1, chapter_number - self.HOT_CHAPTERS - self.WARM_CHAPTERS)
 
         if cold_end <= 1:
             return ""
 
-        # 如果有预计算的卷摘要，直接使用
+        # 如果有预计算的卷摘要，直接使用完整摘要
         if volume_summaries:
             parts = []
-            for vol_num, vol_summary in sorted(volume_summaries.items()):
-                # 检查这个卷是否在冷记忆范围内
-                vol_start = (vol_num - 1) * self.CHAPTERS_PER_VOLUME + 1
+            for vol_num, vol_data in sorted(volume_summaries.items()):
+                vol_summary = vol_data.get("summary", "") if isinstance(vol_data, dict) else str(vol_data)
+                vol_chapters = vol_data.get("chapters", []) if isinstance(vol_data, dict) else []
+
+                # 使用实际定义的章节范围判断卷是否在冷记忆范围内
+                if vol_chapters and len(vol_chapters) >= 2:
+                    vol_start = vol_chapters[0]
+                else:
+                    # fallback: 使用硬编码计算
+                    vol_start = (vol_num - 1) * self.CHAPTERS_PER_VOLUME + 1
+
                 if vol_start < cold_end:
+                    # 完整摘要，不截取
                     parts.append(f"第{vol_num}卷: {vol_summary}")
+            if parts:
+                logger.info(
+                    f"[ColdMemory] 使用卷摘要构建冷记忆，共 {len(parts)} 卷"
+                )
             return "\n".join(parts)
 
-        # 否则，按卷聚合章节摘要
+        # 否则，按卷聚合章节摘要（完整内容）
         volumes: Dict[int, List[str]] = {}
         for ch in range(1, cold_end):
             if ch not in chapter_summaries:
@@ -514,141 +825,59 @@ class ContextCompressor:
             summary = chapter_summaries[ch]
             plot_progress = summary.get("plot_progress", "")
             if plot_progress:
-                volumes[vol_num].append(plot_progress[:100])
+                # 完整情节摘要，不截取
+                volumes[vol_num].append(plot_progress)
 
         # 合并为卷摘要
         parts = []
         for vol_num, summaries in sorted(volumes.items()):
             combined = "；".join(summaries)
-            parts.append(f"第{vol_num}卷: {combined[:self.MAX_VOLUME_SUMMARY_LENGTH]}")
+            # 完整合并，不截取
+            parts.append(f"第{vol_num}卷: {combined}")
 
         return "\n".join(parts)
 
-    def _format_chapter_summary(
-        self, chapter_number: int, summary: Dict[str, Any]
+    # 保留原方法名以兼容旧调用
+    def _build_cold_memory(
+        self,
+        chapter_number: int,
+        chapter_summaries: Dict[int, Dict[str, Any]],
+        volume_summaries: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> str:
-        """格式化单章摘要."""
-        parts = [f"第{chapter_number}章"]
+        """构建冷记忆（兼容旧调用）."""
+        return self._build_cold_memory_full(chapter_number, chapter_summaries, volume_summaries)
 
-        # 情节进展
-        plot_progress = summary.get("plot_progress", "")
-        if plot_progress:
-            parts.append(f"剧情: {plot_progress[:self.MAX_SUMMARY_LENGTH]}")
-
-        # 关键事件
-        key_events = summary.get("key_events", [])
-        if key_events:
-            events_text = "、".join(
-                str(e) if isinstance(e, str) else e.get("event", str(e))
-                for e in key_events[:3]
-            )
-            parts.append(f"事件: {events_text}")
-
-        # 角色变化
-        char_changes = summary.get("character_changes", "")
-        if char_changes:
-            parts.append(f"角色: {char_changes[:100]}")
-
-        return " | ".join(parts)
-
-    def _extract_ending(self, content: str) -> str:
-        """提取章节结尾部分."""
+    def _extract_ending_full(self, content: str) -> str:
+        """提取章节完整结尾段落."""
         if not content:
             return ""
 
+        # 取更大的结尾段落
         ending = content[-self.PREVIOUS_ENDING_LENGTH :]
 
         # 尝试从句子开头开始
         first_period = ending.find("。")
-        if 0 < first_period < 100:
+        if 0 < first_period < 150:
             ending = ending[first_period + 1 :]
 
         return ending.strip()
 
+    def _extract_ending(self, content: str) -> str:
+        """提取章节结尾（兼容旧调用）."""
+        return self._extract_ending_full(content)
+
+    # 移除旧的固定截取压缩方法，保留为兼容别名
     def _compress_world_setting(self, world_setting: Dict[str, Any]) -> str:
-        """压缩世界观设定."""
-        parts = []
-
-        # 世界类型
-        world_type = world_setting.get("world_type", "")
-        if world_type:
-            parts.append(world_type)
-
-        # 力量体系
-        power_system = world_setting.get("power_system", {})
-        if isinstance(power_system, dict):
-            system_name = power_system.get("name", "")
-            if system_name:
-                parts.append(f"力量体系:{system_name}")
-        elif isinstance(power_system, str):
-            parts.append(f"力量体系:{power_system[:50]}")
-
-        # 主要势力
-        factions = world_setting.get("factions", [])
-        if factions:
-            faction_names = []
-            for f in factions[:3]:
-                if isinstance(f, dict):
-                    faction_names.append(f.get("name", str(f)))
-                else:
-                    faction_names.append(str(f))
-            parts.append(f"势力:{','.join(faction_names)}")
-
-        return "；".join(parts)
+        """压缩世界观设定（兼容旧调用）."""
+        return self._build_world_setting_full(world_setting)
 
     def _compress_characters(self, characters: List[Dict[str, Any]]) -> str:
-        """压缩角色信息，只保留主要角色."""
-        main_chars = []
-
-        for char in characters:
-            role_type = char.get("role_type", "")
-            name = char.get("name", "")
-
-            # 只保留主角和重要配角
-            if (
-                role_type in ("protagonist", "主角", "supporting", "配角")
-                or not role_type
-            ):
-                char_brief = name
-                personality = char.get("personality", "")
-                if personality:
-                    char_brief += f"({personality[:20]})"
-                main_chars.append(char_brief)
-
-            if len(main_chars) >= 5:  # 最多 5 个角色
-                break
-
-        return "、".join(main_chars)
+        """压缩角色信息（兼容旧调用）."""
+        return self._build_characters_full(characters)
 
     def _compress_plot_outline(self, plot_outline: Any) -> str:
-        """压缩情节大纲."""
-        if isinstance(plot_outline, str):
-            return plot_outline[:200]
-
-        if isinstance(plot_outline, list):
-            # 如果是卷列表
-            parts = []
-            for vol in plot_outline[:3]:
-                if isinstance(vol, dict):
-                    title = vol.get("title", "")
-                    summary = vol.get("summary", "")
-                    parts.append(f"{title}:{summary[:50]}")
-            return "；".join(parts)
-
-        if isinstance(plot_outline, dict):
-            # 提取主线情节
-            main_plot = plot_outline.get("main_plot", "")
-            if isinstance(main_plot, str):
-                return main_plot[:200]
-            if isinstance(main_plot, dict):
-                return main_plot.get("summary", str(main_plot))[:200]
-
-            # 或者卷列表
-            volumes = plot_outline.get("volumes", [])
-            if volumes:
-                return self._compress_plot_outline(volumes)
-
-        return ""
+        """压缩情节大纲（兼容旧调用）."""
+        return self._build_plot_outline_full(plot_outline)
 
 
 # 便捷函数

@@ -133,6 +133,9 @@ class AiChatService {
 +_safe_get(data, path, default) Any
 +_generate_session_title(session) str
 +_analyze_novel_content(novel_info) dict
++generate_smart_chapter_summary(novel_id, chapter_numbers, force_regenerate) dict
++_extract_chapter_key_points(content, title, chapter_number, genre) dict
++get_novel_chapters_summary(novel_id, chapter_start, chapter_end, use_smart_summary) dict
 }
 class ChatSession {
 +str session_id
