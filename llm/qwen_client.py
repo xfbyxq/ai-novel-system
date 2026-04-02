@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 import dashscope
 from dashscope import Generation
@@ -61,7 +61,7 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,  # None 表示不限制，避免截断
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
@@ -82,7 +82,7 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         retries: int = 3,
     ) -> dict:
         """使用 OpenAI 兼容模式调用 API.
@@ -101,12 +101,15 @@ class QwenClient:
         is_connection_error = False
         for attempt in range(retries):
             try:
-                response = await self.openai_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                # 构建请求参数，max_tokens 仅在有值时传递
+                params: dict[str, Any] = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    params["max_tokens"] = max_tokens
+                response = await self.openai_client.chat.completions.create(**params)
 
                 content = response.choices[0].message.content
                 usage = {
@@ -148,7 +151,7 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
@@ -163,16 +166,19 @@ class QwenClient:
             try:
                 # 使用线程池执行同步调用，避免阻塞事件循环
                 loop = asyncio.get_event_loop()
+                # 构建 Generation.call 参数
+                call_params: dict[str, Any] = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "result_format": "message",
+                }
+                if max_tokens is not None:
+                    call_params["max_tokens"] = max_tokens
                 response = await loop.run_in_executor(
                     None,
-                    lambda: Generation.call(
-                        model=self.model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        result_format="message",
-                    ),
+                    lambda: Generation.call(**call_params),
                 )
 
                 if response.status_code == 200:
@@ -203,7 +209,7 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
     ) -> "AsyncIterator[str]":
         """流式调用通义千问 API，逐块返回文本."""
         messages = []
@@ -220,17 +226,19 @@ class QwenClient:
             # 使用标准 DashScope SDK 的流式调用
             # 使用线程池执行同步流式调用
             loop = asyncio.get_event_loop()
+            call_params: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "result_format": "message",
+                "stream": True,
+                "incremental_output": True,
+            }
+            if max_tokens is not None:
+                call_params["max_tokens"] = max_tokens
             responses = await loop.run_in_executor(
                 None,
-                lambda: Generation.call(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    result_format="message",
-                    stream=True,
-                    incremental_output=True,
-                ),
+                lambda: Generation.call(**call_params),
             )
 
             for response in responses:
@@ -246,7 +254,7 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
     ) -> "AsyncIterator[str]":
         """使用 OpenAI 兼容模式进行流式调用."""
         messages = []
@@ -255,13 +263,15 @@ class QwenClient:
         messages.append({"role": "user", "content": prompt})
 
         # 需要先 await 获取流式响应对象
-        stream = await self.openai_client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=True,
-        )
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        stream = await self.openai_client.chat.completions.create(**params)
         async for chunk in stream:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
@@ -272,7 +282,7 @@ class QwenClient:
         tools: list[dict],
         tool_choice: str = "auto",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         retries: int = 3,
     ) -> dict:
         """调用模型并支持工具调用.
@@ -310,21 +320,23 @@ class QwenClient:
         tools: list[dict[str, Any]],
         tool_choice: str = "auto",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         retries: int = 3,
     ) -> dict:
         """使用 OpenAI 兼容模式调用工具."""
         last_error = None
         for attempt in range(retries):
             try:
-                response = await self.openai_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,  # type: ignore[arg-type]
-                    tools=tools,  # type: ignore[arg-type]
-                    tool_choice=tool_choice,  # type: ignore[arg-type]
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                params: dict[str, Any] = {
+                    "model": self.model,
+                    "messages": messages,  # type: ignore[arg-type]
+                    "tools": tools,  # type: ignore[arg-type]
+                    "tool_choice": tool_choice,  # type: ignore[arg-type]
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    params["max_tokens"] = max_tokens
+                response = await self.openai_client.chat.completions.create(**params)
 
                 message = response.choices[0].message
 
