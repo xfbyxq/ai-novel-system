@@ -82,10 +82,10 @@ class GenerationService:
     def _get_context_manager(self, novel_id: UUID) -> UnifiedContextManager:
         """
         获取或创建小说的上下文管理器.
-        
+
         Args:
             novel_id: 小说 ID
-        
+
         Returns:
             UnifiedContextManager 实例
         """
@@ -126,6 +126,7 @@ class GenerationService:
         )
         existing_task = existing_result.scalar_one_or_none()
         if existing_task:
+            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
             raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
 
         # 更新任务状态
@@ -798,9 +799,7 @@ class GenerationService:
                     plot_points=chapter_plan.get("plot_points", []),
                     foreshadowing=chapter_plan.get("foreshadowing", []),
                     quality_score=writing_result.get("quality_score", 0),
-                    continuity_issues=writing_result.get("continuity_report", {}).get(
-                        "issues", []
-                    ),
+                    continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
                     detailed_outline=writing_result.get("detailed_outline", {}),
                 )
                 self.db.add(chapter)
@@ -918,6 +917,7 @@ class GenerationService:
             if settings.ENABLE_GRAPH_DATABASE and settings.ENABLE_GRAPH_SYNC_ON_CHAPTER:
                 try:
                     import asyncio
+
                     asyncio.create_task(
                         self._sync_chapter_to_graph_safe(
                             novel_id=novel_id,
@@ -1510,6 +1510,7 @@ class GenerationService:
         """
         if novel_id not in self._context_managers:
             from agents.team_context import NovelTeamContext
+
             # 创建新的 TeamContext
             team_context = NovelTeamContext(novel_id=novel_id, novel_title=novel_title)
             # 初始化小说元数据
@@ -1526,6 +1527,7 @@ class GenerationService:
         context_manager = self._context_managers[novel_id]
         if not hasattr(context_manager, "_team_context"):
             from agents.team_context import NovelTeamContext
+
             context_manager._team_context = NovelTeamContext(
                 novel_id=novel_id, novel_title=novel_title
             )
@@ -1855,7 +1857,7 @@ class GenerationService:
         cost_records: list = None,
     ):
         """记录企划阶段的 Agent 活动摘要.
-    
+
         Args:
             novel_id: 小说 ID
             task_id: 任务 ID
@@ -1876,15 +1878,11 @@ class GenerationService:
                             "total_tokens": 0,
                             "cost": 0,
                         }
-                    agent_costs[agent_name]["prompt_tokens"] += record.get(
-                        "prompt_tokens", 0
-                    )
+                    agent_costs[agent_name]["prompt_tokens"] += record.get("prompt_tokens", 0)
                     agent_costs[agent_name]["completion_tokens"] += record.get(
                         "completion_tokens", 0
                     )
-                    agent_costs[agent_name]["total_tokens"] += record.get(
-                        "total_tokens", 0
-                    )
+                    agent_costs[agent_name]["total_tokens"] += record.get("total_tokens", 0)
                     agent_costs[agent_name]["cost"] += record.get("cost", 0)
 
             # 辅助函数：获取 Agent 的 token 消耗
@@ -1949,9 +1947,7 @@ class GenerationService:
                     agent_role="主要角色设计",
                     activity_subtype="character_design",
                     input_data={"world_setting": planning_result.get("world_setting")},
-                    output_data={
-                        "characters_count": len(planning_result.get("characters", []))
-                    },
+                    output_data={"characters_count": len(planning_result.get("characters", []))},
                     total_tokens=tokens,
                     cost=cost,
                     output_data={"characters_count": len(planning_result.get("characters", []))},
@@ -2030,7 +2026,7 @@ class GenerationService:
             if not client:
                 logger.debug("[GraphSync] 图数据库客户端不可用，跳过同步")
                 return
-            
+
             # 尝试连接
             if not client.is_connected:
                 try:
@@ -2048,18 +2044,32 @@ class GenerationService:
                     novel_id, chapter_number, chapter_content
                 )
 
-                # 2. 同步伏笔
+                # 2. 同步伏笔（兼容字符串列表和字典列表两种格式）
                 foreshadowings = chapter_plan.get("foreshadowing", [])
                 for f in foreshadowings[:3]:  # 限制数量避免过多API调用
                     try:
+                        if isinstance(f, str):
+                            content = f
+                            ftype = "plot"
+                            related_characters = []
+                        elif isinstance(f, dict):
+                            content = f.get("content", "") or f.get("description", "")
+                            ftype = f.get("type", "plot")
+                            related_characters = f.get("characters", [])
+                        else:
+                            continue
+
+                        if not content:
+                            continue
+
                         await sync_service.sync_foreshadowing(
                             novel_id=novel_id,
                             foreshadowing_id=str(uuid4()),
-                            content=f.get("content", ""),
+                            content=content,
                             planted_chapter=chapter_number,
-                            ftype=f.get("type", "plot"),
+                            ftype=ftype,
                             status="pending",
-                            related_characters=f.get("characters", []),
+                            related_characters=related_characters,
                         )
                     except Exception as fe:
                         logger.warning(f"[GraphSync] 伏笔同步失败: {fe}")
