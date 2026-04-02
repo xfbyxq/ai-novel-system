@@ -1440,10 +1440,38 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
                 completion_tokens=usage["completion_tokens"],
             )
 
-            return self._parse_builder_response(response["content"])
+            content = response["content"]
+            # 尝试解析 JSON，失败时重试一次
+            try:
+                return self._parse_builder_response(content)
+            except ValueError as e:
+                # JSON 解析失败，记录警告但不立即返回空值
+                # 因为可能是 LLM 输出格式问题，而非网络问题
+                logger.warning(
+                    f"[{self._get_loop_name()}] Builder 响应 JSON 解析失败: {e}\n"
+                    f"响应片段: {content[:200]}..."
+                )
+                # 返回空内容，让审查循环继续（下次迭代会重新尝试）
+                return self._get_empty_content()
 
+        except asyncio.TimeoutError:
+            logger.error(f"[{self._get_loop_name()}] Builder 超时（timeout={self.timeout}s）")
+            return self._get_empty_content()
         except Exception as e:
-            logger.error(f"[{self._get_loop_name()}] Builder 修订失败: {e}")
+            # 区分 Connection error 和其他错误
+            error_type = type(e).__name__
+            error_msg = str(e)
+            is_connection_error = any(
+                keyword in error_msg.lower()
+                for keyword in ["connection", "connect", "timeout", "network"]
+            )
+            if is_connection_error:
+                logger.error(
+                    f"[{self._get_loop_name()}] Builder 网络错误: {error_type}: {error_msg}\n"
+                    f"LLM 调用重试已由 qwen_client 处理，本次返回空内容"
+                )
+            else:
+                logger.error(f"[{self._get_loop_name()}] Builder 修订失败: {error_type}: {error_msg}")
             return self._get_empty_content()
 
     def _parse_builder_response(self, response_text: str) -> TContent:

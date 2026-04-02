@@ -85,13 +85,20 @@ class QwenClient:
         max_tokens: int = 4096,
         retries: int = 3,
     ) -> dict:
-        """使用 OpenAI 兼容模式调用 API."""
+        """使用 OpenAI 兼容模式调用 API.
+
+        增强的重试机制：
+        - 对于 Connection error 类错误，使用更长的退避时间
+        - 记录详细的错误类型，便于诊断
+        """
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
         last_error = None
+        last_error_type = None
+        is_connection_error = False
         for attempt in range(retries):
             try:
                 response = await self.openai_client.chat.completions.create(
@@ -111,15 +118,29 @@ class QwenClient:
 
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"Attempt {attempt + 1}/{retries} exception: {last_error}")
+                last_error_type = type(e).__name__
+                # 对于连接错误，使用更长的退避时间
+                is_connection_error = any(
+                    keyword in last_error.lower()
+                    for keyword in ["connection", "connect", "timeout", "network"]
+                )
+                logger.warning(
+                    f"Attempt {attempt + 1}/{retries} exception: {last_error_type}: {last_error}"
+                )
 
             if attempt < retries - 1:
-                wait = 2**attempt
-                logger.info(f"Retrying in {wait}s...")
+                # Connection error 使用更长退避（5s, 10s, 20s）
+                # 其他错误使用标准退避（1s, 2s, 4s）
+                if is_connection_error:
+                    wait = 5 * (2 ** attempt)
+                    logger.warning(f"Connection error detected, extended retry in {wait}s...")
+                else:
+                    wait = 2 ** attempt
+                    logger.info(f"Retrying in {wait}s...")
                 await asyncio.sleep(wait)
 
         raise RuntimeError(
-            f"QwenClient.chat (OpenAI mode) failed after {retries} attempts: {last_error}"
+            f"QwenClient.chat (OpenAI mode) failed after {retries} attempts: {last_error_type}: {last_error}"
         )
 
     async def _chat_dashscope(
