@@ -6,15 +6,112 @@ CharacterConsistencyTracker - 角色一致性追踪器.
 2. 行为准则（Personal Code）：角色不会违背的原则
 3. 性格特质（Personality Traits）：影响决策的性格因素
 4. 历史决策（Decision History）：过去的关键选择
+5. 角色演变（Character Evolution）：能力/身份/状态的变化轨迹
 
 解决根本原因 3：角色行为约束不足
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from core.logging_config import logger
+
+
+class EvolutionType(str, Enum):
+    """角色演变类型."""
+
+    ABILITY = "ability"  # 能力变化
+    IDENTITY = "identity"  # 身份变化
+    PERSONALITY = "personality"  # 性格变化
+    RELATIONSHIP = "relationship"  # 关系变化
+    STATUS = "status"  # 地位变化
+    SKILL = "skill"  # 技能变化
+
+
+class VerificationStatus(str, Enum):
+    """演变验证状态."""
+
+    PENDING = "pending"  # 待验证
+    VERIFIED = "verified"  # 已验证（有铺垫）
+    WARNING = "warning"  # 警告（缺少铺垫）
+    REJECTED = "rejected"  # 拒绝（前后矛盾）
+
+
+@dataclass
+class CharacterEvolution:
+    """角色演变记录.
+
+    记录角色在能力、身份、性格、关系等方面的变化。
+    用于检测突兀的变化（缺少铺垫）和前后矛盾。
+    """
+
+    chapter_number: int
+    evolution_type: EvolutionType
+    attribute_name: str  # 具体属性名（如"修为等级"、"身份"、"性格"）
+    before_value: str  # 变化前值
+    after_value: str  # 变化后值
+    change_trigger: str  # 变化触发原因
+    is_gradual: bool = True  # 是否渐进变化
+    foreshadowing_chapters: List[int] = field(default_factory=list)  # 铺垫章节
+    verification_status: VerificationStatus = VerificationStatus.PENDING
+    notes: str = ""  # 备注
+
+    # 元数据
+    id: str = field(default_factory=lambda: str(int(datetime.now().timestamp() * 1000))[-8:])
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        """序列化为字典."""
+        return {
+            "id": self.id,
+            "chapter_number": self.chapter_number,
+            "evolution_type": self.evolution_type.value,
+            "attribute_name": self.attribute_name,
+            "before_value": self.before_value,
+            "after_value": self.after_value,
+            "change_trigger": self.change_trigger,
+            "is_gradual": self.is_gradual,
+            "foreshadowing_chapters": self.foreshadowing_chapters,
+            "verification_status": self.verification_status.value,
+            "notes": self.notes,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CharacterEvolution":
+        """从字典创建."""
+        return cls(
+            id=data.get("id", ""),
+            chapter_number=data.get("chapter_number", 0),
+            evolution_type=EvolutionType(data.get("evolution_type", "ability")),
+            attribute_name=data.get("attribute_name", ""),
+            before_value=data.get("before_value", ""),
+            after_value=data.get("after_value", ""),
+            change_trigger=data.get("change_trigger", ""),
+            is_gradual=data.get("is_gradual", True),
+            foreshadowing_chapters=data.get("foreshadowing_chapters", []),
+            verification_status=VerificationStatus(data.get("verification_status", "pending")),
+            notes=data.get("notes", ""),
+            created_at=data.get("created_at", datetime.now().isoformat()),
+        )
+
+    def to_prompt(self) -> str:
+        """转换为提示词格式."""
+        gradual_str = "渐进" if self.is_gradual else "突变"
+        status_str = {
+            VerificationStatus.PENDING: "待验证",
+            VerificationStatus.VERIFIED: "已验证",
+            VerificationStatus.WARNING: "⚠️缺少铺垫",
+            VerificationStatus.REJECTED: "❌前后矛盾",
+        }.get(self.verification_status, "待验证")
+
+        return (
+            f"第{self.chapter_number}章：{self.attribute_name} "
+            f"\"{self.before_value}\" → \"{self.after_value}\" "
+            f"({gradual_str}, {status_str})"
+        )
 
 
 @dataclass
@@ -39,6 +136,11 @@ class CharacterProfile:
     )  # 关键关系 {角色名：关系描述}
     skills: List[str] = field(default_factory=list)  # 技能/能力
 
+    # 角色演变记录（新增）
+    evolution_history: List["CharacterEvolution"] = field(default_factory=list)  # 角色演变历史
+    current_ability_level: str = ""  # 当前能力等级
+    current_identity: str = ""  # 当前身份
+
     # 元数据
     first_appearance_chapter: int = 1
     importance_level: int = 5  # 1-10，主角=10
@@ -62,6 +164,12 @@ class CharacterProfile:
             parts.append("**关键关系**:")
             for char, relation in list(self.relationships.items())[:3]:
                 parts.append(f"- {char}: {relation}")
+
+        # 添加演变摘要（新增）
+        if self.evolution_history:
+            parts.append("**演变轨迹**:")
+            for evolution in self.evolution_history[-3:]:  # 最近3个变化
+                parts.append(f"- {evolution.to_prompt()}")
 
         return "\n".join(parts)
 
@@ -670,8 +778,229 @@ class CharacterConsistencyTracker:
             "average_score": round(avg_score, 2),
         }
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # 角色演变记录相关方法（新增）
+    # ══════════════════════════════════════════════════════════════════════════
 
-# 便捷函数
+    def record_evolution(
+        self,
+        chapter_number: int,
+        evolution_type: EvolutionType,
+        attribute_name: str,
+        before_value: str,
+        after_value: str,
+        change_trigger: str = "",
+        is_gradual: bool = True,
+        foreshadowing_chapters: Optional[List[int]] = None,
+    ) -> CharacterEvolution:
+        """记录角色演变.
+
+        Args:
+            chapter_number: 章节号
+            evolution_type: 演变类型
+            attribute_name: 属性名称
+            before_value: 变化前值
+            after_value: 变化后值
+            change_trigger: 变化触发原因
+            is_gradual: 是否渐进变化
+            foreshadowing_chapters: 铺垫章节
+
+        Returns:
+            CharacterEvolution
+        """
+        evolution = CharacterEvolution(
+            chapter_number=chapter_number,
+            evolution_type=evolution_type,
+            attribute_name=attribute_name,
+            before_value=before_value,
+            after_value=after_value,
+            change_trigger=change_trigger,
+            is_gradual=is_gradual,
+            foreshadowing_chapters=foreshadowing_chapters or [],
+        )
+
+        # 添加到档案的演变历史
+        self.profile.evolution_history.append(evolution)
+
+        # 更新当前状态
+        if evolution_type == EvolutionType.ABILITY:
+            self.profile.current_ability_level = after_value
+        elif evolution_type == EvolutionType.IDENTITY:
+            self.profile.current_identity = after_value
+
+        logger.info(
+            f"Character evolution recorded for {self.profile.name}: "
+            f"{attribute_name} '{before_value}' -> '{after_value}' at chapter {chapter_number}"
+        )
+
+        return evolution
+
+    def get_evolution_summary(self, current_chapter: int = 0) -> str:
+        """获取角色演变摘要.
+
+        Args:
+            current_chapter: 当前章节号（用于过滤）
+
+        Returns:
+            格式化的演变摘要字符串
+        """
+        if not self.profile.evolution_history:
+            return f"{self.profile.name}：无显著变化"
+
+        # 过滤到当前章节为止的演变
+        evolutions = self.profile.evolution_history
+        if current_chapter > 0:
+            evolutions = [e for e in evolutions if e.chapter_number <= current_chapter]
+
+        if not evolutions:
+            return f"{self.profile.name}：无显著变化"
+
+        # 按类型分组
+        by_type: Dict[EvolutionType, List[CharacterEvolution]] = {}
+        for evo in evolutions:
+            if evo.evolution_type not in by_type:
+                by_type[evo.evolution_type] = []
+            by_type[evo.evolution_type].append(evo)
+
+        # 构建摘要
+        parts = [f"## {self.profile.name}的演变轨迹"]
+
+        type_names = {
+            EvolutionType.ABILITY: "能力变化",
+            EvolutionType.IDENTITY: "身份变化",
+            EvolutionType.PERSONALITY: "性格变化",
+            EvolutionType.RELATIONSHIP: "关系变化",
+            EvolutionType.STATUS: "地位变化",
+            EvolutionType.SKILL: "技能变化",
+        }
+
+        for evo_type, evo_list in by_type.items():
+            parts.append(f"\n**{type_names.get(evo_type, '其他')}**:")
+            for evo in evo_list[-3:]:  # 每类最多显示3个
+                parts.append(f"- 第{evo.chapter_number}章：{evo.before_value} → {evo.after_value}")
+                if evo.change_trigger:
+                    parts.append(f"  原因：{evo.change_trigger[:50]}")
+
+        return "\n".join(parts)
+
+    def validate_evolution_consistency(
+        self,
+        proposed_evolution: Dict[str, Any],
+        current_chapter: int,
+    ) -> Dict[str, Any]:
+        """验证演变一致性.
+
+        检查角色的能力/身份变化是否合理（是否有铺垫）。
+
+        Args:
+            proposed_evolution: 提议的演变，包含：
+                - evolution_type: 演变类型
+                - attribute_name: 属性名称
+                - before_value: 变化前值
+                - after_value: 变化后值
+                - is_gradual: 是否渐进变化
+            current_chapter: 当前章节号
+
+        Returns:
+            验证结果
+        """
+        result = {
+            "is_valid": True,
+            "warnings": [],
+            "suggestions": [],
+        }
+
+        evolution_type = proposed_evolution.get("evolution_type", "")
+        attribute_name = proposed_evolution.get("attribute_name", "")
+        before_value = proposed_evolution.get("before_value", "")
+        after_value = proposed_evolution.get("after_value", "")
+        is_gradual = proposed_evolution.get("is_gradual", True)
+
+        # 检查是否有之前的相同属性的演变
+        previous_evolutions = [
+            e
+            for e in self.profile.evolution_history
+            if e.attribute_name == attribute_name
+            and e.evolution_type.value == evolution_type
+        ]
+
+        if previous_evolutions:
+            last_evolution = previous_evolutions[-1]
+            # 检查 before_value 是否与上次演变后的值一致
+            if last_evolution.after_value != before_value:
+                result["warnings"].append(
+                    f"属性值不连续：上次演变后为'{last_evolution.after_value}'，"
+                    f"但本次演变前为'{before_value}'"
+                )
+
+        # 检查突变（非渐进变化）
+        if not is_gradual:
+            # 检查是否有铺垫
+            has_foreshadowing = any(
+                e.chapter_number < current_chapter
+                and e.attribute_name == attribute_name
+                for e in self.profile.evolution_history
+            )
+
+            if not has_foreshadowing:
+                result["warnings"].append(
+                    f"'{attribute_name}'的突变缺少铺垫，建议在之前章节添加暗示或预兆"
+                )
+                result["suggestions"].append(
+                    f"建议在第{max(1, current_chapter - 3)}-{current_chapter - 1}章之间"
+                    f"添加关于'{after_value}'的暗示"
+                )
+
+        if result["warnings"]:
+            result["is_valid"] = False
+
+        return result
+
+    def get_all_evolutions_for_chapter(self, chapter_number: int) -> List[CharacterEvolution]:
+        """获取指定章节的所有演变记录.
+
+        Args:
+            chapter_number: 章节号
+
+        Returns:
+            该章节的演变记录列表
+        """
+        return [
+            e
+            for e in self.profile.evolution_history
+            if e.chapter_number == chapter_number
+        ]
+
+    def mark_evolution_verified(
+        self,
+        evolution_id: str,
+        status: VerificationStatus,
+        notes: str = "",
+    ) -> bool:
+        """标记演变的验证状态.
+
+        Args:
+            evolution_id: 演变ID
+            status: 验证状态
+            notes: 备注
+
+        Returns:
+            是否成功
+        """
+        for evo in self.profile.evolution_history:
+            if evo.id == evolution_id:
+                evo.verification_status = status
+                if notes:
+                    evo.notes = notes
+                logger.info(
+                    f"Evolution {evolution_id} marked as {status.value}"
+                )
+                return True
+
+        logger.warning(f"Evolution {evolution_id} not found")
+        return False
+
+
 def create_character_tracker(
     name: str,
     core_motivation: str,
@@ -711,3 +1040,24 @@ def validate_character_action(
             )
 
     return tracker.validate_action(proposed_action, context, chapter_number)
+
+
+def record_character_evolution(
+    tracker: CharacterConsistencyTracker,
+    chapter_number: int,
+    evolution_type: str,
+    attribute_name: str,
+    before_value: str,
+    after_value: str,
+    change_trigger: str = "",
+) -> CharacterEvolution:
+    """便捷函数：记录角色演变."""
+    evo_type = EvolutionType(evolution_type)
+    return tracker.record_evolution(
+        chapter_number=chapter_number,
+        evolution_type=evo_type,
+        attribute_name=attribute_name,
+        before_value=before_value,
+        after_value=after_value,
+        change_trigger=change_trigger,
+    )

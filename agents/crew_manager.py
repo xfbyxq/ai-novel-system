@@ -1125,6 +1125,18 @@ class NovelCrewManager:
 
         # ── 3. Writer-Editor 审查反馈循环 ─────────────────────
         chapter_plan_json = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
+        
+        # 构建时间线锚点信息（用于跨章节时间一致性检查）
+        timeline_anchor = ""
+        if team_context and team_context.timeline:
+            recent_events = team_context.get_recent_timeline(5)
+            if recent_events:
+                timeline_anchor = f"""当前故事时间：第 {team_context.current_story_day} 天
+最近事件：
+{recent_events}
+
+**检查要点**：本章的时间推进是否合理？是否与前文时间线矛盾？"""
+        
         review_result = await self.review_handler.execute(
             initial_draft=draft,
             chapter_number=chapter_number,
@@ -1133,6 +1145,8 @@ class NovelCrewManager:
             chapter_plan_json=chapter_plan_json,
             writer_system_prompt=writer_system,
             team_context=team_context,
+            previous_chapters_summary=previous_chapters_summary,
+            timeline_anchor=timeline_anchor,
         )
 
         edited_content = review_result.final_content
