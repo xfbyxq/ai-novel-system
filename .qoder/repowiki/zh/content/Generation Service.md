@@ -22,15 +22,25 @@
 - [team_context.py](file://agents/team_context.py)
 - [context_manager.py](file://backend/services/context_manager.py)
 - [outlines.py](file://backend/api/v1/outlines.py)
+- [graph_sync_service.py](file://backend/services/graph_sync_service.py)
+- [entity_extractor_service.py](file://backend/services/entity_extractor_service.py)
+- [graph_query_service.py](file://backend/services/graph_query_service.py)
+- [graph.py](file://backend/api/v1/graph.py)
+- [neo4j_client.py](file://core/graph/neo4j_client.py)
+- [graph_models.py](file://core/graph/graph_models.py)
+- [relationship_mapper.py](file://core/graph/relationship_mapper.py)
+- [graph_query_mixin.py](file://agents/graph_query_mixin.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增_get_or_create_team_context方法支持团队协作工作流
-- 章节编号参数从chapter_number更新为current_chapter保持一致性
-- API序列化机制通过model_to_dict工具函数得到重大改进
-- UnifiedContextManager统一上下文管理器替代分散的上下文管理
-- 增强了团队上下文的序列化和持久化能力
+- 新增图数据库同步功能，支持章节生成后的实体同步
+- 新增实体抽取服务，使用LLM从章节内容中抽取角色、地点、事件等实体
+- 新增图查询服务，提供角色网络、路径分析、影响力计算等功能
+- 新增Agent图查询混入，为AI代理提供图数据库查询能力
+- 新增完整的图数据库API接口，支持健康检查、同步、查询等操作
+- 新增图数据库配置支持，包括连接配置和功能开关
+- 新增实体抽取配置，支持LLM模型选择和置信度阈值设置
 
 ## 目录
 1. [简介](#简介)
@@ -53,7 +63,7 @@
 - **批量写作**：并行生成多个章节内容
 - **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 新增了团队协作工作流支持，通过_unified_context_manager统一管理上下文，改进了API序列化机制，增强了团队上下文的持久化和序列化能力
+**更新** 新增了图数据库同步和实体抽取功能，通过GraphSyncService实现章节生成后的实体同步，通过EntityExtractorService使用LLM从章节内容中抽取角色、地点、事件等实体信息。新增了GraphQueryService提供图分析查询能力，以及GraphQueryMixin为Agent提供图数据库查询支持。
 
 ## 项目结构
 
@@ -67,6 +77,7 @@ Store[状态管理<br/>Zustand Store]
 end
 subgraph "API层"
 API[FastAPI路由<br/>/generation]
+GraphAPI[图数据库API<br/>/novels/{novel_id}/graph]
 Schema[Pydantic模型<br/>任务定义]
 ModelToDict[model_to_dict工具<br/>序列化机制]
 end
@@ -76,14 +87,19 @@ AD[代理调度器<br/>AgentDispatcher]
 AAR[Agent活动记录器<br/>AgentActivityRecorder]
 UCM[统一上下文管理器<br/>UnifiedContextManager]
 TC[团队上下文<br/>NovelTeamContext]
+GSS[图同步服务<br/>GraphSyncService]
+EES[实体抽取服务<br/>EntityExtractorService]
+GQS[图查询服务<br/>GraphQueryService]
 end
 subgraph "AI层"
 QC[Qwen客户端<br/>LLM接口]
 CT[成本追踪器<br/>CostTracker]
 CM[Crew管理器<br/>NovelCrewManager]
+EQM[图查询混入<br/>GraphQueryMixin]
 end
 subgraph "数据层"
 DB[(PostgreSQL数据库)]
+GraphDB[(Neo4j图数据库)]
 Model[ORM模型<br/>小说/章节/任务]
 PM[持久化记忆<br/>SQLite + FTS5]
 end
@@ -98,13 +114,19 @@ GS --> AD
 GS --> AAR
 GS --> UCM
 GS --> TC
+GS --> GSS
+GS --> EES
 AD --> QC
 AD --> CM
 GS --> DB
+GS --> GraphDB
 GS --> PM
 GS --> Model
 GS --> Celery
 Celery --> Worker
+GraphAPI --> GSS
+GraphAPI --> EES
+GraphAPI --> GQS
 ```
 
 **图表来源**
@@ -114,6 +136,9 @@ Celery --> Worker
 - [celery_app.py:21-22](file://workers/celery_app.py#L21-L22)
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 - [team_context.py:173-242](file://agents/team_context.py#L173-L242)
+- [graph_sync_service.py:61-125](file://backend/services/graph_sync_service.py#L61-L125)
+- [entity_extractor_service.py:235-316](file://backend/services/entity_extractor_service.py#L235-L316)
+- [graph_query_service.py:135-218](file://backend/services/graph_query_service.py#L135-L218)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -133,6 +158,8 @@ Celery --> Worker
 - **并发控制**：实施三层并发控制机制
 - **团队协作**：管理团队上下文和协作流程
 - **统一上下文**：通过UnifiedContextManager管理上下文
+- **图数据库同步**：章节生成后异步同步实体到图数据库
+- **实体抽取**：使用LLM从章节内容中抽取实体信息
 
 ```mermaid
 classDiagram
@@ -152,6 +179,7 @@ class GenerationService {
 +_initialize_novel_persistent_memory(novel_id, planning_result) void
 +_record_planning_activities(novel_id, task_id, planning_result, cost_summary) void
 +run_editing_task(novel_id, task_id, draft_content, current_chapter) dict
++_sync_chapter_to_graph_safe(novel_id, chapter_number, chapter_content, chapter_plan) void
 }
 class UnifiedContextManager {
 +AsyncSession db
@@ -190,9 +218,37 @@ class NovelTeamContext {
 +to_dict() dict
 +from_dict(data) NovelTeamContext
 }
+class GraphSyncService {
++Neo4jClient client
++AsyncSession db
++sync_novel_full(novel_id) SyncResult
++sync_characters(novel_id, characters) SyncResult
++sync_chapter_entities(novel_id, chapter_number, chapter_content) SyncResult
++sync_character_relationships(novel_id, character) SyncResult
++sync_foreshadowing(novel_id, foreshadowing_id, content, planted_chapter, ftype, status, related_characters) bool
++delete_novel_graph(novel_id) int
+}
+class EntityExtractorService {
++QwenClient llm
++extract_from_chapter(chapter_number, chapter_content, known_characters) ExtractionResult
++extract_entities_batch(chapters, known_characters) List[ExtractionResult]
++extract_foreshadowing_check(chapter_content, pending_foreshadowings) List[str]
+}
+class GraphQueryService {
++Neo4jClient client
++get_character_network(novel_id, character_name, depth) Optional[CharacterNetwork]
++find_shortest_path(novel_id, from_char, to_char) Optional[CharacterPath]
++get_all_relationships(novel_id, relationship_type) List[Dict[str, Any]]
++check_consistency_conflicts(novel_id) List[ConflictReport]
++find_character_influence(novel_id, character_name) Optional[InfluenceReport]
++get_event_timeline(novel_id, character_name) List[Dict[str, Any]]
++find_pending_foreshadowings(novel_id, current_chapter) List[Dict[str, Any]]
+}
 GenerationService --> UnifiedContextManager : "使用"
 GenerationService --> AgentDispatcher : "使用"
 GenerationService --> NovelTeamContext : "管理"
+GenerationService --> GraphSyncService : "使用"
+GenerationService --> EntityExtractorService : "使用"
 AgentDispatcher --> QwenClient : "使用"
 ```
 
@@ -203,24 +259,31 @@ AgentDispatcher --> QwenClient : "使用"
 - [agent_activity_recorder.py:14-25](file://backend/services/agent_activity_recorder.py#L14-L25)
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 - [team_context.py:173-242](file://agents/team_context.py#L173-L242)
+- [graph_sync_service.py:61-125](file://backend/services/graph_sync_service.py#L61-L125)
+- [entity_extractor_service.py:235-316](file://backend/services/entity_extractor_service.py#L235-L316)
+- [graph_query_service.py:135-218](file://backend/services/graph_query_service.py#L135-L218)
 
-### API接口层
+### 图数据库API接口
 
-API层提供了RESTful接口来管理生成任务，现已实施三层并发控制：
+新增了完整的图数据库API接口，提供健康检查、数据同步、查询分析等功能：
 
-- **POST /generation/tasks**：创建新的生成任务（企划、单章写作、批量写作、编辑任务）
-- **GET /generation/tasks**：获取任务列表
-- **GET /generation/tasks/{task_id}**：获取特定任务状态
-- **POST /generation/tasks/{task_id}/cancel**：取消任务
-
-**更新** 实施了三层并发控制机制：
-1. **API层并发控制**：防止同一小说同时创建多个企划任务
-2. **服务层并发控制**：在服务层检查并阻止重复的企划任务
-3. **Worker层并发控制**：在Celery Worker中检查并阻止重复的企划任务
+- **健康检查**：`GET /novels/{novel_id}/graph/health` - 检查图数据库连接状态
+- **初始化连接**：`POST /novels/{novel_id}/graph/init` - 初始化图数据库连接
+- **数据同步**：`POST /novels/{novel_id}/graph/sync` - 同步小说数据到图数据库
+- **同步状态**：`GET /novels/{novel_id}/graph/sync/status` - 获取同步状态
+- **清除数据**：`DELETE /novels/{novel_id}/graph/sync` - 清除小说的图数据
+- **角色网络**：`GET /novels/{novel_id}/graph/network/{character_name}` - 获取角色关系网络
+- **路径查询**：`GET /novels/{novel_id}/graph/path` - 查找角色间最短路径
+- **关系查询**：`GET /novels/{novel_id}/graph/relationships` - 获取所有角色关系
+- **一致性检测**：`GET /novels/{novel_id}/graph/conflicts` - 检测一致性冲突
+- **影响力分析**：`GET /novels/{novel_id}/graph/influence/{character_name}` - 获取角色影响力
+- **事件时间线**：`GET /novels/{novel_id}/graph/timeline` - 获取事件时间线
+- **伏笔查询**：`GET /novels/{novel_id}/graph/foreshadowings/pending` - 获取待回收伏笔
+- **实体抽取**：`POST /novels/{novel_id}/graph/extract` - 从章节内容抽取实体
+- **批量抽取**：`POST /novels/{novel_id}/graph/extract/batch` - 批量抽取实体
 
 **章节来源**
-- [generation.py:23-103](file://backend/api/v1/generation.py#L23-L103)
-- [generation.py:106-171](file://backend/api/v1/generation.py#L106-L171)
+- [graph.py:35-581](file://backend/api/v1/graph.py#L35-L581)
 
 ### 任务队列系统
 
@@ -241,7 +304,7 @@ API层提供了RESTful接口来管理生成任务，现已实施三层并发控�
 
 ## 架构概览
 
-生成服务采用异步事件驱动架构，支持高并发和可扩展性，现已实施三层并发控制：
+生成服务采用异步事件驱动架构，支持高并发和可扩展性，现已实施三层并发控制和图数据库集成：
 
 ```mermaid
 sequenceDiagram
@@ -251,6 +314,7 @@ participant Service as 生成服务
 participant Queue as Celery队列
 participant Worker as 生成Worker
 participant LLM as AI模型
+participant GraphDB as 图数据库
 Client->>API : POST /generation/tasks
 API->>API : 检查并发控制
 API->>Service : 创建任务记录
@@ -264,6 +328,8 @@ Service->>LLM : 调用AI模型
 LLM-->>Service : 返回生成结果
 Service->>Service : 保存到数据库
 Service->>Service : 记录Agent活动
+Service->>GraphDB : 异步同步实体
+GraphDB-->>Service : 同步完成
 Service-->>Worker : 返回任务结果
 Worker-->>Queue : 更新任务状态
 API-->>Client : 返回任务ID
@@ -306,7 +372,7 @@ RecordActivities --> End([完成])
 
 ### 单章写作 (Chapter Writing)
 
-单章写作流程包括上下文构建和内容生成，现已增强记忆系统集成和编辑任务支持：
+单章写作流程包括上下文构建和内容生成，现已增强记忆系统集成、编辑任务支持和图数据库同步：
 
 ```mermaid
 flowchart TD
@@ -322,7 +388,8 @@ SaveChapter --> UpdateMemory["更新记忆系统<br/>- 章节摘要<br/>- 角色
 UpdateMemory --> UpdateStats["更新统计信息"]
 UpdateStats --> SaveTokens["保存Token记录"]
 SaveTokens --> UpdateTask["更新任务状态"]
-UpdateTask --> End([完成])
+UpdateTask --> GraphSync["异步图数据库同步<br/>- 实体抽取<br/>- 关系同步<br/>- 伏笔处理"]
+GraphSync --> End([完成])
 ```
 
 **图表来源**
@@ -333,7 +400,7 @@ UpdateTask --> End([完成])
 
 ### 批量写作 (Batch Writing)
 
-批量写作支持连续章节的并行生成，现已增强错误处理、中断机制和编辑任务支持：
+批量写作支持连续章节的并行生成，现已增强错误处理、中断机制、编辑任务支持和图数据库同步：
 
 ```mermaid
 flowchart TD
@@ -380,9 +447,279 @@ UpdateTask --> End([完成])
 **章节来源**
 - [generation_service.py:800-948](file://backend/services/generation_service.py#L800-L948)
 
+### 图同步服务 (GraphSyncService)
+
+**新增** 图同步服务负责将PostgreSQL中的实体数据同步到Neo4j图数据库：
+
+```mermaid
+classDiagram
+class GraphSyncService {
++Neo4jClient client
++AsyncSession db
++sync_novel_full(novel_id) SyncResult
++sync_characters(novel_id, characters) SyncResult
++sync_chapter_entities(novel_id, chapter_number, chapter_content) SyncResult
++sync_character_relationships(novel_id, character) SyncResult
++sync_foreshadowing(novel_id, foreshadowing_id, content, planted_chapter, ftype, status, related_characters) bool
++delete_novel_graph(novel_id) int
+}
+class SyncResult {
++bool success
++novel_id : str
++sync_type : str
++int entities_created
++int entities_updated
++int relationships_created
++int relationships_updated
++List[str] errors
++datetime started_at
++datetime completed_at
++to_dict() Dict[str, Any]
+}
+class Neo4jClient {
++bool is_connected
++connect() void
++execute_query(query, parameters) List[Dict[str, Any]]
++create_node(label, properties) str
++create_relationship(from_label, from_id, to_label, to_id, rel_type, properties) bool
++update_node(label, node_id, properties) bool
++delete_node(label, node_id) bool
++find_node(label, node_id) Optional[Dict[str, Any]]
++find_nodes_by_novel(novel_id, label, limit) List[Dict[str, Any]]
++delete_novel_graph(novel_id) int
++health_check() Dict[str, Any]
+}
+GraphSyncService --> Neo4jClient : "使用"
+GraphSyncService --> SyncResult : "返回"
+```
+
+**图表来源**
+- [graph_sync_service.py:61-125](file://backend/services/graph_sync_service.py#L61-L125)
+- [graph_sync_service.py:30-59](file://backend/services/graph_sync_service.py#L30-L59)
+- [neo4j_client.py:81-180](file://core/graph/neo4j_client.py#L81-180)
+
+**章节来源**
+- [graph_sync_service.py:1-596](file://backend/services/graph_sync_service.py#L1-L596)
+
+### 实体抽取服务 (EntityExtractorService)
+
+**新增** 实体抽取服务使用LLM从章节内容中抽取实体信息：
+
+```mermaid
+classDiagram
+class EntityExtractorService {
++QwenClient llm
++extract_from_chapter(chapter_number, chapter_content, known_characters) ExtractionResult
++extract_entities_batch(chapters, known_characters) List[ExtractionResult]
++extract_foreshadowing_check(chapter_content, pending_foreshadowings) List[str]
++to_dict() Dict[str, Any]
+}
+class ExtractionResult {
++int chapter_number
++List[ExtractedCharacter] characters
++List[ExtractedLocation] locations
++List[ExtractedEvent] events
++List[ExtractedForeshadowing] foreshadowings
++List[ExtractedRelationship] relationships
++Optional[str] summary
++float extraction_time
++to_dict() Dict[str, Any]
+}
+class ExtractedCharacter {
++str name
++str role_type
++Optional[str] gender
++bool is_new
++List[str] actions
++Optional[str] status_change
+}
+class ExtractedLocation {
++str name
++str location_type
++Optional[str] description
+}
+class ExtractedEvent {
++str name
++int chapter_number
++str event_type
++List[str] participants
++Optional[str] description
++int significance
+}
+class ExtractedForeshadowing {
++str content
++int planted_chapter
++str ftype
++int importance
++List[str] related_characters
++Optional[int] expected_resolve_chapter
++bool is_resolved
+}
+class ExtractedRelationship {
++str from_character
++str to_character
++str relation_type
++int strength
++bool is_new
++Optional[str] change_type
+}
+EntityExtractorService --> ExtractionResult : "返回"
+ExtractionResult --> ExtractedCharacter : "包含"
+ExtractionResult --> ExtractedLocation : "包含"
+ExtractionResult --> ExtractedEvent : "包含"
+ExtractionResult --> ExtractedForeshadowing : "包含"
+ExtractionResult --> ExtractedRelationship : "包含"
+```
+
+**图表来源**
+- [entity_extractor_service.py:235-316](file://backend/services/entity_extractor_service.py#L235-L316)
+- [entity_extractor_service.py:75-148](file://backend/services/entity_extractor_service.py#L75-L148)
+- [entity_extractor_service.py:17-74](file://backend/services/entity_extractor_service.py#L17-L74)
+
+**章节来源**
+- [entity_extractor_service.py:1-579](file://backend/services/entity_extractor_service.py#L1-L579)
+
+### 图查询服务 (GraphQueryService)
+
+**新增** 图查询服务提供各种图分析查询能力：
+
+```mermaid
+classDiagram
+class GraphQueryService {
++Neo4jClient client
++get_character_network(novel_id, character_name, depth) Optional[CharacterNetwork]
++find_shortest_path(novel_id, from_char, to_char) Optional[CharacterPath]
++get_all_relationships(novel_id, relationship_type) List[Dict[str, Any]]
++check_consistency_conflicts(novel_id) List[ConflictReport]
++find_character_influence(novel_id, character_name) Optional[InfluenceReport]
++get_event_timeline(novel_id, character_name) List[Dict[str, Any]]
++find_pending_foreshadowings(novel_id, current_chapter) List[Dict[str, Any]]
+}
+class CharacterNetwork {
++str character_id
++str character_name
++int depth
++List[Dict[str, Any]] nodes
++List[Dict[str, Any]] edges
++int total_relations
++to_prompt() str
+}
+class CharacterPath {
++str from_character
++str to_character
++List[PathNode] nodes
++List[PathEdge] edges
++int length
++to_prompt() str
+}
+class ConflictReport {
++str conflict_type
++str description
++str severity
++List[str] characters
++str details
++to_dict() Dict[str, Any]
+}
+class InfluenceReport {
++str character_id
++str character_name
++float influence_score
++int direct_relations
++int indirect_relations
++float centrality_score
++List[str] key_connections
++to_dict() Dict[str, Any]
+}
+GraphQueryService --> CharacterNetwork : "返回"
+GraphQueryService --> CharacterPath : "返回"
+GraphQueryService --> ConflictReport : "返回"
+GraphQueryService --> InfluenceReport : "返回"
+```
+
+**图表来源**
+- [graph_query_service.py:135-218](file://backend/services/graph_query_service.py#L135-L218)
+- [graph_query_service.py:14-108](file://backend/services/graph_query_service.py#L14-L108)
+- [graph_query_service.py:35-87](file://backend/services/graph_query_service.py#L35-L87)
+
+**章节来源**
+- [graph_query_service.py:1-537](file://backend/services/graph_query_service.py#L1-L537)
+
+### Agent图查询混入 (GraphQueryMixin)
+
+**新增** Agent图查询混入为AI代理提供图数据库查询能力：
+
+```mermaid
+classDiagram
+class GraphQueryMixin {
++bool _graph_enabled
++Optional[str] _novel_id
++set_graph_context(novel_id) void
++query_character_network(character_name, depth) Optional[CharacterNetwork]
++query_character_path(from_character, to_character) Optional[CharacterPath]
++query_influence(character_name) Optional[InfluenceReport]
++check_conflicts() List[ConflictReport]
++query_pending_foreshadowings(current_chapter) List[Dict[str, Any]]
++query_event_timeline(character_name) List[Dict[str, Any]]
++query_all_relationships(relationship_type) List[Dict[str, Any]]
++format_network_context(network) str
++format_path_context(path) str
++format_conflicts_context(conflicts) str
++format_foreshadowings_context(foreshadowings) str
++format_influence_context(influence) str
++get_full_character_context(character_name, include_conflicts) str
++get_novel_graph_summary() str
+}
+class CharacterNetwork {
++str character_id
++str character_name
++int depth
++List[Dict[str, Any]] nodes
++List[Dict[str, Any]] edges
++int total_relations
++to_prompt() str
+}
+class CharacterPath {
++str from_character
++str to_character
++List[PathNode] nodes
++List[PathEdge] edges
++int length
++to_prompt() str
+}
+class ConflictReport {
++str conflict_type
++str description
++str severity
++List[str] characters
++str details
++to_dict() Dict[str, Any]
+}
+class InfluenceReport {
++str character_id
++str character_name
++float influence_score
++int direct_relations
++int indirect_relations
++float centrality_score
++List[str] key_connections
++to_dict() Dict[str, Any]
+}
+GraphQueryMixin --> CharacterNetwork : "查询"
+GraphQueryMixin --> CharacterPath : "查询"
+GraphQueryMixin --> ConflictReport : "查询"
+GraphQueryMixin --> InfluenceReport : "查询"
+```
+
+**图表来源**
+- [graph_query_mixin.py:26-210](file://agents/graph_query_mixin.py#L26-L210)
+- [graph_query_mixin.py:14-31](file://agents/graph_query_mixin.py#L14-L31)
+
+**章节来源**
+- [graph_query_mixin.py:1-498](file://agents/graph_query_mixin.py#L1-L498)
+
 ### 代理调度器 (Agent Dispatcher)
 
-代理调度器负责协调不同类型的AI代理，现已增强配置管理、错误处理和编辑任务支持：
+代理调度器负责协调不同类型的AI代理，现已增强配置管理、错误处理、编辑任务支持和图数据库查询能力：
 
 ```mermaid
 classDiagram
@@ -411,7 +748,7 @@ class NovelCrewManager {
 +run_editing_phase(**kwargs) dict
 }
 class CrewManager {
-+_extract_json_from_response(response) dict|list
++_extract_json_from_response(response) dict|str
 +_retry_json_extraction(agent_name, ...) dict|str
 +run_planning_phase(**kwargs) dict
 +run_writing_phase(**kwargs) dict
@@ -596,7 +933,7 @@ Dict --> Response[API响应]
 
 ## 依赖关系分析
 
-生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能和编辑任务支持：
+生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能、编辑任务支持和图数据库集成：
 
 ```mermaid
 graph TB
@@ -605,6 +942,7 @@ FastAPI[FastAPI框架]
 Celery[Celery任务队列<br/>并发控制=2]
 DashScope[通义千问API]
 PostgreSQL[PostgreSQL数据库]
+Neo4j[Neo4j图数据库]
 Redis[Redis缓存]
 SQLite[SQLite数据库]
 end
@@ -616,6 +954,10 @@ CostTracker[成本追踪器]
 AgentActivityRecorder[Agent活动记录器]
 UnifiedContextManager[统一上下文管理器]
 NovelTeamContext[团队上下文]
+GraphSyncService[图同步服务]
+EntityExtractorService[实体抽取服务]
+GraphQueryService[图查询服务]
+GraphQueryMixin[图查询混入]
 end
 subgraph "数据模型"
 GenerationTask[生成任务模型<br/>支持editing类型]
@@ -623,6 +965,8 @@ Novel[小说模型]
 Chapter[章节模型]
 Character[角色模型]
 PlotOutline[情节大纲模型]
+GraphModels[图数据模型]
+RelationshipMapper[关系映射器]
 end
 subgraph "记忆系统"
 MemoryService[内存记忆服务]
@@ -630,11 +974,13 @@ PersistentMemory[持久化记忆适配器]
 end
 subgraph "工具函数"
 ModelToDict[model_to_dict序列化]
+Neo4jClient[Neo4j客户端]
 end
 FastAPI --> GenerationService
 Celery --> GenerationService
 DashScope --> QwenClient
 PostgreSQL --> GenerationService
+Neo4j --> GraphSyncService
 Redis --> Celery
 GenerationService --> AgentDispatcher
 AgentDispatcher --> QwenClient
@@ -648,6 +994,10 @@ GenerationService --> PersistentMemory
 GenerationService --> UnifiedContextManager
 GenerationService --> NovelTeamContext
 GenerationService --> AgentActivityRecorder
+GenerationService --> GraphSyncService
+GenerationService --> EntityExtractorService
+GraphQueryService --> Neo4jClient
+GraphQueryMixin --> Neo4jClient
 ModelToDict --> GenerationService
 ```
 
@@ -658,6 +1008,10 @@ ModelToDict --> GenerationService
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 - [team_context.py:173-242](file://agents/team_context.py#L173-L242)
 - [outlines.py:911-928](file://backend/api/v1/outlines.py#L911-L928)
+- [graph_sync_service.py:15-27](file://backend/services/graph_sync_service.py#L15-L27)
+- [entity_extractor_service.py:12-14](file://backend/services/entity_extractor_service.py#L12-L14)
+- [graph_query_service.py:10](file://backend/services/graph_query_service.py#L10)
+- [graph_query_mixin.py:14-23](file://agents/graph_query_mixin.py#L14-L23)
 
 **章节来源**
 - [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
@@ -672,6 +1026,7 @@ ModelToDict --> GenerationService
 - **异步数据库操作**：使用SQLAlchemy异步会话
 - **异步AI调用**：支持流式响应和重试机制
 - **并发任务处理**：Celery支持多worker并发执行
+- **异步图数据库同步**：章节生成后异步执行，避免阻塞主流程
 
 ### 成本控制机制
 
@@ -701,6 +1056,7 @@ Pause --> End
 - **上下文优化**：智能选择结构化摘要而非全文内容
 - **任务状态缓存**：快速查询任务执行状态
 - **持久化记忆**：SQLite + FTS5支持长期记忆存储
+- **图查询缓存**：支持图查询结果缓存，提高查询性能
 
 ### 三层并发控制机制
 
@@ -721,6 +1077,17 @@ Pause --> End
 - 防止Worker级别的重复执行
 - 保证系统资源的合理分配
 
+### 图数据库性能优化
+
+**新增** 图数据库集成的性能优化：
+
+- **异步同步**：章节生成后异步执行图数据库同步，避免阻塞主流程
+- **批量操作**：支持批量实体抽取和关系创建
+- **连接池管理**：Neo4j客户端使用连接池提高连接复用效率
+- **查询缓存**：图查询结果支持缓存，减少重复查询开销
+- **白名单验证**：防止Cypher注入攻击，确保查询安全性
+- **事务管理**：支持批量操作的事务原子性保证
+
 ### 团队协作优化
 
 **新增** 团队协作工作流的性能优化：
@@ -729,6 +1096,7 @@ Pause --> End
 - **增量更新**：只更新变更的角色状态和时间线
 - **批量序列化**：通过model_to_dict优化大量数据的序列化
 - **缓存策略**：统一上下文管理器减少重复计算
+- **图数据模型**：支持丰富的实体关系类型和属性
 
 **章节来源**
 - [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
@@ -736,6 +1104,7 @@ Pause --> End
 - [generation_service.py:87-100](file://backend/services/generation_service.py#L87-L100)
 - [team_context.py:244-268](file://agents/team_context.py#L244-L268)
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+- [graph_sync_service.py:2061-2108](file://backend/services/generation_service.py#L2061-L2108)
 
 ## 故障排除指南
 
@@ -754,6 +1123,10 @@ Pause --> End
 | 编辑任务失败 | 编辑阶段内容质量不佳 | 检查编辑Agent配置和提示词 |
 | 团队上下文冲突 | 多Agent协作时数据不一致 | 检查异步锁和序列化机制 |
 | 上下文缓存失效 | 前置章节上下文丢失 | 检查缓存TTL和清理机制 |
+| 图数据库连接失败 | 同步任务被跳过 | 检查Neo4j连接配置和网络 |
+| 实体抽取失败 | 章节内容未同步到图数据库 | 检查LLM配置和内容长度限制 |
+| 图查询超时 | 角色网络查询响应慢 | 检查查询深度和索引配置 |
+| 伏笔同步错误 | 伏笔状态更新失败 | 检查角色名称匹配和关系映射 |
 
 ### 日志监控
 
@@ -766,6 +1139,9 @@ Pause --> End
 - **并发控制**：记录并发检查的结果和拒绝原因
 - **团队协作**：记录Agent输出和状态变更
 - **上下文管理**：记录缓存命中率和清理操作
+- **图数据库操作**：记录同步结果和错误信息
+- **实体抽取**：记录抽取结果和处理时间
+- **图查询**：记录查询性能和结果格式化
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
@@ -790,5 +1166,11 @@ Pause --> End
 12. **统一上下文**：UnifiedContextManager提供一致的上下文访问
 13. **优化序列化**：model_to_dict工具函数提升API性能
 14. **异步锁机制**：确保团队上下文的线程安全
+15. **图数据库集成**：完整的图数据同步和查询能力
+16. **实体抽取功能**：LLM驱动的智能实体识别和抽取
+17. **Agent图查询**：为AI代理提供强大的图数据分析能力
+18. **配置灵活性**：支持图数据库和实体抽取的灵活配置
+19. **性能优化**：异步操作、缓存策略和连接池管理
+20. **安全防护**：图查询白名单验证和异常处理机制
 
-**更新** 该系统现已显著增强了并发控制能力和编辑任务支持。三层并发控制机制（API层、服务层、Worker层）有效防止了资源竞争和系统过载；编辑任务的引入为内容质量提升提供了完整的自动化流程；新增的团队协作工作流通过NovelTeamContext实现了多Agent的协同工作；统一上下文管理器和优化的API序列化机制进一步提升了系统的性能和可维护性。这些增强为AI驱动的小说创作提供了更加稳健和智能化的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程。
+**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成和实体抽取功能。新增的GraphSyncService实现了章节生成后的实体同步，EntityExtractorService通过LLM实现了智能实体抽取，GraphQueryService提供了丰富的图分析查询能力，GraphQueryMixin为AI代理集成了图数据库查询功能。这些增强为AI驱动的小说创作提供了更加稳健、智能化和可扩展的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘和智能推荐奠定了坚实的技术基础。
