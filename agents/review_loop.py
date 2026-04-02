@@ -39,6 +39,13 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - pacing（节奏把控）：场景节奏是否有变化？是否过于相似？张弛是否有度？
 - fluency（语言流畅度）：表达是否流畅？衔接是否自然？用词是否准确？
 
+【跨章节一致性检查清单】（关键！影响setting_consistency评分）：
+1. 情节重复检测：本章的核心情节是否与前文重复？（如：破解暗号、发现线索的方式）
+2. 时间线检测：是否有明确的时间锚点？时间推进是否合理？是否与前文时间线矛盾？
+3. 人物设定演变：人物能力/性格/身份的转变是否有铺垫？转变是否突兀？
+4. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
+5. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
+
 【聚合维度评分标准】（根据精确维度计算，以星级展示）：
 - 连贯性(coherence)：情节前后衔接是否自然、设定是否一致、角色行为逻辑是否流畅
   ★★★★★(9-10)：完全连贯，无任何矛盾
@@ -76,13 +83,17 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 
 EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
-原文：
-{draft_content}
+{previous_chapters_section}
 
-章节信息：
+## 当前章节信息
 - 章节号：第{chapter_number}章
 - 标题：{chapter_title}
 - 章节目标：{chapter_summary}
+
+{timeline_anchor_section}
+
+原文：
+{draft_content}
 
 请以JSON格式输出（不要输出其他内容）：
 {{
@@ -189,6 +200,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         chapter_plan_json: str,
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
+        previous_chapters_summary: str = "",
+        timeline_anchor: str = "",
     ) -> ReviewLoopResult:
         """执行 Writer-Editor 反馈循环.
 
@@ -200,6 +213,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             chapter_plan_json: 章节计划 JSON 字符串
             writer_system_prompt: Writer 的 system prompt（含风格）
             team_context: 团队上下文（可选，用于记录审查反馈）
+            previous_chapters_summary: 前文章节摘要（用于跨章节一致性检查）
+            timeline_anchor: 时间线锚点信息（用于时间一致性检查）
 
         Returns:
             ReviewLoopResult
@@ -211,6 +226,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         self._chapter_plan_json = chapter_plan_json
         self._writer_system_prompt = writer_system_prompt
         self._team_context = team_context
+        self._previous_chapters_summary = previous_chapters_summary
+        self._timeline_anchor = timeline_anchor
 
         return await super().execute(
             initial_content=initial_draft,
@@ -220,6 +237,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             chapter_plan_json=chapter_plan_json,
             writer_system_prompt=writer_system_prompt,
             team_context=team_context,
+            previous_chapters_summary=previous_chapters_summary,
+            timeline_anchor=timeline_anchor,
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -322,16 +341,45 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         previous_issues: List[str],
         **context,
     ) -> str:
-        """构建 Editor 审查任务提示词."""
+        """构建 Editor 审查任务提示词.
+
+        支持注入前文摘要和时间线锚点，提升跨章节一致性检查能力。
+        """
         chapter_number = context.get("chapter_number", 1)
         chapter_title = context.get("chapter_title", "")
         chapter_summary = context.get("chapter_summary", "")
+        previous_chapters_summary = context.get("previous_chapters_summary", "")
+        timeline_anchor = context.get("timeline_anchor", "")
+
+        # 构建前文章节摘要部分
+        if previous_chapters_summary:
+            previous_chapters_section = f"""## 前文关键信息（用于跨章节一致性检查）
+{previous_chapters_summary}
+
+**特别提醒**：请检查本章是否与前文存在：
+1. 情节重复（如相同的解谜方式、相似的对抗模式）
+2. 时间线矛盾（如时间推进不合理、时间标记冲突）
+3. 角色设定不一致（如能力/身份/性格的突变无铺垫）
+4. 事件后果缺失（前文重要事件在本章无后续反映）"""
+        else:
+            previous_chapters_section = "<!-- 本章为第一章，无前文摘要 -->"
+
+        # 构建时间线锚点部分
+        if timeline_anchor:
+            timeline_anchor_section = f"""## 时间线锚点
+{timeline_anchor}
+
+**检查要点**：本章的时间推进是否合理？是否与前文时间线矛盾？"""
+        else:
+            timeline_anchor_section = ""
 
         return EDITOR_REVIEW_TASK.format(
             draft_content=content,
             chapter_number=chapter_number,
             chapter_title=chapter_title,
             chapter_summary=chapter_summary,
+            previous_chapters_section=previous_chapters_section,
+            timeline_anchor_section=timeline_anchor_section,
         )
 
     def _build_revision_prompt(
@@ -638,6 +686,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
         chapter_type: Optional[str] = None,
+        previous_chapters_summary: str = "",
+        timeline_anchor: str = "",
     ) -> ReviewLoopResult:
         """执行审查循环，支持使用 Editor 润色后的内容.
 
@@ -652,6 +702,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             writer_system_prompt: Writer 系统提示词
             team_context: 团队上下文
             chapter_type: 章节类型（可选，支持动态迭代策略）
+            previous_chapters_summary: 前文章节摘要（用于跨章节一致性检查）
+            timeline_anchor: 时间线锚点信息（用于时间一致性检查）
         """
         self._chapter_number = chapter_number
         self._chapter_title = chapter_title
@@ -659,6 +711,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         self._chapter_plan_json = chapter_plan_json
         self._writer_system_prompt = writer_system_prompt
         self._team_context = team_context
+        self._previous_chapters_summary = previous_chapters_summary
+        self._timeline_anchor = timeline_anchor
 
         # 根据章节类型创建迭代控制器（支持动态策略）
         from agents.iteration_controller import ChapterType, IterationController
@@ -716,6 +770,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
                 chapter_number=chapter_number,
                 chapter_title=chapter_title,
                 chapter_summary=chapter_summary,
+                previous_chapters_summary=previous_chapters_summary,
+                timeline_anchor=timeline_anchor,
             )
 
             score = float(review_data.get("overall_score", 0))
