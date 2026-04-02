@@ -1552,7 +1552,7 @@ class GenerationService:
     def _build_previous_context(self, novel_id: UUID, novel: Novel, chapter_number: int) -> str:
         """构建结构化的前置章节上下文.
 
-        优先使用记忆系统中的结构化摘要，回退到智能截取.
+        使用记忆系统中的结构化摘要，保留完整内容，由调用方统一压缩。
 
         Args:
             novel_id: 小说ID
@@ -1570,44 +1570,41 @@ class GenerationService:
             if ch.chapter_number < chapter_number and ch.content:
                 ch_num_str = str(ch.chapter_number)
                 if ch_num_str in summaries:
-                    # 使用结构化摘要
+                    # 使用结构化摘要（完整内容）
                     summary = summaries[ch_num_str]
                     previous_context += f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
 
                     key_events = summary.get("key_events", [])
                     if key_events:
                         if isinstance(key_events, list):
+                            # 保留完整事件列表
                             previous_context += (
-                                f"**主要事件**: {', '.join(str(e) for e in key_events[:5])}\n"
+                                f"**主要事件**: {', '.join(str(e) for e in key_events)}\n"
                             )
                         else:
                             previous_context += f"**主要事件**: {key_events}\n"
 
                     char_changes = summary.get("character_changes", "")
                     if char_changes:
+                        # 保留完整角色变化描述
                         previous_context += f"**角色变化**: {char_changes}\n"
 
                     plot_progress = summary.get("plot_progress", "")
                     if plot_progress:
-                        # 限制情节摘要长度
-                        if len(plot_progress) > 300:
-                            plot_progress = plot_progress[:300] + "..."
+                        # 保留完整情节摘要
                         previous_context += f"**情节推进**: {plot_progress}\n"
 
                     foreshadowing = summary.get("foreshadowing", [])
                     if foreshadowing:
                         if isinstance(foreshadowing, list) and foreshadowing:
+                            # 保留完整伏笔列表
                             previous_context += (
-                                f"**伏笔**: {', '.join(str(f) for f in foreshadowing[:3])}\n"
+                                f"**伏笔**: {', '.join(str(f) for f in foreshadowing)}\n"
                             )
                 else:
-                    # 回退到智能截取（取前500字，找到完整句子边界）
-                    content = ch.content[:500]
-                    last_period = content.rfind("。")
-                    if last_period > 300:
-                        content = content[: last_period + 1]
+                    # 无结构化摘要时，保留完整章节内容（由统一压缩处理）
                     previous_context += (
-                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n{content}\n"
+                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n{ch.content}\n"
                     )
 
         return previous_context
@@ -1617,6 +1614,9 @@ class GenerationService:
     ) -> dict:
         """从章节内容提取结构化摘要.
 
+        保留完整内容，不再进行固定截取。
+        情节摘要和结尾状态保留完整文本，由上下文压缩器统一处理。
+
         Args:
             content: 章节完整内容
             chapter_plan: 章节大纲（包含plot_points, foreshadowing等）
@@ -1625,35 +1625,28 @@ class GenerationService:
         Returns:
             结构化摘要字典
         """
-        # 从章节内容中提取摘要信息
-        plot_progress = ""
-        if content:
-            # 取内容前200字作为情节摘要
-            plot_progress = content[:200]
-            # 尝试找到完整句子
-            last_period = plot_progress.rfind("。")
-            if last_period > 100:
-                plot_progress = plot_progress[: last_period + 1]
+        # 保留完整情节摘要（由压缩器统一处理）
+        plot_progress = content if content else ""
 
-        # 提取结尾状态（最后100字）
+        # 保留完整结尾状态（由压缩器统一处理）
         ending_state = ""
-        if content and len(content) > 100:
-            ending_state = content[-100:]
+        if content:
+            # 取最后800字作为结尾段落（增加内容保留）
+            ending_length = min(800, len(content))
+            ending_state = content[-ending_length:]
             # 尝试从句子开头开始
             first_period = ending_state.find("。")
-            if first_period > 0 and first_period < 50:
+            if 0 < first_period < 150:
                 ending_state = ending_state[first_period + 1 :]
-        elif content:
-            ending_state = content
 
         return {
             "chapter_number": chapter_number,
             "title": chapter_plan.get("title", f"第{chapter_number}章"),
-            "key_events": chapter_plan.get("plot_points", [])[:5],  # 主要事件（最多5个）
+            "key_events": chapter_plan.get("plot_points", []),  # 保留完整事件列表
             "character_changes": self._extract_character_mentions(content),  # 角色变化
-            "plot_progress": plot_progress,  # 情节摘要
+            "plot_progress": plot_progress,  # 完整情节摘要
             "foreshadowing": chapter_plan.get("foreshadowing", []),  # 伏笔
-            "ending_state": ending_state,  # 结尾状态
+            "ending_state": ending_state,  # 完整结尾状态
         }
 
     def _format_character_states(self, states_dict: dict) -> str:

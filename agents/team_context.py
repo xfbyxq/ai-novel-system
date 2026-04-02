@@ -420,8 +420,8 @@ class NovelTeamContext:
             location=location,
         )
         self.timeline.append(timeline_event)
-        logger.debug(
-            f"Timeline event added: chapter {chapter_number}, day {self.current_story_day}"
+        logger.info(
+            f"[Timeline] 事件添加: 第{chapter_number}章, 故事第{self.current_story_day}天"
         )
 
     async def add_timeline_event_async(
@@ -441,8 +441,8 @@ class NovelTeamContext:
                 location=location,
             )
             self.timeline.append(timeline_event)
-            logger.debug(
-                f"Timeline event added (async): chapter {chapter_number}, day {self.current_story_day}"
+            logger.info(
+                f"[Timeline] 事件添加(async): 第{chapter_number}章, 故事第{self.current_story_day}天"
             )
 
     def advance_story_day(self, days: int = 1):
