@@ -935,6 +935,9 @@ class GenerationService:
                 f"{word_count}字，质量评分 {writing_result.get('quality_score', 'N/A')}，"
                 f"消耗 {cost_summary['total_tokens']} tokens"
             )
+            # 将成本信息添加到返回值中，供批量写作汇总使用
+            writing_result['token_usage'] = cost_summary['total_tokens']
+            writing_result['cost'] = cost_summary['total_cost']
             return writing_result
 
         except Exception as e:
