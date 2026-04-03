@@ -188,28 +188,10 @@ class QualityEvaluator:
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
-        """从 LLM 响应中提取 JSON."""
-        text = text.strip()
-        # 尝试直接解析
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-        # 尝试从 markdown 代码块中提取
-        import re
+        """从 LLM 响应中提取 JSON.
 
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if match:
-            try:
-                return json.loads(match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
-        # 尝试找到第一个 { 和最后一个 }
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(text[start : end + 1])
-            except json.JSONDecodeError:
-                pass
-        raise ValueError(f"无法从响应中提取 JSON: {text[:200]}...")
+        使用统一的 JsonExtractor 处理各种格式。
+        """
+        from agents.base.json_extractor import JsonExtractor
+
+        return JsonExtractor.extract_object(text, default={})

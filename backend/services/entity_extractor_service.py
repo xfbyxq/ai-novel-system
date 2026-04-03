@@ -395,7 +395,7 @@ class EntityExtractorService:
                 prompt=prompt,
                 system="你是一个伏笔分析专家，擅长识别小说中伏笔的回收情况。",
                 temperature=0.2,
-                max_tokens=500,
+                max_tokens=2048,
             )
 
             content = response.get("content", "")
@@ -459,7 +459,21 @@ class EntityExtractorService:
                 except json.JSONDecodeError:
                     pass
 
-        logger.warning(f"无法解析JSON响应: {content[:300]}...")
+        # 截断修复策略：检测并修复被截断的 JSON
+        # 当 LLM 输出被截断时，JSON 可能缺少闭合的 } 或 ]
+        repaired = self._repair_truncated_json(content)
+        if repaired:
+            try:
+                result = json.loads(repaired)
+                logger.info("通过截断修复成功解析 JSON")
+                return result
+            except json.JSONDecodeError:
+                pass
+
+        logger.warning(
+            f"无法解析JSON响应, 响应长度: {len(content)}, "
+            f"内容: {content[:300]}..."
+        )
         return {}
 
     def _parse_json_array(self, content: str) -> List[str]:
@@ -483,6 +497,110 @@ class EntityExtractorService:
                 pass
 
         return []
+
+    def _repair_truncated_json(self, text: str) -> Optional[str]:
+        """尝试修复被截断的 JSON.
+
+        当 LLM 输出被截断时，JSON 可能缺少闭合的 } 或 ]。
+        此方法检测截断并尝试补充缺失的闭合符号。
+
+        修复策略：
+        1. 计算 { 和 } 的数量差，以及 [ 和 ] 的数量差
+        2. 如果检测到未闭合，先处理可能未闭合的字符串值
+        3. 按正确顺序补充缺失的 ] 和 }
+
+        Args:
+            text: 可能被截断的 JSON 文本
+
+        Returns:
+            修复后的 JSON 字符串，如果无法修复则返回 None
+        """
+        # 找到 JSON 起始位置
+        json_start = text.find("{")
+        if json_start == -1:
+            json_start = text.find("[")
+        if json_start == -1:
+            return None
+
+        json_part = text[json_start:]
+
+        # 计算括号数量差
+        open_braces = json_part.count("{")
+        close_braces = json_part.count("}")
+        open_brackets = json_part.count("[")
+        close_brackets = json_part.count("]")
+
+        missing_braces = open_braces - close_braces
+        missing_brackets = open_brackets - close_brackets
+
+        # 如果没有缺失的闭合符号，不需要修复
+        if missing_braces <= 0 and missing_brackets <= 0:
+            return None
+
+        logger.debug(
+            f"检测到 JSON 截断: 缺失 {missing_braces} 个 }} 和 {missing_brackets} 个 ]"
+        )
+
+        # 尝试修复
+        repaired = json_part
+
+        # 先处理可能未闭合的字符串值
+        repaired = self._close_unclosed_string(repaired)
+
+        # 补充缺失的闭合符号（先 ] 后 }，符合 JSON 嵌套规范）
+        # 注意：这里使用简化的顺序补充，对于复杂的嵌套可能不完全准确
+        # 但作为尽力而为的策略，通常能有效处理常见的截断场景
+        repaired = repaired + "]" * missing_brackets + "}" * missing_braces
+
+        return repaired
+
+    def _close_unclosed_string(self, text: str) -> str:
+        """尝试闭合未闭合的字符串值.
+
+        检查 JSON 中最后一个未闭合的字符串值，并补充闭合引号。
+        这是处理截断场景中字符串值被切断的情况.
+
+        Args:
+            text: JSON 文本
+
+        Returns:
+            处理后的 JSON 文本
+        """
+        # 找到最后一个 \" 的位置
+        last_quote = text.rfind('"')
+        if last_quote == -1:
+            return text
+
+        # 统计引号数量（偶数表示闭合，奇数表示未闭合）
+        # 需要正确处理转义引号的情况
+        quote_count = 0
+        i = 0
+        while i < len(text):
+            if text[i] == '"':
+                # 检查是否是转义引号
+                if i > 0 and text[i - 1] == '\\':
+                    # 检查是否是双重转义 \\\\"（此时引号有效）
+                    backslash_count = 0
+                    j = i - 1
+                    while j >= 0 and text[j] == '\\':
+                        backslash_count += 1
+                        j -= 1
+                    if backslash_count % 2 == 0:
+                        # 偶数个反斜杠，说明这个引号是转义的，不计数
+                        pass
+                    else:
+                        # 奇数个反斜杠，这个引号有效
+                        quote_count += 1
+                else:
+                    quote_count += 1
+            i += 1
+
+        # 如果引号数量为奇数，说明有未闭合的字符串
+        if quote_count % 2 == 1:
+            text = text + '"'
+            logger.debug("检测到未闭合的字符串值，已补充闭合引号")
+
+        return text
 
     def _build_extraction_result(
         self, chapter_number: int, data: Dict[str, Any]

@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     DASHSCOPE_MODEL: str = "qwen-plus"
     DASHSCOPE_BASE_URL: str = ""  # Coding Plan Pro 的 base URL
 
+    # 模型上下文窗口配置
+    MODEL_CONTEXT_WINDOW: int = int(os.getenv("MODEL_CONTEXT_WINDOW", "196608"))
+    MODEL_MAX_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MAX_OUTPUT_TOKENS", "16384"))
+    MODEL_MIN_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MIN_OUTPUT_TOKENS", "1024"))
+
     # Database
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码

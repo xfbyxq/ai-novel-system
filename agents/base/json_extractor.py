@@ -112,6 +112,13 @@ class JsonExtractor:
 
         text = text.strip()
 
+        # 排查日志：记录原始响应信息
+        logger.info(
+            f"[JSON解析] 原始响应长度: {len(text)}, "
+            f"前100字符: {text[:100]!r}, "
+            f"后50字符: {text[-50:]!r}"
+        )
+
         # 策略1：直接解析
         try:
             return json.loads(text)
@@ -120,17 +127,31 @@ class JsonExtractor:
 
         # 策略2：代码块提取（完整匹配，有闭合标记）
         match = cls.CODE_BLOCK_PATTERN.search(text)
+        logger.debug(f"[JSON解析] 策略2-正则匹配结果: {match is not None}")
         if match:
             json_str = match.group(1).strip()
+            logger.debug(f"[JSON解析] 策略2-提取到的代码块内容长度: {len(json_str)}")
             try:
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                pass
+                result = json.loads(json_str)
+                logger.info("[JSON解析] 策略2-成功解析代码块中的JSON")
+                return result
+            except json.JSONDecodeError as e:
+                logger.debug(f"[JSON解析] 策略2-JSON解析失败: {e}")
+        else:
+            # 正则未匹配，检查是否存在未闭合的代码块
+            has_opening = "```" in text
+            closing_count = text.count("```")
+            logger.debug(
+                f"[JSON解析] 策略2-正则未匹配, "
+                f"存在反引号: {has_opening}, "
+                f"反引号出现次数: {closing_count}"
+            )
 
         # 策略2b：未闭合的代码块（截断场景）
         # 如果响应以 ```json 或 ``` 开头但没有闭合的 ```，尝试提取代码块内的 JSON
         code_block_start = text.find("```")
         if code_block_start != -1:
+            logger.debug(f"[JSON解析] 策略2b-尝试未闭合代码块提取, 起始位置: {code_block_start}")
             # 跳过 ```json 或 ```
             after_code_block = text[code_block_start + 3:]
             # 跳过语言标识（如 json）
@@ -144,30 +165,43 @@ class JsonExtractor:
             if obj_start != -1:
                 obj_end = json_content.rfind("}")
                 if obj_end > obj_start:
+                    extracted = json_content[obj_start:obj_end + 1]
+                    logger.debug(
+                        f"[JSON解析] 策略2b-提取范围: [{obj_start}:{obj_end + 1}], "
+                        f"长度: {len(extracted)}"
+                    )
                     try:
-                        return json.loads(json_content[obj_start:obj_end + 1])
-                    except json.JSONDecodeError:
-                        pass
+                        result = json.loads(extracted)
+                        logger.info("[JSON解析] 策略2b-成功解析未闭合代码块中的JSON")
+                        return result
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"[JSON解析] 策略2b-JSON解析失败: {e}")
 
         # 策略3a：尝试找 JSON 数组
         array_start = text.find("[")
         if array_start != -1:
             array_end = text.rfind("]")
             if array_end > array_start:
+                logger.debug(f"[JSON解析] 策略3a-尝试数组提取, 范围: [{array_start}:{array_end + 1}]")
                 try:
-                    return json.loads(text[array_start : array_end + 1])
-                except json.JSONDecodeError:
-                    pass
+                    result = json.loads(text[array_start : array_end + 1])
+                    logger.info("[JSON解析] 策略3a-成功解析数组JSON")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.debug(f"[JSON解析] 策略3a-JSON解析失败: {e}")
 
         # 策略3b：尝试找 JSON 对象
         obj_start = text.find("{")
         if obj_start != -1:
             obj_end = text.rfind("}")
             if obj_end > obj_start:
+                logger.debug(f"[JSON解析] 策略3b-尝试对象提取, 范围: [{obj_start}:{obj_end + 1}]")
                 try:
-                    return json.loads(text[obj_start : obj_end + 1])
-                except json.JSONDecodeError:
-                    pass
+                    result = json.loads(text[obj_start : obj_end + 1])
+                    logger.info("[JSON解析] 策略3b-成功解析对象JSON")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.debug(f"[JSON解析] 策略3b-JSON解析失败: {e}")
 
         # 策略4：尝试修复常见问题后解析
         cleaned = cls._clean_json_string(text)
@@ -177,8 +211,20 @@ class JsonExtractor:
             except json.JSONDecodeError:
                 pass
 
+        # 策略5：截断修复策略 - 检测并修复被截断的 JSON
+        # 当 LLM 输出被截断时，JSON 可能缺少闭合的 } 或 ]
+        repaired = cls._repair_truncated_json(text)
+        if repaired:
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError as e:
+                logger.debug(f"截断修复后仍解析失败: {e}")
+
         # 所有策略都失败
-        raise ValueError(f"无法从响应中提取 JSON: {text[:200]}...")
+        raise ValueError(
+            f"无法从响应中提取 JSON, 响应长度: {len(text)}, "
+            f"前200字符: {text[:200]}..."
+        )
 
     @classmethod
     def _clean_json_string(cls, text: str) -> str:
@@ -218,6 +264,116 @@ class JsonExtractor:
         json_part = re.sub(r":\s*'([^']*)'(,|}|\])", r':"\1"\2', json_part)
 
         return json_part
+
+    @classmethod
+    def _repair_truncated_json(cls, text: str) -> Optional[str]:
+        """尝试修复被截断的 JSON.
+
+        当 LLM 输出被截断时，JSON 可能缺少闭合的 } 或 ]。
+        此方法检测截断并尝试补充缺失的闭合符号。
+
+        修复策略：
+        1. 计算 { 和 } 的数量差，以及 [ 和 ] 的数量差
+        2. 如果检测到未闭合，先处理可能未闭合的字符串值
+        3. 按正确顺序补充缺失的 ] 和 }
+
+        Args:
+            text: 可能被截断的 JSON 文本
+
+        Returns:
+            修复后的 JSON 字符串，如果无法修复则返回 None
+        """
+        # 找到 JSON 起始位置
+        json_start = text.find("{")
+        if json_start == -1:
+            json_start = text.find("[")
+        if json_start == -1:
+            return None
+
+        json_part = text[json_start:]
+
+        # 计算括号数量差
+        open_braces = json_part.count("{")
+        close_braces = json_part.count("}")
+        open_brackets = json_part.count("[")
+        close_brackets = json_part.count("]")
+
+        missing_braces = open_braces - close_braces
+        missing_brackets = open_brackets - close_brackets
+
+        # 如果没有缺失的闭合符号，不需要修复
+        if missing_braces <= 0 and missing_brackets <= 0:
+            return None
+
+        logger.debug(
+            f"检测到 JSON 截断: 缺失 {missing_braces} 个 }} 和 {missing_brackets} 个 ]"
+        )
+
+        # 尝试修复
+        repaired = json_part
+
+        # 先处理可能未闭合的字符串值
+        # 检查最后一个 \" 后面是否有闭合的 \"
+        repaired = cls._close_unclosed_string(repaired)
+
+        # 补充缺失的闭合符号（先 ] 后 }，符合 JSON 嵌套规范）
+        # 注意：这里使用简化的顺序补充，对于复杂的嵌套可能不完全准确
+        # 但作为尽力而为的策略，通常能有效处理常见的截断场景
+        repaired = repaired + "]" * missing_brackets + "}" * missing_braces
+
+        return repaired
+
+    @classmethod
+    def _close_unclosed_string(cls, text: str) -> str:
+        """尝试闭合未闭合的字符串值.
+
+        检查 JSON 中最后一个未闭合的字符串值，并补充闭合引号。
+        这是处理截断场景中字符串值被切断的情况.
+
+        Args:
+            text: JSON 文本
+
+        Returns:
+            处理后的 JSON 文本
+        """
+        # 找到最后一个 \" 的位置
+        last_quote = text.rfind('"')
+        if last_quote == -1:
+            return text
+
+        # 从最后位置往前扫描，检查这个引号是否已闭合
+        # 统计引号数量（偶数表示闭合，奇数表示未闭合）
+        quote_count = 0
+        i = 0
+        while i < len(text):
+            if text[i] == '"':
+                # 检查是否是转义引号
+                if i > 0 and text[i - 1] == '\\':
+                    # 检查是否是双重转义 \\\\"（此时引号有效）
+                    backslash_count = 0
+                    j = i - 1
+                    while j >= 0 and text[j] == '\\':
+                        backslash_count += 1
+                        j -= 1
+                    if backslash_count % 2 == 0:
+                        # 偶数个反斜杠，说明这个引号是转义的，不计数
+                        pass
+                    else:
+                        # 奇数个反斜杠，这个引号有效
+                        quote_count += 1
+                else:
+                    quote_count += 1
+            i += 1
+
+        # 如果引号数量为奇数，说明有未闭合的字符串
+        if quote_count % 2 == 1:
+            # 补充闭合引号
+            # 首先截断到最后一个有效字符（去除可能的乱码）
+            # 然后添加闭合引号
+            text = text + '"'
+            logger.debug("检测到未闭合的字符串值，已补充闭合引号")
+
+        return text
 
     @classmethod
     def safe_extract(cls, text: str, context: str = "") -> Dict[str, Any]:

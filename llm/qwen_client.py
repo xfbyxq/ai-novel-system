@@ -9,6 +9,7 @@ from dashscope import Generation
 from openai import AsyncOpenAI
 
 from backend.config import settings
+from llm.token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ class QwenClient:
             self.base_url
             and ("coding.dashscope" in self.base_url or "dashscope.aliyuncs.com" in self.base_url)
         )
+
+        # 初始化 token 计算器，用于动态计算 max_tokens
+        self.token_calculator = TokenCalculator()
 
         if self.use_openai_mode:
             # 使用 OpenAI 兼容模式（异步）
@@ -61,15 +65,32 @@ class QwenClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,  # None 表示不限制，避免截断
+        max_tokens: Optional[int] = None,  # None 表示动态计算
         top_p: float = 0.9,
         retries: int = 3,
     ) -> dict:
         """异步调用通义千问 API.
 
+        Args:
+            prompt: 用户输入文本
+            system: 系统提示文本
+            temperature: 温度参数
+            max_tokens: 最大输出 token 数，None 时动态计算
+            top_p: top_p 参数
+            retries: 重试次数
+
         Returns:
             dict: {"content": str, "usage": {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}}
         """
+        # 动态计算 max_tokens：根据输入 token 数自动分配输出空间
+        if max_tokens is None:
+            max_tokens = self.token_calculator.calculate_max_tokens(
+                prompt=prompt,
+                system=system,
+                context_window=settings.MODEL_CONTEXT_WINDOW,
+                min_output=settings.MODEL_MIN_OUTPUT_TOKENS,
+                max_output=settings.MODEL_MAX_OUTPUT_TOKENS,
+            )
         if self.use_openai_mode:
             return await self._chat_openai(prompt, system, temperature, max_tokens, retries)
         else:
