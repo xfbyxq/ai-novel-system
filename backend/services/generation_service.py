@@ -537,10 +537,39 @@ class GenerationService:
             enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
             if enhanced_outline and isinstance(enhanced_outline, dict):
                 # 更新PlotOutline表中的数据
-                outline.main_plot = enhanced_outline.get("main_plot", outline.main_plot)
-                outline.main_plot_detailed = enhanced_outline.get(
-                    "main_plot_detailed", outline.main_plot_detailed
-                )
+                enhanced_main_plot = enhanced_outline.get("main_plot", {})
+                logger.info(f"增强后的main_plot: {json.dumps(enhanced_main_plot, ensure_ascii=False, indent=2)}")
+                logger.info(f"main_plot字段数: {len(enhanced_main_plot) if enhanced_main_plot else 0}")
+
+                # 字段级合并：只用非空的增强字段覆盖，不丢失已有数据
+                if enhanced_main_plot:
+                    existing_main_plot = outline.main_plot or {}
+                    # 处理 JSON 字符串的情况
+                    if isinstance(existing_main_plot, str):
+                        try:
+                            existing_main_plot = json.loads(existing_main_plot)
+                        except (json.JSONDecodeError, TypeError):
+                            existing_main_plot = {}
+                    # 合并非空字段
+                    for field, value in enhanced_main_plot.items():
+                        if value:  # 只覆盖非空值
+                            existing_main_plot[field] = value
+                    outline.main_plot = existing_main_plot
+                    logger.info(f"合并后main_plot字段数: {len(existing_main_plot)}")
+
+                # main_plot_detailed 也做字段级合并
+                enhanced_detailed = enhanced_outline.get("main_plot_detailed")
+                if enhanced_detailed:
+                    existing_detailed = outline.main_plot_detailed or {}
+                    if isinstance(existing_detailed, str):
+                        try:
+                            existing_detailed = json.loads(existing_detailed)
+                        except (json.JSONDecodeError, TypeError):
+                            existing_detailed = {}
+                    for field, value in enhanced_detailed.items():
+                        if value:
+                            existing_detailed[field] = value
+                    outline.main_plot_detailed = existing_detailed
                 outline.sub_plots = enhanced_outline.get("sub_plots", outline.sub_plots)
                 outline.key_turning_points = enhanced_outline.get(
                     "key_turning_points", outline.key_turning_points

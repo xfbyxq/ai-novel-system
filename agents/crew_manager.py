@@ -1625,6 +1625,9 @@ class NovelCrewManager:
         improvements_made = []
         round_history = []
 
+        # 用于累积所有生成的字段
+        accumulated_main_plot = outline.get("main_plot", {}) or {}
+
         for round_num in range(1, max_rounds + 1):
             logger.info(f"🔄 完善轮次 {round_num}/{max_rounds}")
 
@@ -1642,6 +1645,23 @@ class NovelCrewManager:
             optimized_outline = await self._apply_outline_optimizations(
                 current_outline, suggestions, world_setting, characters
             )
+
+            # 防御性检查：确保 optimized_outline 是 dict
+            if not isinstance(optimized_outline, dict):
+                logger.warning(
+                    f"第{round_num}轮优化返回非dict类型 "
+                    f"({type(optimized_outline).__name__})，跳过本轮"
+                )
+                continue
+
+            # 4. 合并main_plot字段，确保不丢失已生成的字段
+            optimized_main_plot = optimized_outline.get("main_plot", {}) or {}
+            for field, value in optimized_main_plot.items():
+                if value:  # 只保存非空值
+                    accumulated_main_plot[field] = value
+
+            # 确保optimized_outline包含累积的所有字段
+            optimized_outline["main_plot"] = accumulated_main_plot.copy()
 
             # 记录本轮改进
             round_improvements = self._extract_improvements(
@@ -1661,10 +1681,54 @@ class NovelCrewManager:
             # 更新当前大纲
             current_outline = optimized_outline
 
+            logger.info(f"第{round_num}轮后main_plot字段: {list(accumulated_main_plot.keys())}")
+
             # 检查是否达到质量阈值或收敛
             if self._should_stop_refinement(analysis_result, options):
                 logger.info(f"✅ 完善在第 {round_num} 轮达到质量要求")
                 break
+
+        # 循环结束后，最终检查并补全缺失字段
+        main_plot_fields = [
+            "core_conflict", "protagonist_goal", "antagonist",
+            "progression_path", "emotional_arc", "key_revelations",
+            "character_growth", "resolution"
+        ]
+        final_main_plot = current_outline.get("main_plot", {}) or {}
+        final_missing = [f for f in main_plot_fields if not final_main_plot.get(f)]
+
+        if final_missing:
+            logger.warning(f"完善循环结束后仍有缺失字段: {final_missing}，进行最终补全")
+            try:
+                generated = await self._generate_missing_main_plot_fields(
+                    core_conflict=final_main_plot.get("core_conflict", ""),
+                    existing_fields=final_main_plot,
+                    missing_fields=final_missing,
+                    world_setting=world_setting,
+                    characters=characters,
+                )
+                for field, value in generated.items():
+                    if value:
+                        final_main_plot[field] = value
+                current_outline["main_plot"] = final_main_plot
+                logger.info(f"最终补全后main_plot字段: {list(final_main_plot.keys())}")
+            except Exception as e:
+                logger.error(f"最终补全失败: {e}")
+                # 尝试简化版补全
+                try:
+                    simple_generated = await self._generate_missing_main_plot_fields_simple(
+                        existing_fields=final_main_plot,
+                        missing_fields=final_missing,
+                        world_setting=world_setting,
+                        characters=characters,
+                    )
+                    for field, value in simple_generated.items():
+                        if value:
+                            final_main_plot[field] = value
+                    current_outline["main_plot"] = final_main_plot
+                    logger.info(f"简化最终补全后main_plot字段: {list(final_main_plot.keys())}")
+                except Exception as e2:
+                    logger.error(f"简化最终补全也失败: {e2}")
 
         logger.info(f"🎯 大纲完善完成，共进行 {len(round_history)} 轮优化")
 
@@ -1766,8 +1830,18 @@ class NovelCrewManager:
         if not suggestions:
             return outline
 
+        # 获取总章节数，用于生成卷结构
+        total_chapters = outline.get("climax_chapter", 100)
+        if isinstance(total_chapters, int) and total_chapters > 0:
+            total_chapters = max(total_chapters, 50)
+        else:
+            total_chapters = 100
+
+        # 计算推荐的卷数（每卷约20-30章）
+        recommended_volumes = max(3, min(10, total_chapters // 25))
+
         optimization_prompt = f"""
-请根据以下优化建议修改小说大纲：
+请根据以下优化建议修改小说大纲，生成完整且详细的大纲结构：
 
 原大纲：
 {json.dumps(outline, ensure_ascii=False, indent=2)}
@@ -1778,18 +1852,341 @@ class NovelCrewManager:
 世界观设定：
 {json.dumps(world_setting, ensure_ascii=False, indent=2)}
 
-请输出优化后的大纲，保持原有结构格式，只做必要的改进。
+角色列表：
+{json.dumps(characters, ensure_ascii=False, indent=2)}
+
+请输出优化后的大纲，必须包含以下完整结构：
+
+1. **structure_type**: 结构类型（如：三幕式、英雄之旅、多线叙事等）
+
+2. **main_plot**: 主线剧情对象，包含以下字段：
+   - core_conflict: 核心冲突
+   - protagonist_goal: 主角目标
+   - antagonist: 反派/阻碍
+   - progression_path: 升级路径
+   - emotional_arc: 情感弧光
+   - key_revelations: 关键揭示
+   - character_growth: 角色成长
+   - resolution: 结局描述
+
+3. **main_plot_detailed**: 详细主线剧情对象，包含：
+   - setup: 起始设定详细描述
+   - conflict: 冲突发展阶段
+   - climax: 高潮详细设计
+   - resolution: 结局详细描述
+   - turning_points: 关键转折点列表
+
+4. **volumes**: 卷结构数组（建议生成{recommended_volumes}卷，总章节数约{total_chapters}章），每卷必须包含：
+   - number: 卷号（从1开始）
+   - title: 卷标题（有吸引力的名称）
+   - summary: 卷概要（100-200字）
+   - chapters: 章节范围数组 [起始章节, 结束章节]
+   - core_conflict: 本卷核心矛盾
+   - main_events: 主线事件数组，每项包含 {{chapter: 章节号, event: 事件描述, impact: 影响}}
+   - key_turning_points: 关键转折点数组，每项包含 {{chapter: 章节号, event: 事件描述, significance: 重要性}}
+   - tension_cycles: 张力循环数组，每项包含 {{chapters: [起始, 结束], suppress_events: [压抑事件列表], release_event: 释放事件, tension_level: 张力等级1-10}}
+   - emotional_arc: 情感变化曲线描述
+   - character_arcs: 角色发展弧线数组，每项包含 {{character_id: 角色ID或名称, arc_description: 弧线描述, key_moments: [关键章节号列表]}}
+   - side_plots: 支线情节数组，每项包含 {{name: 支线名称, description: 描述, chapters: [涉及章节范围]}}
+   - foreshadowing: 伏笔分配数组，每项包含 {{description: 伏笔描述, setup_chapter: 设置章节, payoff_chapter: 回收章节}}
+   - themes: 本卷主题列表
+   - word_count_range: 字数范围 [最小值, 最大值]
+
+5. **sub_plots**: 支线剧情数组，每项包含：
+   - name: 支线名称
+   - description: 描述
+   - characters: 涉及角色列表
+   - chapters: 涉及章节范围
+   - arc: 支线发展弧线
+
+6. **key_turning_points**: 全书关键转折点数组，每项包含：
+   - chapter: 章节号
+   - event: 事件描述
+   - impact: 对剧情的影响
+   - significance: 重要性说明
+
+7. **climax_chapter**: 高潮章节号（整数）
+
+重要提示：
+- 确保volumes数组完整且每个卷都有详细的字段填充
+- 各卷之间要有清晰的剧情递进关系
+- 伏笔和呼应要贯穿各卷
+- 角色发展弧线要在不同卷中有体现
+- 返回的必须是有效的JSON格式
 """
 
         optimized_outline = await self._call_agent(
             agent_name="大纲重构师",
-            system_prompt="你是一位专业的小说大纲重构师，能够精准地改进大纲内容。",
+            system_prompt="你是一位专业的小说大纲重构师，擅长设计详细完整的卷章结构和剧情发展。",
             task_prompt=optimization_prompt,
-            temperature=0.4,
+            temperature=0.5,
             expect_json=True,
+            max_tokens=4096,
         )
 
+        # 防御性检查：确保 optimized_outline 是 dict 类型
+        if not isinstance(optimized_outline, dict):
+            logger.warning(
+                "_apply_outline_optimizations: LLM返回了非dict类型 "
+                f"({type(optimized_outline).__name__})，回退到原始大纲"
+            )
+            # 如果是list且包含dict元素，尝试提取
+            if isinstance(optimized_outline, list) and len(optimized_outline) > 0:
+                for item in optimized_outline:
+                    if isinstance(item, dict) and ("main_plot" in item or "volumes" in item):
+                        optimized_outline = item
+                        logger.info("从list中成功提取dict元素")
+                        break
+                else:
+                    return outline  # 回退到原始大纲
+            else:
+                return outline  # 回退到原始大纲
+
+        # 确保返回的数据包含完整的结构
+        if isinstance(optimized_outline, dict):
+            # 如果volumes为空或不完整，尝试保留原volumes
+            if not optimized_outline.get("volumes") and outline.get("volumes"):
+                optimized_outline["volumes"] = outline["volumes"]
+            # 确保每个卷都有number字段
+            if optimized_outline.get("volumes"):
+                for idx, vol in enumerate(optimized_outline["volumes"]):
+                    if isinstance(vol, dict) and "number" not in vol:
+                        vol["number"] = vol.get("volume_num", idx + 1)
+
+            # 确保main_plot包含所有必要字段
+            # 注意：字段累积逻辑已在refine_outline_comprehensive中处理
+            # 这里只检查并生成缺失的字段
+            current_main_plot = optimized_outline.get("main_plot", {}) or {}
+
+            # 定义main_plot应该包含的字段
+            main_plot_fields = [
+                "core_conflict", "protagonist_goal", "antagonist",
+                "progression_path", "emotional_arc", "key_revelations",
+                "character_growth", "resolution"
+            ]
+
+            # 检查是否有缺失的字段
+            missing_fields = [f for f in main_plot_fields if f not in current_main_plot or not current_main_plot[f]]
+
+            # 移除对 core_conflict 的前置条件检查，即使没有 core_conflict 也尝试补全
+            if missing_fields:
+                logger.info(f"main_plot缺失字段，将使用AI生成: {missing_fields}")
+                # 使用AI生成缺失的字段
+                try:
+                    generated_fields = await self._generate_missing_main_plot_fields(
+                        core_conflict=current_main_plot.get("core_conflict", ""),
+                        existing_fields=current_main_plot,
+                        missing_fields=missing_fields,
+                        world_setting=world_setting,
+                        characters=characters
+                    )
+                    # 合并生成的字段
+                    for field, value in generated_fields.items():
+                        if field in missing_fields and value:
+                            current_main_plot[field] = value
+                            logger.info(f"已生成字段 {field}: {value[:50]}...")
+                except Exception as e:
+                    logger.warning(f"生成缺失字段时出错: {e}，尝试使用简化提示词重试")
+                    # 异常时不直接跳过，尝试使用简化提示词重试
+                    try:
+                        simplified_fields = await self._generate_missing_main_plot_fields_simple(
+                            existing_fields=current_main_plot,
+                            missing_fields=missing_fields,
+                            world_setting=world_setting,
+                            characters=characters
+                        )
+                        for field, value in simplified_fields.items():
+                            if field in missing_fields and value:
+                                current_main_plot[field] = value
+                                logger.info(f"简化重试后生成字段 {field}: {value[:50]}...")
+                    except Exception as e2:
+                        logger.error(f"简化重试仍然失败: {e2}")
+
+            optimized_outline["main_plot"] = current_main_plot
+
+            logger.info(f"_apply_outline_optimizations后main_plot字段: {list(current_main_plot.keys())}")
+
         return optimized_outline
+
+    async def _generate_missing_main_plot_fields(
+        self,
+        core_conflict: str,
+        existing_fields: dict,
+        missing_fields: list,
+        world_setting: dict,
+        characters: list
+    ) -> dict:
+        """基于核心冲突生成缺失的main_plot字段.
+
+        Args:
+            core_conflict: 核心冲突描述
+            existing_fields: 已存在的字段
+            missing_fields: 需要生成的字段列表
+            world_setting: 世界观设定
+            characters: 角色列表
+
+        Returns:
+            生成的字段字典
+        """
+        field_descriptions = {
+            "core_conflict": "故事的核心矛盾和冲突，是推动剧情发展的主要动力",
+            "protagonist_goal": "主角想要达成的具体目标，应该与核心冲突直接相关",
+            "antagonist": "反派角色或主要阻碍的描述，包括其动机和能力",
+            "progression_path": "主角的成长路径或力量体系升级路线",
+            "emotional_arc": "主角在故事中的情感变化历程",
+            "key_revelations": "故事中的重要揭示和转折点",
+            "character_growth": "主角的性格和能力如何随着故事发展而改变",
+            "resolution": "故事的最终结局，如何解决了核心冲突"
+        }
+
+        # 构建需要生成的字段描述
+        fields_to_generate = {f: field_descriptions.get(f, f) for f in missing_fields}
+
+        # 根据 core_conflict 是否为空选择不同的提示词策略
+        if core_conflict and core_conflict.strip():
+            # 有核心冲突时，基于核心冲突生成
+            prompt = f"""
+基于以下核心冲突，请生成小说大纲中缺失的字段内容：
+
+核心冲突：
+{core_conflict}
+
+世界观设定：
+{json.dumps(world_setting, ensure_ascii=False, indent=2)}
+
+角色列表：
+{json.dumps(characters, ensure_ascii=False, indent=2)}
+
+已填写的字段：
+{json.dumps({k: v for k, v in existing_fields.items() if k not in missing_fields}, ensure_ascii=False, indent=2)}
+
+请生成以下缺失字段的内容（每项100-300字）：
+{json.dumps(fields_to_generate, ensure_ascii=False, indent=2)}
+
+输出格式（必须是有效的JSON）：
+{{
+    "protagonist_goal": "...",
+    "antagonist": "...",
+    ...
+}}
+
+注意：
+1. 只输出JSON格式，不要其他说明文字
+2. 生成的内容必须与核心冲突逻辑一致
+3. 每个字段都要详细具体，不要泛泛而谈
+"""
+        else:
+            # 没有核心冲突时，基于世界观和角色生成
+            prompt = f"""
+请基于世界观和角色信息，生成小说大纲中缺失的字段内容：
+
+世界观设定：
+{json.dumps(world_setting, ensure_ascii=False, indent=2)}
+
+角色列表：
+{json.dumps(characters, ensure_ascii=False, indent=2)}
+
+已填写的字段：
+{json.dumps({k: v for k, v in existing_fields.items() if k not in missing_fields}, ensure_ascii=False, indent=2)}
+
+请生成以下缺失字段的内容（每项100-300字）：
+{json.dumps(fields_to_generate, ensure_ascii=False, indent=2)}
+
+输出格式（必须是有效的JSON）：
+{{
+    "core_conflict": "...",
+    "protagonist_goal": "...",
+    "antagonist": "...",
+    ...
+}}
+
+注意：
+1. 只输出JSON格式，不要其他说明文字
+2. 先理解世界观和角色的特点，再推导合理的剧情要素
+3. 每个字段都要详细具体，确保逻辑一致性
+"""
+
+        result = await self._call_agent(
+            agent_name="大纲补全师",
+            system_prompt="你是一位专业的小说大纲设计师，擅长根据核心冲突推导完整的剧情要素。",
+            task_prompt=prompt,
+            temperature=0.6,
+            expect_json=True,
+            max_tokens=2048,
+        )
+
+        if isinstance(result, dict):
+            return result
+        return {}
+
+    async def _generate_missing_main_plot_fields_simple(
+        self,
+        existing_fields: dict,
+        missing_fields: list,
+        world_setting: dict,
+        characters: list
+    ) -> dict:
+        """简化版字段生成方法，当主方法失败时使用.
+
+        使用更简单的提示词，基于世界观和角色信息生成缺失字段。
+
+        Args:
+            existing_fields: 已存在的字段
+            missing_fields: 需要生成的字段列表
+            world_setting: 世界观设定
+            characters: 角色列表
+
+        Returns:
+            生成的字段字典
+        """
+        field_descriptions = {
+            "core_conflict": "故事的核心矛盾和冲突",
+            "protagonist_goal": "主角想要达成的具体目标",
+            "antagonist": "反派角色或主要阻碍",
+            "progression_path": "主角的成长路径",
+            "emotional_arc": "主角的情感变化历程",
+            "key_revelations": "故事中的重要揭示",
+            "character_growth": "主角的成长变化",
+            "resolution": "故事的最终结局"
+        }
+
+        # 构建需要生成的字段描述
+        fields_to_generate = {
+            f: field_descriptions.get(f, f) for f in missing_fields
+            if f in field_descriptions
+        }
+
+        # 使用更简洁的提示词
+        prompt = f"""
+请根据世界观和角色信息，生成小说大纲的缺失字段。
+
+世界观：
+{json.dumps(world_setting, ensure_ascii=False, indent=2)[:500]}
+
+主要角色：
+{json.dumps(characters[:3] if len(characters) > 3 else characters, ensure_ascii=False, indent=2)}
+
+需要生成：
+{json.dumps(fields_to_generate, ensure_ascii=False, indent=2)}
+
+输出JSON格式，每个字段50-150字。
+"""
+
+        try:
+            result = await self._call_agent(
+                agent_name="大纲补全师",
+                system_prompt="你是专业小说大纲设计师，简洁高效。",
+                task_prompt=prompt,
+                temperature=0.7,
+                expect_json=True,
+                max_tokens=1024,
+            )
+            if isinstance(result, dict):
+                return result
+            return {}
+        except Exception as e:
+            logger.error(f"简化生成也失败: {e}")
+            return {}
 
     def _extract_improvements(
         self, original: dict, optimized: dict, suggestions: list

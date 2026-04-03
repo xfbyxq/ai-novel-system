@@ -13,7 +13,6 @@ class NovelDetailPage(BasePage):
         "characters": "[data-testid='tab-characters']",
         "plot_outline": "[data-testid='tab-plot-outline']",
         "outline_refinement": "[data-testid='tab-outline-refinement']",
-        "chapter_decomposition": "[data-testid='tab-chapter-decomposition']",
         "chapters": "[data-testid='tab-chapters']",
         "generation_history": "[data-testid='tab-generation-history']",
         "relationship_graph": "[data-testid='tab-relationship-graph']",
