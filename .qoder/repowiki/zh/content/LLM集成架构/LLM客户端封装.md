@@ -18,9 +18,11 @@
 
 ## 更新摘要
 **所做更改**
-- 更新了max_tokens参数的说明，从必需整数改为可选参数（Optional[int] = None）
+- 更新了max_tokens参数的实现，从必需整数改为可选参数（Optional[int] = None）
 - 新增None值表示不限制token响应的说明
-- 更新了相关API文档和使用示例
+- 改进了智能重试机制，连接错误使用5s/10s/20s扩展等待，其他错误使用1s/2s/4s指数退避
+- 增强了OpenAI兼容模式的流式调用处理
+- 优化了超时配置，OpenAI兼容模式下设置300秒总超时
 - 强调了max_tokens参数在不同模式下的行为差异
 
 ## 目录
@@ -91,13 +93,13 @@ RT --> QC
 图表来源
 - [llm/qwen_client.py:16-383](file://llm/qwen_client.py#L16-L383)
 - [llm/cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
-- [backend/utils/retry.py:1-231](file://backend/utils/retry.py#L1-L231)
-- [agents/crew_manager.py:19-480](file://agents/crew_manager.py#L19-L480)
+- [backend/utils/retry.py:1-276](file://backend/utils/retry.py#L1-L276)
+- [agents/crew_manager.py:19-1988](file://agents/crew_manager.py#L19-L1988)
 - [agents/agent_dispatcher.py:17-440](file://agents/agent_dispatcher.py#L17-L440)
 - [agents/agent_manager.py:22-227](file://agents/agent_manager.py#L22-L227)
 - [agents/specific_agents.py:15-200](file://agents/specific_agents.py#L15-L200)
 - [backend/services/generation_service.py:27-689](file://backend/services/generation_service.py#L27-L689)
-- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [backend/services/ai_chat_service.py:1718-1917](file://backend/services/ai_chat_service.py#L1718-L1917)
 - [backend/services/novel_creation_flow_manager.py:130-329](file://backend/services/novel_creation_flow_manager.py#L130-L329)
 - [backend/config.py:5-514](file://backend/config.py#L5-L514)
 
@@ -118,9 +120,9 @@ RT --> QC
 章节来源
 - [llm/qwen_client.py:16-383](file://llm/qwen_client.py#L16-L383)
 - [llm/cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
-- [backend/utils/retry.py:1-231](file://backend/utils/retry.py#L1-L231)
+- [backend/utils/retry.py:1-276](file://backend/utils/retry.py#L1-L276)
 - [backend/services/generation_service.py:27-689](file://backend/services/generation_service.py#L27-L689)
-- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [backend/services/ai_chat_service.py:1718-1917](file://backend/services/ai_chat_service.py#L1718-L1917)
 - [backend/services/novel_creation_flow_manager.py:130-329](file://backend/services/novel_creation_flow_manager.py#L130-L329)
 
 ## 架构总览
@@ -381,7 +383,7 @@ end
 - [agents/crew_manager.py:104-163](file://agents/crew_manager.py#L104-L163)
 - [agents/specific_agents.py:37-113](file://agents/specific_agents.py#L37-L113)
 - [agents/agent_manager.py:64-125](file://agents/agent_manager.py#L64-L125)
-- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [backend/services/ai_chat_service.py:1718-1917](file://backend/services/ai_chat_service.py#L1718-L1917)
 - [backend/services/novel_creation_flow_manager.py:130-329](file://backend/services/novel_creation_flow_manager.py#L130-L329)
 
 ## 依赖关系分析
@@ -423,25 +425,25 @@ CT --> SA
 图表来源
 - [llm/qwen_client.py:7-11](file://llm/qwen_client.py#L7-L11)
 - [backend/config.py:5-514](file://backend/config.py#L5-L514)
-- [backend/utils/retry.py:1-231](file://backend/utils/retry.py#L1-L231)
+- [backend/utils/retry.py:1-276](file://backend/utils/retry.py#L1-L276)
 - [agents/crew_manager.py:12-35](file://agents/crew_manager.py#L12-L35)
 - [agents/agent_dispatcher.py:10-31](file://agents/agent_dispatcher.py#L10-L31)
 - [agents/agent_manager.py:18-69](file://agents/agent_manager.py#L18-L69)
 - [agents/specific_agents.py:7-36](file://agents/specific_agents.py#L7-L36)
 - [backend/services/generation_service.py:21-34](file://backend/services/generation_service.py#L21-L34)
-- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [backend/services/ai_chat_service.py:1718-1917](file://backend/services/ai_chat_service.py#L1718-L1917)
 - [backend/services/novel_creation_flow_manager.py:130-329](file://backend/services/novel_creation_flow_manager.py#L130-L329)
 
 章节来源
 - [llm/qwen_client.py:7-11](file://llm/qwen_client.py#L7-L11)
 - [backend/config.py:5-514](file://backend/config.py#L5-L514)
-- [backend/utils/retry.py:1-231](file://backend/utils/retry.py#L1-L231)
+- [backend/utils/retry.py:1-276](file://backend/utils/retry.py#L1-L276)
 - [agents/crew_manager.py:12-35](file://agents/crew_manager.py#L12-L35)
 - [agents/agent_dispatcher.py:10-31](file://agents/agent_dispatcher.py#L10-L31)
 - [agents/agent_manager.py:18-69](file://agents/agent_manager.py#L18-L69)
 - [agents/specific_agents.py:7-36](file://agents/specific_agents.py#L7-L36)
 - [backend/services/generation_service.py:21-34](file://backend/services/generation_service.py#L21-L34)
-- [backend/services/ai_chat_service.py:1718-1920](file://backend/services/ai_chat_service.py#L1718-L1920)
+- [backend/services/ai_chat_service.py:1718-1917](file://backend/services/ai_chat_service.py#L1718-L1917)
 - [backend/services/novel_creation_flow_manager.py:130-329](file://backend/services/novel_creation_flow_manager.py#L130-L329)
 
 ## 性能考量

@@ -39,11 +39,11 @@
 
 ## 更新摘要
 **所做更改**
-- 全面增强了成本跟踪功能，包括令牌使用监控和成本计算机制
-- 新增了详细的TokenUsage模型和数据库表结构
-- 实现了章节级成本分类追踪（base/iteration/query/vote）
-- 增加了成本预算控制和实时成本监控功能
-- 完善了成本汇总统计和详细成本分解报告
+- 全面增强了上下文预加载功能：新增自动加载前一章摘要和内容到crew_manager缓存
+- 实现了双源加载机制：同时从持久化内存和内存服务加载数据
+- 优化了数据结构：统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存
+- 增强了诊断日志：详细的预加载过程日志和性能监控
+- 新增了统一上下文管理器：替代分散的上下文管理，实现三层存储统一
 
 ## 目录
 1. [简介](#简介)
@@ -67,7 +67,7 @@
 - **批量写作**：并行生成多个章节内容
 - **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 新增了全面的成本跟踪功能，包括令牌使用监控和成本计算机制，支持实时跟踪计算资源使用并提供详细的成本分解。系统现在能够按章节、按类别追踪成本，支持base（基础）、iteration（迭代）、query（查询）、vote（投票）等成本分类，并提供详细的成本汇总统计和预算控制功能。
+**更新** 新增了全面的成本跟踪功能，包括令牌使用监控和成本计算机制，支持实时跟踪计算资源使用并提供详细的成本分解。系统现在能够按章节、按类别追踪成本，支持base（基础）、iteration（迭代）、query（查询）、vote（投票）等成本分类，并提供详细的成本汇总统计和预算控制功能。**新增** 统一上下文管理器替代了分散的上下文管理，实现三层存储统一；**新增** 双源加载机制支持从持久化内存和内存服务同时加载数据；**新增** 优化的数据结构统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存；**新增** 详细的诊断日志记录预加载过程和性能监控。
 
 ## 项目结构
 
@@ -119,9 +119,9 @@ API --> GS
 GS --> AD
 GS --> AAR
 GS --> UCM
-GS --> TC
+GS --> CT
 GS --> TU
-GS --> TC
+GS --> CT
 GS --> GSS
 GS --> EES
 GS --> FI
@@ -174,6 +174,9 @@ GraphAPI --> GQS
 - **实体抽取**：使用LLM从章节内容中抽取实体信息
 - **伏笔处理**：增强的foreshadowing数据处理和同步
 - **成本追踪**：完整的令牌使用监控和成本计算
+- **上下文预加载**：自动加载前一章摘要和内容到crew_manager缓存
+- **双源加载**：同时从持久化内存和内存服务加载数据
+- **诊断日志**：详细的预加载过程日志和性能监控
 
 ```mermaid
 classDiagram
@@ -185,6 +188,8 @@ class GenerationService {
 +MemoryService memory_service
 +AgentActivityRecorder activity_recorder
 +dict _context_managers
++dict _chapter_write_counter
++dict _last_active_time
 +UnifiedContextManager _get_context_manager(novel_id)
 +run_planning(novel_id, task_id) dict
 +run_chapter_writing(novel_id, task_id, current_chapter, volume_number) dict
@@ -194,6 +199,7 @@ class GenerationService {
 +_record_planning_activities(novel_id, task_id, planning_result, cost_summary) void
 +run_editing_task(novel_id, task_id, draft_content, current_chapter) dict
 +_sync_chapter_to_graph_safe(novel_id, chapter_number, chapter_content, chapter_plan) void
++cleanup_expired_contexts() dict
 }
 class CostTracker {
 +str model
@@ -227,6 +233,8 @@ class UnifiedContextManager {
 +build_previous_context(current_chapter, count) str
 +get_context_data() dict
 +clear_expired() void
++cleanup() dict
++refresh_all() void
 }
 class AgentDispatcher {
 +QwenClient client
@@ -318,6 +326,183 @@ CostTracker --> TokenUsage : "生成记录"
 - [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 - [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
 - [token_usage.py:13-34](file://core/models/token_usage.py#L13-L34)
+
+### 统一上下文管理器 (UnifiedContextManager)
+
+**新增** 统一上下文管理器替代了分散的上下文管理，提供了一致的上下文访问接口：
+
+```mermaid
+classDiagram
+class UnifiedContextManager {
++AsyncSession db
++str novel_id
++LRUCache memory_cache
++MemoryService memory_service_cache
++NovelMemoryStorage persistent_memory
++dict _current_context
++int _context_version
++build_previous_context(current_chapter, count) str
++get_chapter_context(chapter_number, include_previous, previous_count) dict
++update_chapter_context(chapter_number, context, sync_immediately) void
++get_novel_memory() dict
++cleanup() dict
++refresh_all() void
+}
+class LRUCache {
++int max_size
++int ttl_minutes
++dict cache
++dict timestamps
++get(key) Any
++set(key, value) void
++delete(key) void
++clear() void
++cleanup_expired() int
+}
+class ContextCache {
++dict cache
++dict ttl_cache
++datetime last_cleanup
++get(key) Any
++set(key, value) void
++is_expired(key) bool
++cleanup_expired() void
+}
+UnifiedContextManager --> LRUCache : "使用"
+UnifiedContextManager --> ContextCache : "使用"
+```
+
+**图表来源**
+- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+
+**章节来源**
+- [context_manager.py:1-390](file://backend/services/context_manager.py#L1-L390)
+
+### 上下文预加载系统
+
+**新增** 上下文预加载系统实现了自动加载前一章摘要和内容到crew_manager缓存：
+
+```mermaid
+flowchart TD
+Start([开始上下文预加载]) --> CheckChapter{"检查章节号<br/>chapter_number > 1?"}
+CheckChapter --> |是| LoadPrevChapter["加载前一章数据"]
+CheckChapter --> |否| SkipPreload["跳过预加载"]
+LoadPrevChapter --> LoadDetailedOutline["加载细化大纲到缓存<br/>_chapter_detailed_outlines"]
+LoadDetailedOutline --> LoadSummaries["从持久化内存加载摘要<br/>get_chapter_summaries"]
+LoadSummaries --> LoadMemSummaries["从内存服务加载摘要<br/>get_chapter_summaries"]
+LoadMemSummaries --> LoadContents["加载章节内容到缓存<br/>_chapter_contents"]
+LoadContents --> LogDiagnostics["记录诊断日志<br/>预加载统计数据"]
+LogDiagnostics --> End([完成预加载])
+SkipPreload --> End
+```
+
+**图表来源**
+- [generation_service.py:720-771](file://backend/services/generation_service.py#L720-L771)
+- [generation_service.py:1304-1355](file://backend/services/generation_service.py#L1304-L1355)
+
+**章节来源**
+- [generation_service.py:720-771](file://backend/services/generation_service.py#L720-L771)
+- [generation_service.py:1304-1355](file://backend/services/generation_service.py#L1304-L1355)
+
+### 双源加载机制
+
+**新增** 双源加载机制支持同时从持久化内存和内存服务加载数据：
+
+```mermaid
+classDiagram
+class DoubleSourceLoader {
++get_chapter_summaries(novel_id, start_chapter, end_chapter) list
++get_chapter_summaries_from_persistent(novel_id, start_chapter, end_chapter) list
++get_chapter_summaries_from_memory(novel_id) dict
++merge_summaries(persistent_summaries, memory_summaries) dict
++log_loading_stats(count, source) void
+}
+class PersistentMemoryAdapter {
++get_chapter_summaries(novel_id, start_chapter, end_chapter) list
++save_chapter_summary(novel_id, chapter_number, summary) void
+}
+class MemoryService {
++get_chapter_summaries(novel_id) dict
++update_chapter_summary(novel_id, chapter_number, summary) void
+}
+DoubleSourceLoader --> PersistentMemoryAdapter : "使用"
+DoubleSourceLoader --> MemoryService : "使用"
+```
+
+**图表来源**
+- [generation_service.py:739-758](file://backend/services/generation_service.py#L739-L758)
+- [generation_service.py:1322-1342](file://backend/services/generation_service.py#L1322-L1342)
+
+**章节来源**
+- [generation_service.py:739-758](file://backend/services/generation_service.py#L739-L758)
+- [generation_service.py:1322-1342](file://backend/services/generation_service.py#L1322-L1342)
+
+### 优化的数据结构
+
+**新增** 优化的数据结构统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存：
+
+```mermaid
+classDiagram
+class OptimizedDataStructures {
++dict _chapter_summaries
++dict _chapter_contents
++dict _chapter_detailed_outlines
++load_chapter_summary(chapter_number, summary) void
++load_chapter_content(chapter_number, content) void
++load_detailed_outline(chapter_number, outline) void
++get_preloaded_context(chapter_number) dict
++clear_cache() void
+}
+class ChapterSummary {
++int chapter_number
++str title
++list key_events
++str plot_progress
++list foreshadowing
++str ending_state
+}
+class ChapterContent {
++int chapter_number
++str content
+}
+class DetailedOutline {
++int chapter_number
++dict outline_data
+}
+OptimizedDataStructures --> ChapterSummary : "管理"
+OptimizedDataStructures --> ChapterContent : "管理"
+OptimizedDataStructures --> DetailedOutline : "管理"
+```
+
+**图表来源**
+- [crew_manager.py:162-165](file://agents/crew_manager.py#L162-L165)
+
+**章节来源**
+- [crew_manager.py:162-165](file://agents/crew_manager.py#L162-L165)
+
+### 诊断日志系统
+
+**新增** 诊断日志系统提供详细的预加载过程日志和性能监控：
+
+```mermaid
+flowchart LR
+PreloadStart["预加载开始"] --> LogInfo["记录诊断信息<br/>- novel_id<br/>- chapter_number<br>- novel.chapters数量"]
+LogInfo --> LoadPersistent["加载持久化内存摘要"]
+LoadPersistent --> LogPersistent["记录持久化加载统计"]
+LogPersistent --> LoadMemory["加载内存服务摘要"]
+LoadMemory --> LogMemory["记录内存加载统计"]
+LogMemory --> LoadContents["加载章节内容"]
+LoadContents --> LogFinal["记录最终预加载统计"]
+LogFinal --> PreloadEnd["预加载完成"]
+```
+
+**图表来源**
+- [generation_service.py:735-771](file://backend/services/generation_service.py#L735-L771)
+- [generation_service.py:1318-1355](file://backend/services/generation_service.py#L1318-L1355)
+
+**章节来源**
+- [generation_service.py:735-771](file://backend/services/generation_service.py#L735-L771)
+- [generation_service.py:1318-1355](file://backend/services/generation_service.py#L1318-L1355)
 
 ### 成本跟踪系统
 
@@ -441,6 +626,7 @@ Worker->>Worker : 检查并发控制
 Worker->>Service : 执行生成任务
 Service->>Service : 检查并发控制
 Service->>Service : 获取统一上下文
+Service->>Service : 上下文预加载
 Service->>LLM : 调用AI模型
 LLM-->>Service : 返回生成结果
 Service->>Service : 记录Token使用
@@ -499,8 +685,8 @@ Start([开始章节写作]) --> LoadData["加载小说数据"]
 LoadData --> BuildContext["构建上下文<br/>- 统一上下文管理器<br/>- 增强版前几章摘要<br/>- 持久化记忆集成"]
 BuildContext --> InitTask["初始化任务"]
 InitTask --> InitAgent["初始化代理"]
-InitAgent --> GetStates["获取角色状态<br/>- 优先持久化记忆<br/>- 回退到内存缓存"]
-GetStates --> CallLLM["调用AI生成章节"]
+InitAgent --> PreloadContext["上下文预加载<br/>- 自动加载前一章摘要<br/>- 双源加载机制<br/>- 优化数据结构<br/>- 诊断日志记录"]
+PreloadContext --> CallLLM["调用AI生成章节"]
 CallLLM --> ParseResult["解析结果"]
 ParseResult --> SaveChapter["保存章节内容"]
 SaveChapter --> UpdateMemory["更新记忆系统<br/>- 章节摘要<br/>- 角色状态更新"]
@@ -1002,14 +1188,28 @@ classDiagram
 class UnifiedContextManager {
 +AsyncSession db
 +str novel_id
-+dict cache
-+dict ttl_cache
-+int cache_max_size
-+int cache_ttl_minutes
++LRUCache memory_cache
++MemoryService memory_service_cache
++NovelMemoryStorage persistent_memory
++dict _current_context
++int _context_version
 +build_previous_context(current_chapter, count) str
-+get_context_data() dict
-+clear_expired() void
-+_cleanup_expired() void
++get_chapter_context(chapter_number, include_previous, previous_count) dict
++update_chapter_context(chapter_number, context, sync_immediately) void
++get_novel_memory() dict
++cleanup() dict
++refresh_all() void
+}
+class LRUCache {
++int max_size
++int ttl_minutes
++dict cache
++dict timestamps
++get(key) Any
++set(key, value) void
++delete(key) void
++clear() void
++cleanup_expired() int
 }
 class ContextCache {
 +dict cache
@@ -1020,6 +1220,7 @@ class ContextCache {
 +is_expired(key) bool
 +cleanup_expired() void
 }
+UnifiedContextManager --> LRUCache : "使用"
 UnifiedContextManager --> ContextCache : "使用"
 ```
 
@@ -1027,7 +1228,7 @@ UnifiedContextManager --> ContextCache : "使用"
 - [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
 
 **章节来源**
-- [context_manager.py:1-200](file://backend/services/context_manager.py#L1-L200)
+- [context_manager.py:1-390](file://backend/services/context_manager.py#L1-L390)
 
 ### 团队上下文管理 (NovelTeamContext)
 
@@ -1334,6 +1535,7 @@ ModelToDict --> GenerationService
 - **并发任务处理**：Celery支持多worker并发执行
 - **异步图数据库同步**：章节生成后异步执行，避免阻塞主流程
 - **异步成本记录**：成本追踪与任务执行并行，不影响主流程性能
+- **异步上下文预加载**：预加载过程异步执行，不阻塞主生成流程
 
 ### 成本控制机制
 
@@ -1365,6 +1567,7 @@ Pause --> End
 - **持久化记忆**：SQLite + FTS5支持长期记忆存储
 - **图查询缓存**：支持图查询结果缓存，提高查询性能
 - **成本统计缓存**：成本汇总统计的缓存机制
+- **预加载缓存**：crew_manager的chapter_summaries、chapter_contents、chapter_detailed_outlines缓存
 
 ### 三层并发控制机制
 
@@ -1406,6 +1609,7 @@ Pause --> End
 - **批量序列化**：通过model_to_dict优化大量数据的序列化
 - **缓存策略**：统一上下文管理器减少重复计算
 - **图数据模型**：支持丰富的实体关系类型和属性
+- **预加载优化**：双源加载机制减少数据获取时间
 
 ### 伏笔处理优化
 
@@ -1426,6 +1630,16 @@ Pause --> End
 - **成本分类**：按任务类型和章节号分类追踪，便于成本分析
 - **实时监控**：提供实时成本监控和预算控制功能
 - **成本汇总**：自动生成成本汇总报告，支持导出和分析
+
+### 上下文预加载优化
+
+**新增** 上下文预加载系统的性能优化：
+
+- **双源加载**：同时从持久化内存和内存服务加载数据，提高数据获取速度
+- **异步预加载**：预加载过程异步执行，不阻塞主生成流程
+- **诊断日志**：详细的预加载过程日志，包括数据量统计和性能监控
+- **缓存优化**：统一使用优化的数据结构，减少内存占用
+- **错误处理**：改进的异常处理，确保预加载失败不影响主流程
 
 **章节来源**
 - [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
@@ -1465,6 +1679,10 @@ Pause --> End
 | 成本超支 | 任务被意外终止 | 检查成本阈值和预算配置 |
 | 成本分类错误 | 成本统计不准确 | 检查cost_category参数传递 |
 | 成本汇总失败 | 无法获取成本统计 | 检查get_summary方法和数据完整性 |
+| 上下文预加载失败 | 预加载数据为空 | 检查持久化内存和内存服务配置 |
+| 预加载性能问题 | 预加载过程缓慢 | 检查双源加载机制和缓存策略 |
+| 诊断日志缺失 | 预加载过程无日志 | 检查日志配置和权限设置 |
+| 缓存污染 | 预加载数据错误 | 检查缓存清理机制和版本控制 |
 
 ### 日志监控
 
@@ -1483,6 +1701,8 @@ Pause --> End
 - **伏笔处理**：记录伏笔状态变更和同步过程
 - **成本追踪**：记录成本计算和分类统计
 - **TokenUsage记录**：记录详细的令牌使用明细
+- **上下文预加载**：记录预加载过程和性能统计
+- **诊断日志**：记录详细的预加载诊断信息
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
@@ -1523,5 +1743,15 @@ Pause --> End
 28. **成本分类追踪**：按任务类型和章节号的成本分类管理
 29. **实时成本监控**：支持预算控制和成本预警功能
 30. **成本汇总统计**：提供详细的成本分解和分析报告
+31. **统一上下文管理器**：替代分散的上下文管理，实现三层存储统一
+32. **上下文预加载系统**：自动加载前一章摘要和内容到crew_manager缓存
+33. **双源加载机制**：同时从持久化内存和内存服务加载数据
+34. **优化数据结构**：统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存
+35. **诊断日志系统**：详细的预加载过程日志和性能监控
+36. **异步预加载优化**：预加载过程异步执行，不阻塞主生成流程
+37. **缓存策略优化**：LRU缓存和TTL过期机制，防止内存泄漏
+38. **错误处理优化**：改进的异常处理和数据格式兼容性
+39. **性能监控增强**：详细的预加载统计数据和性能指标
+40. **稳定性保障**：异步上下文预加载、错误隔离和日志记录
 
-**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成、实体抽取功能和**全面的成本跟踪功能**。新增的CostTracker类提供了精确的令牌使用监控和成本计算，TokenUsage模型支持详细的成本记录和统计分析，支持base、iteration、query、vote四种成本分类。这些增强为AI驱动的小说创作提供了更加稳健、智能化、可扩展且具备完整成本控制的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘、智能推荐和精细化成本管理奠定了坚实的技术基础。
+**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成、实体抽取功能、**统一上下文管理器**、**上下文预加载系统**、**双源加载机制**、**优化数据结构**和**诊断日志系统**。新增的UnifiedContextManager类提供了三层存储统一管理，包括LRUCache（内存缓存）、MemoryService（兼容层）和SQLite持久化存储。上下文预加载系统实现了自动加载前一章摘要和内容到crew_manager缓存，支持双源加载机制（持久化内存和内存服务），使用优化的数据结构（chapter_summaries、chapter_contents、chapter_detailed_outlines），并通过详细的诊断日志记录预加载过程和性能统计。这些增强为AI驱动的小说创作提供了更加稳健、智能化、可扩展且具备完整成本控制的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘、智能推荐和精细化成本管理奠定了坚实的技术基础。
