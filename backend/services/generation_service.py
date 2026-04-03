@@ -730,6 +730,46 @@ class GenerationService:
                         prev_chapter.detailed_outline
                     )
 
+                # 预加载章节摘要和内容到 crew_manager 缓存（用于上下文压缩）
+                # 从持久化存储和内存缓存获取之前章节的摘要
+                logger.info(
+                    f"[run_chapter_writing] 预加载数据诊断: novel_id={novel_id}, "
+                    f"chapter_number={chapter_number}, novel.chapters 数量={len(novel.chapters)}"
+                )
+                persistent_summaries = self.persistent_memory.storage.get_chapter_summaries(
+                    str(novel_id), start_chapter=1, end_chapter=chapter_number - 1
+                )
+                logger.info(
+                    f"[run_chapter_writing] persistent_memory 返回 {len(persistent_summaries)} 个摘要"
+                )
+                for summary in persistent_summaries:
+                    ch_num = summary.get("chapter_number")
+                    if ch_num:
+                        self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+                # 补充从 memory_service 获取
+                mem_summaries = self.memory_service.get_chapter_summaries(str(novel_id))
+                logger.info(
+                    f"[run_chapter_writing] memory_service 返回 {len(mem_summaries)} 个摘要"
+                )
+                for ch_num_str, summary in mem_summaries.items():
+                    ch_num = int(ch_num_str)
+                    if ch_num < chapter_number and ch_num not in self.dispatcher.crew_manager._chapter_summaries:
+                        self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+                # 加载章节内容
+                content_count = 0
+                for ch in novel.chapters:
+                    if ch.chapter_number < chapter_number and ch.content:
+                        self.dispatcher.crew_manager._chapter_contents[ch.chapter_number] = ch.content
+                        content_count += 1
+
+                logger.info(
+                    f"[run_chapter_writing] 预加载上下文: "
+                    f"{len(self.dispatcher.crew_manager._chapter_summaries)} 个摘要, "
+                    f"{content_count} 个内容"
+                )
+
             # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
             writing_result = await self.dispatcher.run_chapter_writing(
@@ -1271,6 +1311,48 @@ class GenerationService:
                 self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
                     prev_chapter.detailed_outline
                 )
+
+            # 预加载章节摘要和内容到 crew_manager 缓存（用于上下文压缩）
+            # 从持久化存储和内存缓存获取之前章节的摘要
+            # 1. 尝试从 persistent_memory 获取
+            logger.info(
+                f"[_write_single_chapter] 预加载数据诊断: novel_id={novel_id}, "
+                f"chapter_number={chapter_number}, novel.chapters 数量={len(novel.chapters)}"
+            )
+            persistent_summaries = self.persistent_memory.storage.get_chapter_summaries(
+                str(novel_id), start_chapter=1, end_chapter=chapter_number - 1
+            )
+            logger.info(
+                f"[_write_single_chapter] persistent_memory 返回 {len(persistent_summaries)} 个摘要"
+            )
+            # persistent_summaries 是列表格式，转换为字典
+            for summary in persistent_summaries:
+                ch_num = summary.get("chapter_number")
+                if ch_num:
+                    self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+            # 2. 尝试从 memory_service 获取（补充）
+            mem_summaries = self.memory_service.get_chapter_summaries(str(novel_id))
+            logger.info(
+                f"[_write_single_chapter] memory_service 返回 {len(mem_summaries)} 个摘要"
+            )
+            for ch_num_str, summary in mem_summaries.items():
+                ch_num = int(ch_num_str)
+                if ch_num < chapter_number and ch_num not in self.dispatcher.crew_manager._chapter_summaries:
+                    self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+            # 3. 加载章节内容
+            content_count = 0
+            for ch in novel.chapters:
+                if ch.chapter_number < chapter_number and ch.content:
+                    self.dispatcher.crew_manager._chapter_contents[ch.chapter_number] = ch.content
+                    content_count += 1
+
+            logger.info(
+                f"[_write_single_chapter] 预加载上下文: "
+                f"{len(self.dispatcher.crew_manager._chapter_summaries)} 个摘要, "
+                f"{content_count} 个内容（从 novel.chapters 中有内容的章节）"
+            )
 
         # 执行写作阶段
         self.cost_tracker.reset()
