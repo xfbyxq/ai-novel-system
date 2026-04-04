@@ -12,7 +12,6 @@ import WorldSettingTab from './WorldSettingTab';
 import CharactersTab from './CharactersTab';
 import PlotOutlineTab from './PlotOutlineTab';
 import OutlineRefinementTab from './OutlineRefinementTab';
-import ChapterDecompositionTab from './ChapterDecompositionTab';
 import ChaptersTab from './ChaptersTab';
 import GenerationHistoryTab from './GenerationHistoryTab';
 
@@ -96,7 +95,6 @@ export default function NovelDetail() {
           { key: 'characters', label: '角色', children: <CharactersTab novelId={id} /> },
           { key: 'outline', label: '大纲', children: <PlotOutlineTab novelId={id} /> },
           { key: 'outline-refine', label: '大纲梳理', children: <OutlineRefinementTab novelId={id} onOutlineUpdate={loadNovel} /> },
-          { key: 'chapter-split', label: '章节拆分', children: <ChapterDecompositionTab novelId={id} /> },
           { key: 'chapters', label: '章节', children: <ChaptersTab novelId={id} /> },
           { key: 'generation', label: '生成历史', children: <GenerationHistoryTab novelId={id} onNovelRefresh={loadNovel} /> },
         ]}

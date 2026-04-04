@@ -9,6 +9,7 @@ from backend.api.v1 import (
     chapters,
     characters,
     generation,
+    graph,
     monitoring,
     novels,
     outlines,
@@ -29,6 +30,7 @@ api_router.include_router(generation.router)
 api_router.include_router(ai_chat.router)
 api_router.include_router(publishing.router)
 api_router.include_router(monitoring.router)
+api_router.include_router(graph.router)
 # 注释掉不存在或依赖缺失的模块路由
 # api_router.include_router(crawler.router)
 # api_router.include_router(automation.router)

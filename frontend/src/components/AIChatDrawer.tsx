@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip,
+  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip, Alert,
 } from 'antd';
-import { SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, CheckCircleOutlined, BookOutlined, EditOutlined } from '@ant-design/icons';
+import { SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, CheckCircleOutlined, BookOutlined, EditOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { 
   createChatSession, 
   getWebSocketUrl, 
@@ -14,6 +14,7 @@ import {
   applySuggestions,
   getNovelCharactersForRevision,
   getNovelChaptersForRevision,
+  generateSmartSummary,
   type RevisionSuggestion,
   type CharacterListItem,
   type ChapterListItem,
@@ -81,6 +82,10 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<RevisionSuggestion | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  
+  // 智能摘要相关状态
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [showSummaryHint, setShowSummaryHint] = useState(true);
 
   const initSession = async () => {
     try {
@@ -95,6 +100,40 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     } catch (error) {
       console.error('创建会话失败:', error);
       message.error('创建会话失败，请重试');
+    }
+  };
+
+  // 生成智能章节摘要
+  const handleGenerateSmartSummary = async () => {
+    if (!novelId) return;
+    
+    setGeneratingSummary(true);
+    try {
+      // 获取指定范围内的章节号列表
+      const chapterNumbers = [];
+      for (let i = chapterRange.start; i <= chapterRange.end; i++) {
+        chapterNumbers.push(i);
+      }
+      
+      const response = await generateSmartSummary({
+        novel_id: novelId,
+        chapter_numbers: chapterNumbers,
+        force_regenerate: false, // 使用缓存
+      });
+      
+      setShowSummaryHint(false);
+      
+      const summaryMsg = `已生成 ${response.generated_count} 个章节的智能摘要，使用缓存 ${response.cached_count} 个。\n\n` +
+        `摘要包含：关键事件、情节概要、人物互动、情感走向、伏笔暗示等结构化信息。\n\n` +
+        `现在您可以询问关于这些章节的具体问题了！`;
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: summaryMsg }]);
+      message.success('智能摘要生成完成');
+    } catch (error) {
+      console.error('生成智能摘要失败:', error);
+      message.error('生成智能摘要失败，请重试');
+    } finally {
+      setGeneratingSummary(false);
     }
   };
 
@@ -540,11 +579,29 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                     onChange={(e) => setChapterRange({ ...chapterRange, end: parseInt(e.target.value) || chapterRange.start })}
                     style={{ width: 80 }}
                   />
-                  <Button size="small" onClick={handleRestart}>
-                    应用
-                  </Button>
+                  <Tooltip title="读取完整章节内容并提炼关键点">
+                    <Button 
+                      size="small" 
+                      type="primary"
+                      icon={<ThunderboltOutlined />}
+                      loading={generatingSummary}
+                      onClick={handleGenerateSmartSummary}
+                    >
+                      智能摘要
+                    </Button>
+                  </Tooltip>
                 </Space>
               </Space>
+            )}
+            {showSummaryHint && (scene === 'novel_revision' || scene === 'novel_analysis') && novelId && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 8 }}
+                message="提示：点击「智能摘要」按钮，AI将读取完整章节内容并提炼关键点，提供更精准的分析建议。"
+                closable
+                onClose={() => setShowSummaryHint(false)}
+              />
             )}
             <Space style={{ marginTop: 8 }}>
               <Button size="small" icon={<HistoryOutlined />} onClick={() => {

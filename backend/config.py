@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     DASHSCOPE_MODEL: str = "qwen-plus"
     DASHSCOPE_BASE_URL: str = ""  # Coding Plan Pro 的 base URL
 
+    # 模型上下文窗口配置
+    MODEL_CONTEXT_WINDOW: int = int(os.getenv("MODEL_CONTEXT_WINDOW", "196608"))
+    MODEL_MAX_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MAX_OUTPUT_TOKENS", "16384"))
+    MODEL_MIN_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MIN_OUTPUT_TOKENS", "1024"))
+
+    # 上下文压缩器配置
+    CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "8000"))  # 压缩阈值，超过此值启动动态压缩
+
     # Database
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
@@ -131,7 +139,7 @@ class Settings(BaseSettings):
             return 5432  # 开发 Docker 内部端口
         elif docker_env in ("true", "1"):
             return 5432  # 生产 Docker 内部端口
-        return 5434  # 本地开发映射端口
+        return 5436  # 本地开发映射端口（开发环境容器映射到5436）
 
     @property
     def DATABASE_URL(self) -> str:
@@ -152,7 +160,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/0"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/0"
-        return "redis://localhost:6379/0"
+        return "redis://localhost:6382/0"  # 本地开发映射端口（开发环境容器映射到6382）
 
     @property
     def CELERY_BROKER_URL(self) -> str:
@@ -162,7 +170,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/1"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/1"
-        return "redis://localhost:6379/1"
+        return "redis://localhost:6382/1"  # 本地开发映射端口
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
@@ -172,13 +180,21 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/2"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/2"
-        return "redis://localhost:6379/2"
+        return "redis://localhost:6382/2"  # 本地开发映射端口
 
     # Application
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+
+    # 日志配置
+    LOG_DIR: str = "logs"  # 日志目录（相对于项目根目录）
+    LOG_FILE_MAX_BYTES: int = 10 * 1024 * 1024  # 单个日志文件大小（默认10MB）
+    LOG_FILE_BACKUP_COUNT: int = 5  # 轮转备份数量
+    LOG_RETENTION_DAYS: int = 7  # 日志保留天数
+    LOG_FILE_NAME: str = "app.log"  # 后端日志文件名
+    LOG_WORKER_FILE_NAME: str = "worker.log"  # Worker日志文件名
 
     # CORS 配置（安全加固）
     # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
@@ -228,6 +244,14 @@ class Settings(BaseSettings):
     ENABLE_QUERY: bool = True
     # 章节大纲细化：在 ChapterPlanner 之后、Writer 之前，将章节计划展开为详细大纲
     ENABLE_OUTLINE_REFINEMENT: bool = True
+
+    # --- 详细评估报告配置 ---
+    # 启用详细问题报告：输出包含位置定位、具体表现、优先级分类的问题列表
+    ENABLE_DETAILED_ISSUE_REPORT: bool = True
+    # 启用优先级分类修订：按优先级（影响阅读体验/提升精彩度/细节打磨）分组输出修订建议
+    ENABLE_PRIORITY_REVISION: bool = True
+    # 启用聚合维度评分：输出连贯性、合理性、趣味性三个聚合维度的星级评分
+    ENABLE_AGGREGATE_RATINGS: bool = True
 
     # --- 质量阈值 (1-10分) ---
     # 评分达到阈值即停止迭代，分数越高要求越严格
@@ -285,6 +309,66 @@ class Settings(BaseSettings):
     REFLECTION_ANALYSIS_INTERVAL: int = 3  # 长期反思触发间隔（每 N 章分析一次）
     REFLECTION_MIN_CHAPTERS: int = 3  # 启动长期反思所需的最少章节数
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限
+
+    # ============================================================
+    # Neo4j 图数据库配置
+    # ============================================================
+    # 图数据库用于存储小说中的实体关系网络，支持：
+    # - 多跳关系查询（如"A的师傅的徒弟"）
+    # - 角色影响力分析
+    # - 社区发现
+    # - 一致性冲突检测
+    # ============================================================
+
+    # --- 功能开关 ---
+    # 图数据库总开关，关闭时系统正常运行但缺少图分析能力
+    ENABLE_GRAPH_DATABASE: bool = False
+    # 实体自动抽取开关，章节生成后自动识别角色、地点、事件等
+    ENABLE_ENTITY_EXTRACTION: bool = True
+    # 章节生成后自动同步到图数据库
+    ENABLE_GRAPH_SYNC_ON_CHAPTER: bool = True
+
+    # --- Neo4j 连接配置 ---
+    NEO4J_URI: str = ""  # bolt://localhost:7687
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str | None = None  # 必须通过环境变量设置
+    NEO4J_DATABASE: str = "neo4j"  # 数据库名称
+    NEO4J_MAX_CONNECTION_POOL_SIZE: int = 50
+    NEO4J_CONNECTION_TIMEOUT: int = 30  # 秒
+
+    @property
+    def NEO4J_EFFECTIVE_URI(self) -> str:
+        """自动检测Neo4j URI，根据Docker环境动态调整."""
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "bolt://neo4j_dev:7687"
+        elif docker_env in ("true", "1"):
+            return "bolt://neo4j:7687"
+        # 本地开发：使用映射端口
+        return self.NEO4J_URI if self.NEO4J_URI else "bolt://localhost:7688"
+
+    # --- 实体抽取配置 ---
+    # 使用LLM从章节内容中抽取实体
+    ENTITY_EXTRACTION_MODEL: str = "qwen-plus"
+    ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.7  # 置信度阈值 0-1
+    ENTITY_EXTRACTION_MAX_CONTENT_LENGTH: int = 4000  # 传入LLM的内容最大字符数
+
+    # --- 图查询缓存配置 ---
+    GRAPH_QUERY_CACHE_TTL: int = 300  # 缓存过期时间（秒）
+    GRAPH_QUERY_CACHE_MAX_SIZE: int = 100  # 最大缓存条目数
+
+    # --- Agent图查询增强配置 ---
+    # 启用后，Writer Agent 的 prompt 中会注入图数据库查询结果
+    # 包括：角色关系网络、待回收伏笔、一致性冲突警告
+    ENABLE_GRAPH_CONTEXT_INJECTION: bool = True  # 注入图上下文到 Writer prompt
+    ENABLE_GRAPH_QUERY_FOR_WRITER: bool = True  # Writer支持动态图查询
+
+    # 图查询参数配置
+    GRAPH_QUERY_DEPTH: int = 2  # 角色网络查询深度（1-3，推荐2）
+    GRAPH_CONTEXT_MAX_CHARACTERS: int = 5  # 最大查询角色数（避免prompt过长）
+    GRAPH_CONTEXT_MAX_FORESHADOWINGS: int = 5  # 最大伏笔提醒数
+    GRAPH_ENABLE_INDIRECT_RELATIONS: bool = True  # 是否查询间接关系
+    GRAPH_QUERY_RELATED_FORESHADOWINGS: bool = True  # 查询与出场角色相关的伏笔
 
     def __init__(self, **values):
         """初始化方法."""
@@ -363,6 +447,33 @@ class Settings(BaseSettings):
                 "生产环境必须配置 ENCRYPTION_KEY！\n"
                 "请通过环境变量设置：export ENCRYPTION_KEY='your_32_char_key'"
             )
+
+        # 验证 Neo4j 图数据库配置
+        if self.ENABLE_GRAPH_DATABASE:
+            # 生产环境必须配置 Neo4j 密码
+            if self.APP_ENV == "production" and not self.NEO4J_PASSWORD:
+                raise ValueError(
+                    "生产环境启用图数据库时必须配置 NEO4J_PASSWORD！\n"
+                    "请通过环境变量设置：export NEO4J_PASSWORD='your_password'"
+                )
+            # 验证连接池和超时配置
+            self._validate_positive_int(
+                "NEO4J_MAX_CONNECTION_POOL_SIZE", self.NEO4J_MAX_CONNECTION_POOL_SIZE
+            )
+            self._validate_positive_int("NEO4J_CONNECTION_TIMEOUT", self.NEO4J_CONNECTION_TIMEOUT)
+
+        # 验证实体抽取配置
+        if self.ENABLE_ENTITY_EXTRACTION:
+            if not 0 <= self.ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD <= 1:
+                raise ValueError("ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD 必须在 0-1 之间")
+            if self.ENTITY_EXTRACTION_MAX_CONTENT_LENGTH < 500:
+                raise ValueError("ENTITY_EXTRACTION_MAX_CONTENT_LENGTH 必须至少为 500")
+
+        # 验证图查询缓存配置
+        if self.GRAPH_QUERY_CACHE_TTL < 0:
+            raise ValueError("GRAPH_QUERY_CACHE_TTL 必须为非负整数")
+        if self.GRAPH_QUERY_CACHE_MAX_SIZE < 1:
+            raise ValueError("GRAPH_QUERY_CACHE_MAX_SIZE 必须至少为 1")
 
         # 验证配置依赖关系
         self._validate_config_dependencies()

@@ -32,6 +32,7 @@
 - [agents/world_review_loop.py](file://agents/world_review_loop.py)
 - [agents/reflection_agent.py](file://agents/reflection_agent.py)
 - [agents/crew_manager.py](file://agents/crew_manager.py)
+- [agents/crew_manager_enhanced_example.py](file://agents/crew_manager_enhanced_example.py)
 - [backend/services/character_auto_detector.py](file://backend/services/character_auto_detector.py)
 - [backend/services/outline_service.py](file://backend/services/outline_service.py)
 - [backend/services/generation_service.py](file://backend/services/generation_service.py)
@@ -46,12 +47,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增反思机制（Reflection Mechanism），包括ReflectionAgent组件和AgentMesh记忆适配器
-- 增强Agent管理器功能，支持反思代理的集成和管理
-- 新增短期和长期反思功能，支持纯Python统计分析和跨章节模式分析
-- 新增反思记录、模式识别和经验规则持久化机制
-- 集成反思机制到审查循环和生成流程中
-- 新增Agent活动记录和监控功能
+- 新增角色进化跟踪功能（CharacterEvolution类），支持能力、身份、性格、关系、地位、技能等多维度角色演变记录
+- 增强相似度检测器（SimilarityDetector），新增情节向量提取和情节相似度检测功能
+- 集成Crew管理器增强功能，在章节生成流程中增加相似度检测和角色进化跟踪
+- 新增角色一致性验证机制，支持演变一致性的自动检查和铺垫验证
+- 增强内容重复检测能力，支持文字层面和情节层面的双重检测
 
 ## 目录
 1. [引言](#引言)
@@ -62,21 +62,25 @@
 6. [动态大纲更新系统](#动态大纲更新系统)
 7. [角色自动检测系统](#角色自动检测系统)
 8. [反思机制（Reflection Mechanism）](#反思机制reflection-mechanism)
-9. [连贯性保障系统](#连贯性保障系统)
-10. [约束推断引擎](#约束推断引擎)
-11. [验证引擎](#验证引擎)
-12. [数据模型](#数据模型)
-13. [智能体通信协议](#智能体通信协议)
-14. [错误处理策略](#错误处理策略)
-15. [依赖关系分析](#依赖关系分析)
-16. [性能考量](#性能考量)
-17. [故障排查指南](#故障排查指南)
-18. [结论](#结论)
-19. [附录](#附录)
+9. [角色进化跟踪系统](#角色进化跟踪系统)
+10. [相似度检测增强系统](#相似度检测增强系统)
+11. [连贯性保障系统](#连贯性保障系统)
+12. [约束推断引擎](#约束推断引擎)
+13. [验证引擎](#验证引擎)
+14. [数据模型](#数据模型)
+15. [智能体通信协议](#智能体通信协议)
+16. [错误处理策略](#错误处理策略)
+17. [依赖关系分析](#依赖关系分析)
+18. [性能考量](#性能考量)
+19. [故障排查指南](#故障排查指南)
+20. [结论](#结论)
+21. [附录](#附录)
 
 ## 引言
-本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用全新的连贯性保障架构，集成了智能体类型设计、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统和反思机制。文档将深入解析：
-- 反思机制的设计与实现，包括短期和长期反思功能
+本文件面向"AI智能体系统"的全面技术文档，重点阐述该系统如何在小说生成场景中应用智能体协作与任务编排。系统采用全新的连贯性保障架构，集成了智能体类型设计、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统、反思机制和新增的角色进化跟踪系统。文档将深入解析：
+- 角色进化跟踪系统的设计与实现，包括多维度角色演变记录和一致性验证
+- 增强的相似度检测器功能，支持情节层面的重复检测
+- Crew管理器的增强集成，支持相似度检测和角色进化跟踪
 - AgentMesh记忆适配器的持久化存储机制
 - 增强的Agent管理器功能，支持反思代理的集成
 - 动态大纲更新系统的设计与实现
@@ -90,14 +94,15 @@
 - 性能监控、负载均衡与扩展性设计
 
 ## 项目结构
-系统采用模块化的分层架构，包含智能体核心、连贯性保障、质量评估、团队协作、章节管理、大纲优化、动态更新、角色检测、反思机制等多个子系统：
+系统采用模块化的分层架构，包含智能体核心、连贯性保障、质量评估、团队协作、章节管理、大纲优化、动态更新、角色检测、反思机制、角色进化跟踪、相似度检测增强等多个子系统：
 - agents：智能体与通信相关的核心实现
 - agents/base：质量评估和审查循环的基础组件
 - agents/continuity_*：连贯性保障相关组件
 - agents/outline_*：大纲级别的质量评估和迭代优化组件
 - agents/reflection_agent.py：反思代理组件
-- agents/crew_manager.py：增强的Crew管理器，集成反思机制
-- agents/character_consistency_tracker.py：角色一致性追踪器
+- agents/crew_manager.py：增强的Crew管理器，集成反思机制和相似度检测
+- agents/character_consistency_tracker.py：角色一致性追踪器，新增角色进化跟踪功能
+- agents/similarity_detector.py：增强的相似度检测器，支持情节向量检测
 - agents/foreshadowing_*：伏笔管理和追踪组件
 - backend/services：后端服务与业务逻辑
 - backend/services/character_auto_detector.py：角色自动检测服务
@@ -122,6 +127,8 @@ RA["ReflectionAgent<br/>反思代理"]
 ODU["OutlineDynamicUpdater<br/>动态大纲更新器"]
 CAD["CharacterAutoDetector<br/>角色自动检测器"]
 CM["CrewManager<br/>增强Crew管理器"]
+CET["CharacterEvolutionTracker<br/>角色进化跟踪器"]
+SD["SimilarityDetector<br/>相似度检测器"]
 end
 subgraph "反思机制"
 RAM["ReflectionAgentMemory<br/>反思记忆"]
@@ -179,6 +186,8 @@ ODU --> CT
 CAD --> QC
 CAD --> CT
 CM --> RA
+CM --> SD
+CM --> CET
 CIM --> CIE
 CIM --> VE
 CIM --> CM2
@@ -205,6 +214,8 @@ LOG --> SA
 - [agents/reflection_agent.py:147-841](file://agents/reflection_agent.py#L147-L841)
 - [agents/crew_manager.py:1680-1757](file://agents/crew_manager.py#L1680-L1757)
 - [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
@@ -230,8 +241,10 @@ LOG --> SA
 - [agents/agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
 - [agents/reflection_agent.py:1-841](file://agents/reflection_agent.py#L1-L841)
-- [agents/crew_manager.py:1-1757](file://agents/crew_manager.py#L1-L1757)
+- [agents/crew_manager.py:1-1962](file://agents/crew_manager.py#L1-L1962)
 - [agents/outline_dynamic_updater.py:1-745](file://agents/outline_dynamic_updater.py#L1-L745)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [backend/services/character_auto_detector.py:1-422](file://backend/services/character_auto_detector.py#L1-L422)
 - [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
 - [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
@@ -258,9 +271,11 @@ LOG --> SA
 - SpecificAgents：五类智能体，分别承担市场分析、内容策划、创作、编辑、发布职责。
 - ReflectionAgent：反思代理，提供短期和长期反思功能，支持纯Python统计分析和跨章节模式分析。
 - AgentMeshMemoryAdapter：AgentMesh记忆适配器，提供反思记录、模式识别和经验规则的持久化存储。
-- CrewManager：增强的Crew管理器，集成反思机制到大纲优化和审查循环中。
+- CrewManager：增强的Crew管理器，集成反思机制、相似度检测和角色进化跟踪到大纲优化和审查循环中。
 - OutlineDynamicUpdater：动态大纲更新器，基于章节内容偏差分析自动调整未来章节大纲。
 - CharacterAutoDetector：角色自动检测器，从章节内容中自动识别并注册新角色。
+- CharacterConsistencyTracker：角色一致性追踪器，新增角色进化跟踪功能，支持多维度角色演变记录和验证。
+- SimilarityDetector：增强的相似度检测器，支持情节向量提取和情节层面的重复检测。
 - ContinuityIntegrationModule：连贯性保障集成模块，将所有连贯性保障组件集成到统一接口中。
 - ConstraintInferenceEngine：约束推断引擎，从上一章内容中自动推断读者期待和连贯性约束。
 - ValidationEngine：验证引擎，使用 LLM 验证新章节是否满足连贯性约束。
@@ -275,7 +290,7 @@ LOG --> SA
 - EnhancedContextManager：增强型上下文管理器，采用四层记忆架构确保关键信息不丢失。
 - ThemeGuardian：主题守护者，负责定义小说核心主题并审查内容一致性。
 - OutlineService：大纲服务，提供大纲生成、分解、验证和版本管理功能。
-- GenerationService：生成服务，编排整个小说生成流程，集成动态更新、角色检测和反思机制。
+- GenerationService：生成服务，编排整个小说生成流程，集成动态更新、角色检测、反思机制和相似度检测。
 - QwenClient：DashScope/OpenAI兼容的大模型客户端，支持重试与流式输出。
 - CostTracker：Token用量与成本统计，按模型定价计算累计成本。
 - AgentActivityRecorder：Agent活动记录器，记录Agent执行过程中的详细活动信息。
@@ -287,6 +302,8 @@ LOG --> SA
 - [agents/reflection_agent.py:147-841](file://agents/reflection_agent.py#L147-L841)
 - [agents/crew_manager.py:1680-1757](file://agents/crew_manager.py#L1680-L1757)
 - [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
@@ -309,7 +326,7 @@ LOG --> SA
 - [core/logging_config.py:20-55](file://core/logging_config.py#L20-L55)
 
 ## 架构总览
-系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统和反思机制：
+系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统、反思机制和角色进化跟踪系统：
 - 通过AgentCommunicator实现智能体间的异步消息传递
 - 通过ContinuityIntegrationModule实现统一的连贯性保障接口
 - 通过ConstraintInferenceEngine实现基于 LLM 的约束推断
@@ -322,7 +339,9 @@ LOG --> SA
 - 通过CharacterAutoDetector实现角色自动检测功能
 - 通过ReflectionAgent实现短期和长期反思功能
 - 通过AgentMeshMemoryAdapter实现反思机制的持久化存储
-- 通过CrewManager集成反思机制到审查循环和大纲优化中
+- 通过CharacterConsistencyTracker实现角色进化跟踪功能
+- 通过SimilarityDetector实现增强的相似度检测功能
+- 通过CrewManager集成反思机制、相似度检测和角色进化跟踪到审查循环和大纲优化中
 - 通过GenerationService集成所有功能到统一的生成流程
 - 通过OutlineService提供大纲管理服务
 - 通过SpecificAgents实现小说生成的各个阶段
@@ -338,6 +357,8 @@ participant RA as "ReflectionAgent"
 participant AMMA as "AgentMeshMemoryAdapter"
 participant ODUE as "OutlineDynamicUpdater"
 participant CAD as "CharacterAutoDetector"
+participant CCT as "CharacterConsistencyTracker"
+participant SD as "SimilarityDetector"
 participant CIM as "ContinuityIntegrationModule"
 participant CIE as "ConstraintInferenceEngine"
 participant VE as "ValidationEngine"
@@ -355,6 +376,14 @@ RA->>AMMA : 保存反思记录
 RA->>RA : 分析跨章节模式
 RA->>AMMA : 保存模式和规则
 RA->>GS : 注入经验规则
+GS->>SD : 相似度检测
+SD->>SD : 情节向量提取
+SD->>SD : 文字和情节重复检测
+SD->>GS : 返回相似度报告
+GS->>CCT : 角色进化跟踪
+CCT->>CCT : 记录角色演变
+CCT->>CCT : 验证演变一致性
+CCT->>GS : 返回角色跟踪结果
 GS->>ODUE : 每N章触发动态更新
 ODUE->>ODUE : 偏差分析
 ODUE->>Qwen : 调用大模型
@@ -395,6 +424,8 @@ Comm-->>Agent : 接收后续任务
 - [backend/services/generation_service.py:1227-1332](file://backend/services/generation_service.py#L1227-L1332)
 - [agents/outline_dynamic_updater.py:82-195](file://agents/outline_dynamic_updater.py#L82-L195)
 - [backend/services/character_auto_detector.py:44-105](file://backend/services/character_auto_detector.py#L44-L105)
+- [agents/character_consistency_tracker.py:785-836](file://agents/character_consistency_tracker.py#L785-L836)
+- [agents/similarity_detector.py:117-162](file://agents/similarity_detector.py#L117-L162)
 - [agents/continuity_integration_module.py:176-352](file://agents/continuity_integration_module.py#L176-L352)
 - [agents/continuity_inference.py:72-144](file://agents/continuity_inference.py#L72-L144)
 - [agents/continuity_validation.py:86-145](file://agents/continuity_validation.py#L86-L145)
@@ -476,6 +507,8 @@ Comm-->>Receiver : processed
 - 大纲优化：OutlineIterationController提供成本控制和迭代终止机制，防止无限循环。
 - 动态更新：OutlineDynamicUpdater对LLM调用失败进行保护性处理，返回空报告而非中断流程。
 - 角色检测：CharacterAutoDetector对LLM调用失败进行保护性处理，返回空列表而非中断流程。
+- 角色进化跟踪：CharacterConsistencyTracker对演变记录和验证失败进行保护性处理，记录警告而非中断流程。
+- 相似度检测：SimilarityDetector对情节向量提取和相似度计算失败进行保护性处理，返回基础报告而非中断流程。
 - 反思机制：ReflectionAgent对LLM调用失败进行保护性处理，记录警告而非中断流程。
 - Agent活动：AgentActivityRecorder对数据库操作异常进行保护性处理，记录错误日志。
 
@@ -486,6 +519,8 @@ Comm-->>Receiver : processed
 - [agents/outline_iteration_controller.py:68-123](file://agents/outline_iteration_controller.py#L68-L123)
 - [agents/outline_dynamic_updater.py:263-265](file://agents/outline_dynamic_updater.py#L263-L265)
 - [backend/services/character_auto_detector.py:155-157](file://backend/services/character_auto_detector.py#L155-L157)
+- [agents/character_consistency_tracker.py:886-957](file://agents/character_consistency_tracker.py#L886-L957)
+- [agents/similarity_detector.py:306-366](file://agents/similarity_detector.py#L306-L366)
 - [agents/reflection_agent.py:382-398](file://agents/reflection_agent.py#L382-L398)
 - [backend/services/agent_activity_recorder.py:50-51](file://backend/services/agent_activity_recorder.py#L50-L51)
 
@@ -614,6 +649,261 @@ CharacterFilterStrategy <|-- ConfidenceFilter
 
 **章节来源**
 - [backend/services/character_auto_detector.py:259-330](file://backend/services/character_auto_detector.py#L259-L330)
+
+## 角色进化跟踪系统
+
+### CharacterConsistencyTracker架构设计
+CharacterConsistencyTracker是系统新增的核心角色管理组件，提供角色进化跟踪功能，支持多维度角色演变记录和一致性验证。
+
+```mermaid
+classDiagram
+class EvolutionType {
+<<enumeration>>
+ABILITY
+IDENTITY
+PERSONALITY
+RELATIONSHIP
+STATUS
+SKILL
+}
+class VerificationStatus {
+<<enumeration>>
+PENDING
+VERIFIED
+WARNING
+REJECTED
+}
+class CharacterEvolution {
++chapter_number : int
++evolution_type : EvolutionType
++attribute_name : str
++before_value : str
++after_value : str
++change_trigger : str
++is_gradual : bool
++foreshadowing_chapters : List[int]
++verification_status : VerificationStatus
++notes : str
++id : str
++created_at : str
++to_dict() Dict[str, Any]
++from_dict(data) CharacterEvolution
++to_prompt() str
+}
+class CharacterProfile {
++name : str
++core_motivation : str
++personal_code : str
++personality_traits : List[str]
++background : str
++goals : List[str]
++fears : List[str]
++relationships : Dict[str, str]
++skills : List[str]
++evolution_history : List[CharacterEvolution]
++current_ability_level : str
++current_identity : str
++first_appearance_chapter : int
++importance_level : int
++to_prompt() str
++from_character_data(character_data) CharacterProfile
+}
+class DecisionRecord {
++chapter_number : int
++decision : str
++reason : str
++alternatives_considered : List[str]
++consequences : List[str]
++timestamp : str
++to_dict() Dict[str, Any]
+}
+class BehavioralPattern {
++pattern_type : str
++description : str
++examples : List[str]
++consistency_score : float
++to_prompt() str
+}
+class ConsistencyValidation {
++passed : bool
++issues : List[Dict[str, Any]]
++motivation_alignment : float
++code_adherence : float
++personality_consistency : float
++historical_consistency : float
++analysis : str
++suggestions : List[str]
++overall_score : float
++to_dict() Dict[str, Any]
+}
+class CharacterConsistencyTracker {
++profile : CharacterProfile
++decision_history : List[DecisionRecord]
++behavioral_patterns : Dict[str, BehavioralPattern]
++validation_history : List[ConsistencyValidation]
++record_evolution(chapter_number, evolution_type, attribute_name, before_value, after_value, change_trigger, is_gradual, foreshadowing_chapters) CharacterEvolution
++get_evolution_summary(current_chapter) str
++validate_evolution_consistency(proposed_evolution, current_chapter) Dict[str, Any]
++get_all_evolutions_for_chapter(chapter_number) List[CharacterEvolution]
++mark_evolution_verified(evolution_id, status, notes) bool
++record_decision(chapter_number, decision, reason, alternatives, consequences)
++validate_action(proposed_action, context, chapter_number) ConsistencyValidation
+}
+CharacterConsistencyTracker --> CharacterProfile
+CharacterConsistencyTracker --> CharacterEvolution
+CharacterConsistencyTracker --> DecisionRecord
+CharacterConsistencyTracker --> BehavioralPattern
+CharacterConsistencyTracker --> ConsistencyValidation
+CharacterEvolution --> VerificationStatus
+CharacterEvolution --> EvolutionType
+```
+
+**图表来源**
+- [agents/character_consistency_tracker.py:22-1064](file://agents/character_consistency_tracker.py#L22-L1064)
+
+### 角色演变记录与验证机制
+系统提供六种角色演变类型，支持渐进变化和突变变化的记录：
+
+- **能力变化（ABILITY）**：角色技能、力量、修为等能力的发展
+- **身份变化（IDENTITY）**：角色社会地位、职业、身份的转变
+- **性格变化（PERSONALITY）**：角色性格特质的演进
+- **关系变化（RELATIONSHIP）**：角色间关系的建立和发展
+- **地位变化（STATUS）**：角色社会地位、影响力的变化
+- **技能变化（SKILL）**：特定技能或专长的发展
+
+**章节来源**
+- [agents/character_consistency_tracker.py:22-1064](file://agents/character_consistency_tracker.py#L22-L1064)
+
+### 演变一致性验证与铺垫检查
+系统提供智能的演变一致性验证功能，检查角色变化的合理性：
+
+- **值连续性检查**：确保角色变化的前值与上次变化的后值一致
+- **铺垫验证**：检查突变变化是否有适当的铺垫章节
+- **建议生成**：为缺乏铺垫的变化提供添加暗示的建议
+
+**章节来源**
+- [agents/character_consistency_tracker.py:886-957](file://agents/character_consistency_tracker.py#L886-L957)
+
+### 角色档案与提示词构建
+系统提供完整的角色档案管理功能，支持角色信息的序列化和提示词构建：
+
+- **档案信息**：包含角色核心动机、行为准则、性格特质、背景故事等
+- **演变历史**：记录所有角色演变事件，支持按章节过滤
+- **提示词生成**：自动生成角色一致性提示词，用于创作约束
+
+**章节来源**
+- [agents/character_consistency_tracker.py:117-175](file://agents/character_consistency_tracker.py#L117-L175)
+
+## 相似度检测增强系统
+
+### SimilarityDetector架构设计
+SimilarityDetector是系统新增的增强相似度检测组件，支持文字层面和情节层面的双重重复检测。
+
+```mermaid
+classDiagram
+class SimilarityReport {
++is_duplicate : bool
++overall_similarity : float
++ngram_similarity : float
++sentence_overlap : float
++structure_similarity : float
++plot_similarity : float
++duplicate_sentences : List[str]
++plot_duplicate_reasons : List[str]
++most_similar_chapter : int
++to_dict() Dict[str, Any]
+}
+class PlotVector {
++chapter_number : int
++protagonist_goal : str
++conflict_type : str
++obstacle_level : str
++resolution_method : str
++outcome : str
++emotional_arc : str
++key_scenes : List[str]
++confidence : float
++to_dict() Dict[str, Any]
+}
+class SimilarityDetector {
++duplicate_threshold : float
++PLOT_DUPLICATE_THRESHOLD : float
++NGRAM_SIZE : int
++MIN_SENTENCE_LENGTH : int
++WEIGHTS : Dict[str, float]
++_plot_vectors : Dict[int, PlotVector]
++detect(new_content, previous_chapters, current_chapter) SimilarityReport
++detect_with_plot_vectors(new_content, previous_chapters, current_chapter, previous_plot_vectors) SimilarityReport
++_compare_two_texts(text_a, text_b, plot_vector_a, plot_vector_b) SimilarityReport
++_ngram_similarity(text_a, text_b) float
++_sentence_overlap(text_a, text_b) Tuple[float, List[str]]
++_structure_similarity(text_a, text_b) float
++_plot_similarity(vector_a, vector_b) Tuple[float, List[str]]
++extract_plot_vector(content, chapter_number) PlotVector
++get_plot_vector(chapter_number) PlotVector
+}
+SimilarityDetector --> SimilarityReport
+SimilarityDetector --> PlotVector
+```
+
+**图表来源**
+- [agents/similarity_detector.py:16-570](file://agents/similarity_detector.py#L16-L570)
+
+### 多维度相似度计算
+系统采用加权算法计算总体相似度，包含四个维度：
+
+- **N-gram相似度（权重20%）**：基于字符n-gram的重叠检测
+- **句子重叠比例（权重30%）**：基于句子级别的重复检测
+- **结构相似度（权重15%）**：基于段落长度模式的结构分析
+- **情节相似度（权重35%）**：基于情节向量的深层结构比较
+
+**章节来源**
+- [agents/similarity_detector.py:77-570](file://agents/similarity_detector.py#L77-L570)
+
+### 情节向量提取与分析
+系统提供智能的情节向量提取功能，支持情节层面的重复检测：
+
+- **冲突类型识别**：识别战斗、竞速、解谜、成长、探索等冲突类型
+- **解决方式分析**：分析武力、智谋、妥协、逃避、意外等解决方式
+- **障碍等级评估**：评估高、中、低三个等级的障碍难度
+- **结果预测**：预测成功、失败、逆转、部分等不同结果
+- **情感弧线分析**：分析上扬、下抑、波折、平缓等情感变化模式
+
+**章节来源**
+- [agents/similarity_detector.py:368-484](file://agents/similarity_detector.py#L368-L484)
+
+### 相似度检测集成流程
+系统在CrewManager中集成相似度检测功能，形成完整的章节生成流程：
+
+```mermaid
+sequenceDiagram
+participant CM as "CrewManager"
+participant SD as "SimilarityDetector"
+participant Writer as "Writer"
+participant Editor as "Editor"
+CM->>Writer : 生成章节草稿
+Writer-->>CM : 返回章节内容
+CM->>SD : 相似度检测
+SD->>SD : 提取情节向量
+SD->>SD : 计算多维度相似度
+SD-->>CM : 返回相似度报告
+alt 内容相似度过高
+CM->>Writer : 重写请求
+Writer-->>CM : 返回重写内容
+CM->>SD : 重新检测
+SD-->>CM : 返回新的相似度报告
+end
+CM->>Editor : 质量审查
+Editor-->>CM : 返回审查结果
+```
+
+**图表来源**
+- [agents/crew_manager.py:1264-1316](file://agents/crew_manager.py#L1264-L1316)
+- [agents/similarity_detector.py:117-162](file://agents/similarity_detector.py#L117-L162)
+
+**章节来源**
+- [agents/crew_manager.py:1264-1316](file://agents/crew_manager.py#L1264-L1316)
+- [agents/similarity_detector.py:117-162](file://agents/similarity_detector.py#L117-L162)
 
 ## 反思机制（Reflection Mechanism）
 
@@ -1506,9 +1796,11 @@ OutlineQualityEvaluator --> OutlineQualityScore
 - 组件耦合：
   - SpecificAgents依赖AgentCommunicator与QwenClient/CostTracker/PromptManager。
   - ReflectionAgent依赖QwenClient、CostTracker和AgentMeshMemoryAdapter。
-  - CrewManager依赖ReflectionAgent进行反思机制集成。
+  - CrewManager依赖ReflectionAgent、SimilarityDetector和CharacterConsistencyTracker进行增强集成。
   - OutlineDynamicUpdater依赖QwenClient、CostTracker和PromptManager。
   - CharacterAutoDetector依赖QwenClient、CostTracker和PromptManager。
+  - CharacterConsistencyTracker依赖EnhancedContextManager和TeamContext。
+  - SimilarityDetector依赖QwenClient、CostTracker和PromptManager。
   - ContinuityIntegrationModule依赖EnhancedContextManager、ThemeGuardian、ChapterOutlineMapper、CharacterConsistencyTracker、ForeshadowingAutoInjector、PreventionContinuityChecker。
   - ConstraintInferenceEngine和ValidationEngine依赖ContinuityModels。
   - ReviewLoopBase依赖QualityReport、ReviewResult、IssueTracker等基础组件。
@@ -1527,6 +1819,8 @@ OutlineQualityEvaluator --> OutlineQualityScore
   - 连贯性保障过程中的约束推断和验证需要合理配置阈值。
   - 大纲优化过程中的成本控制和迭代终止机制需要合理配置阈值。
   - 动态更新和角色检测的LLM调用需要合理的重试和降级策略。
+  - 角色进化跟踪的存储操作需要考虑SQLite并发访问的线程安全性。
+  - 相似度检测的缓存操作需要考虑多线程访问的安全性。
   - 反思机制的存储操作需要考虑SQLite并发访问的线程安全性。
   - Agent活动记录的数据库操作需要考虑事务的一致性。
 
@@ -1539,6 +1833,8 @@ RA["ReflectionAgent"] --> QC
 RA --> CT
 RA --> AMMA["AgentMeshMemoryAdapter"]
 CM["CrewManager"] --> RA
+CM --> SD["SimilarityDetector"]
+CM --> CCT["CharacterConsistencyTracker"]
 ODU["OutlineDynamicUpdater"] --> QC
 ODU --> CT
 CAD["CharacterAutoDetector"] --> QC
@@ -1546,7 +1842,7 @@ CAD --> CT
 CIM["ContinuityIntegrationModule"] --> ECM["EnhancedContextManager"]
 CIM --> TG["ThemeGuardian"]
 CIM --> COM["ChapterOutlineMapper"]
-CIM --> CCT["CharacterConsistencyTracker"]
+CIM --> CCT
 CIM --> FAI["ForeshadowingAutoInjector"]
 CIM --> PCC["PreventionContinuityChecker"]
 CIE["ConstraintInferenceEngine"] --> CM2["ContinuityModels"]
@@ -1564,6 +1860,8 @@ OIC["OutlineIterationController"] --> OQE["OutlineQualityEvaluator"]
 GS["GenerationService"] --> ODUE
 GS --> CAD
 GS --> RA
+GS --> SD
+GS --> CCT
 AAR["AgentActivityRecorder"] --> AA["AgentActivity"]
 OS["OutlineService"] --> CFG["Settings"]
 LOG --> SA
@@ -1574,6 +1872,8 @@ LOG --> SA
 - [agents/reflection_agent.py:147-841](file://agents/reflection_agent.py#L147-L841)
 - [agents/crew_manager.py:1680-1757](file://agents/crew_manager.py#L1680-L1757)
 - [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
@@ -1597,8 +1897,10 @@ LOG --> SA
 **章节来源**
 - [agents/specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
 - [agents/reflection_agent.py:1-841](file://agents/reflection_agent.py#L1-L841)
-- [agents/crew_manager.py:1-1757](file://agents/crew_manager.py#L1-L1757)
+- [agents/crew_manager.py:1-1962](file://agents/crew_manager.py#L1-L1962)
 - [agents/outline_dynamic_updater.py:1-745](file://agents/outline_dynamic_updater.py#L1-L745)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [backend/services/character_auto_detector.py:1-422](file://backend/services/character_auto_detector.py#L1-L422)
 - [agents/continuity_integration_module.py:1-483](file://agents/continuity_integration_module.py#L1-L483)
 - [agents/continuity_inference.py:1-270](file://agents/continuity_inference.py#L1-L270)
@@ -1631,6 +1933,8 @@ LOG --> SA
 - 验证引擎优化：ValidationEngine区分连贯性问题和艺术性打破期待，避免过度严格的标准。
 - 动态更新优化：OutlineDynamicUpdater采用阈值驱动的更新策略，避免频繁更新造成性能问题。
 - 角色检测优化：CharacterAutoDetector采用多层去重策略，减少重复处理和数据库操作。
+- 角色进化跟踪优化：CharacterConsistencyTracker采用内存缓存和批量操作，提升角色演变记录的性能。
+- 相似度检测优化：SimilarityDetector采用多线程缓存和增量计算，提升重复检测的效率。
 - 反思机制优化：ReflectionAgent采用短期反思零LLM开销，长期反思按配置间隔执行，平衡性能与效果。
 - Agent活动记录优化：AgentActivityRecorder提供批量记录和查询优化，支持分页和索引。
 - 存储优化：AgentMeshMemoryAdapter使用SQLite WAL模式和索引优化，提升并发性能。
@@ -1641,6 +1945,7 @@ LOG --> SA
   - 负载均衡：按Agent类型与资源占用动态分配任务，避免热点。
   - 缓存策略：对常用的大纲数据和角色信息进行缓存，提高访问速度。
   - 反思机制：考虑引入分布式缓存存储反思历史，提升大规模并发下的性能。
+  - 相似度检测：考虑引入分布式缓存存储情节向量，提升大规模并发下的检测性能。
 
 ## 故障排查指南
 - Agent未启动/状态异常
@@ -1659,6 +1964,14 @@ LOG --> SA
   - 检查CharacterAutoDetector的LLM调用是否成功。
   - 确认多层去重过滤逻辑是否正确执行。
   - 验证角色注册和章节回填操作是否成功。
+- 角色进化跟踪异常
+  - 检查CharacterConsistencyTracker的演变记录是否成功保存。
+  - 确认演变验证逻辑是否正确执行。
+  - 验证角色档案的序列化和反序列化。
+- 相似度检测异常
+  - 检查SimilarityDetector的多维度相似度计算是否成功。
+  - 确认情节向量提取是否正确。
+  - 验证相似度阈值配置是否合理。
 - 连贯性保障异常
   - 检查ContinuityIntegrationModule的组件初始化顺序。
   - 确认EnhancedContextManager的上下文构建逻辑。
@@ -1685,10 +1998,10 @@ LOG --> SA
   - 检查AgentActivityRecorder的数据库连接和表结构。
   - 确认AgentActivity模型的字段映射。
   - 验证活动记录的批量插入和查询功能。
-- 生成服务集成问题
-  - 检查GenerationService的动态更新触发逻辑。
-  - 确认角色检测的集成是否正确执行。
-  - 验证反思机制的集成是否正确执行。
+- Crew管理器集成问题
+  - 检查CrewManager中相似度检测和角色进化跟踪的集成逻辑。
+  - 确认各组件的初始化顺序和依赖关系。
+  - 验证章节生成流程中的各步骤执行情况。
 
 **章节来源**
 - [agents/agent_communicator.py:80-135](file://agents/agent_communicator.py#L80-L135)
@@ -1696,6 +2009,8 @@ LOG --> SA
 - [llm/cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
 - [agents/outline_dynamic_updater.py:263-265](file://agents/outline_dynamic_updater.py#L263-L265)
 - [backend/services/character_auto_detector.py:155-157](file://backend/services/character_auto_detector.py#L155-L157)
+- [agents/character_consistency_tracker.py:886-957](file://agents/character_consistency_tracker.py#L886-L957)
+- [agents/similarity_detector.py:306-366](file://agents/similarity_detector.py#L306-L366)
 - [agents/continuity_integration_module.py:98-123](file://agents/continuity_integration_module.py#L98-L123)
 - [agents/continuity_inference.py:141-144](file://agents/continuity_inference.py#L141-L144)
 - [agents/continuity_validation.py:138-145](file://agents/continuity_validation.py#L138-L145)
@@ -1707,20 +2022,22 @@ LOG --> SA
 - [agents/reflection_agent.py:382-398](file://agents/reflection_agent.py#L382-L398)
 - [backend/services/agentmesh_memory_adapter.py:1000-1199](file://backend/services/agentmesh_memory_adapter.py#L1000-L1199)
 - [backend/services/agent_activity_recorder.py:50-51](file://backend/services/agent_activity_recorder.py#L50-L51)
-- [backend/services/generation_service.py:1227-1332](file://backend/services/generation_service.py#L1227-L1332)
+- [agents/crew_manager.py:1264-1316](file://agents/crew_manager.py#L1264-L1316)
 
 ## 结论
-该系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统和反思机制。通过ReflectionAgent提供的短期和长期反思能力、AgentMeshMemoryAdapter提供的持久化存储机制、CrewManager集成的反思机制、OutlineDynamicUpdater提供的动态大纲更新能力、CharacterAutoDetector提供的角色自动检测能力、ContinuityIntegrationModule提供的统一接口、ConstraintInferenceEngine提供的基于 LLM 的约束推断、ValidationEngine提供的章节过渡验证、ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、EnhancedContextManager的四层记忆架构、ThemeGuardian的主题一致性检查，系统具备了强大的连贯性保障能力和团队协作能力。
+该系统采用全新的连贯性保障架构，集成了智能体协作、约束推断、验证引擎、统一的连贯性保障模块、动态大纲更新系统、角色自动检测系统、反思机制、角色进化跟踪系统和增强的相似度检测系统。通过ReflectionAgent提供的短期和长期反思能力、AgentMeshMemoryAdapter提供的持久化存储机制、CrewManager集成的反思机制、OutlineDynamicUpdater提供的动态大纲更新能力、CharacterAutoDetector提供的角色自动检测能力、CharacterConsistencyTracker提供的角色进化跟踪能力、SimilarityDetector提供的增强相似度检测能力、ContinuityIntegrationModule提供的统一接口、ConstraintInferenceEngine提供的基于 LLM 的约束推断、ValidationEngine提供的章节过渡验证、ReviewLoopBase提供的模板方法模式、TeamContext实现的团队协作机制、ChapterOutlineMapper的章节级任务管理、OutlineIterationController和OutlineQualityEvaluator的大纲优化能力、EnhancedContextManager的四层记忆架构、ThemeGuardian的主题一致性检查，系统具备了强大的连贯性保障能力和团队协作能力。
 
-新增的反思机制（Reflection Mechanism）进一步增强了系统的智能化水平和自动化程度，通过短期反思实现零LLM开销的即时学习，通过长期反思实现跨章节的模式识别和经验积累，通过AgentMesh记忆适配器实现反思知识的持久化存储，通过经验注入机制将学习到的知识应用到后续的写作和审查过程中。这一机制不仅提升了小说生成的质量和效率，还为系统的持续改进提供了强大的动力。
+新增的角色进化跟踪系统（CharacterEvolution类）和相似度检测器改进进一步增强了系统的智能化水平和自动化程度，通过多维度角色演变记录和一致性验证、情节向量提取和情节层面的重复检测，系统能够更好地维护角色发展的连贯性和内容的独特性。这些增强功能不仅提升了小说生成的质量和效率，还为系统的持续改进提供了强大的动力。
 
-未来可在限流熔断、任务持久化与负载均衡、分布式缓存、反思知识的可视化管理等方面进一步增强，以应对更高并发与更复杂业务场景，同时可以考虑引入更多的机器学习算法来优化反思机制的效果。
+未来可在限流熔断、任务持久化与负载均衡、分布式缓存、反思知识的可视化管理、角色进化跟踪的深度学习优化、相似度检测的机器学习算法等方面进一步增强，以应对更高并发与更复杂业务场景，同时可以考虑引入更多的机器学习算法来优化反思机制和角色进化跟踪的效果。
 
 ## 附录
 - 启动方式：可通过scripts/start_agents.py启动Agent系统，自动注册并运行五类Agent，支持信号处理与成本统计。
 - 配置项：Settings提供DashScope API Key、模型、数据库、Redis、Celery等配置；LoggingConfig统一日志级别与输出。
 - 动态更新配置：ENABLE_DYNAMIC_OUTLINE_UPDATE、OUTLINE_UPDATE_INTERVAL、OUTLINE_DEVIATION_THRESHOLD等配置项控制动态更新行为。
 - 角色检测配置：ENABLE_CHARACTER_AUTO_DETECTION、CHARACTER_DETECTION_CONFIDENCE_THRESHOLD、CHARACTER_DETECTION_MAX_CONTENT_LENGTH等配置项控制角色检测行为。
+- 角色进化跟踪配置：CharacterEvolution类提供完整的角色演变记录和验证功能，支持多维度角色管理。
+- 相似度检测配置：SimilarityDetector提供多维度相似度计算和情节向量提取功能，支持文字和情节层面的重复检测。
 - 反思机制配置：ReflectionConfig提供短期和长期反思的详细配置选项，包括触发间隔、字符预算、LLM参数等。
 - 连贯性保障：ContinuityIntegrationModule提供统一的连贯性检查和优化接口。
 - 约束推断：ConstraintInferenceEngine支持多策略解析，确保约束推断的稳定性。
@@ -1732,7 +2049,7 @@ LOG --> SA
 - 增强上下文管理：EnhancedContextManager提供四层记忆架构，确保关键信息不丢失。
 - 主题守护者：ThemeGuardian提供主题一致性检查和评估功能。
 - 大纲服务：OutlineService提供大纲生成、分解、验证和版本管理功能。
-- 生成服务：GenerationService集成所有功能到统一的生成流程，支持动态更新、角色检测和反思机制。
+- 生成服务：GenerationService集成所有功能到统一的生成流程，支持动态更新、角色检测、反思机制、相似度检测和角色进化跟踪。
 - Agent活动记录：AgentActivityRecorder提供详细的Agent活动记录和监控功能。
 - Agent活动路由：AgentActivities路由提供Agent活动的查询和管理接口。
 
@@ -1743,6 +2060,8 @@ LOG --> SA
 - [agents/reflection_agent.py:29-56](file://agents/reflection_agent.py#L29-L56)
 - [agents/outline_dynamic_updater.py:62-745](file://agents/outline_dynamic_updater.py#L62-L745)
 - [backend/services/character_auto_detector.py:24-422](file://backend/services/character_auto_detector.py#L24-L422)
+- [agents/character_consistency_tracker.py:1-1064](file://agents/character_consistency_tracker.py#L1-L1064)
+- [agents/similarity_detector.py:1-570](file://agents/similarity_detector.py#L1-L570)
 - [agents/continuity_integration_module.py:74-483](file://agents/continuity_integration_module.py#L74-L483)
 - [agents/continuity_inference.py:16-270](file://agents/continuity_inference.py#L16-L270)
 - [agents/continuity_validation.py:16-363](file://agents/continuity_validation.py#L16-L363)

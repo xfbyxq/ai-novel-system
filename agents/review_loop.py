@@ -3,10 +3,6 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from core.logging_config import logger
-from llm.cost_tracker import CostTracker
-from llm.qwen_client import QwenClient
-
 from agents.base import (
     BaseReviewLoopHandler,
     ChapterQualityReport,
@@ -18,47 +14,126 @@ from agents.base.review_loop_base import (
     QualityLevel,
     ReviewProgressSummary,
 )
-from backend.config import settings
 from agents.team_context import AgentReview, NovelTeamContext
+from backend.config import settings
+from core.logging_config import logger
+from llm.cost_tracker import CostTracker
+from llm.qwen_client import QwenClient
 
 # ── 审查专用提示词 ──────────────────────────────────────────
 
 EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色.
 
-你的工作包含两个部分：
-1. 对内容进行多维度评分
-2. 润色并输出修改后的完整内容
+你的工作包含三个部分：
+1. 对内容进行多维度精确评分（8个维度）
+2. 生成聚合维度评分（连贯性、合理性、趣味性）
+3. 润色并输出修改后的完整内容
 
-评分维度（1-10分）：
-- fluency：语言流畅度
-- plot_logic：情节逻辑
-- character_consistency：角色一致性
-- pacing：节奏把控
-- satisfaction_design：爽感设计——章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底（旁观者反应、对手震惊）？章末是否有有效卡章？压制期章节是否在章末给出反转信号？"""
+【精确评分维度】（1-10分）：
+- satisfaction_design（爽感设计）：章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底？章末是否有有效卡章？
+- foreshadowing（伏笔设计）：伏笔是否埋设合理？是否有铺垫？后续是否可能兑现？悬念设置是否有效？
+- character_distinctiveness（角色辨识度）：主角是否有鲜明特征？职业能力是否发挥作用？是否有个人习惯或口头禅？
+- plot_logic（情节逻辑）：因果关系是否清晰？动机是否充分？事件发展是否合理？
+- character_consistency（角色一致性）：称呼是否统一？行为是否矛盾？性格是否前后一致？
+- setting_consistency（设定一致性）：世界观设定是否前后一致？角色设定是否矛盾？时间线是否清晰？
+- pacing（节奏把控）：场景节奏是否有变化？是否过于相似？张弛是否有度？
+- fluency（语言流畅度）：表达是否流畅？衔接是否自然？用词是否准确？
+
+【跨章节一致性检查清单】（关键！影响setting_consistency评分）：
+1. 情节重复检测：本章的核心情节是否与前文重复？（如：破解暗号、发现线索的方式）
+2. 时间线检测：是否有明确的时间锚点？时间推进是否合理？是否与前文时间线矛盾？
+3. 人物设定演变：人物能力/性格/身份的转变是否有铺垫？转变是否突兀？
+4. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
+5. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
+
+【聚合维度评分标准】（根据精确维度计算，以星级展示）：
+- 连贯性(coherence)：情节前后衔接是否自然、设定是否一致、角色行为逻辑是否流畅
+  ★★★★★(9-10)：完全连贯，无任何矛盾
+  ★★★★☆(7-8)：基本连贯，有少量不影响阅读的不一致
+  ★★★☆☆(5-6)：存在明显的衔接问题或设定矛盾
+  ★★☆☆☆(3-4)：多处不连贯，影响阅读体验
+  ★☆☆☆☆(1-2)：严重混乱，无法理解
+
+- 合理性(plausibility)：动机是否充分、因果关系是否清晰、伏笔铺垫是否合理
+  ★★★★★：动机充分合理，因果关系清晰，铺垫恰到好处
+  ★★★★☆：基本合理，有少量可接受的简化处理
+  ★★★☆☆：存在动机不够充分或因果跳跃
+  ★★☆☆☆：多处不合理，需要补充铺垫
+  ★☆☆☆☆：严重违背逻辑和设定
+
+- 趣味性(engagement)：爽点设计、悬念布局、角色吸引力
+  ★★★★★：爽点精彩，悬念布局巧妙，角色魅力十足
+  ★★★★☆：有明确的爽点和悬念，节奏紧凑
+  ★★★☆☆：趣味性一般，缺少高潮或悬念不足
+  ★★☆☆☆：较为平淡，缺少吸引点
+  ★☆☆☆☆：毫无吸引力，难以继续阅读
+
+【问题描述格式要求】：
+每条问题必须包含：
+1. location: 问题位置（type: paragraph/scene/character/global, identifier: 具体标识, excerpt: 可选摘录）
+2. description: 问题描述（精炼概括）
+3. manifestation: 具体表现（原文中的具体表现，可列举多个）
+4. severity: 严重程度（high/medium/low）
+5. priority_category: 优先级分类
+   - reading_experience: 影响阅读体验（称呼不一致、设定矛盾等）— 必须修改
+   - excitement: 提升精彩度（爽点不足、悬念缺失等）— 建议增强
+   - polish: 细节打磨（措辞优化、节奏调整等）— 可考虑优化
+6. suggestion: 修订建议（具体可操作）
+7. related_dimensions: 关联维度（如 ["coherence", "plausibility"]）"""
 
 EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
-原文：
-{draft_content}
+{previous_chapters_section}
 
-章节信息：
+## 当前章节信息
 - 章节号：第{chapter_number}章
 - 标题：{chapter_title}
 - 章节目标：{chapter_summary}
+
+{timeline_anchor_section}
+
+原文：
+{draft_content}
 
 请以JSON格式输出（不要输出其他内容）：
 {{
     "overall_score": 综合评分(1-10浮点数),
     "dimension_scores": {{
-        "fluency": 分数,
+        "satisfaction_design": 分数,
+        "foreshadowing": 分数,
+        "character_distinctiveness": 分数,
         "plot_logic": 分数,
         "character_consistency": 分数,
+        "setting_consistency": 分数,
         "pacing": 分数,
-        "satisfaction_design": 分数
+        "fluency": 分数
     }},
-    "revision_suggestions": [
-        {{"issue": "问题描述", "suggestion": "修改建议", "severity": "high/medium/low"}}
+    "aggregate_dimension_ratings": {{
+        "coherence": "★★★☆☆格式",
+        "plausibility": "★★★☆☆格式",
+        "engagement": "★★★★☆格式"
+    }},
+    "overall_assessment": "整体评价文本（2-3句话概括章节质量）",
+    "detailed_issues": [
+        {{
+            "location": {{
+                "type": "paragraph/scene/character/global",
+                "identifier": "具体位置标识（如第3段、开篇场景、主角王明）",
+                "excerpt": "问题片段摘录（可选，50字以内）"
+            }},
+            "description": "问题描述（精炼概括）",
+            "manifestation": ["具体表现1", "具体表现2"],
+            "severity": "high/medium/low",
+            "priority_category": "reading_experience/excitement/polish",
+            "suggestion": "修订建议",
+            "related_dimensions": ["coherence/plausibility/engagement"]
+        }}
     ],
+    "revision_by_priority": {{
+        "reading_experience": ["影响阅读体验的修订建议"],
+        "excitement": ["提升精彩度的修订建议"],
+        "polish": ["细节打磨的修订建议"]
+    }},
     "edited_content": "润色后的完整章节内容"
 }}"""
 
@@ -78,9 +153,7 @@ WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title
 直接输出修订后的完整章节内容，不要输出JSON或其他格式标记。"""
 
 
-class ReviewLoopHandler(
-    BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]
-):
+class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]):
     """Writer-Editor 审查反馈循环处理器.
 
     流程：
@@ -109,7 +182,7 @@ class ReviewLoopHandler(
         """
         if timeout is None:
             timeout = settings.CHAPTER_REVIEW_TIMEOUT
-            
+
         super().__init__(
             client=client,
             cost_tracker=cost_tracker,
@@ -127,6 +200,8 @@ class ReviewLoopHandler(
         chapter_plan_json: str,
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
+        previous_chapters_summary: str = "",
+        timeline_anchor: str = "",
     ) -> ReviewLoopResult:
         """执行 Writer-Editor 反馈循环.
 
@@ -138,6 +213,8 @@ class ReviewLoopHandler(
             chapter_plan_json: 章节计划 JSON 字符串
             writer_system_prompt: Writer 的 system prompt（含风格）
             team_context: 团队上下文（可选，用于记录审查反馈）
+            previous_chapters_summary: 前文章节摘要（用于跨章节一致性检查）
+            timeline_anchor: 时间线锚点信息（用于时间一致性检查）
 
         Returns:
             ReviewLoopResult
@@ -149,6 +226,8 @@ class ReviewLoopHandler(
         self._chapter_plan_json = chapter_plan_json
         self._writer_system_prompt = writer_system_prompt
         self._team_context = team_context
+        self._previous_chapters_summary = previous_chapters_summary
+        self._timeline_anchor = timeline_anchor
 
         return await super().execute(
             initial_content=initial_draft,
@@ -158,6 +237,8 @@ class ReviewLoopHandler(
             chapter_plan_json=chapter_plan_json,
             writer_system_prompt=writer_system_prompt,
             team_context=team_context,
+            previous_chapters_summary=previous_chapters_summary,
+            timeline_anchor=timeline_anchor,
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -170,9 +251,7 @@ class ReviewLoopHandler(
     def _create_result(self) -> ReviewLoopResult:
         return ReviewLoopResult()
 
-    def _create_quality_report(
-        self, review_data: Dict[str, Any]
-    ) -> ChapterQualityReport:
+    def _create_quality_report(self, review_data: Dict[str, Any]) -> ChapterQualityReport:
         return ChapterQualityReport.from_llm_response(
             review_data,
             quality_threshold=self.quality_threshold,
@@ -262,16 +341,45 @@ class ReviewLoopHandler(
         previous_issues: List[str],
         **context,
     ) -> str:
-        """构建 Editor 审查任务提示词."""
+        """构建 Editor 审查任务提示词.
+
+        支持注入前文摘要和时间线锚点，提升跨章节一致性检查能力。
+        """
         chapter_number = context.get("chapter_number", 1)
         chapter_title = context.get("chapter_title", "")
         chapter_summary = context.get("chapter_summary", "")
+        previous_chapters_summary = context.get("previous_chapters_summary", "")
+        timeline_anchor = context.get("timeline_anchor", "")
+
+        # 构建前文章节摘要部分
+        if previous_chapters_summary:
+            previous_chapters_section = f"""## 前文关键信息（用于跨章节一致性检查）
+{previous_chapters_summary}
+
+**特别提醒**：请检查本章是否与前文存在：
+1. 情节重复（如相同的解谜方式、相似的对抗模式）
+2. 时间线矛盾（如时间推进不合理、时间标记冲突）
+3. 角色设定不一致（如能力/身份/性格的突变无铺垫）
+4. 事件后果缺失（前文重要事件在本章无后续反映）"""
+        else:
+            previous_chapters_section = "<!-- 本章为第一章，无前文摘要 -->"
+
+        # 构建时间线锚点部分
+        if timeline_anchor:
+            timeline_anchor_section = f"""## 时间线锚点
+{timeline_anchor}
+
+**检查要点**：本章的时间推进是否合理？是否与前文时间线矛盾？"""
+        else:
+            timeline_anchor_section = ""
 
         return EDITOR_REVIEW_TASK.format(
             draft_content=content,
             chapter_number=chapter_number,
             chapter_title=chapter_title,
             chapter_summary=chapter_summary,
+            previous_chapters_section=previous_chapters_section,
+            timeline_anchor_section=timeline_anchor_section,
         )
 
     def _build_revision_prompt(
@@ -398,11 +506,13 @@ class ReviewLoopHandler(
             if iteration > 1:
                 system_prompt += self._get_enhanced_reviewer_system_suffix()
 
+            # 使用动态 max_tokens，让 QwenClient 根据输入 tokens 自动计算合理的输出空间
+            # 公式：available = MODEL_CONTEXT_WINDOW - input_tokens - 512
             response = await self.client.chat(
                 prompt=task_prompt,
                 system=system_prompt,
                 temperature=self.config.reviewer_temperature,
-                max_tokens=6144,  # 章节审查需要更多 token 来输出润色内容
+                max_tokens=None,  # 动态计算，避免响应被截断
             )
 
             usage = response["usage"]
@@ -470,15 +580,94 @@ class ReviewLoopHandler(
                 }
             )
 
-    def _build_issues_text(
-        self, report: ChapterQualityReport, review_data: Dict[str, Any]
-    ) -> str:
-        """构建问题列表文本."""
+    def _build_issues_text(self, report: ChapterQualityReport, review_data: Dict[str, Any]) -> str:
+        """构建问题列表文本，按优先级分组输出.
+
+        支持新旧两种格式：
+        - 新格式：detailed_issues（包含位置、具体表现、优先级）
+        - 旧格式：revision_suggestions
+        """
+        lines = []
+
+        # 优先使用新格式的 detailed_issues
+        detailed_issues = review_data.get("detailed_issues", [])
+        if detailed_issues:
+            # 按优先级分组
+            by_priority = {
+                "reading_experience": [],
+                "excitement": [],
+                "polish": [],
+            }
+            for issue in detailed_issues:
+                category = issue.get("priority_category", "polish")
+                if category in by_priority:
+                    by_priority[category].append(issue)
+                else:
+                    by_priority["polish"].append(issue)
+
+            # 优先级一：影响阅读体验
+            if by_priority["reading_experience"]:
+                lines.append("【优先级一：影响阅读体验 - 必须修改】")
+                for issue in by_priority["reading_experience"]:
+                    location = issue.get("location", {})
+                    location_str = ""
+                    if location:
+                        loc_type = {
+                            "paragraph": "段落",
+                            "scene": "场景",
+                            "character": "角色",
+                            "global": "整体",
+                        }.get(location.get("type", "global"), "整体")
+                        location_str = f"[{loc_type}]{location.get('identifier', '')}"
+                    else:
+                        location_str = "[整体]"
+
+                    lines.append(f"位置{location_str}: {issue.get('description', '')}")
+                    manifestation = issue.get("manifestation", [])
+                    if manifestation:
+                        lines.append(f"  表现: {', '.join(manifestation)}")
+                    suggestion = issue.get("suggestion", "")
+                    if suggestion:
+                        lines.append(f"  建议: {suggestion}")
+
+            # 优先级二：提升精彩度
+            if by_priority["excitement"]:
+                lines.append("\n【优先级二：提升精彩度 - 建议增强】")
+                for issue in by_priority["excitement"]:
+                    location = issue.get("location", {})
+                    location_str = ""
+                    if location:
+                        loc_type = {
+                            "paragraph": "段落",
+                            "scene": "场景",
+                            "character": "角色",
+                            "global": "整体",
+                        }.get(location.get("type", "global"), "整体")
+                        location_str = f"[{loc_type}]{location.get('identifier', '')}"
+                    else:
+                        location_str = "[整体]"
+
+                    lines.append(f"位置{location_str}: {issue.get('description', '')}")
+                    suggestion = issue.get("suggestion", "")
+                    if suggestion:
+                        lines.append(f"  建议: {suggestion}")
+
+            # 优先级三：细节打磨
+            if by_priority["polish"]:
+                lines.append("\n【优先级三：细节打磨 - 可考虑优化】")
+                for issue in by_priority["polish"]:
+                    lines.append(f"- {issue.get('description', '')}")
+                    suggestion = issue.get("suggestion", "")
+                    if suggestion:
+                        lines.append(f"  建议: {suggestion}")
+
+            return "\n".join(lines) if lines else "（无具体问题）"
+
+        # 回退到旧格式
         suggestions = review_data.get("revision_suggestions", [])
         if not suggestions:
             return "（无具体问题）"
 
-        lines = []
         for s in suggestions:
             severity = s.get("severity", "medium")
             issue = s.get("issue", "")
@@ -499,6 +688,8 @@ class ReviewLoopHandler(
         writer_system_prompt: str,
         team_context: Optional[NovelTeamContext] = None,
         chapter_type: Optional[str] = None,
+        previous_chapters_summary: str = "",
+        timeline_anchor: str = "",
     ) -> ReviewLoopResult:
         """执行审查循环，支持使用 Editor 润色后的内容.
 
@@ -513,6 +704,8 @@ class ReviewLoopHandler(
             writer_system_prompt: Writer 系统提示词
             team_context: 团队上下文
             chapter_type: 章节类型（可选，支持动态迭代策略）
+            previous_chapters_summary: 前文章节摘要（用于跨章节一致性检查）
+            timeline_anchor: 时间线锚点信息（用于时间一致性检查）
         """
         self._chapter_number = chapter_number
         self._chapter_title = chapter_title
@@ -520,6 +713,8 @@ class ReviewLoopHandler(
         self._chapter_plan_json = chapter_plan_json
         self._writer_system_prompt = writer_system_prompt
         self._team_context = team_context
+        self._previous_chapters_summary = previous_chapters_summary
+        self._timeline_anchor = timeline_anchor
 
         # 根据章节类型创建迭代控制器（支持动态策略）
         from agents.iteration_controller import ChapterType, IterationController
@@ -577,6 +772,8 @@ class ReviewLoopHandler(
                 chapter_number=chapter_number,
                 chapter_title=chapter_title,
                 chapter_summary=chapter_summary,
+                previous_chapters_summary=previous_chapters_summary,
+                timeline_anchor=timeline_anchor,
             )
 
             score = float(review_data.get("overall_score", 0))
@@ -611,9 +808,7 @@ class ReviewLoopHandler(
                 else:
                     # 保留原始内容
                     self.metrics["editor_edit_rejected"] = 1
-                    self.metrics["editor_reason"] = (
-                        f"质量未提升：{edited_score:.2f} vs {score:.2f}"
-                    )
+                    self.metrics["editor_reason"] = f"质量未提升：{edited_score:.2f} vs {score:.2f}"
                     logger.info(
                         f"[ReviewLoop] 拒绝 Editor 润色：edited={edited_score:.2f} <= original={score:.2f}"
                     )
@@ -640,25 +835,17 @@ class ReviewLoopHandler(
                 review_data,
                 quality_level=self._quality_level.value,
                 issues_resolved=(
-                    len(self._issue_tracker.get_resolved_this_round())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_resolved_this_round()) if self._issue_tracker else 0
                 ),
                 issues_new=(
-                    len(self._issue_tracker.get_new_this_round())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_new_this_round()) if self._issue_tracker else 0
                 ),
                 issues_recurring=(
-                    len(self._issue_tracker.get_recurring_issues())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_recurring_issues()) if self._issue_tracker else 0
                 ),
             )
 
-            prev_score = (
-                result.iterations[-2]["score"] if len(result.iterations) > 1 else 0
-            )
+            prev_score = result.iterations[-2]["score"] if len(result.iterations) > 1 else 0
             logger.info(
                 f"[ReviewLoop] score={score:.1f}"
                 + (f" (prev={prev_score:.1f})" if prev_score else "")
@@ -691,7 +878,7 @@ class ReviewLoopHandler(
                     break
 
             # Writer 修订
-            logger.info(f"[ReviewLoop] 质量未达标，请求 Writer 修订...")
+            logger.info("[ReviewLoop] 质量未达标，请求 Writer 修订...")
             feedback = self._build_feedback_text(last_report, review_data)
             issues = self._build_issues_text(last_report, review_data)
 

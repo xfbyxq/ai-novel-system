@@ -219,7 +219,7 @@ class NovelMemoryStorage:
                 )
             """)
 
-            # 创建索引
+            # 创建索引 - 单列索引
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_chapter_novel ON chapter_summaries(novel_id)"
             )
@@ -258,6 +258,29 @@ class NovelMemoryStorage:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_lessons_type ON writing_lessons(novel_id, lesson_type, status)"
+            )
+            
+            # 创建复合索引 - 优化高频查询性能 (Issue #42)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chapter_composite ON chapter_summaries(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_character_composite ON character_states(novel_id, character_name)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memory_chunks_composite ON memory_chunks(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reflection_chapter ON reflection_entries(novel_id, chapter_number)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_foreshadowing_composite ON foreshadowing(novel_id, status, planted_chapter)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_patterns_composite ON chapter_patterns(novel_id, status, pattern_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lessons_composite ON writing_lessons(novel_id, lesson_type, status, priority)"
             )
 
             conn.commit()
@@ -969,7 +992,7 @@ class NovelMemoryStorage:
         conn = self._get_connection()
 
         rows = conn.execute(
-            """SELECT chapter_number, key_events, plot_progress.
+            """SELECT chapter_number, key_events, plot_progress
                FROM chapter_summaries
                WHERE novel_id = ?
                ORDER BY chapter_number DESC
@@ -1106,14 +1129,14 @@ class NovelMemoryStorage:
 
         if loop_type:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries.
+                """SELECT * FROM reflection_entries
                    WHERE novel_id = ? AND loop_type = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, loop_type, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM reflection_entries.
+                """SELECT * FROM reflection_entries
                    WHERE novel_id = ?
                    ORDER BY chapter_number ASC LIMIT ?""",
                 (novel_id, limit),
@@ -1187,7 +1210,7 @@ class NovelMemoryStorage:
         """获取活跃的模式列表."""
         conn = self._get_connection()
         rows = conn.execute(
-            """SELECT * FROM chapter_patterns.
+            """SELECT * FROM chapter_patterns
                WHERE novel_id = ? AND status = 'active'
                ORDER BY confidence DESC, occurrence_count DESC
                LIMIT ?""",
@@ -1255,7 +1278,7 @@ class NovelMemoryStorage:
 
         if lesson_type:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons.
+                """SELECT * FROM writing_lessons
                    WHERE novel_id = ? AND lesson_type = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",
@@ -1263,7 +1286,7 @@ class NovelMemoryStorage:
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM writing_lessons.
+                """SELECT * FROM writing_lessons
                    WHERE novel_id = ? AND status = 'active'
                    ORDER BY priority DESC, effectiveness_score DESC
                    LIMIT ?""",
@@ -1393,7 +1416,8 @@ class NovelMemoryAdapter:
                 if summary["character_changes"]:
                     chapter_text += f"\n- 角色变化：{summary['character_changes']}"
                 if summary["plot_progress"]:
-                    chapter_text += f"\n- 情节：{summary['plot_progress'][:300]}"
+                    # 保留完整情节，由统一压缩处理
+                    chapter_text += f"\n- 情节：{summary['plot_progress']}"
                 parts.append(chapter_text)
 
         # 2. 获取角色状态

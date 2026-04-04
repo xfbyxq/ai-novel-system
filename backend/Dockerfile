@@ -19,7 +19,7 @@ RUN poetry config virtualenvs.create false \
     && poetry config installer.modern-installation false
 
 # 安装依赖
-RUN poetry install --no-interaction --no-ansi --only main
+RUN poetry install --no-interaction --no-ansi
 
 # ========== 运行阶段 ==========
 FROM python:3.12-slim
@@ -32,11 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# 设置 Python 路径
-ENV PYTHONPATH=/app/lib/python3.12/site-packages:$PYTHONPATH
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
 
-# 从构建阶段复制 Python 包
-COPY --from=builder /usr/local/lib/python3.12/site-packages /app/lib/python3.12/site-packages
+# 直接复制到系统站点包目录
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 # 复制应用代码
 COPY . .
@@ -49,7 +49,5 @@ EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
-
-ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

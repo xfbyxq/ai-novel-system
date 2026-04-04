@@ -18,8 +18,10 @@ build/
 .DS_Store
 node_modules/
 *.log
+logs/
 
 # Playwright
+ai_test_reports/
 test-results/
 playwright-report/
 blob-report/
@@ -28,7 +30,8 @@ playwright/.auth/
 
 # IDE & Tools
 .trae/
-# .qoder/
+.qoder/
+.vite/
 # GitHub Actions 工作流需要保留
 !.github/workflows/
 # 其他 GitHub 相关目录
@@ -49,3 +52,6 @@ novel_memory/
 *.db
 *.db-*
 *.db.*
+# SQLite WAL 文件（可能不带 .db 后缀）
+*-shm
+*-wal
