@@ -186,7 +186,8 @@ class QwenClient:
         for attempt in range(retries):
             try:
                 # 使用线程池执行同步调用，避免阻塞事件循环
-                loop = asyncio.get_event_loop()
+                # 使用 asyncio.get_running_loop() 避免 "no running event loop" 错误
+                loop = asyncio.get_running_loop()
                 # 构建 Generation.call 参数
                 call_params: dict[str, Any] = {
                     "model": self.model,
@@ -246,7 +247,8 @@ class QwenClient:
         else:
             # 使用标准 DashScope SDK 的流式调用
             # 使用线程池执行同步流式调用
-            loop = asyncio.get_event_loop()
+            # 使用 asyncio.get_running_loop() 避免 "no running event loop" 错误
+            loop = asyncio.get_running_loop()
             call_params: dict[str, Any] = {
                 "model": self.model,
                 "messages": messages,

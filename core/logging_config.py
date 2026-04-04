@@ -15,6 +15,10 @@ from pathlib import Path
 
 from backend.config import settings
 
+# 获取根 logger 实例，供其他模块导入使用
+# 使用方式: from core.logging_config import logger
+logger = logging.getLogger("novel_system")
+
 
 def get_project_root() -> Path:
     """
@@ -212,5 +216,5 @@ def setup_worker_logging():
     return worker_logger
 
 
-# 初始化日志系统（后端默认使用）
-logger = setup_logging()
+# 注意：不要在这里自动初始化，让使用方手动调用 setup_logging()
+# 如果需要初始化，使用: from core.logging_config import setup_logging; setup_logging()

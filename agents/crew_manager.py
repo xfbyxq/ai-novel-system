@@ -1087,13 +1087,26 @@ class NovelCrewManager:
             )
 
             # 检查是否有严重问题
-            issues = continuity_report.get("issues", [])
-            high_severity = [i for i in issues if i.get("severity") == "high"]
+            # 处理 continuity_report 可能是 list 的情况（JsonExtractor 可能返回 list）
+            if isinstance(continuity_report, list):
+                # 如果是列表，提取其中的 issue 项
+                issues = []
+                for item in continuity_report:
+                    if isinstance(item, dict) and "severity" in item:
+                        issues.append(item)
+                    elif isinstance(item, dict) and "issues" in item:
+                        issues.extend(item.get("issues", []))
+                high_severity = [i for i in issues if i.get("severity") == "high"]
+                quality_score = "N/A"
+            else:
+                issues = continuity_report.get("issues", []) if isinstance(continuity_report, dict) else []
+                high_severity = [i for i in issues if i.get("severity") == "high"]
+                quality_score = continuity_report.get("quality_score", "N/A") if isinstance(continuity_report, dict) else "N/A"
 
             if not high_severity:
                 logger.info(
                     f"[连续性检查] 第 {fix_round} 轮: 无严重问题 "
-                    f"(score={continuity_report.get('quality_score', 'N/A')})"
+                    f"(score={quality_score})"
                 )
                 break
 

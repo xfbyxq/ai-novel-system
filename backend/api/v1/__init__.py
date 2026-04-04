@@ -14,6 +14,7 @@ from backend.api.v1 import (
     novels,
     outlines,
     publishing,
+    revision,
 )
 
 # 注释掉不存在或依赖缺失的模块
@@ -31,6 +32,7 @@ api_router.include_router(ai_chat.router)
 api_router.include_router(publishing.router)
 api_router.include_router(monitoring.router)
 api_router.include_router(graph.router)
+api_router.include_router(revision.router)
 # 注释掉不存在或依赖缺失的模块路由
 # api_router.include_router(crawler.router)
 # api_router.include_router(automation.router)

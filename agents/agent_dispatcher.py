@@ -429,8 +429,8 @@ class AgentDispatcher:
             task_id: 任务ID
             timeout: 超时时间（秒）
         """
-        start_time = asyncio.get_event_loop().time()
-        while asyncio.get_event_loop().time() - start_time < timeout:
+        start_time = asyncio.get_running_loop().time()
+        while asyncio.get_running_loop().time() - start_time < timeout:
             task = scheduler.tasks.get(task_id)
             if task:
                 if task.status in [

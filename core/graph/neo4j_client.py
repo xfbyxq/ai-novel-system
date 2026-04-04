@@ -218,7 +218,8 @@ class Neo4jClient:
         Returns:
             查询结果列表
         """
-        loop = asyncio.get_event_loop()
+        # 使用 asyncio.get_running_loop() 避免 "no running event loop" 错误
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self._execute_query_sync, query, parameters
         )
@@ -254,7 +255,8 @@ class Neo4jClient:
                             query="transaction", message="事务执行失败", details=str(e)
                         )
 
-        loop = asyncio.get_event_loop()
+        # 使用 asyncio.get_running_loop() 避免 "no running event loop" 错误
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, _execute_transaction_sync)
 
     async def create_node(

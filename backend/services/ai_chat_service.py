@@ -13,6 +13,7 @@ from llm.qwen_client import QwenClient
 
 from .agentmesh_memory_adapter import NovelMemoryAdapter
 from .memory_service import get_novel_memory_service
+from .revision_understanding_service import RevisionUnderstandingService
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,8 @@ class AiChatService:
         self.memory_service = get_novel_memory_service()
         # 初始化持久化记忆适配器
         self.persistent_memory = NovelMemoryAdapter()
+        # 初始化修订理解服务
+        self.revision_service = RevisionUnderstandingService(db=db, llm=self.client)
 
     def _get_system_prompt(self, scene: str) -> str:
         return SYSTEM_PROMPTS.get(scene, "你是一位AI助手，请帮助用户解决问题。")
@@ -1252,6 +1255,24 @@ class AiChatService:
 
     def _analyze_revision_intent(self, user_message: str) -> str:
         """分析用户的修订意图，识别修订类型."""
+        # 特殊模式识别：包含"改成"、"改为"等操作指令的消息
+        action_patterns = [
+            (r"把(.+?)改成", "update_field"),
+            (r"把(.+?)改为", "update_field"),
+            (r"把(.+?)修改", "update_field"),
+            (r"(.+?)改成", "update_field"),
+            (r"(.+?)改为", "update_field"),
+            (r"(.+?)修改成", "update_field"),
+            (r"添加(.+?)", "add"),
+            (r"增加(.+?)", "add"),
+            (r"删除(.+?)", "delete"),
+            (r"移除(.+?)", "delete"),
+        ]
+        
+        for pattern, action in action_patterns:
+            if re.search(pattern, user_message):
+                return "specific_revision"  # 特殊修订，需要精确执行
+        
         # 扩展关键词列表
         world_keywords = [
             "世界观",
@@ -2047,8 +2068,68 @@ class AiChatService:
                     # 分析用户修订意图
                     revision_type = self._analyze_revision_intent(user_message)
 
-                    # 生成针对性的提示词（已包含小说信息）
-                    prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                    # 检查是否需要生成修订计划
+                    pending_plan_id = session.context.get("pending_revision_plan_id")
+                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
+                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+
+                    if pending_plan_id and is_confirming_revision:
+                        # 用户确认执行修订
+                        from .revision_execution_service import RevisionExecutionService
+                        execution_service = RevisionExecutionService(db=self.db)
+                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        session.context["pending_revision_plan_id"] = None
+                    elif is_rejecting_revision:
+                        # 用户拒绝修订
+                        session.context["pending_revision_plan_id"] = None
+                        prompt = "好的，已取消本次修订。"
+                    elif revision_type == "specific_revision":
+                        # 用户有明确的修订指令，调用parse_natural_revision解析并执行
+                        try:
+                            parse_result = await self.parse_natural_revision(
+                                novel_id=novel_info.get("id"),
+                                instruction=user_message
+                            )
+                            if parse_result.get("preview"):
+                                preview = parse_result["preview"]
+                                # 直接执行修订
+                                execute_result = await self.execute_revision(
+                                    novel_id=novel_info.get("id"),
+                                    preview_id=preview["preview_id"]
+                                )
+                                if execute_result.get("success"):
+                                    return f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
+                                else:
+                                    return f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                            else:
+                                # 解析失败，返回消息
+                                return parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                        except Exception as e:
+                            logger.error(f"执行自然语言修订失败: {e}")
+                            return f"抱歉，处理您的修订请求时出现错误：{str(e)}"
+                    else:
+                        # 检测是否是需要生成修订计划的反馈
+                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        needs_plan = any(keyword in user_message for keyword in revision_keywords)
+
+                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                            # 使用修订理解服务生成计划
+                            try:
+                                plan = await self.revision_service.understand_feedback(
+                                    user_feedback=user_message,
+                                    novel_id=novel_info.get("id"),
+                                )
+                                session.context["pending_revision_plan_id"] = str(plan.id)
+                                plan_display = self.revision_service.format_plan_for_display(plan)
+                                session.add_assistant_message(plan_display)
+                                import asyncio
+                                asyncio.create_task(self.save_session(session))
+                                return plan_display
+                            except Exception as e:
+                                logger.warning(f"生成修订计划失败: {e}")
+                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                        else:
+                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -2222,8 +2303,73 @@ class AiChatService:
                     # 分析用户修订意图
                     revision_type = self._analyze_revision_intent(user_message)
 
-                    # 生成针对性的提示词（已包含小说信息）
-                    prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                    # 检查是否需要生成修订计划
+                    pending_plan_id = session.context.get("pending_revision_plan_id")
+                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
+                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+
+                    if pending_plan_id and is_confirming_revision:
+                        # 用户确认执行修订
+                        from .revision_execution_service import RevisionExecutionService
+                        execution_service = RevisionExecutionService(db=self.db)
+                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        session.context["pending_revision_plan_id"] = None
+                    elif is_rejecting_revision:
+                        # 用户拒绝修订
+                        session.context["pending_revision_plan_id"] = None
+                        prompt = "好的，已取消本次修订。"
+                    elif revision_type == "specific_revision":
+                        # 用户有明确的修订指令，调用parse_natural_revision解析并执行
+                        try:
+                            parse_result = await self.parse_natural_revision(
+                                novel_id=novel_info.get("id"),
+                                instruction=user_message
+                            )
+                            if parse_result.get("preview"):
+                                preview = parse_result["preview"]
+                                # 直接执行修订
+                                execute_result = await self.execute_revision(
+                                    novel_id=novel_info.get("id"),
+                                    preview_id=preview["preview_id"]
+                                )
+                                if execute_result.get("success"):
+                                    yield f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
+                                    return
+                                else:
+                                    yield f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                                    return
+                            else:
+                                # 解析失败，返回消息
+                                yield parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                                return
+                        except Exception as e:
+                            logger.error(f"执行自然语言修订失败: {e}")
+                            yield f"抱歉，处理您的修订请求时出现错误：{str(e)}"
+                            return
+                    else:
+                        # 检测是否是需要生成修订计划的反馈
+                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        needs_plan = any(keyword in user_message for keyword in revision_keywords)
+
+                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                            # 使用修订理解服务生成计划
+                            try:
+                                plan = await self.revision_service.understand_feedback(
+                                    user_feedback=user_message,
+                                    novel_id=novel_info.get("id"),
+                                )
+                                session.context["pending_revision_plan_id"] = str(plan.id)
+                                plan_display = self.revision_service.format_plan_for_display(plan)
+                                session.add_assistant_message(plan_display)
+                                import asyncio
+                                asyncio.create_task(self.save_session(session))
+                                yield plan_display
+                                return
+                            except Exception as e:
+                                logger.warning(f"生成修订计划失败: {e}")
+                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                        else:
+                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -2988,10 +3134,10 @@ AI修订建议内容：
         Returns:
             欢迎消息
         """
+        from backend.schemas.novel_creation_flow import NovelDialogueScene
         from backend.services.novel_creation_flow_manager import (
             NovelCreationFlowManager,
         )
-        from backend.schemas.novel_creation_flow import NovelDialogueScene
 
         # 映射场景字符串到枚举
         scene_mapping = {
@@ -3087,3 +3233,356 @@ AI修订建议内容：
             asyncio.create_task(self.save_session(session))
 
         return response.message
+
+    # 自然语言修订相关
+    # 存储待执行的修订预览
+    _revision_previews: dict[str, dict] = {}
+
+    async def parse_natural_revision(
+        self, novel_id: str, instruction: str
+    ) -> dict:
+        """解析自然语言修订指令.
+
+        Args:
+            novel_id: 小说ID
+            instruction: 用户指令，如「把主角年龄改成25岁」
+
+        Returns:
+            解析结果，包含预览信息和消息
+        """
+        import uuid
+
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from core.models.novel import Novel
+
+        # 获取小说信息
+        query = (
+            select(Novel)
+            .where(Novel.id == novel_id)
+            .options(selectinload(Novel.characters))
+        )
+        result = await self.db.execute(query)
+        novel = result.scalar_one_or_none()
+
+        if not novel:
+            return {
+                "preview": None,
+                "message": "未找到该小说",
+                "needs_confirmation": False,
+                "error": "小说不存在",
+            }
+
+        # 构建上下文信息
+        characters_info = []
+        for char in novel.characters:
+            role_type = char.role_type or "配角"
+            characters_info.append(
+                f"角色「{char.name}」(ID:{char.id}): "
+                f"类型={role_type}, 性别={char.gender or '未设置'}, "
+                f"年龄={char.age or '未设置'}, 职业={char.occupation or '未设置'}"
+            )
+
+        characters_text = "\n".join(characters_info) if characters_info else "暂无角色"
+
+        # 使用 LLM 解析指令
+        system_prompt = f"""你是一个小说修订指令解析器。
+
+小说信息：
+- 小说ID: {novel_id}
+- 小说标题: {novel.title}
+
+已有角色列表：
+{characters_text}
+
+你的任务是根据用户的自然语言指令，生成一个结构化的修订操作。
+
+支持的指令类型：
+1. 修改角色信息：「把XX年龄改成YY」「修改XX的名字为YY」
+2. 新增角色：「增加一个配角叫XX」
+3. 删除角色：「删除角色XX」
+4. 修改小说信息：「把小说名改成XX」
+
+请严格按照以下JSON格式输出（不要有其他内容）：
+{{
+  "action": "update_field|add|delete",
+  "target_type": "character|novel|world_setting|outline",
+  "target_name": "角色名或目标名",
+  "target_id": "目标ID（如果能找到的话）",
+  "field": "要修改的字段名",
+  "old_value": "旧值",
+  "new_value": "新值",
+  "description": "用中文描述这个操作"
+}}
+
+如果无法解析指令，返回：
+{{
+  "action": "unknown",
+  "description": "无法理解你的指令，请换一种说法"
+}}"""
+
+        try:
+            response = await self.client.chat(
+                prompt=instruction,
+                system=system_prompt,
+                temperature=0.3,
+                max_tokens=500,
+            )
+
+            content = response.get("content", "")
+
+            # 提取 JSON - 改进解析逻辑
+            import json
+            import re
+                        
+            # 尝试多种方式解析 JSON
+            parsed = None
+                        
+            # 方式1: 直接解析完整内容
+            try:
+                parsed = json.loads(content.strip())
+            except json.JSONDecodeError:
+                pass
+                        
+            # 方式2: 提取代码块中的 JSON
+            if not parsed:
+                code_block_match = re.search(r"```(?:json)?\s*([^{}]+\{[^{}]+\}[^{}]*)\$", content, re.DOTALL)
+                if code_block_match:
+                    try:
+                        parsed = json.loads(code_block_match.group(1).strip())
+                    except json.JSONDecodeError:
+                        pass
+                        
+            # 方式3: 提取普通 JSON 对象
+            if not parsed:
+                json_match = re.search(r"\{[^{}]+\}", content, re.DOTALL)
+                if json_match:
+                    try:
+                        parsed = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        pass
+                        
+            # 方式4: 尝试提取最外层的 JSON
+            if not parsed:
+                try:
+                    # 找第一个 { 和最后一个 }
+                    start = content.find("{")
+                    end = content.rfind("}")
+                    if start != -1 and end != -1 and end > start:
+                        json_str = content[start:end+1]
+                        parsed = json.loads(json_str)
+                except json.JSONDecodeError:
+                    pass
+                        
+            if not parsed:
+                logger.warning(f"无法解析LLM响应为JSON: {content[:200]}...")
+                parsed = {"action": "unknown", "description": content or "无法解析指令"}
+
+            if parsed.get("action") == "unknown":
+                return {
+                    "preview": None,
+                    "message": parsed.get("description", "无法理解你的指令"),
+                    "needs_confirmation": False,
+                    "error": None,
+                }
+
+            # 如果是 update_field，尝试查找目标角色
+            if parsed.get("action") in ["update_field", "delete"]:
+                target_name = parsed.get("target_name", "")
+                # 忽略「主角」「男主」「女主」等通用称呼，改为查找第一个主角/男主/女主
+                if target_name in ["主角", "男主", "女主"]:
+                    # 查找对应类型的角色
+                    for char in novel.characters:
+                        if char.role_type in ["主角", "男主", "女主"]:
+                            parsed["target_id"] = str(char.id)
+                            parsed["target_name"] = char.name
+                            break
+                else:
+                    # 根据名称查找角色
+                    for char in novel.characters:
+                        if char.name == target_name:
+                            parsed["target_id"] = str(char.id)
+                            break
+
+                # 获取旧值
+                if parsed.get("target_id"):
+                    for char in novel.characters:
+                        if str(char.id) == parsed["target_id"]:
+                            field = parsed.get("field", "")
+                            if field == "age":
+                                parsed["old_value"] = str(char.age) if char.age else "未设置"
+                            elif field == "name":
+                                parsed["old_value"] = char.name
+                            elif field == "gender":
+                                parsed["old_value"] = char.gender or "未设置"
+                            elif field == "occupation":
+                                parsed["old_value"] = char.occupation or "未设置"
+                            elif field == "personality":
+                                parsed["old_value"] = char.personality or "未设置"
+                            break
+
+            # 生成预览ID
+            preview_id = str(uuid.uuid4())
+
+            # 保存预览
+            self._revision_previews[preview_id] = {
+                "novel_id": novel_id,
+                "action": parsed.get("action"),
+                "target_type": parsed.get("target_type"),
+                "target_name": parsed.get("target_name"),
+                "target_id": parsed.get("target_id"),
+                "field": parsed.get("field"),
+                "old_value": parsed.get("old_value"),
+                "new_value": parsed.get("new_value"),
+                "description": parsed.get("description"),
+            }
+
+            preview = {
+                "preview_id": preview_id,
+                "action": parsed.get("action"),
+                "target_type": parsed.get("target_type"),
+                "target_name": parsed.get("target_name"),
+                "target_id": parsed.get("target_id"),
+                "field": parsed.get("field"),
+                "old_value": parsed.get("old_value"),
+                "new_value": parsed.get("new_value"),
+                "description": parsed.get("description"),
+            }
+
+            # 生成确认消息
+            action = parsed.get("action")
+            target = parsed.get("target_name", "目标")
+            field = parsed.get("field", "")
+            old_val = parsed.get("old_value", "")
+            new_val = parsed.get("new_value", "")
+
+            if action == "update_field":
+                msg = f"📝 确认修改：\n- 目标：{target}\n- 字段：{field}\n- {old_val} → {new_val}"
+            elif action == "add":
+                msg = f"➕ 确认新增：\n- {parsed.get('description', '')}"
+            elif action == "delete":
+                msg = f"🗑️ 确认删除：\n- {target}\n- {parsed.get('description', '')}"
+            else:
+                msg = parsed.get("description", "请确认操作")
+
+            return {
+                "preview": preview,
+                "message": msg,
+                "needs_confirmation": True,
+                "error": None,
+            }
+
+        except Exception as e:
+            logger.error(f"解析自然语言修订指令失败: {e}")
+            return {
+                "preview": None,
+                "message": f"解析失败：{str(e)}",
+                "needs_confirmation": False,
+                "error": str(e),
+            }
+
+    async def execute_revision(self, novel_id: str, preview_id: str) -> dict:
+        """执行已确认的修订操作.
+
+        Args:
+            novel_id: 小说ID
+            preview_id: 预览ID
+
+        Returns:
+            执行结果
+        """
+        from sqlalchemy import update
+
+        from core.models.character import Character
+
+        # 获取预览
+        preview = self._revision_previews.get(preview_id)
+        if not preview:
+            return {
+                "success": False,
+                "message": "预览已过期或不存在，请重新解析指令",
+                "error": "预览不存在",
+            }
+
+        if preview.get("novel_id") != novel_id:
+            return {
+                "success": False,
+                "message": "小说ID不匹配",
+                "error": "小说ID不匹配",
+            }
+
+        action = preview.get("action")
+        target_id = preview.get("target_id")
+        field = preview.get("field")
+        new_value = preview.get("new_value")
+        target_name = preview.get("target_name", "")
+
+        try:
+            if action == "update_field" and target_id:
+                # 更新角色字段
+                if field == "age":
+                    # 年龄转为整数
+                    new_val_int = int(new_value) if new_value else None
+                    stmt = update(Character).where(Character.id == target_id).values(age=new_val_int)
+                elif field == "name":
+                    stmt = update(Character).where(Character.id == target_id).values(name=new_value)
+                elif field == "gender":
+                    stmt = update(Character).where(Character.id == target_id).values(gender=new_value)
+                elif field == "occupation":
+                    stmt = update(Character).where(Character.id == target_id).values(occupation=new_value)
+                elif field == "personality":
+                    stmt = update(Character).where(Character.id == target_id).values(personality=new_value)
+                else:
+                    return {
+                        "success": False,
+                        "message": f"不支持的字段：{field}",
+                        "error": f"不支持的字段：{field}",
+                    }
+
+                await self.db.execute(stmt)
+                await self.db.commit()
+
+                # 删除预览
+                del self._revision_previews[preview_id]
+
+                return {
+                    "success": True,
+                    "message": f"✅ 已更新「{target_name}」的{field}为「{new_value}」",
+                    "action": action,
+                    "field": field,
+                    "target_name": target_name,
+                }
+
+            elif action == "delete" and target_id:
+                # 删除角色
+                from core.models.character import Character
+
+                stmt = update(Character).where(Character.id == target_id).values(is_deleted=True)
+                await self.db.execute(stmt)
+                await self.db.commit()
+
+                del self._revision_previews[preview_id]
+
+                return {
+                    "success": True,
+                    "message": f"✅ 已删除角色「{target_name}」",
+                    "action": action,
+                    "target_name": target_name,
+                }
+
+            else:
+                return {
+                    "success": False,
+                    "message": "暂不支持该操作类型",
+                    "error": "不支持的操作类型",
+                }
+
+        except Exception as e:
+            logger.error(f"执行修订失败: {e}")
+            await self.db.rollback()
+            return {
+                "success": False,
+                "message": f"执行失败：{str(e)}",
+                "error": str(e),
+            }

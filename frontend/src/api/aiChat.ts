@@ -266,3 +266,88 @@ export const getChaptersSummary = async (data: ChapterSummaryQuery): Promise<Sma
   const response = await apiClient.post<SmartSummaryResponse>('/ai-chat/chapters-summary', data);
   return response.data;
 };
+
+// ==================== 自然语言修订API ====================
+
+/**
+ * 自然语言修订请求
+ */
+export interface NaturalRevisionRequest {
+  novel_id: string;
+  instruction: string;
+}
+
+/**
+ * 修订预览
+ */
+export interface RevisionPreview {
+  preview_id: string;
+  action: 'update_field' | 'add' | 'delete';
+  target_type: 'character' | 'world_setting' | 'outline' | 'novel' | 'chapter';
+  target_name?: string;
+  target_id?: string;
+  field?: string;
+  old_value?: string;
+  new_value?: string;
+  description: string;
+}
+
+/**
+ * 自然语言修订响应
+ */
+export interface NaturalRevisionResponse {
+  preview?: RevisionPreview;
+  message: string;
+  needs_confirmation: boolean;
+  error?: string;
+}
+
+/**
+ * 确认执行修订请求
+ */
+export interface ExecuteRevisionRequest {
+  novel_id: string;
+  preview_id: string;
+}
+
+/**
+ * 执行修订响应
+ */
+export interface ExecuteRevisionResponse {
+  success: boolean;
+  message: string;
+  action?: string;
+  field?: string;
+  target_name?: string;
+  error?: string;
+}
+
+/**
+ * 解析自然语言修订指令
+ * @param data 请求参数
+ * @returns 预览信息和确认消息
+ */
+export const parseNaturalRevision = async (
+  data: NaturalRevisionRequest
+): Promise<NaturalRevisionResponse> => {
+  const response = await apiClient.post<NaturalRevisionResponse>(
+    '/ai-chat/natural-revision',
+    data
+  );
+  return response.data;
+};
+
+/**
+ * 确认执行修订操作
+ * @param data 请求参数
+ * @returns 执行结果
+ */
+export const executeRevision = async (
+  data: ExecuteRevisionRequest
+): Promise<ExecuteRevisionResponse> => {
+  const response = await apiClient.post<ExecuteRevisionResponse>(
+    '/ai-chat/execute-revision',
+    data
+  );
+  return response.data;
+};

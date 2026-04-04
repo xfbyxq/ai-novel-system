@@ -22,9 +22,13 @@ from backend.schemas.ai_chat import (
     CharacterListItem,
     CrawlerParseRequest,
     CrawlerParseResponse,
+    ExecuteRevisionRequest,
+    ExecuteRevisionResponse,
     ExtractSuggestionsRequest,
     ExtractSuggestionsResponse,
     MessageResponse,
+    NaturalRevisionRequest,
+    NaturalRevisionResponse,
     NovelChaptersResponse,
     NovelCharactersResponse,
     NovelParseRequest,
@@ -615,6 +619,71 @@ async def get_chapters_summary(
 
     except HTTPException:
         raise
+
+
+# 自然语言修订 API
+@router.post("/natural-revision", response_model=NaturalRevisionResponse)
+async def parse_natural_revision(
+    request: NaturalRevisionRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """解析自然语言修订指令.
+
+    用户通过自然语言描述想要进行的修改，系统解析后返回预览，用户确认后再执行。
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.parse_natural_revision(request.novel_id, request.instruction)
+
+        return NaturalRevisionResponse(
+            preview=result.get("preview"),
+            message=result.get("message", ""),
+            needs_confirmation=result.get("needs_confirmation", True),
+            error=result.get("error"),
+        )
+
     except Exception as e:
-        logger.error(f"获取章节摘要失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取章节摘要失败: {str(e)}")
+        logger.error(f"解析自然语言修订指令失败: {e}", exc_info=True)
+        return NaturalRevisionResponse(
+            preview=None,
+            message=f"解析失败：{str(e)}",
+            needs_confirmation=False,
+            error=str(e),
+        )
+
+
+@router.post("/execute-revision", response_model=ExecuteRevisionResponse)
+async def execute_revision(
+    request: ExecuteRevisionRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """确认执行修订操作.
+
+    用户确认预览后，执行实际的数据库修改。
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.execute_revision(request.novel_id, request.preview_id)
+
+        return ExecuteRevisionResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            action=result.get("action"),
+            field=result.get("field"),
+            target_name=result.get("target_name"),
+            error=result.get("error"),
+        )
+
+    except Exception as e:
+        logger.error(f"执行修订失败: {e}", exc_info=True)
+        return ExecuteRevisionResponse(
+            success=False,
+            message=f"执行失败：{str(e)}",
+            error=str(e),
+        )

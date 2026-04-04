@@ -15,6 +15,14 @@ from core.models.chapter_publish import ChapterPublish, PublishStatus
 from core.models.ai_chat_session import AIChatSession, AIChatMessage
 from core.models.novel_creation_flow import NovelCreationFlow
 from core.models.agent_activity import AgentActivity
+from core.models.revision_plan import RevisionPlan, RevisionPlanStatus, RevisionTargetType
+from core.models.hindsight_memory import (
+    HindsightExperience,
+    StrategyEffectiveness,
+    UserPreference,
+    TaskType as HindsightTaskType,
+    StrategyTrend,
+)
 
 __all__ = [
     "Novel",
@@ -48,4 +56,14 @@ __all__ = [
     "NovelCreationFlow",
     # Agent activity
     "AgentActivity",
+    # Revision models
+    "RevisionPlan",
+    "RevisionPlanStatus",
+    "RevisionTargetType",
+    # Hindsight memory models
+    "HindsightExperience",
+    "StrategyEffectiveness",
+    "UserPreference",
+    "HindsightTaskType",
+    "StrategyTrend",
 ]
