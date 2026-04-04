@@ -16,10 +16,14 @@ ContinuityIntegrationModule - 连贯性保障集成模块.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from agents.character_relationship_tracker import CharacterRelationshipTracker
+from agents.coherence_scorecard import CoherenceScorecard, CoherenceScorecardBuilder
+from agents.continuity_models import IntentionalInconsistency
+from agents.foreshadowing_auto_detector import ForeshadowingAutoDetector
+from agents.spatial_tracker import SpatialTracker
+from agents.world_evolution_tracker import WorldEvolutionTracker
 from core.logging_config import logger
 
-from .enhanced_context_manager import EnhancedContext, EnhancedContextManager
-from .theme_guardian import ThemeConsistencyReport, ThemeGuardian, ThemeDefinition
 from .chapter_outline_mapper import (
     ChapterOutlineMapper,
     ChapterOutlineTask,
@@ -30,8 +34,10 @@ from .character_consistency_tracker import (
     CharacterProfile,
     ConsistencyValidation,
 )
+from .enhanced_context_manager import EnhancedContext, EnhancedContextManager
 from .foreshadowing_auto_injector import ForeshadowingAutoInjector, ForeshadowingReport
 from .prevention_continuity_checker import PreventionContinuityChecker, PreventionReport
+from .theme_guardian import ThemeConsistencyReport, ThemeDefinition, ThemeGuardian
 
 
 @dataclass
@@ -61,6 +67,17 @@ class ContinuityIntegrationResult:
     issues: List[Dict[str, Any]] = field(default_factory=list)
     suggestions: List[str] = field(default_factory=list)
 
+    # 新增字段 - 世界观演变追踪
+    world_evolution_issues: List[Dict[str, Any]] = field(default_factory=list)
+    # 新增字段 - 空间一致性检查
+    spatial_issues: List[Dict[str, Any]] = field(default_factory=list)
+    # 新增字段 - 角色关系问题
+    relationship_issues: List[Dict[str, Any]] = field(default_factory=list)
+    # 新增字段 - 自动检测的伏笔
+    detected_foreshadowings: List[Dict[str, Any]] = field(default_factory=list)
+    # 新增字段 - 统一连贯性评分卡
+    scorecard: Optional[CoherenceScorecard] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典."""
         return {
@@ -88,6 +105,11 @@ class ContinuityIntegrationResult:
             },
             "issues": self.issues,
             "suggestions": self.suggestions,
+            "world_evolution_issues": self.world_evolution_issues,
+            "spatial_issues": self.spatial_issues,
+            "relationship_issues": self.relationship_issues,
+            "detected_foreshadowings": self.detected_foreshadowings,
+            "scorecard": self.scorecard.to_dict() if self.scorecard else None,
         }
 
 
@@ -140,7 +162,27 @@ class ContinuityIntegrationModule:
         # 6. 预防式检查器
         self.prevention_checker = PreventionContinuityChecker(novel_id)
 
-        logger.info("ContinuityIntegrationModule initialized successfully")
+        # === 新增连贯性组件 ===
+        # 世界观演变追踪器
+        self.world_tracker = WorldEvolutionTracker(
+            novel_data=novel_data,
+        )
+        # 空间位置追踪器
+        self.spatial_tracker = SpatialTracker(
+            novel_data=novel_data,
+        )
+        # 角色关系追踪器
+        self.relationship_tracker = CharacterRelationshipTracker()
+        # 伏笔自动检测器
+        self.foreshadowing_detector = ForeshadowingAutoDetector()
+        # 连贯性评分卡构建器
+        self.scorecard_builder = CoherenceScorecardBuilder()
+        # 有意不一致列表
+        self.intentional_inconsistencies: List[IntentionalInconsistency] = []
+
+        logger.info(
+            "连贯性增强组件初始化完成: 世界观追踪、空间追踪、关系追踪、伏笔检测、评分体系"
+        )
 
     def _load_volume_outlines(self, novel_data: Dict[str, Any]):
         """加载卷大纲."""
@@ -263,6 +305,20 @@ class ContinuityIntegrationModule:
 
         result["character_consistency_requirements"] = "\n\n".join(character_prompts)
 
+        # 新增上下文信息
+        result["world_setting_context"] = self.world_tracker.get_settings_summary()
+        result["spatial_context"] = self.spatial_tracker.build_spatial_context(chapter_number)
+
+        # 获取已知角色列表（从 character_trackers 中获取）
+        known_characters = (
+            list(self.character_trackers.keys())
+            if hasattr(self, "character_trackers")
+            else []
+        )
+        result["relationship_context"] = self.relationship_tracker.build_relationship_context(
+            characters=known_characters
+        )
+
         logger.info(f"Chapter {chapter_number} preparation completed")
 
         return result
@@ -344,6 +400,92 @@ class ContinuityIntegrationModule:
                 chapter_number=chapter_number,
             )
             result.prevention_report = prevention_report
+
+        # === 新增检查步骤 ===
+
+        # 1. 世界观演变检查
+        world_issues = []
+        try:
+            world_issues_raw = await self.world_tracker.validate_chapter_against_settings(
+                chapter_content=str(chapter_plan),
+                chapter_number=chapter_number,
+            )
+            world_issues = [issue.to_dict() for issue in world_issues_raw]
+        except Exception as e:
+            logger.warning(f"世界观验证失败: {e}")
+
+        # 2. 空间一致性检查
+        spatial_issues = []
+        spatial_issues_raw = []
+        try:
+            spatial_issues_raw = self.spatial_tracker.validate_spatial_continuity(
+                chapter_content=str(chapter_plan),
+                chapter_number=chapter_number,
+            )
+            spatial_issues = [issue.to_dict() for issue in spatial_issues_raw]
+        except Exception as e:
+            logger.warning(f"空间一致性检查失败: {e}")
+
+        # 3. 角色关系检查
+        relationship_issues = []
+        try:
+            rel_issues_raw = self.relationship_tracker.detect_relationship_issues(
+                chapter_number=chapter_number,
+            )
+            relationship_issues = [issue.to_dict() for issue in rel_issues_raw]
+        except Exception as e:
+            logger.warning(f"角色关系检查失败: {e}")
+
+        # 4. 伏笔自动检测
+        detected_foreshadowings = []
+        try:
+            detected_raw = await self.foreshadowing_detector.detect_foreshadowings(
+                chapter_content=str(chapter_plan),
+                chapter_number=chapter_number,
+            )
+            detected_foreshadowings = [d.to_dict() for d in detected_raw]
+            # 将高置信度伏笔合并到追踪器
+            if hasattr(self, "foreshadowing_injector") and hasattr(
+                self.foreshadowing_injector, "tracker"
+            ):
+                self.foreshadowing_detector.merge_with_tracker(
+                    detected=detected_raw,
+                    tracker=self.foreshadowing_injector.tracker,
+                )
+        except Exception as e:
+            logger.warning(f"伏笔自动检测失败: {e}")
+
+        # 5. 构建统一评分卡
+        scorecard = None
+        try:
+            scorecard = self.scorecard_builder.build_scorecard(
+                chapter_number=chapter_number,
+                continuity_result=result if isinstance(result, dict) else None,
+                character_validations=result.character_validations
+                if hasattr(result, "character_validations")
+                else None,
+                foreshadowing_report=result.foreshadowing_report
+                if hasattr(result, "foreshadowing_report")
+                else None,
+                spatial_issues=spatial_issues_raw if spatial_issues else None,
+            )
+        except Exception as e:
+            logger.warning(f"评分卡构建失败: {e}")
+
+        # 设置新增字段到 result
+        result.world_evolution_issues = world_issues
+        result.spatial_issues = spatial_issues
+        result.relationship_issues = relationship_issues
+        result.detected_foreshadowings = detected_foreshadowings
+        result.scorecard = scorecard
+
+        # 将新发现的问题也追加到 result.issues 中
+        for wi in world_issues:
+            result.issues.append({"source": "world_evolution", **wi})
+        for si in spatial_issues:
+            result.issues.append({"source": "spatial", **si})
+        for ri in relationship_issues:
+            result.issues.append({"source": "relationship", **ri})
 
         # 6. 综合评分
         scores = []
@@ -456,10 +598,11 @@ class ContinuityIntegrationModule:
         # 伏笔问题
         if result.foreshadowing_report:
             if result.foreshadowing_report.must_payoff_tasks:
+                task_count = len(result.foreshadowing_report.must_payoff_tasks)
                 issues.append(
                     {
                         "component": "foreshadowing",
-                        "description": f"有{len(result.foreshadowing_report.must_payoff_tasks)}个关键伏笔必须回收",
+                        "description": f"有{task_count}个关键伏笔必须回收",
                     }
                 )
                 suggestions.update(result.foreshadowing_report.suggestions)

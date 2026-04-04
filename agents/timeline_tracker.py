@@ -18,7 +18,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from agents.base.json_extractor import JsonExtractor
 from core.logging_config import logger
+from llm.qwen_client import QwenClient
 
 
 class TimeAnchorType(str, Enum):
@@ -154,6 +156,44 @@ class TimelineValidationReport:
             "inconsistencies": [i.to_dict() for i in self.inconsistencies],
             "current_story_day": self.current_story_day,
             "total_chapters_tracked": self.total_chapters_tracked,
+        }
+
+
+@dataclass
+class ImplicitTimeInfo:
+    """隐性时间信息 - 从文本中提取的非直接时间表达.
+
+    用于识别文本中隐晦的时间线索，如季节变化、年龄增长、长期进度等，
+    这些线索不直接表达时间，但可以推断出时间跨度。
+
+    Attributes:
+        chapter_number: 章节号
+        season_indicators: 季节线索（如"雪花纷飞"、"春暖花开"）
+        aging_indicators: 年龄变化线索（如"少年长成青年"、"白发渐生"）
+        long_term_progress: 长期进度线索（如"修炼已过百日"、"战争持续数月"）
+        estimated_time_span: 估算时间跨度描述
+        confidence: 提取置信度（0-1）
+        source_snippets: 来源文本片段列表
+    """
+
+    chapter_number: int = 0
+    season_indicators: List[str] = field(default_factory=list)
+    aging_indicators: List[str] = field(default_factory=list)
+    long_term_progress: List[str] = field(default_factory=list)
+    estimated_time_span: str = ""
+    confidence: float = 0.0
+    source_snippets: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """序列化为字典."""
+        return {
+            "chapter_number": self.chapter_number,
+            "season_indicators": self.season_indicators,
+            "aging_indicators": self.aging_indicators,
+            "long_term_progress": self.long_term_progress,
+            "estimated_time_span": self.estimated_time_span,
+            "confidence": self.confidence,
+            "source_snippets": self.source_snippets,
         }
 
 
@@ -315,6 +355,418 @@ class TimelineTracker:
 
         return anchor
 
+    async def extract_anchor_enhanced(
+        self,
+        chapter_number: int,
+        content: str,
+    ) -> TimeAnchor:
+        """增强版时间锚点提取（支持LLM辅助）.
+
+        在正则提取基础上，当置信度不足时调用LLM进行补充提取。
+
+        Args:
+            chapter_number: 章节号
+            content: 章节内容
+
+        Returns:
+            提取的时间锚点
+        """
+        # 先使用正则提取
+        anchor = self.extract_anchor_from_text(chapter_number, content)
+
+        # 当正则提取置信度不足时，使用LLM辅助提取
+        if anchor.confidence < 0.5:
+            try:
+                llm_anchor = await self._llm_extract_time_info(content, chapter_number)
+                if llm_anchor and llm_anchor.confidence > anchor.confidence:
+                    # 合并LLM结果（优先保留正则的精确匹配，补充LLM的额外信息）
+                    anchor = self._merge_time_anchors(anchor, llm_anchor)
+            except Exception as e:
+                logger.warning(f"LLM时间提取失败: {e}")
+
+        return anchor
+
+    async def _llm_extract_time_info(
+        self,
+        content: str,
+        chapter_number: int,
+    ) -> Optional[TimeAnchor]:
+        """使用LLM提取时间信息作为正则提取的补充.
+
+        Args:
+            content: 章节内容
+            chapter_number: 章节号
+
+        Returns:
+            LLM提取的时间锚点，失败返回None
+        """
+        # 截取内容前2000字符，避免token过多
+        truncated_content = content[:2000]
+
+        system_prompt = """你是时间信息提取专家。从小说章节中提取时间相关信息。
+请输出JSON格式：
+{
+    "absolute_time": "绝对时间（如2024年3月15日），无则留空",
+    "relative_time": "相对时间（如三天后、次日清晨），无则留空",
+    "time_markers": ["时间标记词列表，如黎明、深夜"],
+    "duration": "本章时长描述（如两小时、半天），无则留空",
+    "story_day": 故事第几天（数字，无法推断则填0）,
+    "confidence": 置信度（0-1之间的小数）
+}"""
+
+        user_prompt = f"""请从以下第{chapter_number}章内容中提取时间信息：
+
+{truncated_content}
+
+请只输出JSON，不要其他解释。"""
+
+        try:
+            client = QwenClient()
+            response = await client.chat(
+                prompt=user_prompt,
+                system=system_prompt,
+                temperature=0.3,
+            )
+
+            result = JsonExtractor.extract_object(response.get("content", ""))
+
+            if not result:
+                return None
+
+            anchor = TimeAnchor(
+                chapter_number=chapter_number,
+                absolute_time=result.get("absolute_time", ""),
+                relative_time=result.get("relative_time", ""),
+                time_markers=result.get("time_markers", []),
+                duration=result.get("duration", ""),
+                story_day=result.get("story_day", 0),
+                confidence=result.get("confidence", 0.5),
+                source_text=truncated_content[:100],
+            )
+
+            return anchor
+
+        except Exception as e:
+            logger.warning(f"LLM提取时间信息失败: {e}")
+            return None
+
+    def _merge_time_anchors(
+        self,
+        regex_anchor: TimeAnchor,
+        llm_anchor: TimeAnchor,
+    ) -> TimeAnchor:
+        """合并正则和LLM提取的时间锚点.
+
+        策略：优先保留正则的精确匹配，补充LLM的额外信息。
+
+        Args:
+            regex_anchor: 正则提取的时间锚点
+            llm_anchor: LLM提取的时间锚点
+
+        Returns:
+            合并后的时间锚点
+        """
+        merged = TimeAnchor(
+            chapter_number=regex_anchor.chapter_number,
+            id=regex_anchor.id,
+            created_at=regex_anchor.created_at,
+        )
+
+        # 相对时间：优先使用正则结果（更精确）
+        merged.relative_time = regex_anchor.relative_time or llm_anchor.relative_time
+
+        # 绝对时间：优先使用正则结果
+        merged.absolute_time = regex_anchor.absolute_time or llm_anchor.absolute_time
+
+        # 时长：优先使用正则结果
+        merged.duration = regex_anchor.duration or llm_anchor.duration
+
+        # 时间标记：合并两者，去重
+        merged_markers = list(set(regex_anchor.time_markers + llm_anchor.time_markers))
+        merged.time_markers = merged_markers[:5]  # 最多保留5个
+
+        # 故事天数：优先使用正则结果（基于已有时间线计算）
+        if regex_anchor.story_day > 0:
+            merged.story_day = regex_anchor.story_day
+        elif llm_anchor.story_day > 0:
+            merged.story_day = llm_anchor.story_day
+
+        # 来源文本：优先使用正则的
+        merged.source_text = regex_anchor.source_text or llm_anchor.source_text
+
+        # 置信度：取两者较高值，但最高不超过0.9
+        merged.confidence = min(max(regex_anchor.confidence, llm_anchor.confidence), 0.9)
+
+        return merged
+
+    async def extract_implicit_time_info(
+        self,
+        chapter_content: str,
+        chapter_number: int,
+    ) -> ImplicitTimeInfo:
+        """使用LLM提取隐性时间信息.
+
+        识别以下隐性时间表达：
+        - 季节变化：雪花纷飞、春暖花开、秋叶飘零等
+        - 年龄增长：少年长成青年、白发渐生等
+        - 长期进度：修炼已过百日、战争持续数月等
+        - 生理变化：伤口已愈合、肚子隆起等
+
+        Args:
+            chapter_content: 章节内容
+            chapter_number: 章节号
+
+        Returns:
+            隐性时间信息对象
+        """
+        # 截取内容前3000字符
+        truncated_content = chapter_content[:3000]
+
+        system_prompt = """你是隐性时间信息提取专家。从小说文本中识别隐晦的时间线索。
+这些线索不直接表达时间，但可以推断出时间跨度。
+
+请输出JSON格式：
+{
+    "season_indicators": ["季节线索，如雪花纷飞、春暖花开、秋叶飘零"],
+    "aging_indicators": ["年龄变化线索，如少年长成青年、白发渐生"],
+    "long_term_progress": ["长期进度线索，如修炼已过百日、战争持续数月"],
+    "estimated_time_span": "估算的时间跨度描述（如约三个月、半年左右）",
+    "confidence": 置信度（0-1之间的小数）,
+    "source_snippets": ["来源文本片段，每个片段不超过50字"]
+}"""
+
+        user_prompt = f"""请从以下第{chapter_number}章内容中提取隐性时间信息：
+
+{truncated_content}
+
+请只输出JSON，不要其他解释。"""
+
+        try:
+            client = QwenClient()
+            response = await client.chat(
+                prompt=user_prompt,
+                system=system_prompt,
+                temperature=0.3,
+            )
+
+            result = JsonExtractor.extract_object(response.get("content", ""))
+
+            if not result:
+                return ImplicitTimeInfo(chapter_number=chapter_number)
+
+            return ImplicitTimeInfo(
+                chapter_number=chapter_number,
+                season_indicators=result.get("season_indicators", []),
+                aging_indicators=result.get("aging_indicators", []),
+                long_term_progress=result.get("long_term_progress", []),
+                estimated_time_span=result.get("estimated_time_span", ""),
+                confidence=result.get("confidence", 0.0),
+                source_snippets=result.get("source_snippets", []),
+            )
+
+        except Exception as e:
+            logger.warning(f"提取隐性时间信息失败: {e}")
+            return ImplicitTimeInfo(chapter_number=chapter_number)
+
+    def validate_npc_timeline(
+        self,
+        character_name: str,
+        character_status: Dict[str, Any],
+        chapters_data: List[Dict[str, Any]],
+    ) -> List[TimelineInconsistency]:
+        """验证特定角色的时间线一致性.
+
+        检查：
+        1. 已死亡角色不应在后续章节中活着出现
+        2. 角色离开某地后不应在未返回的情况下出现在该地
+        3. 角色的伤势/状态应按时间合理变化
+
+        Args:
+            character_name: 角色名
+            character_status: 角色状态信息，如 {"status": "dead", "death_chapter": 5}
+            chapters_data: 各章节的出场信息列表，每项包含
+                {"chapter": 1, "location": "长安", "status": "alive", "injuries": []}
+
+        Returns:
+            时间线不一致问题列表
+        """
+        inconsistencies: List[TimelineInconsistency] = []
+
+        if not chapters_data:
+            return inconsistencies
+
+        # 按章节号排序
+        sorted_chapters = sorted(chapters_data, key=lambda x: x.get("chapter", 0))
+
+        # 检查1：死亡后不应再出现
+        death_chapter = character_status.get("death_chapter")
+        if death_chapter and character_status.get("status") == "dead":
+            for ch_data in sorted_chapters:
+                ch_num = ch_data.get("chapter", 0)
+                if ch_num > death_chapter and ch_data.get("status") == "alive":
+                    inconsistencies.append(
+                        TimelineInconsistency(
+                            chapter_number=ch_num,
+                            issue_type="npc_timeline",
+                            description=f"角色'{character_name}'在第{death_chapter}章已死亡，"
+                            f"但在第{ch_num}章仍然活着出现",
+                            severity="high",
+                            suggestion=f"请检查第{ch_num}章中该角色的状态，"
+                            f"应改为回忆、幻觉或其他合理解释",
+                        )
+                    )
+
+        # 检查2：地点一致性
+        last_location: Optional[str] = None
+        last_chapter: int = 0
+        for ch_data in sorted_chapters:
+            ch_num = ch_data.get("chapter", 0)
+            location = ch_data.get("location")
+            travel_method = ch_data.get("travel_method")  # 移动方式
+
+            if location and last_location and location == last_location:
+                # 同一地点连续出现，检查是否合理
+                if ch_num - last_chapter > 1 and not travel_method:
+                    # 跨多章仍在同一地点，但没有说明如何返回
+                    inconsistencies.append(
+                        TimelineInconsistency(
+                            chapter_number=ch_num,
+                            issue_type="npc_location",
+                            description=f"角色'{character_name}'在第{last_chapter}章出现在'{last_location}'，"
+                            f"中间经过{ch_num - last_chapter - 1}章后"
+                            f"又在第{ch_num}章出现在同一地点，"
+                            f"但没有说明如何返回",
+                            severity="medium",
+                            suggestion=f"建议补充角色返回'{last_location}'的过程描述",
+                        )
+                    )
+
+            last_location = location
+            last_chapter = ch_num
+
+        # 检查3：伤势状态合理性
+        last_injuries: List[str] = []
+        last_chapter_for_injury = 0
+        for ch_data in sorted_chapters:
+            ch_num = ch_data.get("chapter", 0)
+            injuries = ch_data.get("injuries", [])
+
+            # 检查伤势恢复是否合理（简单规则：重伤不会在1章内完全恢复）
+            if last_injuries and not injuries:
+                # 伤势消失，检查章节间隔
+                if ch_num - last_chapter_for_injury < 2:
+                    severe_injuries = [i for i in last_injuries if "重" in i or "伤" in i]
+                    if severe_injuries:
+                        inconsistencies.append(
+                            TimelineInconsistency(
+                                chapter_number=ch_num,
+                                issue_type="npc_injury",
+                                description=f"角色'{character_name}'在第{last_chapter_for_injury}章"
+                                f"受重伤({', '.join(severe_injuries)})，"
+                                f"但在第{ch_num}章伤势完全消失，恢复过快",
+                                severity="low",
+                                suggestion="建议补充伤势恢复过程，或调整章节时间间隔",
+                            )
+                        )
+
+            if injuries:
+                last_injuries = injuries
+                last_chapter_for_injury = ch_num
+
+        return inconsistencies
+
+    def detect_time_acceleration(
+        self,
+        threshold: float = 3.0,
+    ) -> List[TimelineInconsistency]:
+        """检测时间加速/减速异常.
+
+        基于已记录的TimeAnchor数据：
+        - 计算相邻章节之间的时间跨度
+        - 计算平均时间推进速度
+        - 标记偏离平均速度超过threshold倍的章节
+
+        例如：前5章每章推进1天，第6章突然跳到1年后 -> 异常
+
+        Args:
+            threshold: 偏离阈值倍数，默认3.0倍
+
+        Returns:
+            时间线不一致问题列表
+        """
+        inconsistencies: List[TimelineInconsistency] = []
+
+        # 需要至少3个章节的数据才有意义
+        if len(self.anchors) < 3:
+            return inconsistencies
+
+        # 按章节号排序
+        sorted_chapters = sorted(self.anchors.keys())
+
+        # 计算各章节间的时间跨度
+        time_jumps: List[Tuple[int, int, int]] = []  # (章节号, 天数差, 章节间隔)
+        for i in range(1, len(sorted_chapters)):
+            prev_ch = sorted_chapters[i - 1]
+            curr_ch = sorted_chapters[i]
+            prev_anchor = self.anchors[prev_ch]
+            curr_anchor = self.anchors[curr_ch]
+
+            day_diff = curr_anchor.story_day - prev_anchor.story_day
+            chapter_gap = curr_ch - prev_ch
+
+            if day_diff >= 0 and chapter_gap > 0:
+                time_jumps.append((curr_ch, day_diff, chapter_gap))
+
+        if len(time_jumps) < 2:
+            return inconsistencies
+
+        # 计算平均每章推进天数（排除0天的情况）
+        speeds = [day_diff / ch_gap for _, day_diff, ch_gap in time_jumps if day_diff > 0]
+        if not speeds:
+            return inconsistencies
+
+        avg_speed = sum(speeds) / len(speeds)
+
+        # 检测异常加速/减速
+        for ch_num, day_diff, ch_gap in time_jumps:
+            if day_diff <= 0:
+                continue
+
+            current_speed = day_diff / ch_gap
+
+            # 检测加速（当前速度远大于平均速度）
+            if current_speed > avg_speed * threshold and day_diff > 7:
+                inconsistencies.append(
+                    TimelineInconsistency(
+                        chapter_number=ch_num,
+                        issue_type="time_acceleration",
+                        description=f"时间加速异常：第{ch_num}章时间推进了{day_diff}天，"
+                        f"平均每章推进{current_speed:.1f}天，"
+                        f"是平均速度({avg_speed:.1f}天/章)的{current_speed/avg_speed:.1f}倍",
+                        current_anchor=self.anchors.get(ch_num),
+                        severity="medium",
+                        suggestion=f"建议检查第{ch_num}章的时间跳跃是否合理，"
+                        f"或在前文添加时间过渡说明",
+                    )
+                )
+
+            # 检测减速（当前速度远小于平均速度，但不是0）
+            elif avg_speed > 1 and current_speed < avg_speed / threshold and current_speed < 1:
+                inconsistencies.append(
+                    TimelineInconsistency(
+                        chapter_number=ch_num,
+                        issue_type="time_deceleration",
+                        description=f"时间减速异常：第{ch_num}章时间仅推进{day_diff}天，"
+                        f"平均每章推进{current_speed:.1f}天，"
+                        f"远低于平均速度({avg_speed:.1f}天/章)",
+                        current_anchor=self.anchors.get(ch_num),
+                        severity="low",
+                        suggestion="如果这是有意为之（如详细描写某一天），请忽略此提示",
+                    )
+                )
+
+        return inconsistencies
+
     def _estimate_story_day(self, chapter_number: int, anchor: TimeAnchor) -> int:
         """估算故事天数.
 
@@ -456,7 +908,7 @@ class TimelineTracker:
                                             previous_anchor=prev_anchor,
                                             current_anchor=curr_anchor,
                                             severity="medium",
-                                            suggestion=f"请检查时间推进是否合理，或添加'次日'等说明",
+                                            suggestion="请检查时间推进是否合理，或添加'次日'等说明",
                                         )
                                     )
 

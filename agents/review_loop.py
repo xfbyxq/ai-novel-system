@@ -506,11 +506,13 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             if iteration > 1:
                 system_prompt += self._get_enhanced_reviewer_system_suffix()
 
+            # 使用动态 max_tokens，让 QwenClient 根据输入 tokens 自动计算合理的输出空间
+            # 公式：available = MODEL_CONTEXT_WINDOW - input_tokens - 512
             response = await self.client.chat(
                 prompt=task_prompt,
                 system=system_prompt,
                 temperature=self.config.reviewer_temperature,
-                max_tokens=6144,  # 章节审查需要更多 token 来输出润色内容
+                max_tokens=None,  # 动态计算，避免响应被截断
             )
 
             usage = response["usage"]

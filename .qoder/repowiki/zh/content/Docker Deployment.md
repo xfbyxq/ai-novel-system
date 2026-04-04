@@ -25,9 +25,10 @@
 ## 更新摘要
 **所做更改**
 - **Neo4j镜像更新**：从自定义镜像 `m.daocloud.io/docker.io/neo4j:5.15-community` 更新为官方最新版本 `neo4j:latest`
-- **生产环境安全优化**：移除了Neo4j外部端口暴露，仅允许容器内部访问，提高安全性
+- **生产环境安全优化**：移除了Neo4j外部端口暴露，仅允许容器内部访问，显著提高安全性
+- **容器网络优化**：采用专用 `app-network` 网络隔离生产环境服务
 - **配置简化**：简化了Neo4j配置，移除了不必要的端口映射注释
-- **架构优化**：生产环境采用更安全的容器网络隔离策略
+- **版本升级**：项目版本更新为2.1.0，包含Neo4j图数据库集成和安全优化
 
 ## 目录
 1. [简介](#简介)
@@ -51,6 +52,8 @@
 
 **更新** 生产环境配置经过重大安全优化，采用官方 Neo4j 镜像并移除了外部端口暴露，仅允许容器内部访问，显著提高了系统的安全性。
 
+**更新** 项目版本升级至2.1.0，引入了Neo4j图数据库的官方镜像支持和生产环境安全配置优化。
+
 系统的核心优势包括：
 - **容器化部署**：通过 Docker 和 docker-compose 实现服务编排
 - **多环境支持**：同时支持开发、测试和生产环境配置
@@ -62,6 +65,7 @@
 - **简化依赖管理**：移除 PYTHONPATH 环境变量，优化依赖安装流程
 - **图数据库支持**：Neo4j 图数据库提供关系分析能力
 - **生产环境安全优化**：移除外部端口暴露，提高系统安全性
+- **官方镜像支持**：使用Neo4j官方镜像确保安全性和稳定性
 
 ## 项目结构
 
@@ -87,6 +91,7 @@ CACHE[静态资源缓存]
 BALANCE[负载均衡]
 APOC_PLUGIN[APoC 插件]
 INTERNAL_ACCESS[内部网络访问]
+APP_NETWORK[app-network 网络隔离]
 end
 end
 NGINX --> FRONTEND
@@ -97,6 +102,8 @@ BACKEND --> REDIS
 BACKEND --> NEO4J
 NEO4J --> APOC_PLUGIN
 NEO4J -.-> INTERNAL_ACCESS
+APP_NETWORK -.-> SECURITY
+APP_NETWORK -.-> BALANCE
 ```
 
 **图表来源**
@@ -241,7 +248,7 @@ BACKEND --> DB[(PostgreSQL)]
 BACKEND --> CACHE[(Redis)]
 BACKEND --> GRAPH_DB[Neo4j 图数据库<br/>APoC 插件<br/>仅内部访问]
 GRAPH_DB --> APOC[APoC 算法库]
-subgraph "Docker 容ainer"
+subgraph "Docker 容器"
 FRONTEND
 BACKEND
 DB
@@ -256,6 +263,7 @@ CACHE_STATIC[静态资源缓存]
 SPA_ROUTING[SPA 路由支持]
 GRAPH_OPTIMIZATION[图数据库优化]
 INTERNAL_ACCESS[内部网络访问]
+APP_NETWORK[app-network 网络隔离]
 end
 NGINX -.-> SECURITY
 NGINX -.-> GZIP
@@ -263,6 +271,7 @@ NGINX -.-> CACHE_STATIC
 NGINX -.-> SPA_ROUTING
 GRAPH_DB -.-> GRAPH_OPTIMIZATION
 GRAPH_DB -.-> INTERNAL_ACCESS
+APP_NETWORK -.-> APP_NETWORK
 ```
 
 **图表来源**
@@ -733,6 +742,7 @@ NETWORK_OPTIMIZATION[网络优化]
 HEALTH_MONITORING[健康监控]
 SECURITY_CONFIG[安全配置]
 INTERNAL_ACCESS[内部访问控制]
+APP_NETWORK[app-network 网络隔离]
 end
 ```
 
@@ -839,6 +849,7 @@ PORT_MAPPING[端口映射]
 HEALTH_CHECK[健康检查]
 DATA_PERSISTENCE[数据持久化]
 SECURITY_ISOLATION[安全隔离]
+APP_NETWORK[app-network 网络隔离]
 end
 ```
 
@@ -862,6 +873,7 @@ APoC_PLUGIN[APoC 插件]
 CONNECTION_POOL[连接池]
 INDEX_OPTIMIZATION[索引优化]
 SECURITY_OPTIMIZATION[安全优化]
+APP_NETWORK[app-network 网络隔离]
 end
 ```
 
@@ -871,6 +883,7 @@ end
 - **连接池**：支持并发查询
 - **索引优化**：自动创建必要索引
 - **安全优化**：移除外部端口暴露，仅内部访问
+- **网络隔离**：通过 app-network 提供安全访问
 
 ### 开发环境性能考虑
 
@@ -905,9 +918,9 @@ CLEAN --> EFFICIENT[高效依赖管理]
 
 **章节来源**
 - [backend/Dockerfile:35-46](file://backend/Dockerfile#L35-L46)
-- [requirements.txt:1-28](file://requirements.txt#L1-L28)
+- [requirements.txt:1-35](file://requirements.txt#L1-L35)
 - [requirements-dev.txt:1-7](file://requirements-dev.txt#L1-L7)
-- [pyproject.toml:1-106](file://pyproject.toml#L1-L106)
+- [pyproject.toml:1-111](file://pyproject.toml#L1-L111)
 
 ## 故障排除指南
 
@@ -1292,6 +1305,7 @@ docker-compose -f docker-compose.dev.yml up -d
 - **静态资源优化**：提升前端性能
 - **依赖管理简化**：移除 PYTHONPATH，优化安装流程
 - **生产环境安全优化**：Neo4j 仅内部访问，提高安全性
+- **官方镜像支持**：使用Neo4j官方镜像确保安全性和稳定性
 
 ### 未来改进方向
 

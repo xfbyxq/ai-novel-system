@@ -236,6 +236,72 @@ class GraphQueryMixin:
             logger.error(f"查询关系失败: {e}")
             return []
 
+    async def query_foreshadowings_by_characters(
+        self,
+        character_names: List[str],
+        current_chapter: Optional[int] = None,
+        include_resolved: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """查询与指定角色相关的伏笔.
+
+        Args:
+            character_names: 角色名称列表
+            current_chapter: 当前章节号（可选，用于筛选相关伏笔）
+            include_resolved: 是否包含已回收的伏笔
+
+        Returns:
+            相关伏笔列表
+        """
+        if not self._graph_enabled or not self._novel_id:
+            return []
+
+        client = get_neo4j_client()
+        if not client or not client.is_connected:
+            return []
+
+        try:
+            service = GraphQueryService(client)
+            foreshadowings = await service.find_foreshadowings_by_characters(
+                self._novel_id, character_names, current_chapter, include_resolved
+            )
+            return foreshadowings
+        except Exception as e:
+            logger.error(f"查询角色相关伏笔失败: {e}")
+            return []
+
+    async def analyze_character_relationships_in_chapter(
+        self, character_names: List[str]
+    ) -> Dict[str, Any]:
+        """分析章节内角色之间的关系网络.
+
+        识别直接关联、间接关联和潜在关系冲突。
+
+        Args:
+            character_names: 本章出场角色名称列表
+
+        Returns:
+            关系分析结果，包含：
+            - direct_relations: 直接关联的角色对
+            - indirect_relations: 通过中间人连接的间接关系
+            - potential_conflicts: 潜在的关系冲突
+        """
+        if not self._graph_enabled or not self._novel_id:
+            return {"direct_relations": [], "indirect_relations": [], "potential_conflicts": []}
+
+        client = get_neo4j_client()
+        if not client or not client.is_connected:
+            return {"direct_relations": [], "indirect_relations": [], "potential_conflicts": []}
+
+        try:
+            service = GraphQueryService(client)
+            analysis = await service.analyze_character_relationships(
+                self._novel_id, character_names
+            )
+            return analysis
+        except Exception as e:
+            logger.error(f"分析角色关系失败: {e}")
+            return {"direct_relations": [], "indirect_relations": [], "potential_conflicts": []}
+
     # ============ 上下文格式化方法 ============
 
     def format_network_context(

@@ -210,5 +210,47 @@ class ChapterTransition:
         )
 
 
+@dataclass
+class IntentionalInconsistency:
+    """有意的不一致 - 标注作者故意设计的不一致，避免连贯性检查误报
+
+    某些不一致是叙事设计的一部分，例如：
+    - 角色故意撒谎导致的信息矛盾
+    - 不可靠叙述者导致的事实偏差
+    - 为剧情反转预设的"错误"信息
+    - 为伏笔埋设故意留下的不一致
+    """
+    description: str = ""              # 不一致的描述
+    # 类型: deception|unreliable_narrator|plot_twist|foreshadowing_setup|red_herring
+    intent_type: str = "plot_twist"
+    author_note: str = ""              # 作者意图说明
+    chapter_number: int = 0            # 出现的章节
+    related_constraints: List[str] = field(default_factory=list)  # 关联的约束描述
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            "description": self.description,
+            "intent_type": self.intent_type,
+            "author_note": self.author_note,
+            "chapter_number": self.chapter_number,
+            "related_constraints": self.related_constraints,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IntentionalInconsistency":
+        """从字典创建"""
+        return cls(
+            description=data.get("description", ""),
+            intent_type=data.get("intent_type", "plot_twist"),
+            author_note=data.get("author_note", ""),
+            chapter_number=data.get("chapter_number", 0),
+            related_constraints=data.get("related_constraints", []),
+            created_at=data.get("created_at", datetime.now().isoformat()),
+        )
+
+
 # 便捷类型别名
 ConstraintList = List[ContinuityConstraint]
