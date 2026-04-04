@@ -1,18 +1,27 @@
 # TESTS 模块
 
-**测试套件**: unit/integration/e2e/ai_e2e 四个层级
+**测试套件**: unit/integration/e2e/ai_e2e/agents/performance 六个层级
 
 ## OVERVIEW
 
-完整的测试金字塔，77个测试文件。使用pytest + pytest-asyncio + Playwright。
+完整的测试金字塔。
 
 ## STRUCTURE
 
 ```
 tests/
 ├── conftest.py              # 全局fixtures
-├── unit/                    # 单元测试 (13 files)
-├── integration/            # 集成测试
+├── benchmark_indexes.py      # 性能基准测试
+├── unit/                    # 单元测试 (19 files)
+│   └── test_*.py            # 服务层、模型层单元测试
+├── integration/             # 集成测试 (3 files)
+│   ├── test_concurrency.py  # 并发控制测试
+│   ├── test_graph_integration.py  # 图数据库集成测试
+│   └── test_outline_system.py     # 大纲系统集成测试
+├── agents/                 # Agent系统测试 (10 files)
+│   ├── test_continuity_*.py       # 连贯性系统测试
+│   ├── test_outline_*.py          # 大纲相关测试
+│   └── test_*.py                 # Agent组件测试
 ├── e2e/                     # 端到端测试 (Playwright)
 │   ├── conftest.py          # E2E专用fixtures
 │   ├── pages/               # Page Object
@@ -25,7 +34,7 @@ tests/
 │   ├── runners/
 │   └── selectors/
 ├── performance/             # 性能测试
-└── fixtures/                # 测试数据
+└── fixtures/               # 测试数据
 ```
 
 ## WHERE TO LOOK
@@ -34,6 +43,8 @@ tests/
 |------|------|------|
 | 新增fixtures | `conftest.py` | 全局或子目录 |
 | 单元测试 | `unit/test_*.py` | Mock所有外部依赖 |
+| 集成测试 | `integration/test_*.py` | 多模块协作测试 |
+| Agent测试 | `agents/test_*.py` | Agent系统组件测试 |
 | E2E测试 | `e2e/test_scenarios/` | Page Object模式 |
 | AI测试 | `ai_e2e/runners/` | autonomous/heal模式 |
 
