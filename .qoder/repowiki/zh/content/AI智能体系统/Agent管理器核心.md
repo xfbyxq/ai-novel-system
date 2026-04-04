@@ -15,14 +15,16 @@
 - [reflection_agent.py](file://agents/reflection_agent.py)
 - [start_agents.py](file://scripts/start_agents.py)
 - [test_multi_agent.py](file://agents/test_multi_agent.py)
+- [token_calculator.py](file://llm/token_calculator.py)
+- [voting_manager.py](file://agents/voting_manager.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增反思机制集成章节，包括setup_reflection方法、反思代理初始化
-- 更新连续性检查系统，展示反思经验在提示词中的注入
-- 增加反思代理的短期和长期反思功能说明
-- 补充反思机制的成本控制和存储管理
+- 新增章节成本追踪能力，支持按章节和成本类别分类的成本统计
+- 更新CostTracker类的API，新增chapter_number和cost_category参数
+- 增强成本监控功能，提供章节级别的成本控制和限额检查
+- 更新Agent管理器的成本追踪集成，确保所有agent操作都得到成本效率监控
 
 ## 目录
 1. [简介](#简介)
@@ -30,15 +32,16 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [反思机制集成](#反思机制集成)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考虑](#性能考虑)
-9. [故障排查指南](#故障排查指南)
-10. [结论](#结论)
-11. [附录](#附录)
+6. [成本追踪系统](#成本追踪系统)
+7. [反思机制集成](#反思机制集成)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能考虑](#性能考虑)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
+12. [附录](#附录)
 
 ## 简介
-本文件面向"Agent管理器核心"组件，系统性阐述其单例模式实现、线程安全与实例化控制、内存管理策略；详解初始化流程（通信管理器创建、调度器配置、LLM客户端集成、成本跟踪器设置）、智能体注册机制（注册流程、状态管理、生命周期控制）；提供完整的API参考（initialize、start、stop方法的参数与返回值说明），并覆盖错误处理策略、日志记录机制、性能监控指标。特别新增反思机制集成章节，展示反思代理的初始化、短期/长期反思功能，以及反思经验在连续性检查系统中的注入。最后给出实际使用示例与最佳实践建议，帮助开发者快速上手并稳定运行该Agent系统。
+本文件面向"Agent管理器核心"组件，系统性阐述其单例模式实现、线程安全与实例化控制、内存管理策略；详解初始化流程（通信管理器创建、调度器配置、LLM客户端集成、成本跟踪器设置）、智能体注册机制（注册流程、状态管理、生命周期控制）；提供完整的API参考（initialize、start、stop方法的参数与返回值说明），并覆盖错误处理策略、日志记录机制、性能监控指标。特别新增成本追踪系统章节，展示章节级别的成本统计、成本类别分类、限额检查等功能，确保所有agent操作都得到成本效率监控。最后给出实际使用示例与最佳实践建议，帮助开发者快速上手并稳定运行该Agent系统。
 
 ## 项目结构
 Agent管理器位于agents子模块，围绕AgentManager单例、AgentCommunicator通信、AgentScheduler调度、具体Agent实现、反思代理以及LLM客户端与成本跟踪器协同工作。核心文件如下：
@@ -49,8 +52,10 @@ Agent管理器位于agents子模块，围绕AgentManager单例、AgentCommunicat
 - agents/agent_dispatcher.py：调度器风格与CrewAI风格的统一入口
 - agents/reflection_agent.py：反思代理，提供短期和长期反思功能
 - agents/crew_manager.py：CrewAI风格的小说生成编排器，集成反思机制
+- agents/voting_manager.py：投票管理器，支持多Agent视角的决策投票
 - llm/qwen_client.py：通义千问客户端封装（OpenAI兼容与DashScope两种模式）
-- llm/cost_tracker.py：Token用量与成本统计
+- llm/cost_tracker.py：Token用量与成本统计，支持章节和类别追踪
+- llm/token_calculator.py：Token计算工具，动态分配输出空间
 - core/logging_config.py：全局日志配置
 - backend/config.py：应用配置（LLM密钥、模型、基础URL等）
 - scripts/start_agents.py：独立Agent系统启动脚本
@@ -68,10 +73,12 @@ WA["WritingAgent"]
 EA["EditingAgent"]
 PA["PublishingAgent"]
 RA["ReflectionAgent<br/>反思代理"]
+VM["VotingManager<br/>投票管理器"]
 end
 subgraph "LLM与成本"
 QC["QwenClient"]
-CT["CostTracker"]
+CT["CostTracker<br/>章节成本追踪"]
+TC["TokenCalculator<br/>动态Token计算"]
 end
 subgraph "运行入口"
 AD["AgentDispatcher"]
@@ -88,12 +95,19 @@ AS --> WA
 AS --> EA
 AS --> PA
 MA --> QC
+MA --> CT
 CPA --> QC
+CPA --> CT
 WA --> QC
+WA --> CT
 EA --> QC
+EA --> CT
 PA --> QC
+PA --> CT
 RA --> QC
 RA --> CT
+VM --> QC
+VM --> CT
 CM --> RA
 CM --> QC
 CM --> CT
@@ -109,8 +123,10 @@ AD --> CM
 - [agent_dispatcher.py:17-440](file://agents/agent_dispatcher.py#L17-L440)
 - [crew_manager.py:162-163](file://agents/crew_manager.py#L162-L163)
 - [reflection_agent.py:147-170](file://agents/reflection_agent.py#L147-L170)
+- [voting_manager.py:81-84](file://agents/voting_manager.py#L81-L84)
 - [qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
-- [cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
+- [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
+- [token_calculator.py:7-86](file://llm/token_calculator.py#L7-L86)
 
 **章节来源**
 - [agent_manager.py:1-227](file://agents/agent_manager.py#L1-L227)
@@ -118,10 +134,12 @@ AD --> CM
 - [agent_communicator.py:1-180](file://agents/agent_communicator.py#L1-L180)
 - [specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
 - [agent_dispatcher.py:1-440](file://agents/agent_dispatcher.py#L1-L440)
-- [crew_manager.py:1-1757](file://agents/crew_manager.py#L1-L1757)
+- [crew_manager.py:1-2838](file://agents/crew_manager.py#L1-L2838)
 - [reflection_agent.py:1-841](file://agents/reflection_agent.py#L1-L841)
-- [qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
-- [cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
+- [voting_manager.py:1-124](file://agents/voting_manager.py#L1-L124)
+- [qwen_client.py:1-404](file://llm/qwen_client.py#L1-L404)
+- [cost_tracker.py:1-126](file://llm/cost_tracker.py#L1-L126)
+- [token_calculator.py:1-86](file://llm/token_calculator.py#L1-L86)
 - [logging_config.py:1-55](file://core/logging_config.py#L1-L55)
 - [config.py:1-59](file://backend/config.py#L1-L59)
 
@@ -132,9 +150,11 @@ AD --> CM
 - 具体Agent：市场分析、内容策划、创作、编辑、发布Agent，继承BaseAgent并实现任务处理
 - ReflectionAgent：反思代理，提供短期和长期反思功能，支持经验注入到各个Agent
 - NovelCrewManager：CrewAI风格的小说生成编排器，集成反思机制，支持反思经验在连续性检查中的注入
+- VotingManager：投票管理器，支持多Agent视角的决策投票，集成成本追踪
 - AgentDispatcher：统一入口，支持"基于调度器的Agent系统"与"CrewAI风格系统"
 - QwenClient：通义千问客户端封装，支持OpenAI兼容与DashScope两种模式
-- CostTracker：Token用量与成本统计
+- CostTracker：Token用量与成本统计，支持章节级别追踪和成本类别分类
+- TokenCalculator：Token计算工具，动态分配输出空间，优化成本控制
 - 日志与配置：core.logging_config与backend.config
 
 **章节来源**
@@ -144,14 +164,16 @@ AD --> CM
 - [specific_agents.py:15-505](file://agents/specific_agents.py#L15-L505)
 - [reflection_agent.py:147-170](file://agents/reflection_agent.py#L147-L170)
 - [crew_manager.py:41-51](file://agents/crew_manager.py#L41-L51)
+- [voting_manager.py:81-84](file://agents/voting_manager.py#L81-L84)
 - [agent_dispatcher.py:17-440](file://agents/agent_dispatcher.py#L17-L440)
 - [qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
-- [cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
+- [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
+- [token_calculator.py:7-86](file://llm/token_calculator.py#L7-L86)
 - [logging_config.py:1-55](file://core/logging_config.py#L1-L55)
 - [config.py:1-59](file://backend/config.py#L1-L59)
 
 ## 架构总览
-AgentManager作为单例，串联通信、调度、LLM与成本模块，并在初始化时创建AgentCommunicator、AgentScheduler、QwenClient、CostTracker，随后批量注册五类Agent。ReflectionAgent作为独立组件，通过CrewManager的setup_reflection方法初始化，为整个系统提供学习和经验积累能力。AgentDispatcher提供两种执行模式：基于调度器的Agent系统（逐步提交任务、依赖链、状态流转）与CrewAI风格系统（一次性编排各Agent，集成反思机制）。日志系统统一输出，配置来自环境变量。
+AgentManager作为单例，串联通信、调度、LLM与成本模块，并在初始化时创建AgentCommunicator、AgentScheduler、QwenClient、CostTracker，随后批量注册五类Agent。ReflectionAgent作为独立组件，通过CrewManager的setup_reflection方法初始化，为整个系统提供学习和经验积累能力。VotingManager集成成本追踪，支持多Agent视角的决策投票。所有Agent在执行任务时都会通过CostTracker记录Token使用和成本，支持章节级别的成本统计和限额检查。AgentDispatcher提供两种执行模式：基于调度器的Agent系统（逐步提交任务、依赖链、状态流转）与CrewAI风格系统（一次性编排各Agent，集成反思机制）。日志系统统一输出，配置来自环境变量。
 
 ```mermaid
 sequenceDiagram
@@ -412,7 +434,8 @@ end
 
 ### LLM客户端与成本跟踪
 - QwenClient：支持OpenAI兼容模式与DashScope模式；提供chat与stream_chat；带指数退避重试
-- CostTracker：记录prompt/completion token与累计成本，支持汇总与重置
+- CostTracker：记录prompt/completion token与累计成本，支持章节级别追踪和成本类别分类
+- TokenCalculator：基于tiktoken精确计算token数量，动态分配输出空间
 
 ```mermaid
 classDiagram
@@ -421,20 +444,29 @@ class QwenClient {
 +stream_chat(prompt, system, temperature, max_tokens) async Iterator[str]
 }
 class CostTracker {
-+record(agent_name, prompt_tokens, completion_tokens) dict
++record(agent_name, prompt_tokens, completion_tokens, chapter_number, cost_category) dict
++get_chapter_cost(chapter_number) float
++check_chapter_limit(chapter_number, limit) bool
 +get_summary() dict
 +reset() void
 }
+class TokenCalculator {
++count_tokens(text) int
++calculate_max_tokens(prompt, system, context_window, min_output, max_output, buffer) int
+}
 QwenClient --> CostTracker : "配合使用"
+QwenClient --> TokenCalculator : "使用"
 ```
 
 **图表来源**
 - [qwen_client.py:16-232](file://llm/qwen_client.py#L16-L232)
-- [cost_tracker.py:16-74](file://llm/cost_tracker.py#L16-L74)
+- [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
+- [token_calculator.py:7-86](file://llm/token_calculator.py#L7-L86)
 
 **章节来源**
-- [qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
-- [cost_tracker.py:1-74](file://llm/cost_tracker.py#L1-L74)
+- [qwen_client.py:1-404](file://llm/qwen_client.py#L1-L404)
+- [cost_tracker.py:1-126](file://llm/cost_tracker.py#L1-L126)
+- [token_calculator.py:1-86](file://llm/token_calculator.py#L1-L86)
 
 ### 日志与配置
 - core.logging_config：统一日志配置，支持控制台与文件输出、滚动日志、级别控制
@@ -443,6 +475,100 @@ QwenClient --> CostTracker : "配合使用"
 **章节来源**
 - [logging_config.py:1-55](file://core/logging_config.py#L1-L55)
 - [config.py:1-59](file://backend/config.py#L1-L59)
+
+## 成本追踪系统
+
+### CostTracker（章节成本追踪与类别分类）
+CostTracker是成本追踪系统的核心组件，现已集成章节级别的成本追踪和成本类别分类功能，确保所有agent操作都得到成本效率监控。
+
+- **章节成本追踪**：支持按章节号追踪成本，提供章节级别的成本统计和限额检查
+- **成本类别分类**：支持base、iteration、query、vote等成本类别，便于精细化成本分析
+- **动态成本计算**：基于预设的模型定价表计算成本，支持多种通义千问模型
+- **详细记录**：记录每次API调用的详细信息，包括agent名称、token使用量、成本等
+
+```mermaid
+classDiagram
+class CostTracker {
+-model
+-total_prompt_tokens
+-total_completion_tokens
+-total_cost
+-records
+-chapter_costs
++record(agent_name, prompt_tokens, completion_tokens, chapter_number, cost_category) dict
++get_chapter_cost(chapter_number) float
++check_chapter_limit(chapter_number, limit) bool
++get_summary() dict
++reset() void
+}
+class ChapterCosts {
++base : Decimal
++iteration : Decimal
++query : Decimal
++vote : Decimal
++total : Decimal
+}
+CostTracker --> ChapterCosts : "按章节追踪"
+```
+
+**图表来源**
+- [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
+
+**章节来源**
+- [cost_tracker.py:1-126](file://llm/cost_tracker.py#L1-L126)
+
+### 章节成本追踪功能
+CostTracker新增了章节级别的成本追踪功能，支持对特定章节的成本进行统计和控制：
+
+- **get_chapter_cost(chapter_number)**：获取指定章节的总成本
+- **check_chapter_limit(chapter_number, limit)**：检查指定章节成本是否超过限额
+- **按章节分类统计**：支持base、iteration、query、vote等成本类别的章节级统计
+
+### 成本类别分类
+CostTracker支持四种成本类别，便于精细化成本分析：
+
+- **base**：基础操作成本
+- **iteration**：迭代审查成本  
+- **query**：查询操作成本
+- **vote**：投票决策成本
+
+### Agent中的成本追踪集成
+所有Agent在执行任务时都会通过CostTracker记录Token使用和成本：
+
+- **MarketAnalysisAgent**：记录市场分析任务的成本
+- **ContentPlanningAgent**：记录内容策划任务的成本
+- **WritingAgent**：记录章节创作任务的成本
+- **EditingAgent**：记录编辑润色任务的成本
+- **PublishingAgent**：记录发布流程的成本
+
+**章节来源**
+- [specific_agents.py:74-80](file://agents/specific_agents.py#L74-L80)
+- [specific_agents.py:176-182](file://agents/specific_agents.py#L176-L182)
+- [specific_agents.py:286-292](file://agents/specific_agents.py#L286-L292)
+- [specific_agents.py:393-399](file://agents/specific_agents.py#L393-L399)
+- [specific_agents.py:493-499](file://agents/specific_agents.py#L493-L499)
+
+### TokenCalculator（动态Token计算）
+TokenCalculator提供精确的Token计算和动态输出空间分配：
+
+- **count_tokens(text)**：精确计算文本的token数量
+- **calculate_max_tokens(prompt, system, context_window, min_output, max_output, buffer)**：动态计算推荐的max_tokens值
+- **tiktoken支持**：基于tiktoken编码，提供精确的token计算
+- **降级方案**：当tiktoken不可用时，提供简化的估算方案
+
+**章节来源**
+- [token_calculator.py:1-86](file://llm/token_calculator.py#L1-L86)
+
+### VotingManager中的成本追踪
+VotingManager集成了成本追踪功能，支持多Agent视角的决策投票：
+
+- **初始化**：接收QwenClient和CostTracker实例
+- **投票成本记录**：在投票过程中记录每次LLM调用的成本
+- **多Agent协作成本控制**：支持多个Agent参与投票时的成本统计
+
+**章节来源**
+- [voting_manager.py:81-84](file://agents/voting_manager.py#L81-L84)
+- [voting_manager.py:108-124](file://agents/voting_manager.py#L108-L124)
 
 ## 反思机制集成
 
@@ -562,7 +688,9 @@ ReflectionConfig提供了灵活的配置选项，支持短期和长期反思的�
 - 具体Agent依赖QwenClient与CostTracker
 - ReflectionAgent依赖QwenClient、CostTracker和存储实例
 - NovelCrewManager依赖QwenClient、CostTracker、ReflectionAgent和各种审查组件
+- VotingManager依赖QwenClient、CostTracker，支持多Agent视角的决策投票
 - AgentDispatcher依赖AgentManager与CrewManager
+- TokenCalculator为QwenClient提供动态Token计算支持
 - 日志与配置贯穿全局
 
 ```mermaid
@@ -577,11 +705,14 @@ BA --> QC
 BA --> CT
 RA["ReflectionAgent"] --> QC
 RA --> CT
+VM["VotingManager"] --> QC
+VM --> CT
 CM["NovelCrewManager"] --> RA
 CM --> QC
 CM --> CT
 AD["AgentDispatcher"] --> AM
 AD --> CM
+TC["TokenCalculator"] --> QC
 ```
 
 **图表来源**
@@ -590,22 +721,28 @@ AD --> CM
 - [specific_agents.py:5-9](file://agents/specific_agents.py#L5-L9)
 - [reflection_agent.py:18-19](file://agents/reflection_agent.py#L18-L19)
 - [crew_manager.py:32-33](file://agents/crew_manager.py#L32-L33)
+- [voting_manager.py:81-84](file://agents/voting_manager.py#L81-L84)
 - [agent_dispatcher.py:7-11](file://agents/agent_dispatcher.py#L7-L11)
+- [token_calculator.py:7-86](file://llm/token_calculator.py#L7-L86)
 
 **章节来源**
 - [agent_manager.py:1-227](file://agents/agent_manager.py#L1-L227)
 - [agent_scheduler.py:1-488](file://agents/agent_scheduler.py#L1-L488)
 - [specific_agents.py:1-505](file://agents/specific_agents.py#L1-L505)
 - [reflection_agent.py:1-841](file://agents/reflection_agent.py#L1-L841)
-- [crew_manager.py:1-1757](file://agents/crew_manager.py#L1-L1757)
+- [crew_manager.py:1-2838](file://agents/crew_manager.py#L1-L2838)
+- [voting_manager.py:1-124](file://agents/voting_manager.py#L1-L124)
 - [agent_dispatcher.py:1-440](file://agents/agent_dispatcher.py#L1-L440)
+- [token_calculator.py:1-86](file://llm/token_calculator.py#L1-L86)
 
 ## 性能考虑
 - 异步与并发：通信与调度均采用asyncio，消息队列与锁保护共享状态，避免竞态
 - 任务调度：按优先级与依赖关系调度，减少Agent空闲等待
 - LLM调用：使用线程池执行同步调用以避免阻塞事件循环；支持指数退避重试
-- 成本控制：CostTracker记录token与成本，便于成本预算与优化
+- 成本控制：CostTracker记录token与成本，便于成本预算与优化；TokenCalculator动态分配输出空间
+- 章节成本追踪：支持章节级别的成本控制和限额检查，避免单章成本过高
 - 反思机制成本：ReflectionAgent的短期反思为纯Python计算，零LLM开销；长期反思仅在配置的间隔触发，避免频繁调用
+- Token计算优化：TokenCalculator基于tiktoken提供精确计算，减少不必要的token浪费
 - 日志级别：生产环境建议INFO以上，避免过多DEBUG日志影响性能
 
 ## 故障排查指南
@@ -613,9 +750,12 @@ AD --> CM
 - Agent未启动：确认AgentScheduler.register_agent调用与BaseAgent.start执行
 - 任务无进展：检查依赖是否满足、Agent是否空闲、消息队列是否正常
 - LLM调用异常：查看QwenClient重试日志与错误信息，核对配置（密钥、模型、基础URL）
-- 成本统计异常：确认CostTracker.record调用与日志输出
+- 成本统计异常：确认CostTracker.record调用与日志输出，检查章节号和成本类别参数
+- 章节成本超限：使用CostTracker.check_chapter_limit检查成本限额，调整任务配置
+- Token计算错误：检查TokenCalculator的tiktoken编码，确认输入文本格式
 - 反思机制异常：检查ReflectionAgent初始化参数、存储连接、LLM调用权限
 - 反思经验注入失败：确认CrewManager.setup_reflection调用、反思代理状态、经验格式化
+- 投票管理异常：检查VotingManager的成本追踪集成，确认多Agent投票的成本记录
 - 日志定位：统一使用core.logging_config，关注INFO/ERROR级别输出
 
 **章节来源**
@@ -623,12 +763,14 @@ AD --> CM
 - [agent_scheduler.py:241-488](file://agents/agent_scheduler.py#L241-L488)
 - [qwen_client.py:65-161](file://llm/qwen_client.py#L65-L161)
 - [cost_tracker.py:26-56](file://llm/cost_tracker.py#L26-L56)
+- [token_calculator.py:78-84](file://llm/token_calculator.py#L78-L84)
 - [reflection_agent.py:175-245](file://agents/reflection_agent.py#L175-L245)
 - [crew_manager.py:1680-1696](file://agents/crew_manager.py#L1680-L1696)
+- [voting_manager.py:108-124](file://agents/voting_manager.py#L108-L124)
 - [logging_config.py:20-50](file://core/logging_config.py#L20-L50)
 
 ## 结论
-Agent管理器核心通过单例模式统一管理Agent系统的初始化、注册与生命周期，结合消息通信与任务调度，实现了可扩展、可观测、可成本控制的多Agent协作框架。新增的反思机制进一步增强了系统的智能化水平，通过短期和长期反思功能，为写作流程提供持续的学习和优化能力。同时提供两种执行模式（调度器风格与CrewAI风格），满足不同场景需求。配合完善的日志与配置体系，能够稳定支撑小说生成流水线。
+Agent管理器核心通过单例模式统一管理Agent系统的初始化、注册与生命周期，结合消息通信与任务调度，实现了可扩展、可观测、可成本控制的多Agent协作框架。新增的成本追踪系统进一步增强了系统的经济性，通过章节级别的成本统计、成本类别分类、限额检查等功能，确保所有agent操作都得到成本效率监控。反思机制和投票管理器的集成，为系统提供了智能化的学习、优化和决策能力。配合完善的日志与配置体系，能够稳定支撑小说生成流水线，在保证质量的同时实现成本控制。
 
 ## 附录
 
@@ -688,6 +830,39 @@ Agent管理器核心通过单例模式统一管理Agent系统的初始化、注�
 **章节来源**
 - [agent_dispatcher.py:33-440](file://agents/agent_dispatcher.py#L33-L440)
 
+### API参考（CostTracker）
+- record(agent_name, prompt_tokens, completion_tokens, chapter_number=0, cost_category="base")：记录一次API调用的成本
+  - 参数：agent_name: str, prompt_tokens: int, completion_tokens: int, chapter_number: int=0, cost_category: str="base"
+  - 返回：记录详情字典
+  - 异常：无
+- get_chapter_cost(chapter_number)：获取指定章节的总成本
+  - 参数：chapter_number: int
+  - 返回：float（成本金额）
+- check_chapter_limit(chapter_number, limit)：检查指定章节成本是否超过限额
+  - 参数：chapter_number: int, limit: float
+  - 返回：bool（True表示未超限，False表示已超限）
+- get_summary()：获取成本汇总信息
+  - 参数：无
+  - 返回：包含总成本、Token统计、章节分解等的字典
+- reset()：重置成本统计
+  - 参数：无
+  - 返回：无
+
+**章节来源**
+- [cost_tracker.py:29-126](file://llm/cost_tracker.py#L29-L126)
+
+### API参考（TokenCalculator）
+- count_tokens(text)：精确计算文本的token数量
+  - 参数：text: str
+  - 返回：int（token数量）
+- calculate_max_tokens(prompt, system="", context_window=196608, min_output=1024, max_output=16384, buffer=512)：动态计算推荐的max_tokens
+  - 参数：prompt: str, system: str="", context_window: int=196608, min_output: int=1024, max_output: int=16384, buffer: int=512
+  - 返回：int（推荐的max_tokens值）
+  - 异常：无
+
+**章节来源**
+- [token_calculator.py:26-86](file://llm/token_calculator.py#L26-L86)
+
 ### API参考（ReflectionAgent）
 - reflect_on_loop(input_data)：短期反思，提取统计特征
   - 参数：input_data: ReflectionInput
@@ -695,13 +870,13 @@ Agent管理器核心通过单例模式统一管理Agent系统的初始化、注�
 - analyze_cross_chapter_patterns(current_chapter)：长期反思，跨章节模式分析
   - 参数：current_chapter: int
   - 返回：bool（是否成功执行）
-- get_lessons_for_writer(chapter_type)：获取给Writer的经验建议
+- get_lessons_for_writer(chapter_type="normal")：获取给Writer的经验建议
   - 参数：chapter_type: str（默认"normal"）
   - 返回：格式化的建议文本
-- get_lessons_for_reviewer(chapter_type)：获取给Reviewer的经验建议
+- get_lessons_for_reviewer(chapter_type="normal")：获取给Reviewer的经验建议
   - 参数：chapter_type: str（默认"normal"）
   - 返回：格式化的建议文本
-- get_lessons_for_continuity(chapter_type)：获取给Continuity Checker的经验建议
+- get_lessons_for_continuity(chapter_type="normal")：获取给Continuity Checker的经验建议
   - 参数：chapter_type: str（默认"normal"）
   - 返回：格式化的建议文本
 - record_lesson_effectiveness(lesson_id, chapter_number, was_effective)：记录lesson的实际应用效果
@@ -726,6 +901,19 @@ Agent管理器核心通过单例模式统一管理Agent系统的初始化、注�
 - [crew_manager.py:1680-1696](file://agents/crew_manager.py#L1680-L1696)
 - [crew_manager.py:1072-1078](file://agents/crew_manager.py#L1072-L1078)
 
+### API参考（VotingManager）
+- initiate_vote(topic, options, context, voters)：发起一次投票
+  - 参数：topic: str, options: List[str], context: str, voters: List[Dict[str, str]]
+  - 返回：VoteResult
+  - 异常：无
+- 初始化：接收QwenClient和CostTracker实例
+  - 参数：client: QwenClient, cost_tracker: CostTracker
+  - 返回：无
+
+**章节来源**
+- [voting_manager.py:86-124](file://agents/voting_manager.py#L86-L124)
+- [voting_manager.py:81-84](file://agents/voting_manager.py#L81-L84)
+
 ### 使用示例与最佳实践
 - 示例一：独立Agent系统启动
   - 参考脚本：scripts/start_agents.py
@@ -735,6 +923,8 @@ Agent管理器核心通过单例模式统一管理Agent系统的初始化、注�
   - 步骤：创建AgentScheduler，注册Agent，提交市场分析、内容策划、创作、编辑、发布任务，等待完成，打印成本
 - 示例三：反思机制集成
   - 步骤：初始化CrewManager，调用setup_reflection设置反思代理，运行写作流程，观察反思经验在连续性检查中的注入效果
+- 示例四：成本追踪监控
+  - 步骤：创建CostTracker实例，调用record记录各Agent的成本，使用get_summary获取汇总信息，使用check_chapter_limit检查章节限额
 - 最佳实践
   - 使用AgentManager单例，避免重复初始化
   - 在生产环境设置合适的日志级别与输出
@@ -743,9 +933,14 @@ Agent管理器核心通过单例模式统一管理Agent系统的初始化、注�
   - 在Agent中实现具体的任务处理逻辑，确保任务完成后发送完成消息
   - 合理配置ReflectionConfig，平衡反思成本与收益
   - 定期清理过时的反思经验，保持经验库的有效性
+  - 使用TokenCalculator优化LLM调用，减少不必要的token浪费
+  - 设置合理的章节成本限额，避免单章成本过高
+  - 利用成本类别分类进行精细化成本分析和控制
 
 **章节来源**
 - [start_agents.py:47-177](file://scripts/start_agents.py#L47-L177)
 - [test_multi_agent.py:27-194](file://agents/test_multi_agent.py#L27-L194)
 - [crew_manager.py:1680-1696](file://agents/crew_manager.py#L1680-L1696)
 - [reflection_agent.py:29-56](file://agents/reflection_agent.py#L29-L56)
+- [cost_tracker.py:102-126](file://llm/cost_tracker.py#L102-L126)
+- [token_calculator.py:78-84](file://llm/token_calculator.py#L78-L84)
