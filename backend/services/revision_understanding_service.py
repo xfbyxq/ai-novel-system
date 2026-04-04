@@ -1,16 +1,17 @@
 """修订理解服务 - 理解用户反馈并生成修改方案."""
 
 import json
-from typing import Any, Optional
+from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from uuid import UUID
 
-from core.models import Character, Chapter, WorldSetting, PlotOutline, RevisionPlan
+from core.models import Chapter, Character, PlotOutline, RevisionPlan, WorldSetting
 from core.models.revision_plan import RevisionPlanStatus
 from llm.qwen_client import QwenClient
+
+from .revision_data_validator import RevisionDataValidator, ValidationReport
 
 
 class RevisionUnderstandingService:
@@ -67,11 +68,12 @@ class RevisionUnderstandingService:
         """理解用户反馈，生成修订计划.
 
         核心流程：
-        1. 加载小说上下文（角色、章节摘要、世界观）
-        2. LLM分析反馈意图
-        3. 定位修改目标（哪个角色？哪几章？）
-        4. 生成修改方案
-        5. 保存修订计划
+        1. 数据验证 - 验证用户提到的角色、章节等是否存在
+        2. 加载小说上下文（角色、章节摘要、世界观）
+        3. LLM分析反馈意图（结合验证结果）
+        4. 定位修改目标（哪个角色？哪几章？）
+        5. 生成修改方案
+        6. 保存修订计划
 
         Args:
             user_feedback: 用户反馈文本
@@ -80,11 +82,17 @@ class RevisionUnderstandingService:
         Returns:
             RevisionPlan: 创建的修订计划
         """
+        # Step 0: 数据验证 - 验证用户提到的实体是否存在
+        validator = RevisionDataValidator(self.db)
+        validation_report = await validator.validate_feedback(user_feedback, novel_id)
+
         # Step 1: 加载上下文
         context = await self._load_novel_context(novel_id)
 
-        # Step 2: LLM分析
-        analysis = await self._analyze_with_llm(user_feedback, context)
+        # Step 2: LLM分析（传入验证报告）
+        analysis = await self._analyze_with_llm(
+            user_feedback, context, validation_report
+        )
 
         # Step 3: 补充目标ID
         targets = self._enrich_targets(analysis.get("targets", []), context)
@@ -184,33 +192,56 @@ class RevisionUnderstandingService:
             ),
         }
 
-    async def _analyze_with_llm(self, feedback: str, context: dict) -> dict:
+    async def _analyze_with_llm(
+        self, feedback: str, context: dict, validation_report: Optional[ValidationReport] = None
+    ) -> dict:
         """使用LLM分析用户反馈.
 
         Args:
             feedback: 用户反馈文本
             context: 小说上下文
+            validation_report: 实体验证报告
 
         Returns:
             dict: 分析结果
         """
         if self.llm is None:
             # 无LLM时使用简化分析
-            return self._simple_analyze(feedback, context)
+            return self._simple_analyze(feedback, context, validation_report)
 
-        # 构建分析prompt
-        prompt = self._build_analysis_prompt(feedback, context)
+        # 构建分析prompt（包含验证信息）
+        prompt = self._build_analysis_prompt(feedback, context, validation_report)
 
         try:
             response = await self.llm.chat([{"role": "user", "content": prompt}])
             result = json.loads(response)
+
+            # 如果验证发现问题，降低置信度并添加警告
+            if validation_report and not validation_report.is_valid:
+                if result.get("confidence", 1.0) > 0.5:
+                    result["confidence"] = result["confidence"] * 0.7
+                    result.setdefault("suggestions", []).insert(
+                        0, validation_report.warning_message or "检测到不存在的实体"
+                    )
+
             return result
         except (json.JSONDecodeError, Exception):
             # 解析失败时使用简化分析
-            return self._simple_analyze(feedback, context)
+            return self._simple_analyze(feedback, context, validation_report)
 
-    def _build_analysis_prompt(self, feedback: str, context: dict) -> str:
-        """构建分析prompt."""
+    def _build_analysis_prompt(
+        self, feedback: str, context: dict, validation_report: Optional[ValidationReport] = None
+    ) -> str:
+        """构建分析prompt.
+
+        Args:
+            feedback: 用户反馈
+            context: 上下文
+            validation_report: 验证报告
+
+        Returns:
+            str: 格式化的prompt
+        """
         # 格式化角色列表
         characters_text = "\n".join(
             f"- {c['name']} ({c['role_type']}): {c.get('personality', '未设定')}"
@@ -223,10 +254,17 @@ class RevisionUnderstandingService:
             for c in context.get("chapters", [])[-10:]  # 只显示最近10章
         )
 
+        # 构建验证信息部分
+        validation_section = ""
+        if validation_report:
+            validation_section = self._format_validation_section(validation_report)
+
         prompt = f"""{self.SYSTEM_PROMPT}
 
 ## 用户反馈
 {feedback}
+
+{validation_section}
 
 ## 小说上下文
 ### 角色列表
@@ -237,18 +275,74 @@ class RevisionUnderstandingService:
 """
         return prompt
 
-    def _simple_analyze(self, feedback: str, context: dict) -> dict:
+    def _format_validation_section(self, report: ValidationReport) -> str:
+        """格式化验证信息到prompt中.
+
+        Args:
+            report: 验证报告
+
+        Returns:
+            str: 格式化的验证部分
+        """
+        lines = ["## 实体验证结果\n"]
+
+        # 添加验证总结
+        lines.append(f"**验证总结**: {report.summary}")
+        lines.append("")
+
+        # 添加具体验证结果
+        if report.character_results:
+            lines.append("### 角色验证")
+            for result in report.character_results:
+                if result.exists:
+                    lines.append(f"- [OK] {result.entity_name}: 已验证存在")
+                    if result.matched_item:
+                        lines.append(
+                            f"  - 角色类型: {result.matched_item.get('role_type', '未知')}"
+                        )
+                else:
+                    lines.append(f"- [X] {result.entity_name}: **不存在于小说中**")
+                    if result.suggestions:
+                        lines.append(f"  - 建议：{', '.join(result.suggestions)}")
+            lines.append("")
+
+        if report.chapter_results:
+            lines.append("### 章节验证")
+            for result in report.chapter_results:
+                if result.exists:
+                    lines.append(
+                        f"- [OK] {result.entity_name}: {result.matched_item.get('title', '已验证')}"
+                    )
+                else:
+                    lines.append(f"- [X] {result.entity_name}: **章节不存在**")
+                    if result.suggestions:
+                        lines.append(f"  - 建议：{', '.join(result.suggestions)}")
+            lines.append("")
+
+        # 添加警告信息
+        if report.warning_message:
+            lines.append(f"**警告**: {report.warning_message}")
+            lines.append("")
+            lines.append("请根据验证结果调整分析策略：")
+            lines.append("1. 如果涉及不存在的实体，降低置信度并询问用户确认")
+            lines.append("2. 优先基于已验证的实体进行分析")
+            lines.append("3. 避免基于不存在的数据生成修改建议")
+
+        return "\n".join(lines)
+
+    def _simple_analyze(
+        self, feedback: str, context: dict, validation_report: Optional[ValidationReport] = None
+    ) -> dict:
         """简化分析 - 无LLM时的fallback.
 
         Args:
             feedback: 用户反馈
             context: 上下文
+            validation_report: 验证报告
 
         Returns:
             dict: 简化的分析结果
         """
-        feedback_lower = feedback.lower()
-
         # 尝试识别目标类型
         target_type = "character"
         if "世界观" in feedback or "设定" in feedback:
@@ -277,14 +371,21 @@ class RevisionUnderstandingService:
                 }
             )
 
+        suggestions = ["请用户提供更多细节"]
+
+        # 如果验证发现问题，添加警告
+        if validation_report and not validation_report.is_valid:
+            if validation_report.warning_message:
+                suggestions.insert(0, validation_report.warning_message)
+
         return {
             "intent": f"理解用户反馈：{feedback[:50]}...",
-            "confidence": 0.5,
+            "confidence": 0.5 if (validation_report and validation_report.is_valid) else 0.3,
             "target_type": target_type,
             "targets": targets,
             "changes": [],
             "affected_chapters": [],
-            "suggestions": ["请用户提供更多细节"],
+            "suggestions": suggestions,
         }
 
     def _enrich_targets(
@@ -399,7 +500,7 @@ class RevisionUnderstandingService:
         if plan.impact_assessment:
             chapters = plan.impact_assessment.get("affected_chapters", [])
             if chapters:
-                lines.append(f"【影响范围】")
+                lines.append("【影响范围】")
                 lines.append(f"- 可能影响章节：第{min(chapters)}-{max(chapters)}章")
                 lines.append("")
 

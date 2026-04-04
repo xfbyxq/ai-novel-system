@@ -38,10 +38,11 @@ class TestRevisionUnderstandingService:
         }
 
         # 由于反馈中包含"第"，会被识别为chapter类型
-        result = service._simple_analyze("第5章张三的性格不一致", context)
+        result = service._simple_analyze("第5章张三的性格不一致", context, validation_report=None)
 
         assert result["intent"] is not None
-        assert result["confidence"] == 0.5
+        # validation_report=None 时 confidence 降低为 0.3
+        assert result["confidence"] == 0.3
         # 注意：简单分析会优先识别章节引用
         assert result["target_type"] == "chapter"
         # 但仍会识别到角色名
@@ -53,7 +54,7 @@ class TestRevisionUnderstandingService:
         context = {"characters": [], "chapters": []}
 
         # 使用明确的"世界观"关键词
-        result = service._simple_analyze("世界观设定需要修改", context)
+        result = service._simple_analyze("世界观设定需要修改", context, validation_report=None)
 
         assert result["target_type"] == "world_setting"
 
@@ -61,7 +62,7 @@ class TestRevisionUnderstandingService:
         """测试简化分析大纲反馈."""
         context = {"characters": [], "chapters": []}
 
-        result = service._simple_analyze("情节发展太慢，需要调整大纲", context)
+        result = service._simple_analyze("情节发展太慢，需要调整大纲", context, validation_report=None)
 
         assert result["target_type"] == "outline"
 

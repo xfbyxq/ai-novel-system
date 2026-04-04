@@ -136,14 +136,24 @@ def setup_logging():
     # 3. 获取日志级别
     log_level = get_log_level()
 
-    # 4. 创建根 logger
+    # 4. 获取根 logger 并彻底清除所有 handlers（包括其他模块添加的）
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
 
-    # 清除现有 handlers（避免重复配置）
-    root_logger.handlers = []
+    # 禁用所有现有 logger 的日志传播，避免重复
+    # 这样每个 logger 只通过自己的 handlers 输出
+    # 注意：这必须在添加新的 handlers 之前执行
+    for logger_name in logging.Logger.manager.loggerDict:
+        log = logging.getLogger(logger_name)
+        log.propagate = False
 
-    # 5. 控制台 Handler
+    # 确保 novel_system logger 启用日志传播到根 logger
+    novel_logger = logging.getLogger("novel_system")
+    novel_logger.propagate = True
+
+    # 5. 控制台 Handler（只保留一个）
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
@@ -167,6 +177,12 @@ def setup_logging():
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("celery").setLevel(logging.WARNING)
+
+    # 禁用 uvicorn 的日志传播
+    for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+        uvicorn_log = logging.getLogger(name)
+        uvicorn_log.propagate = False
+        uvicorn_log.setLevel(logging.WARNING)
 
     return root_logger
 

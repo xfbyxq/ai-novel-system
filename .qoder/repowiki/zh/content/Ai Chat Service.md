@@ -19,15 +19,22 @@
 - [graph_query_mixin.py](file://agents/graph_query_mixin.py)
 - [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
 - [context_manager.py](file://backend/services/context_manager.py)
+- [revision_understanding_service.py](file://backend/services/revision_understanding_service.py)
+- [revision_execution_service.py](file://backend/services/revision_execution_service.py)
+- [revision_data_validator.py](file://backend/services/revision_data_validator.py)
+- [revision.py](file://backend/api/v1/revision.py)
+- [revision_plan.py](file://core/models/revision_plan.py)
+- [review_loop.py](file://agents/review_loop.py)
+- [continuity_integration_module.py](file://agents/continuity_integration_module.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增图数据库智能章节分析功能，支持基于Neo4j的章节内容分析
-- 集成智能章节摘要生成功能，提供结构化的内容分析结果
-- 增强持久化记忆系统，支持章节摘要的长期存储和检索
-- 新增图查询混入类，为AI聊天服务提供图数据库查询能力
-- 扩展AI聊天服务的章节分析能力，支持图数据库上下文集成
+- 新增修订建议提取、应用和智能章节分析功能
+- 集成完整的修订系统，支持结构化建议提取和数据库应用
+- 增强AI聊天服务的修订能力，支持自然语言修订和智能摘要
+- 新增修订数据验证和执行服务，确保修订建议的准确性和安全性
+- 扩展前端界面，支持修订建议的可视化展示和一键应用
 
 ## 目录
 1. [简介](#简介)
@@ -35,7 +42,7 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [图数据库集成](#图数据库集成)
+6. [修订系统集成](#修订系统集成)
 7. [智能章节分析功能](#智能章节分析功能)
 8. [持久化记忆系统](#持久化记忆系统)
 9. [依赖关系分析](#依赖关系分析)
@@ -47,7 +54,7 @@
 
 AI聊天服务是一个基于FastAPI构建的智能对话系统，专门为网络小说创作提供AI辅助功能。该系统集成了通义千问大模型，支持多种创作场景，包括小说创作、爬虫任务规划、小说修订和内容分析。系统采用内存缓存机制和数据库持久化相结合的方式，提供了高效的会话管理和内容存储能力。
 
-**更新** 系统现已显著增强了分析能力和稳定性，新增了图数据库智能章节分析功能、智能章节摘要生成、持久化记忆系统等特性。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析和关系网络查询方面。
+**更新** 系统现已显著增强了分析能力和稳定性，新增了修订建议提取、应用和智能章节分析功能，以及与新修订系统的完整集成。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析、关系网络查询和结构化修订建议方面。
 
 ## 项目结构
 
@@ -68,6 +75,7 @@ Service[AI聊天服务<br/>AiChatService]
 Memory[内存服务<br/>MemoryService]
 Context[上下文管理<br/>ContextManager]
 Cost[成本追踪<br/>CostTracker]
+Revision[修订服务<br/>RevisionServices]
 end
 subgraph "图数据库层"
 GraphAPI[图数据库API<br/>/api/v1/graph]
@@ -82,6 +90,12 @@ Models[数据库模型<br/>AIChatSession/AIChatMessage]
 Persist[持久化存储<br/>SQLite/AgentMesh]
 DB[(PostgreSQL数据库)]
 end
+subgraph "修订系统"
+RevisionAPI[修订API<br/>/api/v1/revision]
+RevisionPlan[修订计划模型<br/>RevisionPlan]
+Validator[数据验证服务<br/>RevisionDataValidator]
+Executor[执行服务<br/>RevisionExecutionService]
+end
 FE --> API
 API --> Router
 Router --> Service
@@ -95,6 +109,10 @@ GraphService --> Neo4j
 Neo4j --> Persist
 Models --> DB
 Qwen --> Cost
+Service --> RevisionAPI
+RevisionAPI --> RevisionPlan
+RevisionAPI --> Validator
+RevisionAPI --> Executor
 ```
 
 **图表来源**
@@ -102,6 +120,7 @@ Qwen --> Cost
 - [ai_chat_service.py:189-200](file://backend/services/ai_chat_service.py#L189-L200)
 - [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 - [graph.py:29-30](file://backend/api/v1/graph.py#L29-L30)
+- [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
 
 **章节来源**
 - [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
@@ -136,6 +155,11 @@ class AiChatService {
 +generate_smart_chapter_summary(novel_id, chapter_numbers, force_regenerate) dict
 +_extract_chapter_key_points(content, title, chapter_number, genre) dict
 +get_novel_chapters_summary(novel_id, chapter_start, chapter_end, use_smart_summary) dict
++extract_structured_suggestions(ai_response, novel_info, revision_type) Dict[]
++apply_suggestion_to_database(novel_id, suggestion) Dict
++apply_suggestions_batch(novel_id, suggestions) Dict
++get_novel_characters(novel_id) Dict[]
++get_novel_chapters(novel_id) Dict[]
 }
 class ChatSession {
 +str session_id
@@ -225,6 +249,7 @@ participant Service as AI聊天服务
 participant Context as 上下文管理
 participant Memory as 内存服务
 participant Graph as 图数据库
+participant Revision as 修订系统
 participant LLM as 通义千问
 participant DB as 数据库
 Client->>API : POST /ai-chat/sessions
@@ -238,6 +263,17 @@ Service->>DB : 保存会话含novel_id和title
 DB-->>Service : 确认保存
 Service-->>API : 会话信息
 API-->>Client : 会话创建成功
+Client->>API : POST /ai-chat/suggestions
+API->>Service : extract_structured_suggestions()
+Service->>LLM : 提取结构化建议
+LLM-->>Service : 建议列表
+Service-->>API : 建议响应
+Client->>API : POST /ai-chat/suggestions/apply
+API->>Service : apply_suggestion_to_database()
+Service->>DB : 应用建议到数据库
+DB-->>Service : 确认更新
+Service-->>API : 应用结果
+API-->>Client : 应用成功
 Client->>API : POST /ai-chat/sessions/{id}/messages
 API->>Service : send_message()
 Service->>Context : 构建图数据库上下文
@@ -254,6 +290,7 @@ API-->>Client : 消息响应
 - [ai_chat.py:54-104](file://backend/api/v1/ai_chat.py#L54-L104)
 - [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
 - [context_manager.py:157-190](file://backend/services/context_manager.py#L157-L190)
+- [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
 
 ## 详细组件分析
 
@@ -500,6 +537,10 @@ Version --> Cache
 | /ai-chat/ws/{session_id} | WebSocket | 流式对话 | 文本块 |
 | /ai-chat/parse-novel | POST | 解析小说意图 | NovelParseResponse |
 | /ai-chat/extract-suggestions | POST | 提取修订建议 | ExtractSuggestionsResponse |
+| /ai-chat/apply-suggestion | POST | 应用单个建议 | ApplySuggestionResult |
+| /ai-chat/apply-suggestions | POST | 批量应用建议 | ApplySuggestionsResponse |
+| /ai-chat/novels/{novel_id}/characters-list | GET | 获取角色列表 | NovelCharactersResponse |
+| /ai-chat/novels/{novel_id}/chapters-list | GET | 获取章节列表 | NovelChaptersResponse |
 | /ai-chat/sessions | GET | 获取会话列表 | 包含novel_id和title |
 
 #### WebSocket通信协议
@@ -658,111 +699,236 @@ AiChatService --> AnalysisResult : generates
 - [ai_chat_service.py:1451-1507](file://backend/services/ai_chat_service.py#L1451-L1507)
 - [ai_chat_service.py:1508-1575](file://backend/services/ai_chat_service.py#L1508-L1575)
 
-## 图数据库集成
+### 修订建议提取与应用功能
 
-### 图数据库架构
+**更新** 系统新增了完整的修订建议提取、验证和应用功能：
 
-**更新** 系统新增了完整的图数据库集成，支持基于Neo4j的智能章节分析和关系查询：
+#### 修订建议提取流程
+
+```mermaid
+flowchart TD
+Start([开始提取修订建议]) --> ValidateInput[验证输入参数]
+ValidateInput --> BuildPrompt[构建提取提示词]
+BuildPrompt --> CallLLM[调用LLM提取建议]
+CallLLM --> ParseJSON[解析JSON响应]
+ParseJSON --> ValidateSuggestion[验证建议有效性]
+ValidateSuggestion --> CleanData[清理和格式化数据]
+CleanData --> ReturnSuggestions[返回结构化建议]
+CallLLM --> Error{LLM调用失败?}
+Error --> |是| HandleError[记录错误并返回空数组]
+Error --> |否| ParseJSON
+HandleError --> ReturnEmpty[返回空数组]
+```
+
+#### 修订建议应用流程
+
+```mermaid
+flowchart TD
+Start([开始应用修订建议]) --> ValidateTarget[验证目标对象]
+ValidateTarget --> CheckType{建议类型?}
+CheckType --> |novel| UpdateNovel[更新小说基本信息]
+CheckType --> |world_setting| UpdateWorld[更新世界观设定]
+CheckType --> |character| UpdateCharacter[更新角色信息]
+CheckType --> |outline| UpdateOutline[更新大纲信息]
+CheckType --> |chapter| UpdateChapter[更新章节内容]
+UpdateNovel --> CommitDB[提交数据库更改]
+UpdateWorld --> CommitDB
+UpdateCharacter --> CommitDB
+UpdateOutline --> CommitDB
+UpdateChapter --> CommitDB
+CommitDB --> InvalidateCache[失效缓存]
+InvalidateCache --> Success[返回成功结果]
+```
+
+**章节来源**
+- [ai_chat_service.py:2618-3100](file://backend/services/ai_chat_service.py#L2618-L3100)
+- [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
+
+## 修订系统集成
+
+### 修订系统架构
+
+**更新** 系统集成了完整的修订系统，支持从自然语言反馈到结构化建议再到数据库应用的完整流程：
 
 ```mermaid
 graph TB
-subgraph "图数据库层"
-Neo4j[Neo4j数据库]
-Client[Neo4jClient]
-Service[GraphQueryService]
-API[GraphAPI]
+subgraph "修订系统层"
+RevisionAPI[修订API<br/>/api/v1/revision]
+Understanding[修订理解服务<br/>RevisionUnderstandingService]
+Validator[数据验证服务<br/>RevisionDataValidator]
+Executor[执行服务<br/>RevisionExecutionService]
+Plan[修订计划模型<br/>RevisionPlan]
 end
 subgraph "AI聊天服务集成"
-Mixin[GraphQueryMixin]
-Context[图上下文构建]
-Analysis[智能分析]
+AiChat[AI聊天服务<br/>AiChatService]
+SuggestionExtraction[建议提取]
+SuggestionApplication[建议应用]
 end
-subgraph "数据模型"
-Character[角色节点]
-Location[地点节点]
-Event[事件节点]
-Relationship[关系边]
+subgraph "数据库层"
+DB[(PostgreSQL数据库)]
 end
-Neo4j --> Client
-Client --> Service
-Service --> API
-API --> Mixin
-Mixin --> Context
-Context --> Analysis
-Character --> Relationship
-Location --> Relationship
-Event --> Relationship
+RevisionAPI --> Understanding
+RevisionAPI --> Validator
+RevisionAPI --> Executor
+Understanding --> Plan
+AiChat --> SuggestionExtraction
+AiChat --> SuggestionApplication
+SuggestionExtraction --> RevisionAPI
+SuggestionApplication --> DB
+Plan --> DB
 ```
 
 **图表来源**
-- [graph.py:29-30](file://backend/api/v1/graph.py#L29-L30)
-- [graph_query_service.py:135-148](file://backend/services/graph_query_service.py#L135-L148)
-- [neo4j_client.py:81-92](file://core/graph/neo4j_client.py#L81-L92)
+- [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
+- [revision_understanding_service.py:17-498](file://backend/services/revision_understanding_service.py#L17-L498)
+- [revision_data_validator.py:43-619](file://backend/services/revision_data_validator.py#L43-L619)
+- [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
+- [revision_plan.py:33-116](file://core/models/revision_plan.py#L33-L116)
 
-### 图查询混入类
+### 修订理解服务
 
-**更新** 新增了`GraphQueryMixin`类，为AI聊天服务提供图数据库查询能力：
+**更新** 新增了`RevisionUnderstandingService`类，负责理解用户反馈并生成修订计划：
 
 ```mermaid
 classDiagram
-class GraphQueryMixin {
-+bool _graph_enabled
-+Optional[str] _novel_id
-+set_graph_context(novel_id) void
-+query_character_network(name, depth) CharacterNetwork
-+query_character_path(from, to) CharacterPath
-+query_influence(name) InfluenceReport
-+check_conflicts() List[ConflictReport]
-+query_pending_foreshadowings(chapter) List[Dict]
-+query_event_timeline(name) List[Dict]
-+query_all_relationships(type) List[Dict]
-+format_network_context(network) str
-+format_path_context(path) str
-+format_conflicts_context(conflicts) str
-+format_foreshadowings_context(fos) str
-+format_influence_context(influence) str
-+get_full_character_context(name, include) str
-+get_novel_graph_summary() str
+class RevisionUnderstandingService {
++AsyncSession db
++QwenClient llm
++understand_feedback(feedback, novel_id) RevisionPlan
++_extract_targets(feedback, novel_id) dict
++_extract_proposed_changes(targets, novel_id) list
++_assess_impact(changes) dict
++format_plan_for_display(plan) str
 }
-class GraphQueryService {
-+Neo4jClient client
-+get_character_network(novel_id, name, depth) CharacterNetwork
-+find_shortest_path(novel_id, from, to) CharacterPath
-+find_character_influence(novel_id, name) InfluenceReport
-+check_consistency_conflicts(novel_id) List[ConflictReport]
-+find_pending_foreshadowings(novel_id, chapter) List[Dict]
-+get_event_timeline(novel_id, name) List[Dict]
-+get_all_relationships(novel_id, type) List[Dict]
+class RevisionPlan {
++UUID id
++UUID novel_id
++str feedback_text
++str understood_intent
++float confidence
++list targets
++list proposed_changes
++dict impact_assessment
++RevisionPlanStatus status
++datetime created_at
 }
-GraphQueryMixin --> GraphQueryService : uses
+class EntityValidationResult {
++str entity_type
++str entity_name
++bool exists
++dict matched_item
++list suggestions
+}
+RevisionUnderstandingService --> RevisionPlan : creates
+RevisionUnderstandingService --> EntityValidationResult : validates
 ```
 
 **图表来源**
-- [graph_query_mixin.py:26-44](file://agents/graph_query_mixin.py#L26-L44)
-- [graph_query_service.py:135-148](file://backend/services/graph_query_service.py#L135-L148)
+- [revision_understanding_service.py:17-498](file://backend/services/revision_understanding_service.py#L17-L498)
+- [revision_plan.py:33-116](file://core/models/revision_plan.py#L33-L116)
 
 **章节来源**
-- [graph_query_mixin.py:1-498](file://agents/graph_query_mixin.py#L1-L498)
-- [graph_query_service.py:135-537](file://backend/services/graph_query_service.py#L135-L537)
+- [revision_understanding_service.py:17-498](file://backend/services/revision_understanding_service.py#L17-L498)
+- [revision_plan.py:33-116](file://core/models/revision_plan.py#L33-L116)
 
-### 图数据库API接口
+### 修订数据验证服务
 
-**更新** 新增了完整的图数据库API接口，支持各种查询和同步操作：
+**更新** 新增了`RevisionDataValidator`类，负责验证用户反馈中的实体是否存在：
+
+```mermaid
+classDiagram
+class RevisionDataValidator {
++AsyncSession db
++validate_feedback(feedback, novel_id) ValidationReport
++_extract_entities(feedback, context) dict
++_validate_characters(names, context) list
++_validate_chapters(numbers, context) list
++_validate_locations(locations, context) list
++_validate_world_elements(elements, context) list
++_find_similar_names(target, names) list
+}
+class ValidationReport {
++str novel_id
++bool is_valid
++int entity_count
++int valid_count
++int invalid_count
++list character_results
++list chapter_results
++list location_results
++list world_element_results
++dict extracted_entities
++str warning_message
++str summary
+}
+RevisionDataValidator --> ValidationReport : generates
+```
+
+**图表来源**
+- [revision_data_validator.py:43-619](file://backend/services/revision_data_validator.py#L43-L619)
+
+**章节来源**
+- [revision_data_validator.py:43-619](file://backend/services/revision_data_validator.py#L43-L619)
+
+### 修订执行服务
+
+**更新** 新增了`RevisionExecutionService`类，负责执行用户确认的修订计划：
+
+```mermaid
+classDiagram
+class RevisionExecutionService {
++AsyncSession db
++execute_plan(plan_id, confirmed, modifications) ExecutionResult
++preview_plan(plan_id) dict
++_get_plan(plan_id) RevisionPlan
++_merge_modifications(proposed, modifications) list
++_execute_single_change(change) ChangeResult
++_update_character(id, field, value) ChangeResult
++_update_chapter(id, field, value) ChangeResult
++_update_world_setting(novel_id, field, value) ChangeResult
++_update_outline(novel_id, field, value) ChangeResult
++_extract_affected_chapters(plan, results) list
+}
+class ExecutionResult {
++bool success
++str message
++list changes
++list affected_chapters
+}
+class ChangeResult {
++bool success
++str target_type
++str target_name
++str field
++str message
+}
+RevisionExecutionService --> ExecutionResult : returns
+RevisionExecutionService --> ChangeResult : produces
+```
+
+**图表来源**
+- [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
+
+**章节来源**
+- [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
+
+### 修订API接口
+
+**更新** 新增了完整的修订API接口，支持修订反馈理解、计划执行和经验学习：
 
 | 端点 | 方法 | 功能 | 返回类型 |
 |------|------|------|----------|
-| /novels/{novel_id}/graph/health | GET | 检查图数据库健康状态 | GraphHealthResponse |
-| /novels/{novel_id}/graph/init | POST | 初始化图数据库连接 | InitResponse |
-| /novels/{novel_id}/graph/sync | POST | 同步小说数据到图数据库 | SyncResponse |
-| /novels/{novel_id}/graph/network/{character_name} | GET | 获取角色关系网络 | NetworkResponse |
-| /novels/{novel_id}/graph/path | GET | 查找角色关系路径 | PathResponse |
-| /novels/{novel_id}/graph/conflicts | GET | 检测一致性冲突 | ConflictsResponse |
-| /novels/{novel_id}/graph/influence/{character_name} | GET | 获取角色影响力分析 | InfluenceResponse |
-| /novels/{novel_id}/graph/timeline | GET | 获取事件时间线 | TimelineResponse |
-| /novels/{novel_id}/graph/foreshadowings/pending | GET | 获取待回收伏笔 | ForeshadowingsResponse |
+| /revision/understand | POST | 理解修订反馈并生成计划 | RevisionPlanResponse |
+| /revision/execute | POST | 执行修订计划 | ExecutionResultResponse |
+| /revision/preview/{plan_id} | GET | 预览修订计划影响 | dict |
+| /revision/plans/{novel_id} | GET | 获取修订计划列表 | dict |
+| /revision/lessons/{novel_id} | GET | 获取适用的经验教训 | LessonResponse |
+| /revision/strategies/{novel_id} | GET | 获取策略建议 | StrategyResponse |
+| /revision/preferences | POST | 记录用户偏好 | PreferenceResponse |
+| /revision/preferences/{user_id} | GET | 获取用户偏好列表 | dict |
 
 **章节来源**
-- [graph.py:35-581](file://backend/api/v1/graph.py#L35-L581)
+- [revision.py:136-463](file://backend/api/v1/revision.py#L136-L463)
 
 ## 智能章节分析功能
 
@@ -834,6 +1000,38 @@ AI-->>AI : 生成智能章节分析
 **章节来源**
 - [graph_query_mixin.py:362-445](file://agents/graph_query_mixin.py#L362-L445)
 - [graph_query_service.py:320-522](file://backend/services/graph_query_service.py#L320-L522)
+
+### 修订建议与智能分析集成
+
+**更新** 系统将修订建议提取功能与智能章节分析深度集成：
+
+```mermaid
+flowchart TD
+Start([开始修订分析]) --> LoadChapters[加载章节内容]
+LoadChapters --> GenerateSmartSummary[生成智能摘要]
+GenerateSmartSummary --> AnalyzeWithLLM[LLM分析章节]
+AnalyzeWithLLM --> ExtractIssues[提取问题和建议]
+ExtractIssues --> ValidateEntities[验证实体存在性]
+ValidateEntities --> GeneratePlan[生成修订计划]
+GeneratePlan --> ReviewLoop[评审循环]
+ReviewLoop --> ApplySuggestion[应用修订建议]
+ApplySuggestion --> UpdateMemory[更新记忆缓存]
+UpdateMemory --> End([完成])
+```
+
+#### 修订建议提取流程
+
+系统支持多种修订类型的建议提取：
+
+1. **小说基本信息修订**：标题、作者、简介、类型等
+2. **世界观设定修订**：修炼体系、地理环境、势力划分等
+3. **角色设定修订**：性格、背景、能力、关系等
+4. **大纲修订**：结构类型、主线剧情、关键转折点等
+5. **章节内容修订**：标题、内容、情节等
+
+**章节来源**
+- [ai_chat_service.py:2618-2720](file://backend/services/ai_chat_service.py#L2618-L2720)
+- [review_loop.py:71-408](file://agents/review_loop.py#L71-L408)
 
 ## 持久化记忆系统
 
@@ -1006,17 +1204,22 @@ graph TD
 subgraph "接口层"
 API[backend/api/v1/ai_chat.py]
 GraphAPI[backend/api/v1/graph.py]
+RevisionAPI[backend/api/v1/revision.py]
 end
 subgraph "服务层"
 Service[backend/services/ai_chat_service.py]
 Memory[backend/services/memory_service.py]
 Context[backend/services/context_manager.py]
 GraphService[backend/services/graph_query_service.py]
+RevisionUnderstanding[backend/services/revision_understanding_service.py]
+RevisionExecution[backend/services/revision_execution_service.py]
+Validator[backend/services/revision_data_validator.py]
 Cost[llm/cost_tracker.py]
 end
 subgraph "模型层"
 Models[core/models/ai_chat_session.py]
 Neo4jClient[core/graph/neo4j_client.py]
+RevisionPlan[core/models/revision_plan.py]
 end
 subgraph "LLM层"
 Qwen[llm/qwen_client.py]
@@ -1026,18 +1229,23 @@ Config[backend/config.py]
 end
 API --> Service
 GraphAPI --> GraphService
+RevisionAPI --> RevisionUnderstanding
+RevisionAPI --> RevisionExecution
+RevisionAPI --> Validator
 Service --> Memory
 Service --> Context
 Service --> Qwen
 Service --> Models
 Service --> Config
 GraphService --> Neo4jClient
+RevisionUnderstanding --> RevisionPlan
 Qwen --> Cost
 ```
 
 **图表来源**
 - [ai_chat.py:1-37](file://backend/api/v1/ai_chat.py#L1-L37)
 - [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
+- [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
 
 **章节来源**
 - [pyproject.toml:8-37](file://pyproject.toml#L8-L37)
@@ -1081,6 +1289,15 @@ Qwen --> Cost
 - **查询优化**：使用白名单验证防止Cypher注入
 - **事务处理**：支持批量操作的原子性
 - **索引优化**：创建复合索引提升查询性能
+
+### 修订系统性能优化
+
+**更新** 修订系统采用了多项性能优化措施：
+
+- **并行实体验证**：使用异步查询并行验证多个实体
+- **缓存机制**：缓存验证结果，避免重复查询
+- **批量应用**：支持批量应用修订建议，减少数据库往返
+- **增量更新**：只更新发生变化的数据，减少写操作
 
 ## 故障排除指南
 
@@ -1207,11 +1424,63 @@ Qwen --> Cost
 4. 检查AgentMesh存储服务日志
 5. 清理损坏的索引数据
 
+#### 修订建议提取失败
+
+**问题症状**：提取修订建议返回空数组或错误
+
+**可能原因**：
+1. LLM调用失败或响应格式不正确
+2. 输入参数验证失败
+3. JSON解析错误
+4. 建议格式不符合规范
+
+**解决步骤**：
+1. 检查LLM服务状态和API密钥配置
+2. 验证输入参数的novel_id和ai_response格式
+3. 查看日志中的JSON解析错误信息
+4. 确认建议格式符合预期的JSON结构
+
+#### 修订建议应用失败
+
+**问题症状**：应用修订建议返回失败或部分成功
+
+**可能原因**：
+1. 目标对象不存在或ID无效
+2. 字段名不正确或不允许修改
+3. 数据库事务失败
+4. 结构化数据解析错误
+
+**解决步骤**：
+1. 检查目标对象ID是否存在于数据库
+2. 验证字段名是否在允许的字段列表中
+3. 查看数据库事务日志，确认是否有约束冲突
+4. 检查结构化数据的JSON格式是否正确
+5. 对于列表字段，确保提供正确的JSON格式
+
+#### 修订数据验证失败
+
+**问题症状**：验证用户反馈中的实体失败
+
+**可能原因**：
+1. 数据库连接问题
+2. 实体提取正则表达式匹配失败
+3. 异步查询超时
+4. 中文数字转换错误
+
+**解决步骤**：
+1. 检查数据库连接状态和权限
+2. 验证正则表达式的正确性
+3. 查看异步查询的超时设置
+4. 检查中文数字转换函数的逻辑
+5. 确认角色名列表的加载是否成功
+
 **章节来源**
 - [ai_chat.py:98-104](file://backend/api/v1/ai_chat.py#L98-L104)
 - [qwen_client.py:97-106](file://llm/qwen_client.py#L97-L106)
 - [neo4j_client.py:133-172](file://core/graph/neo4j_client.py#L133-L172)
 - [agentmesh_memory_adapter.py:46-88](file://backend/services/agentmesh_memory_adapter.py#L46-L88)
+- [revision_understanding_service.py:17-498](file://backend/services/revision_understanding_service.py#L17-L498)
+- [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
 
 ## 结论
 
@@ -1224,9 +1493,11 @@ AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过
 5. **智能组织**：新增的会话隔离和智能标题生成功能，提升了用户体验
 6. **图数据库集成**：全新的图数据库智能章节分析功能
 7. **持久化记忆**：基于AgentMesh理念的完整记忆系统
+8. **修订系统集成**：完整的修订建议提取、验证和应用功能
+9. **智能分析能力**：深度集成的智能章节分析和修订建议功能
 
-**更新** 系统现已显著增强了分析能力和稳定性，通过新增的图数据库智能章节分析功能、智能章节摘要生成、持久化记忆系统等特性，大幅提升了系统的智能化水平和用户体验。特别是图数据库的集成，使得系统能够深入分析小说中的角色关系网络、事件时间线和伏笔追踪，为用户提供更加精准和全面的创作辅助。
+**更新** 系统现已显著增强了分析能力和稳定性，通过新增的修订建议提取、应用和智能章节分析功能，以及与新修订系统的完整集成，大幅提升了系统的智能化水平和用户体验。特别是修订系统的集成，使得系统能够从自然语言反馈中提取结构化的修订建议，并直接应用到数据库中，为用户提供了一站式的创作辅助解决方案。
 
-这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务，特别是在处理章节内容分析、角色关系理解和情节发展预测等方面表现出色。系统现在不仅能够理解文本内容，还能够利用图数据库的强大查询能力，为用户提供深层次的创作洞察和建议。
+这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务，特别是在处理章节内容分析、角色关系理解和情节发展预测等方面表现出色。系统现在不仅能够理解文本内容，还能够利用图数据库的强大查询能力和修订系统的智能分析，为用户提供深层次的创作洞察和建议。
 
-该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量，是现代AI驱动的创作工具的重要代表。
+该系统为网络小说创作提供了强大的AI辅助能力，能够显著提升创作效率和质量，是现代AI驱动的创作工具的重要代表。通过持续的功能扩展和性能优化，系统将继续为创作者提供更加智能、便捷和高效的服务体验。
