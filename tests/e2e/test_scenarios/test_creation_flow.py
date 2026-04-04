@@ -1,4 +1,12 @@
-"""小说创建流程测试."""
+"""
+小说创建流程测试
+
+测试编号: E2E-09
+测试目标: 测试完整的小说创建端到端流程
+
+前置条件: 无
+依赖测试: E2E-01 (小说创建)
+"""
 import pytest
 from tests.e2e.pages.novel_list_page import NovelListPage
 from tests.e2e.pages.novel_detail_page import NovelDetailPage

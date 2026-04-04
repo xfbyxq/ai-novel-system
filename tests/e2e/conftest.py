@@ -1,4 +1,30 @@
-"""E2E测试配置文件."""
+"""
+E2E测试配置文件
+
+E2E测试用例编号方案:
++------------------+----------------------------------+---------------+
+| 编号             | 测试模块                         | 依赖         |
++------------------+----------------------------------+---------------+
+| E2E-01           | 小说创建 (test_小说创建.py)       | 无           |
+| E2E-02           | 小说查看 (test_小说查看.py)       | E2E-01       |
+| E2E-03           | 大纲查看 (test_大纲查看.py)       | E2E-01       |
+| E2E-04           | 世界观查看 (test_世界观查看.py)    | E2E-01       |
+| E2E-05           | 章节查看 (test_小说章节查看.py)    | E2E-01,07    |
+| E2E-06           | 企划任务 (test_添加企划任务.py)   | E2E-01       |
+| E2E-07           | 章节生成 (test_chapter_flow.py)   | E2E-01       |
+| E2E-08           | 批量生成 (test_批量生成小说任务.py)| E2E-01       |
+| E2E-09           | 创作流程 (test_creation_flow.py)  | E2E-01       |
+| E2E-10           | 大纲流程 (test_outline_flow.py)   | E2E-01       |
+| E2E-11           | 工作流 (test_working_flow.py)     | E2E-01,07    |
+| E2E-12           | 最终流程 (test_final_flow.py)     | E2E-01~11    |
++------------------+----------------------------------+---------------+
+
+测试执行顺序建议:
+1. 先执行 E2E-01 (小说创建) - 基础测试
+2. 然后并行执行 E2E-02~06 (查看类测试)
+3. 接着执行 E2E-07~08 (生成类测试)
+4. 最后执行 E2E-09~12 (端到端流程测试)
+"""
 
 import os
 import pytest
@@ -11,6 +37,21 @@ load_dotenv()
 
 def pytest_configure(config):
     """pytest配置钩子."""
+    # 测试用例标记
+    config.addinivalue_line("markers", "e2e01: E2E-01 小说创建基础测试")
+    config.addinivalue_line("markers", "e2e02: E2E-02 小说查看测试")
+    config.addinivalue_line("markers", "e2e03: E2E-03 大纲查看测试")
+    config.addinivalue_line("markers", "e2e04: E2E-04 世界观查看测试")
+    config.addinivalue_line("markers", "e2e05: E2E-05 章节查看测试")
+    config.addinivalue_line("markers", "e2e06: E2E-06 企划任务测试")
+    config.addinivalue_line("markers", "e2e07: E2E-07 章节生成测试")
+    config.addinivalue_line("markers", "e2e08: E2E-08 批量生成测试")
+    config.addinivalue_line("markers", "e2e09: E2E-09 创作流程测试")
+    config.addinivalue_line("markers", "e2e10: E2E-10 大纲流程测试")
+    config.addinivalue_line("markers", "e2e11: E2E-11 工作流测试")
+    config.addinivalue_line("markers", "e2e12: E2E-12 最终流程测试")
+    
+    # 功能标记
     config.addinivalue_line("markers", "ui: mark test as UI test")
     config.addinivalue_line("markers", "smoke: mark test as smoke test")
     config.addinivalue_line("markers", "regression: mark test as regression test")

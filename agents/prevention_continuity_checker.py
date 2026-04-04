@@ -273,7 +273,7 @@ class PreventionContinuityChecker:
 
         # 3. 检查剧情推进
         progress_check = self._check_plot_progress(
-            chapter_plan, previous_chapter, constraints
+            chapter_plan, previous_chapter, constraints, chapter_number
         )
         report.missing_progress = progress_check["missing"]
         report.progress_score = progress_check["score"]
@@ -420,6 +420,7 @@ class PreventionContinuityChecker:
         chapter_plan: Dict[str, Any],
         previous_chapter: Dict[str, Any],
         constraints: List[ContinuityConstraint],
+        chapter_number: int,
     ) -> Dict[str, Any]:
         """检查剧情推进."""
         missing = []
@@ -434,6 +435,7 @@ class PreventionContinuityChecker:
                     element_type="plot_point",
                     description="本章缺乏明确的主要事件",
                     importance=8,
+                    expected_chapter=chapter_number,
                     reason="每章至少需要一个推进剧情的主要事件",
                 )
             )
@@ -448,6 +450,7 @@ class PreventionContinuityChecker:
                             element_type="plot_point",
                             description=f"未推进冲突：{constraint.description}",
                             importance=constraint.priority,
+                            expected_chapter=chapter_number,
                             reason=f"该冲突始于第{constraint.source_chapter}章，需要推进",
                         )
                     )
@@ -462,6 +465,7 @@ class PreventionContinuityChecker:
                     element_type="character_arc",
                     description="本章缺乏角色发展",
                     importance=5,
+                    expected_chapter=chapter_number,
                     reason="剧情事件应该带来角色成长或变化",
                 )
             )

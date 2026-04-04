@@ -6,76 +6,55 @@ from .base_page import BasePage
 class NovelDetailPage(BasePage):
     """小说详情页面对象."""
 
-    # 标签页选择器
+    # 标签页选择器 (Ant Design Tabs)
     TAB_SELECTORS = {
-        "overview": "[data-testid='tab-overview']",
-        "world_setting": "[data-testid='tab-world-setting']",
-        "characters": "[data-testid='tab-characters']",
-        "plot_outline": "[data-testid='tab-plot-outline']",
-        "outline_refinement": "[data-testid='tab-outline-refinement']",
-        "chapters": "[data-testid='tab-chapters']",
-        "generation_history": "[data-testid='tab-generation-history']",
-        "relationship_graph": "[data-testid='tab-relationship-graph']",
+        "overview": ".ant-tabs-tab:has-text('概览')",
+        "world_setting": ".ant-tabs-tab:has-text('世界观')",
+        "characters": ".ant-tabs-tab:has-text('角色')",
+        "plot_outline": ".ant-tabs-tab:has-text('大纲')",
+        "outline_refinement": ".ant-tabs-tab:has-text('大纲梳理')",
+        "chapters": ".ant-tabs-tab:has-text('章节')",
+        "generation_history": ".ant-tabs-tab:has-text('生成历史')",
     }
 
     # 概览标签页元素
     OVERVIEW_SELECTORS = {
-        "start_planning_btn": "[data-testid='start-planning-btn']",
-        "generate_single_chapter_btn": "[data-testid='generate-single-chapter-btn']",
-        "batch_generate_btn": "[data-testid='batch-generate-btn']",
-        "edit_novel_btn": "[data-testid='edit-novel-btn']",
+        "start_planning_btn": "button:has-text('开始企划')",
+        "generate_single_chapter_btn": "button:has-text('生成单章')",
+        "batch_generate_btn": "button:has-text('批量生成章节')",
+        "edit_novel_btn": "button:has-text('编辑小说')",
+        # 生成单章模态框
+        "chapter_modal": ".ant-modal:has-text('生成单章')",
+        "chapter_number_input": ".ant-modal .ant-input-number input",
+        "confirm_single_btn": ".ant-modal button:has-text('开始写作')",
+        # 批量生成模态框
+        "batch_modal": ".ant-modal:has-text('批量生成章节')",
+        "batch_start_input": ".ant-modal .ant-input-number input >> nth=0",
+        "batch_end_input": ".ant-modal .ant-input-number input >> nth=1",
+        "confirm_batch_btn": ".ant-modal button:has-text('开始批量生成')",
         # 编辑小说模态框
-        "edit_modal": "[data-testid='edit-novel-modal']",
-        "edit_title_input": "[data-testid='edit-title-input']",
-        "edit_genre_select": "[data-testid='edit-genre-select']",
-        "edit_tags_input": "[data-testid='edit-tags-input']",
-        "edit_synopsis_textarea": "[data-testid='edit-synopsis-textarea']",
-        "save_edit_btn": "[data-testid='save-edit-btn']",
-        "cancel_edit_btn": "[data-testid='cancel-edit-btn']",
-        # 生成章节模态框
-        "chapter_modal": "[data-testid='chapter-generation-modal']",
-        "chapter_number_input": "[data-testid='chapter-number-input']",
-        "batch_start_input": "[data-testid='batch-start-input']",
-        "batch_end_input": "[data-testid='batch-end-input']",
-        "confirm_generation_btn": "[data-testid='confirm-generation-btn']",
+        "edit_modal": ".ant-modal:has-text('编辑小说')",
     }
 
     # 大纲梳理标签页元素
     OUTLINE_SELECTORS = {
-        "core_conflict_input": "[data-testid='core-conflict-input']",
-        "protagonist_goal_input": "[data-testid='protagonist-goal-input']",
-        "antagonist_input": "[data-testid='antagonist-input']",
-        "progression_path_input": "[data-testid='progression-path-input']",
-        "emotional_arc_input": "[data-testid='emotional-arc-input']",
-        "key_revelations_input": "[data-testid='key-revelations-input']",
-        "character_growth_input": "[data-testid='character-growth-input']",
-        "ending_description_input": "[data-testid='ending-description-input']",
-        "save_outline_btn": "[data-testid='save-outline-btn']",
-        "enhance_outline_btn": "[data-testid='enhance-outline-btn']",
-        "preview_enhancement_btn": "[data-testid='preview-enhancement-btn']",
-        # 增强预览模态框
-        "enhancement_modal": "[data-testid='enhancement-preview-modal']",
-        "apply_enhancement_btn": "[data-testid='apply-enhancement-btn']",
-        "cancel_enhancement_btn": "[data-testid='cancel-enhancement-btn']",
+        "save_outline_btn": "button:has-text('保存大纲')",
+        "enhance_outline_btn": "button:has-text('智能完善')",
         # 质量评估
-        "quality_score": "[data-testid='quality-score']",
-        "quality_dimensions": "[data-testid='quality-dimensions']",
+        "quality_score": ".ant-progress-text",
     }
 
     # 章节标签页元素
     CHAPTERS_SELECTORS = {
-        "chapter_table": "[data-testid='chapters-table']",
-        "chapter_row": "[data-testid='chapter-row']",
-        "chapter_title": "[data-testid='chapter-title']",
-        "chapter_status": "[data-testid='chapter-status']",
-        "chapter_quality": "[data-testid='chapter-quality']",
-        "edit_chapter_btn": "[data-testid='edit-chapter-btn']",
-        "delete_chapter_btn": "[data-testid='delete-chapter-btn']",
-        "batch_delete_btn": "[data-testid='batch-delete-btn']",
+        "chapter_table": ".ant-table",
+        "chapter_row": ".ant-table-tbody tr",
+        "chapter_title": ".ant-table-tbody a",
+        "chapter_status": ".ant-table-tbody .ant-tag",
+        "delete_chapter_btn": ".ant-btn-dangerous",
+        "batch_delete_btn": "button:has-text('批量删除')",
         # 删除确认模态框
-        "delete_confirm_modal": "[data-testid='delete-confirm-modal']",
-        "confirm_delete_btn": "[data-testid='confirm-delete-btn']",
-        "cancel_delete_btn": "[data-testid='cancel-delete-btn']",
+        "delete_confirm_modal": ".ant-modal:has-text('删除')",
+        "confirm_delete_btn": ".ant-modal button:has-text('确认删除')",
     }
 
     def navigate_to_novel(self, novel_id: str):
@@ -129,7 +108,7 @@ class NovelDetailPage(BasePage):
         """点击批量生成按钮."""
         self.switch_to_tab("overview")
         self.click_element(self.OVERVIEW_SELECTORS["batch_generate_btn"])
-        self.wait_for_element_visible(self.OVERVIEW_SELECTORS["chapter_modal"])
+        self.wait_for_element_visible(self.OVERVIEW_SELECTORS["batch_modal"])
 
     def click_edit_novel(self):
         """点击编辑小说按钮."""
@@ -144,9 +123,10 @@ class NovelDetailPage(BasePage):
         Args:
             chapter_number: 章节数
         """
-        self.fill_input(
-            self.OVERVIEW_SELECTORS["chapter_number_input"], str(chapter_number)
-        )
+        # 清空并填写章节号
+        input_elem = self.get_element(self.OVERVIEW_SELECTORS["chapter_number_input"])
+        input_elem.click()
+        input_elem.fill(str(chapter_number))
 
     def fill_batch_generation_form(self, start_chapter: int, end_chapter: int):
         """
@@ -156,15 +136,37 @@ class NovelDetailPage(BasePage):
             start_chapter: 起始章节数
             end_chapter: 结束章节数
         """
-        self.fill_input(
-            self.OVERVIEW_SELECTORS["batch_start_input"], str(start_chapter)
-        )
-        self.fill_input(self.OVERVIEW_SELECTORS["batch_end_input"], str(end_chapter))
+        # Ant Design InputNumber 内部是 div，需要使用 click + type 方式
+        start_input = self.get_element(self.OVERVIEW_SELECTORS["batch_start_input"])
+        start_input.click()
+        # 使用键盘全选并输入
+        start_input.press("Control+A")
+        start_input.type(str(start_chapter))
+        
+        end_input = self.get_element(self.OVERVIEW_SELECTORS["batch_end_input"])
+        end_input.click()
+        end_input.press("Control+A")
+        end_input.type(str(end_chapter))
+
+    def confirm_single_chapter_generation(self):
+        """确认单章生成."""
+        self.click_element(self.OVERVIEW_SELECTORS["confirm_single_btn"])
+        self.wait_for_element_hidden(self.OVERVIEW_SELECTORS["chapter_modal"])
+
+    def confirm_batch_chapter_generation(self):
+        """确认批量生成."""
+        self.click_element(self.OVERVIEW_SELECTORS["confirm_batch_btn"])
+        self.wait_for_element_hidden(self.OVERVIEW_SELECTORS["batch_modal"])
 
     def confirm_chapter_generation(self):
-        """确认章节生成."""
-        self.click_element(self.OVERVIEW_SELECTORS["confirm_generation_btn"])
-        self.wait_for_element_hidden(self.OVERVIEW_SELECTORS["chapter_modal"])
+        """确认章节生成 - 兼容方法，根据模态框类型自动选择."""
+        if self.is_element_visible(self.OVERVIEW_SELECTORS.get("chapter_modal", "")):
+            self.confirm_single_chapter_generation()
+        elif self.is_element_visible(self.OVERVIEW_SELECTORS.get("batch_modal", "")):
+            self.confirm_batch_chapter_generation()
+        else:
+            # 默认使用单章确认
+            self.confirm_single_chapter_generation()
 
     def fill_edit_novel_form(
         self, title: str, genre: str, tags: list = None, synopsis: str = None
