@@ -1,13 +1,13 @@
 """Agent依赖注入容器."""
 
-from typing import Optional
 from functools import lru_cache
+from typing import Optional
 
-from llm.qwen_client import QwenClient
-from llm.cost_tracker import CostTracker
 from agents.crew_manager import NovelCrewManager
-from agents.outline_refiner import OutlineRefiner
 from agents.outline_quality_evaluator import OutlineQualityEvaluator
+from agents.outline_refiner import OutlineRefiner
+from llm.cost_tracker import CostTracker
+from llm.qwen_client import QwenClient
 
 
 class AgentDependencies:

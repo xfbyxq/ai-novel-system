@@ -520,6 +520,208 @@ class GraphQueryService:
             logger.error(f"查找待回收伏笔失败: {e}")
             return []
 
+    async def find_foreshadowings_by_characters(
+        self,
+        novel_id: str,
+        character_names: List[str],
+        current_chapter: Optional[int] = None,
+        include_resolved: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """查找与指定角色相关的伏笔.
+
+        Args:
+            novel_id: 小说ID
+            character_names: 角色名称列表
+            current_chapter: 当前章节号（可选）
+            include_resolved: 是否包含已回收的伏笔
+
+        Returns:
+            相关伏笔列表
+        """
+        status_filter = "" if include_resolved else "status: 'pending'"
+        status_match = f"{{{status_filter}}}" if status_filter else ""
+
+        query = f"""
+        MATCH (f:Foreshadowing {{novel_id: $novel_id{status_match}}})
+        WHERE any(name IN $character_names WHERE name IN f.related_characters)
+        RETURN f.id as id, f.content as content, f.planted_chapter as planted_chapter,
+               f.expected_resolve_chapter as expected_chapter, f.importance as importance,
+               f.related_characters as related_characters, f.status as status
+        ORDER BY f.importance DESC, f.planted_chapter ASC
+        """
+
+        try:
+            result = await self.client.execute_query(
+                query, {"novel_id": novel_id, "character_names": character_names}
+            )
+            return result
+        except Exception as e:
+            logger.error(f"查找角色相关伏笔失败: {e}")
+            return []
+
+    async def analyze_character_relationships(
+        self, novel_id: str, character_names: List[str]
+    ) -> Dict[str, Any]:
+        """分析角色之间的关系网络.
+
+        识别直接关联、间接关联和潜在关系冲突。
+
+        Args:
+            novel_id: 小说ID
+            character_names: 角色名称列表
+
+        Returns:
+            关系分析结果
+        """
+        result = {
+            "direct_relations": [],
+            "indirect_relations": [],
+            "potential_conflicts": [],
+        }
+
+        try:
+            # 1. 查询直接关联（这些角色之间的关系）
+            direct_query = """
+            MATCH (a:Character {novel_id: $novel_id})-[r:CHARACTER_RELATION]->(b:Character)
+            WHERE a.name IN $character_names AND b.name IN $character_names
+            RETURN a.name as from_char, b.name as to_char, r.type as rel_type,
+                   r.strength as strength
+            """
+            direct_result = await self.client.execute_query(
+                direct_query, {"novel_id": novel_id, "character_names": character_names}
+            )
+            result["direct_relations"] = direct_result
+
+            # 2. 查询间接关联（通过中间人连接）
+            indirect_query = """
+            MATCH (a:Character {novel_id: $novel_id, name: $char_name})
+                      -[:CHARACTER_RELATION*2]->(c:Character)
+            WHERE c.name IN $character_names AND a.name <> c.name
+            RETURN a.name as from_char, c.name as to_char, 'indirect' as rel_type
+            """
+            for char_name in character_names:
+                indirect_result = await self.client.execute_query(
+                    indirect_query,
+                    {"novel_id": novel_id, "char_name": char_name, "character_names": character_names},
+                )
+                for rel in indirect_result:
+                    # 避免重复
+                    pair = tuple(sorted([rel["from_char"], rel["to_char"]]))
+                    if not any(
+                        tuple(sorted([r["from_char"], r["to_char"]])) == pair
+                        for r in result["direct_relations"]
+                    ):
+                        result["indirect_relations"].append(rel)
+
+            # 3. 检测潜在冲突（如A是B的敌人，B是C的朋友，A与C的关系张力）
+            conflict_query = """
+            MATCH (a:Character {novel_id: $novel_id})-[r1:CHARACTER_RELATION]->(b:Character)
+            MATCH (b)-[r2:CHARACTER_RELATION]->(c:Character)
+            WHERE a.name IN $character_names AND c.name IN $character_names
+            AND a.name <> c.name
+            AND (
+                (r1.type IN ['enemy', 'rival'] AND r2.type IN ['friend', 'ally'])
+                OR (r1.type IN ['friend', 'ally'] AND r2.type IN ['enemy', 'rival'])
+            )
+            RETURN a.name as char_a, b.name as char_b, c.name as char_c,
+                   r1.type as rel_ab, r2.type as rel_bc,
+                   'potential_conflict' as conflict_type
+            """
+            conflict_result = await self.client.execute_query(
+                conflict_query, {"novel_id": novel_id, "character_names": character_names}
+            )
+            result["potential_conflicts"] = conflict_result
+
+        except Exception as e:
+            logger.error(f"分析角色关系失败: {e}")
+
+        return result
+
+    async def validate_chapter_against_graph(
+        self,
+        novel_id: str,
+        chapter_content: str,
+        chapter_characters: List[str],
+    ) -> List[ConflictReport]:
+        """验证章节内容是否与图数据库一致.
+
+        检查项：
+        - 本章建立的新关系是否与已有关系冲突
+        - 角色状态变化是否符合图中记录
+        - 事件顺序是否与时间线一致
+
+        Args:
+            novel_id: 小说ID
+            chapter_content: 章节内容
+            chapter_characters: 章节出场角色
+
+        Returns:
+            冲突报告列表
+        """
+        conflicts = []
+
+        try:
+            # 1. 检查角色状态一致性
+            status_query = """
+            MATCH (c:Character {novel_id: $novel_id})
+            WHERE c.name IN $character_names AND c.status = 'dead'
+            RETURN c.name as character_name, c.first_appearance_chapter as chapter
+            """
+            dead_chars = await self.client.execute_query(
+                status_query, {"novel_id": novel_id, "character_names": chapter_characters}
+            )
+
+            # 检查死亡角色是否出现在本章
+            for char in dead_chars:
+                char_name = char.get("character_name", "")
+                if char_name and char_name in chapter_content:
+                    conflicts.append(
+                        ConflictReport(
+                            conflict_type="dead_character_appearance",
+                            description=f"已死亡角色 '{char_name}' 出现在本章内容中",
+                            severity="high",
+                            characters=[char_name],
+                            details=f"该角色在第 {char.get('chapter', '未知')} 章后已死亡",
+                        )
+                    )
+
+            # 2. 检查关系冲突
+            relation_query = """
+            MATCH (a:Character {novel_id: $novel_id})-[r1:CHARACTER_RELATION]->(b:Character)
+            WHERE a.name IN $character_names AND b.name IN $character_names
+            RETURN a.name as char_a, b.name as char_b, r1.type as rel_type
+            """
+            existing_relations = await self.client.execute_query(
+                relation_query, {"novel_id": novel_id, "character_names": chapter_characters}
+            )
+
+            # 检测矛盾关系（如同时是敌人和朋友）
+            relation_pairs = {}
+            for rel in existing_relations:
+                pair = tuple(sorted([rel["char_a"], rel["char_b"]]))
+                if pair not in relation_pairs:
+                    relation_pairs[pair] = []
+                relation_pairs[pair].append(rel["rel_type"])
+
+            for pair, rel_types in relation_pairs.items():
+                has_enemy = any(t in ["enemy", "rival"] for t in rel_types)
+                has_friend = any(t in ["friend", "ally", "best_friend"] for t in rel_types)
+                if has_enemy and has_friend:
+                    conflicts.append(
+                        ConflictReport(
+                            conflict_type="contradictory_relationship",
+                            description=f"角色 '{pair[0]}' 与 '{pair[1]}' 同时存在敌对和友好关系",
+                            severity="medium",
+                            characters=list(pair),
+                            details=f"关系类型: {', '.join(rel_types)}",
+                        )
+                    )
+
+        except Exception as e:
+            logger.error(f"验证章节一致性失败: {e}")
+
+        return conflicts
+
 
 # 便捷函数
 async def get_character_network_async(

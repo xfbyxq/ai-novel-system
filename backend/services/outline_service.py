@@ -762,6 +762,15 @@ class OutlineService:
             "sub_plots": "根据主线剧情和角色关系，设计支线剧情",
             "key_turning_points": "根据剧情发展，设计关键转折点",
             "climax_chapter": "根据故事结构，推荐高潮章节位置",
+            # main_plot 子字段
+            "core_conflict": "根据世界观和主角设定，构思故事的核心冲突",
+            "protagonist_goal": "根据主角性格和背景，设定主角的核心目标",
+            "antagonist": "根据故事冲突，设计主要反派角色",
+            "progression_path": "根据核心冲突，设计剧情发展路径",
+            "emotional_arc": "根据故事主题，设计情感起伏曲线",
+            "key_revelations": "根据剧情发展，设计关键揭示时刻",
+            "character_growth": "根据主角弧光，设计角色成长轨迹",
+            "resolution": "根据核心冲突，设计故事结局走向",
         }
 
         prompt_template = field_prompts.get(
@@ -924,8 +933,139 @@ class OutlineService:
                 ensure_ascii=False,
             )
 
+        # main_plot 子字段：使用 LLM 生成
+        main_plot_fields = [
+            "core_conflict",
+            "protagonist_goal",
+            "antagonist",
+            "progression_path",
+            "emotional_arc",
+            "key_revelations",
+            "character_growth",
+            "resolution",
+        ]
+
+        if field_name in main_plot_fields:
+            return await self._generate_main_plot_field_with_llm(
+                field_name, context, prompt_template
+            )
+
         else:
             return f"请根据{prompt_template}填写此字段"
+
+    async def _generate_main_plot_field_with_llm(
+        self,
+        field_name: str,
+        context: Dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        """使用 LLM 为 main_plot 子字段生成内容.
+
+        Args:
+            field_name: 字段名
+            context: 上下文信息
+            prompt_template: 提示词模板
+
+        Returns:
+            生成的字段内容
+        """
+        novel = context.get("novel", {})
+        world = context.get("world_setting", {})
+        characters = context.get("characters", [])
+        outline = context.get("outline", {})
+        main_plot = outline.get("main_plot", {})
+
+        # 构建上下文
+        title = novel.get("title", "未命名小说")
+        genre = novel.get("genre", "玄幻")
+        world_name = world.get("world_name", "未知世界")
+        world_type = world.get("world_type", "奇幻")
+
+        # 获取主角信息
+        protagonist = None
+        for char in characters:
+            if char.get("role") == "protagonist" or char.get("is_protagonist"):
+                protagonist = char
+                break
+
+        protagonist_name = protagonist.get("name", "主角") if protagonist else "主角"
+        protagonist_trait = (
+            protagonist.get("personality", "坚韧不拔") if protagonist else "坚韧不拔"
+        )
+
+        # 字段特定的生成指导
+        field_guidance = {
+            "core_conflict": f"为《{title}》构思一个引人入胜的核心冲突，结合{world_type}世界观特色",
+            "protagonist_goal": f"为{protagonist_name}设定一个明确、有动力的核心目标",
+            "antagonist": f"设计与{protagonist_name}形成鲜明对立的反派角色",
+            "progression_path": "设计从冲突爆发到高潮的剧情发展路径",
+            "emotional_arc": "设计读者在故事中的情感起伏体验",
+            "key_revelations": "设计3-5个震撼读者的关键揭示时刻",
+            "character_growth": f"设计{protagonist_name}从起点到终点的成长蜕变",
+            "resolution": "设计一个令人满意的结局走向",
+        }
+
+        # 已有字段作为上下文
+        existing_context = ""
+        if main_plot:
+            existing_parts = []
+            for key, value in main_plot.items():
+                if value and key != field_name:
+                    existing_parts.append(f"- {key}: {value}")
+            if existing_parts:
+                existing_context = f"\n已有设定:\n" + "\n".join(existing_parts)
+
+        prompt = f"""# 任务：为小说《{title}》生成 {field_name} 字段
+
+## 小说信息
+- 书名：{title}
+- 类型：{genre}
+- 世界观：{world_name}（{world_type}）
+- 主角：{protagonist_name}，性格：{protagonist_trait}
+{existing_context}
+
+## 任务说明
+{field_guidance.get(field_name, prompt_template)}
+
+## 输出要求
+- 直接输出字段内容，不要解释
+- 内容要具体、有画面感
+- 字数控制在50-150字
+- 不要输出 JSON 格式，只输出纯文本内容
+"""
+
+        try:
+            response = await self.client.chat(
+                prompt=prompt,
+                system="你是一位专业的小说剧情策划师，擅长设计引人入胜的故事元素。",
+                temperature=0.8,
+                max_tokens=500,
+            )
+            content = response["content"].strip()
+            # 移除可能的引号包裹
+            if content.startswith('"') and content.endswith('"'):
+                content = content[1:-1]
+            return content
+        except Exception as e:
+            logger.error(f"LLM generation failed for {field_name}: {e}")
+            # 降级到默认值
+            return self._get_fallback_value(field_name, protagonist_name, world_name)
+
+    def _get_fallback_value(
+        self, field_name: str, protagonist: str, world_name: str
+    ) -> str:
+        """为字段提供降级默认值."""
+        fallbacks = {
+            "core_conflict": f"{protagonist}在{world_name}中面临生存与成长的重大挑战",
+            "protagonist_goal": f"{protagonist}追求力量与真相，最终实现自我超越",
+            "antagonist": "神秘的强大敌人，与主角形成理念与利益的冲突",
+            "progression_path": "从初入世界到逐渐成长，经历挫折后突破自我，最终面对终极挑战",
+            "emotional_arc": "从好奇探索到危机焦虑，再到突破喜悦，最终达到平静满足",
+            "key_revelations": "身份真相的揭露、敌我关系的反转、世界本质的发现",
+            "character_growth": f"{protagonist}从懵懂少年成长为担当大任的英雄",
+            "resolution": "核心冲突得到解决，主角达成目标，开启新的篇章",
+        }
+        return fallbacks.get(field_name, "待补充")
 
     async def get_outline_versions(self, novel_id: UUID) -> List[Dict[str, Any]]:
         """

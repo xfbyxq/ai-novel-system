@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     MODEL_MAX_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MAX_OUTPUT_TOKENS", "16384"))
     MODEL_MIN_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MIN_OUTPUT_TOKENS", "1024"))
 
+    # 上下文压缩器配置
+    CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "8000"))  # 压缩阈值，超过此值启动动态压缩
+
     # Database
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
@@ -358,8 +361,14 @@ class Settings(BaseSettings):
     # 启用后，Writer Agent 的 prompt 中会注入图数据库查询结果
     # 包括：角色关系网络、待回收伏笔、一致性冲突警告
     ENABLE_GRAPH_CONTEXT_INJECTION: bool = True  # 注入图上下文到 Writer prompt
+    ENABLE_GRAPH_QUERY_FOR_WRITER: bool = True  # Writer支持动态图查询
+
+    # 图查询参数配置
+    GRAPH_QUERY_DEPTH: int = 2  # 角色网络查询深度（1-3，推荐2）
     GRAPH_CONTEXT_MAX_CHARACTERS: int = 5  # 最大查询角色数（避免prompt过长）
-    GRAPH_CONTEXT_MAX_FORESHADOWINGS: int = 3  # 最大伏笔提醒数
+    GRAPH_CONTEXT_MAX_FORESHADOWINGS: int = 5  # 最大伏笔提醒数
+    GRAPH_ENABLE_INDIRECT_RELATIONS: bool = True  # 是否查询间接关系
+    GRAPH_QUERY_RELATED_FORESHADOWINGS: bool = True  # 查询与出场角色相关的伏笔
 
     def __init__(self, **values):
         """初始化方法."""

@@ -390,9 +390,9 @@ class IssueTracker:
     ) -> List[Dict[str, Any]]:
         """从报告和审查数据中提取所有问题（兼容所有子类格式）.
 
-        支持新旧两种格式：
+        按优先级依次调用各数据源的提取器，支持新旧两种格式：
         - 新格式：detailed_issues（包含 location, manifestation, priority_category）
-        - 旧格式：issues, revision_suggestions 等
+        - 旧格式：issues, revision_suggestions, character_assessments 等
         """
         issues: List[Dict[str, Any]] = []
         seen_descs: Set[str] = set()  # 去重
@@ -407,6 +407,7 @@ class IssueTracker:
             manifestation: Optional[List[str]] = None,
             related_dimensions: Optional[List[str]] = None,
         ):
+            """添加问题到列表，自动去重."""
             if desc and desc not in seen_descs:
                 seen_descs.add(desc)
                 issues.append(
@@ -422,7 +423,28 @@ class IssueTracker:
                     }
                 )
 
-        # 0. 从 detailed_issues 提取（新格式，优先级最高）
+        # 依次调用各数据源的提取器
+        self._extract_from_detailed_issues(review_data, add_issue)
+        self._extract_from_report_issues(report, add_issue)
+        self._extract_from_critical_issues(review_data, add_issue)
+        self._extract_from_revision_suggestions(review_data, add_issue)
+        self._extract_from_character_assessments(review_data, add_issue)
+        self._extract_from_volume_assessments(review_data, add_issue)
+        self._extract_from_missing_elements(review_data, add_issue)
+
+        return issues
+
+    # ── Issue 提取器方法（策略模式）──────────────────────────────────────
+
+    def _extract_from_detailed_issues(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 detailed_issues 提取问题（新格式，优先级最高）.
+
+        新格式包含更详细的字段：location, manifestation, priority_category。
+        """
         for issue in review_data.get("detailed_issues", []):
             location_data = issue.get("location", {})
             add_issue(
@@ -436,7 +458,15 @@ class IssueTracker:
                 related_dimensions=issue.get("related_dimensions", []),
             )
 
-        # 1. 从 report.issues 提取（通用格式）
+    def _extract_from_report_issues(
+        self,
+        report: BaseQualityReport,
+        add_issue: Any,
+    ) -> None:
+        """从 report.issues 提取问题（通用格式）.
+
+        兼容 area/character 和 issue/description 两种字段命名。
+        """
         for issue in report.issues:
             add_issue(
                 area=issue.get("area", issue.get("character", "")),
@@ -445,7 +475,15 @@ class IssueTracker:
                 suggestion=issue.get("suggestion", ""),
             )
 
-        # 2. 从 critical_issues 提取（世界观/角色/大纲）
+    def _extract_from_critical_issues(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 critical_issues 提取问题（世界观/角色/大纲审查）.
+
+        兼容 area/character 和 issue/description 两种字段命名。
+        """
         for issue in review_data.get("critical_issues", []):
             add_issue(
                 area=issue.get("area", issue.get("character", "")),
@@ -454,7 +492,15 @@ class IssueTracker:
                 suggestion=issue.get("suggestion", ""),
             )
 
-        # 3. 从 revision_suggestions 提取（章节审查）
+    def _extract_from_revision_suggestions(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 revision_suggestions 提取问题（章节审查）.
+
+        问题领域固定为【章节内容】。
+        """
         for s in review_data.get("revision_suggestions", []):
             add_issue(
                 area="章节内容",
@@ -463,23 +509,45 @@ class IssueTracker:
                 suggestion=s.get("suggestion", ""),
             )
 
-        # 4. 从 character_assessments 提取（角色审查）
+    def _extract_from_character_assessments(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 character_assessments 提取问题（角色审查）.
+
+        每个角色的 weaknesses 列表被拆分为独立问题。
+        """
         for ca in review_data.get("character_assessments", []):
             char_name = ca.get("name", "")
             for w in ca.get("weaknesses", []):
                 add_issue(area=char_name, desc=w, severity="medium")
 
-        # 5. 从 volume_assessments 提取（大纲审查）
+    def _extract_from_volume_assessments(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 volume_assessments 提取问题（大纲审查）.
+
+        每卷的 weaknesses 列表被拆分为独立问题，问题领域为【第N卷】。
+        """
         for va in review_data.get("volume_assessments", []):
             vol_num = va.get("volume_num", "?")
             for w in va.get("weaknesses", []):
                 add_issue(area=f"第{vol_num}卷", desc=w, severity="medium")
 
-        # 6. 从 missing_elements 提取
+    def _extract_from_missing_elements(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 missing_elements 提取问题.
+
+        问题领域固定为【缺失】，严重级别默认为 medium。
+        """
         for m in review_data.get("missing_elements", []):
             add_issue(area="缺失", desc=m, severity="medium")
-
-        return issues
 
     def _find_matching_record(self, issue_dict: Dict[str, str]) -> Optional[IssueRecord]:
         """在已有记录中查找与当前问题匹配的记录."""

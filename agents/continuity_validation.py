@@ -6,15 +6,15 @@
 """
 
 import json
-from typing import Any, Dict, Optional
-
-from core.logging_config import logger
-from llm.qwen_client import QwenClient
+from typing import Any, Dict, List, Optional
 
 from agents.continuity_models import (
     ConstraintList,
+    IntentionalInconsistency,
     ValidationReport,
 )
+from core.logging_config import logger
+from llm.qwen_client import QwenClient
 
 
 class ValidationEngine:
@@ -39,6 +39,7 @@ class ValidationEngine:
 
 ## 本章开头
 {new_chapter_beginning}
+{intentional_section}
 
 ## 评估任务
 请评估本章开头是否合理地回应了上一章结尾引发的读者期待。
@@ -48,6 +49,9 @@ class ValidationEngine:
 2. 关键是评估这种处理是否有艺术合理性，而非机械检查
 3. 如果打破期待，是否有足够的叙事支撑？
 4. 考虑小说的整体类型和风格
+5. 【特别说明】如果存在"有意设计的不一致"，请区分：
+   - artistic_breaking: 检测到的艺术性打破（非预期的）
+   - 有意设计的不一致已在上方标注，不应报告为问题
 
 ## 输出格式
 请以 JSON 格式输出评估结果：
@@ -92,6 +96,7 @@ class ValidationEngine:
         previous_ending: str,
         new_chapter_beginning: str,
         constraints: ConstraintList,
+        intentional_inconsistencies: Optional[List[IntentionalInconsistency]] = None,
     ) -> ValidationReport:
         """
         验证新章节是否满足连贯性约束.
@@ -100,6 +105,7 @@ class ValidationEngine:
             previous_ending: 上一章结尾（500-800 字）
             new_chapter_beginning: 新章节开头（500-800 字）
             constraints: 推断的约束列表
+            intentional_inconsistencies: 有意设计的不一致列表，用于避免误报
 
         Returns:
             验证报告
@@ -113,12 +119,16 @@ class ValidationEngine:
             # 构建约束描述
             constraints_description = self._format_constraints(constraints)
 
+            # 构建有意不一致段落
+            intentional_section = self._build_intentional_section(intentional_inconsistencies)
+
             # 调用 LLM 验证
             response = await self.client.chat(
                 prompt=self.VALIDATION_PROMPT.format(
                     previous_ending=previous_ending,
                     constraints_description=constraints_description,
                     new_chapter_beginning=new_chapter_beginning,
+                    intentional_section=intentional_section,
                 ),
                 system="你是一位专业的文学编辑，擅长评估章节过渡的连贯性和艺术性。",
                 temperature=0.3,
@@ -169,6 +179,42 @@ class ValidationEngine:
             lines.append(line)
 
         return "\n".join(lines)
+
+    def _build_intentional_section(
+        self,
+        intentional_inconsistencies: Optional[List[IntentionalInconsistency]],
+    ) -> str:
+        """构建有意不一致的提示词段落.
+
+        Args:
+            intentional_inconsistencies: 有意设计的不一致列表
+
+        Returns:
+            格式化的有意不一致段落，如果没有则返回空字符串
+        """
+        if not intentional_inconsistencies:
+            return ""
+
+        section = "\n\n【有意设计的不一致】\n"
+        section += "以下不一致是作者故意设计的叙事手法，不应标记为问题：\n"
+
+        for ii in intentional_inconsistencies:
+            # 支持对象和字典两种形式
+            if hasattr(ii, 'description'):
+                desc = ii.description
+                intent = ii.intent_type if hasattr(ii, 'intent_type') else "unknown"
+                note = ii.author_note if hasattr(ii, 'author_note') else ""
+            else:
+                desc = ii.get("description", "") if isinstance(ii, dict) else ""
+                intent = ii.get("intent_type", "unknown") if isinstance(ii, dict) else "unknown"
+                note = ii.get("author_note", "") if isinstance(ii, dict) else ""
+
+            section += f"- [{intent}] {desc}"
+            if note:
+                section += f"（说明：{note}）"
+            section += "\n"
+
+        return section
 
     def _parse_llm_response(self, content: str) -> Dict[str, Any]:
         """

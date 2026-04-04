@@ -98,12 +98,16 @@ class JsonExtractor:
 
     @classmethod
     def _extract(cls, text: str) -> Any:
-        """内部提取方法，尝试多种策略.
+        """内部提取方法，按优先级尝试各策略.
 
         策略优先级：
         1. 直接解析（最快）
-        2. 代码块提取
-        3. 边界查找（最宽松）
+        2. 代码块提取（完整匹配）
+        3. 未闭合代码块提取
+        4. 数组边界提取
+        5. 对象边界提取
+        6. 清理后解析
+        7. 截断修复
         """
         if not text:
             raise ValueError("输入文本为空")
@@ -117,135 +121,265 @@ class JsonExtractor:
             f"后50字符: {text[-50:]!r}"
         )
 
-        # 策略1：直接解析
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        # 按优先级尝试各策略
+        strategies = [
+            cls._strategy_direct_parse,
+            cls._strategy_closed_code_block,
+            cls._strategy_unclosed_code_block,
+            cls._strategy_array_boundary,
+            cls._strategy_object_boundary,
+            cls._strategy_clean_and_parse,
+            cls._strategy_truncation_repair,
+        ]
 
-        # 策略2：代码块提取（完整匹配，有闭合标记）
-        # 手动查找第一个和最后一个 ``` 以避免惰性匹配在小说正文含反引号时提前终止
-        first_fence = text.find("```")
-        last_fence = text.rfind("```")
-        if first_fence != -1:
-            # 确保有闭合的代码块（两个不同的 ``` 位置）
-            if last_fence > first_fence:
-                # 跳过开头的 ```json\n 或 ```\n
-                content_start = first_fence + 3
-                # 跳过语言标识（如 json）
-                newline_after_fence = text.find("\n", content_start)
-                if newline_after_fence != -1 and newline_after_fence < content_start + 10:
-                    content_start = newline_after_fence + 1
-                json_str = text[content_start:last_fence].strip()
-                logger.debug(f"[JSON解析] 策略2-手动提取代码块内容长度: {len(json_str)}")
-                try:
-                    result = json.loads(json_str)
-                    logger.info("[JSON解析] 策略2-成功解析代码块中的JSON")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.debug(f"[JSON解析] 策略2-JSON解析失败: {e}")
-                    # 尝试修复后再解析
-                    repaired = cls._try_repair_and_parse(json_str)
-                    if repaired is not None:
-                        logger.info("[JSON解析] 策略2-修复后成功解析代码块中的JSON")
-                        return repaired
-
-        # 策略2b：未闭合的代码块（截断场景）
-        # 只有当存在 ``` 但没有闭合时才进入（first_fence == last_fence 表示只有一个 ```）
-        # 注意：first_fence 和 last_fence 在策略2中已计算，这里复用其值
-        if first_fence != -1 and first_fence == last_fence:
-            logger.debug(f"[JSON解析] 策略2b-尝试未闭合代码块提取, 起始位置: {first_fence}")
-            # 跳过 ```json 或 ```
-            after_code_block = text[first_fence + 3 :]
-            # 跳过语言标识（如 json）
-            newline_pos = after_code_block.find("\n")
-            if newline_pos != -1:
-                json_content = after_code_block[newline_pos + 1 :]
-            else:
-                json_content = after_code_block
-            # 找到 JSON 对象边界
-            obj_start = json_content.find("{")
-            if obj_start != -1:
-                obj_end = json_content.rfind("}")
-                if obj_end > obj_start:
-                    extracted = json_content[obj_start : obj_end + 1]
-                    logger.debug(
-                        f"[JSON解析] 策略2b-提取范围: [{obj_start}:{obj_end + 1}], "
-                        f"长度: {len(extracted)}"
-                    )
-                    try:
-                        result = json.loads(extracted)
-                        logger.info("[JSON解析] 策略2b-成功解析未闭合代码块中的JSON")
-                        return result
-                    except json.JSONDecodeError as e:
-                        logger.debug(f"[JSON解析] 策略2b-JSON解析失败: {e}")
-                        # 尝试修复后再解析
-                        repaired = cls._try_repair_and_parse(extracted)
-                        if repaired is not None:
-                            logger.info("[JSON解析] 策略2b-修复后成功解析未闭合代码块中的JSON")
-                            return repaired
-
-        # 策略3a：尝试找 JSON 数组
-        array_start = text.find("[")
-        if array_start != -1:
-            array_end = text.rfind("]")
-            if array_end > array_start:
-                logger.debug(
-                    f"[JSON解析] 策略3a-尝试数组提取, 范围: [{array_start}:{array_end + 1}]"
-                )
-                try:
-                    result = json.loads(text[array_start : array_end + 1])
-                    logger.info("[JSON解析] 策略3a-成功解析数组JSON")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.debug(f"[JSON解析] 策略3a-JSON解析失败: {e}")
-                    # 尝试修复后再解析
-                    array_text = text[array_start : array_end + 1]
-                    repaired = cls._try_repair_and_parse(array_text)
-                    if repaired is not None:
-                        logger.info("[JSON解析] 策略3a-修复后成功解析数组JSON")
-                        return repaired
-
-        # 策略3b：尝试找 JSON 对象
-        obj_start = text.find("{")
-        if obj_start != -1:
-            obj_end = text.rfind("}")
-            if obj_end > obj_start:
-                logger.debug(f"[JSON解析] 策略3b-尝试对象提取, 范围: [{obj_start}:{obj_end + 1}]")
-                try:
-                    result = json.loads(text[obj_start : obj_end + 1])
-                    logger.info("[JSON解析] 策略3b-成功解析对象JSON")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.debug(f"[JSON解析] 策略3b-JSON解析失败: {e}")
-                    # 尝试修复后再解析
-                    obj_text = text[obj_start : obj_end + 1]
-                    repaired = cls._try_repair_and_parse(obj_text)
-                    if repaired is not None:
-                        logger.info("[JSON解析] 策略3b-修复后成功解析对象JSON")
-                        return repaired
-
-        # 策略4：尝试修复常见问题后解析
-        cleaned = cls._clean_json_string(text)
-        if cleaned != text:
-            try:
-                return json.loads(cleaned)
-            except json.JSONDecodeError:
-                pass
-
-        # 策略5：截断修复策略 - 检测并修复被截断的 JSON
-        # 当 LLM 输出被截断时，JSON 可能缺少闭合的 } 或 ]
-        repaired = cls._repair_truncated_json(text)
-        if repaired:
-            try:
-                return json.loads(repaired)
-            except json.JSONDecodeError as e:
-                logger.debug(f"截断修复后仍解析失败: {e}")
+        for strategy in strategies:
+            result = strategy(text)
+            if result is not None:
+                return result
 
         # 所有策略都失败
         raise ValueError(
             f"无法从响应中提取 JSON, 响应长度: {len(text)}, " f"前200字符: {text[:200]}..."
         )
+
+    @classmethod
+    def _strategy_direct_parse(cls, text: str) -> Optional[Any]:
+        """策略1：直接解析纯 JSON 文本.
+
+        Args:
+            text: 待解析的文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
+
+    @classmethod
+    def _strategy_closed_code_block(cls, text: str) -> Optional[Any]:
+        """策略2：从完整闭合的代码块中提取 JSON.
+
+        处理格式：```json ... ``` 或 ``` ... ```
+        手动查找第一个和最后一个 ``` 以避免惰性匹配问题。
+
+        Args:
+            text: 可能包含代码块的文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        first_fence = text.find("```")
+        last_fence = text.rfind("```")
+
+        # 没有代码块或只有一个反引号标记（未闭合）
+        if first_fence == -1 or last_fence <= first_fence:
+            return None
+
+        # 跳过开头的 ```json\n 或 ```\n
+        content_start = first_fence + 3
+        newline_after_fence = text.find("\n", content_start)
+        if newline_after_fence != -1 and newline_after_fence < content_start + 10:
+            content_start = newline_after_fence + 1
+
+        json_str = text[content_start:last_fence].strip()
+        logger.debug(f"[JSON解析] 策略2-手动提取代码块内容长度: {len(json_str)}")
+
+        # 尝试直接解析
+        try:
+            result = json.loads(json_str)
+            logger.info("[JSON解析] 策略2-成功解析代码块中的JSON")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"[JSON解析] 策略2-JSON解析失败: {e}")
+            # 尝试修复后再解析
+            repaired = cls._try_repair_and_parse(json_str)
+            if repaired is not None:
+                logger.info("[JSON解析] 策略2-修复后成功解析代码块中的JSON")
+                return repaired
+            return None
+
+    @classmethod
+    def _strategy_unclosed_code_block(cls, text: str) -> Optional[Any]:
+        """策略3：从未闭合的代码块中提取 JSON.
+
+        处理截断场景：只有一个 ``` 标记，缺少闭合的 ```。
+        提取代码块内的 JSON 对象边界。
+
+        Args:
+            text: 可能包含未闭合代码块的文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        first_fence = text.find("```")
+        last_fence = text.rfind("```")
+
+        # 只有存在且仅存在一个反引号标记时才处理
+        if first_fence == -1 or first_fence != last_fence:
+            return None
+
+        logger.debug(f"[JSON解析] 策略3-尝试未闭合代码块提取, 起始位置: {first_fence}")
+
+        # 跳过 ```json 或 ```
+        after_code_block = text[first_fence + 3 :]
+        newline_pos = after_code_block.find("\n")
+        json_content = (
+            after_code_block[newline_pos + 1 :] if newline_pos != -1 else after_code_block
+        )
+
+        # 找到 JSON 对象边界
+        obj_start = json_content.find("{")
+        if obj_start == -1:
+            return None
+
+        obj_end = json_content.rfind("}")
+        if obj_end <= obj_start:
+            return None
+
+        extracted = json_content[obj_start : obj_end + 1]
+        logger.debug(
+            f"[JSON解析] 策略3-提取范围: [{obj_start}:{obj_end + 1}], "
+            f"长度: {len(extracted)}"
+        )
+
+        # 尝试直接解析
+        try:
+            result = json.loads(extracted)
+            logger.info("[JSON解析] 策略3-成功解析未闭合代码块中的JSON")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"[JSON解析] 策略3-JSON解析失败: {e}")
+            # 尝试修复后再解析
+            repaired = cls._try_repair_and_parse(extracted)
+            if repaired is not None:
+                logger.info("[JSON解析] 策略3-修复后成功解析未闭合代码块中的JSON")
+                return repaired
+            return None
+
+    @classmethod
+    def _strategy_array_boundary(cls, text: str) -> Optional[Any]:
+        """策略4：按数组边界提取 JSON.
+
+        查找文本中第一个 [ 和最后一个 ] 之间的内容。
+
+        Args:
+            text: 可能包含 JSON 数组的文本
+
+        Returns:
+            解析成功返回 JSON 数组，失败返回 None
+        """
+        array_start = text.find("[")
+        if array_start == -1:
+            return None
+
+        array_end = text.rfind("]")
+        if array_end <= array_start:
+            return None
+
+        logger.debug(f"[JSON解析] 策略4-尝试数组提取, 范围: [{array_start}:{array_end + 1}]")
+
+        array_text = text[array_start : array_end + 1]
+
+        # 尝试直接解析
+        try:
+            result = json.loads(array_text)
+            logger.info("[JSON解析] 策略4-成功解析数组JSON")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"[JSON解析] 策略4-JSON解析失败: {e}")
+            # 尝试修复后再解析
+            repaired = cls._try_repair_and_parse(array_text)
+            if repaired is not None:
+                logger.info("[JSON解析] 策略4-修复后成功解析数组JSON")
+                return repaired
+            return None
+
+    @classmethod
+    def _strategy_object_boundary(cls, text: str) -> Optional[Any]:
+        """策略5：按对象边界提取 JSON.
+
+        查找文本中第一个 { 和最后一个 } 之间的内容。
+
+        Args:
+            text: 可能包含 JSON 对象的文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        obj_start = text.find("{")
+        if obj_start == -1:
+            return None
+
+        obj_end = text.rfind("}")
+        if obj_end <= obj_start:
+            return None
+
+        logger.debug(f"[JSON解析] 策略5-尝试对象提取, 范围: [{obj_start}:{obj_end + 1}]")
+
+        obj_text = text[obj_start : obj_end + 1]
+
+        # 尝试直接解析
+        try:
+            result = json.loads(obj_text)
+            logger.info("[JSON解析] 策略5-成功解析对象JSON")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"[JSON解析] 策略5-JSON解析失败: {e}")
+            # 尝试修复后再解析
+            repaired = cls._try_repair_and_parse(obj_text)
+            if repaired is not None:
+                logger.info("[JSON解析] 策略5-修复后成功解析对象JSON")
+                return repaired
+            return None
+
+    @classmethod
+    def _strategy_clean_and_parse(cls, text: str) -> Optional[Any]:
+        """策略6：清理格式问题后解析.
+
+        处理常见的 JSON 格式问题：
+        - 移除注释
+        - 移除尾部逗号
+        - 处理单引号
+
+        Args:
+            text: 可能包含格式问题的 JSON 文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        cleaned = cls._clean_json_string(text)
+        if cleaned == text:
+            return None
+
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            return None
+
+    @classmethod
+    def _strategy_truncation_repair(cls, text: str) -> Optional[Any]:
+        """策略7：截断修复策略.
+
+        检测并修复被截断的 JSON，当 LLM 输出被截断时，
+        JSON 可能缺少闭合的 } 或 ]。
+
+        Args:
+            text: 可能被截断的 JSON 文本
+
+        Returns:
+            解析成功返回 JSON 对象，失败返回 None
+        """
+        repaired = cls._repair_truncated_json(text)
+        if not repaired:
+            return None
+
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError as e:
+            logger.debug(f"截断修复后仍解析失败: {e}")
+            return None
 
     @classmethod
     def _clean_json_string(cls, text: str) -> str:

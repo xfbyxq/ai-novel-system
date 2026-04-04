@@ -7,17 +7,20 @@
 集成审查反馈循环、投票共识、请求-应答协商机制。
 """
 
+import asyncio
 import json
-import re
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from agents.agent_query_service import AgentQueryService
+from agents.base.json_extractor import JsonExtractor
 from agents.chapter_summary_generator import ChapterSummaryGenerator
 from agents.character_review_loop import CharacterReviewHandler
 
 # 反思机制
 # 章节连续性增强组件
 from agents.context_compressor import ContextCompressor
+from agents.continuity_fixer import ContinuityFixerPipeline
 from agents.plot_review_loop import PlotReviewHandler
 
 # Agent 间协作组件
@@ -36,6 +39,28 @@ from llm.prompt_manager import PromptManager
 from llm.qwen_client import QwenClient
 
 
+@dataclass
+class CrewConfig:
+    """NovelCrewManager 的统一配置."""
+
+    quality_threshold: float = 7.5
+    max_review_iterations: int = 3
+    max_fix_iterations: int = 2
+    enable_voting: bool = True
+    enable_query: bool = True
+    enable_character_review: bool = True
+    enable_world_review: bool = True
+    enable_plot_review: bool = True
+    enable_outline_refinement: bool = True
+    character_quality_threshold: float = 7.0
+    world_quality_threshold: float = 7.0
+    plot_quality_threshold: float = 7.0
+    max_character_review_iterations: int = 2
+    max_world_review_iterations: int = 2
+    max_plot_review_iterations: int = 2
+    context_compressor_max_tokens: int = 8000  # 上下文压缩器token阈值
+
+
 class NovelCrewManager:
     """小说生成 Crew 管理器.
 
@@ -52,57 +77,50 @@ class NovelCrewManager:
         self,
         qwen_client: QwenClient,
         cost_tracker: CostTracker,
-        quality_threshold: float = 7.5,
-        max_review_iterations: int = 3,
-        max_fix_iterations: int = 2,
-        enable_voting: bool = True,
-        enable_query: bool = True,
-        enable_character_review: bool = True,
-        enable_world_review: bool = True,
-        enable_plot_review: bool = True,
-        enable_outline_refinement: bool = True,
-        character_quality_threshold: float = 7.0,
-        world_quality_threshold: float = 7.0,
-        plot_quality_threshold: float = 7.0,
-        max_character_review_iterations: int = 2,
-        max_world_review_iterations: int = 2,
-        max_plot_review_iterations: int = 2,
+        config: CrewConfig | None = None,
     ):
         """初始化 Crew 管理器.
 
         Args:
             qwen_client: 通义千问客户端实例
             cost_tracker: 成本跟踪器实例
-            quality_threshold: 质量评分阈值（达标即停止迭代）
-            max_review_iterations: Writer-Editor 审查循环最大迭代次数
-            max_fix_iterations: 连续性修复循环最大迭代次数
-            enable_voting: 是否启用企划阶段投票共识
-            enable_query: 是否启用写作过程中的设定查询
-            enable_character_review: 是否启用角色设计审查循环
-            enable_world_review: 是否启用世界观设计审查循环
-            enable_plot_review: 是否启用大纲设计审查循环
-            enable_outline_refinement: 是否启用章节大纲细化步骤
-            character_quality_threshold: 角色设计质量阈值
-            world_quality_threshold: 世界观设计质量阈值
-            plot_quality_threshold: 大纲设计质量阈值
-            max_character_review_iterations: 角色审查最大迭代次数
-            max_world_review_iterations: 世界观审查最大迭代次数
-            max_plot_review_iterations: 大纲审查最大迭代次数
+            config: 配置对象，包含所有质量阈值和功能开关参数
         """
+        # 如果没有传入配置，从 Settings 加载
+        if config is None:
+            from backend.config import settings
+            config = CrewConfig(
+                quality_threshold=settings.CHAPTER_QUALITY_THRESHOLD,
+                max_review_iterations=settings.MAX_CHAPTER_REVIEW_ITERATIONS,
+                max_fix_iterations=settings.MAX_FIX_ITERATIONS,
+                enable_voting=settings.ENABLE_VOTING,
+                enable_query=settings.ENABLE_QUERY,
+                enable_character_review=settings.ENABLE_CHARACTER_REVIEW,
+                enable_world_review=settings.ENABLE_WORLD_REVIEW,
+                enable_plot_review=settings.ENABLE_PLOT_REVIEW,
+                enable_outline_refinement=settings.ENABLE_OUTLINE_REFINEMENT,
+                character_quality_threshold=settings.CHARACTER_QUALITY_THRESHOLD,
+                world_quality_threshold=settings.WORLD_QUALITY_THRESHOLD,
+                plot_quality_threshold=settings.PLOT_QUALITY_THRESHOLD,
+                max_character_review_iterations=settings.MAX_CHARACTER_REVIEW_ITERATIONS,
+                max_world_review_iterations=settings.MAX_WORLD_REVIEW_ITERATIONS,
+                max_plot_review_iterations=settings.MAX_PLOT_REVIEW_ITERATIONS,
+                context_compressor_max_tokens=settings.CONTEXT_COMPRESSOR_MAX_TOKENS,
+            )
         self.client = qwen_client
         self.cost_tracker = cost_tracker
         self.pm = PromptManager
 
         # 协作配置
-        self.quality_threshold = quality_threshold
-        self.max_review_iterations = max_review_iterations
-        self.max_fix_iterations = max_fix_iterations
-        self.enable_voting = enable_voting
-        self.enable_query = enable_query
-        self.enable_character_review = enable_character_review
-        self.enable_world_review = enable_world_review
-        self.enable_plot_review = enable_plot_review
-        self.enable_outline_refinement = enable_outline_refinement
+        self.quality_threshold = config.quality_threshold
+        self.max_review_iterations = config.max_review_iterations
+        self.max_fix_iterations = config.max_fix_iterations
+        self.enable_voting = config.enable_voting
+        self.enable_query = config.enable_query
+        self.enable_character_review = config.enable_character_review
+        self.enable_world_review = config.enable_world_review
+        self.enable_plot_review = config.enable_plot_review
+        self.enable_outline_refinement = config.enable_outline_refinement
 
         # 图数据库上下文注入开关（从配置读取）
         from backend.config import settings
@@ -115,8 +133,8 @@ class NovelCrewManager:
         self.review_handler = ReviewLoopHandler(
             client=qwen_client,
             cost_tracker=cost_tracker,
-            quality_threshold=quality_threshold,
-            max_iterations=max_review_iterations,
+            quality_threshold=config.quality_threshold,
+            max_iterations=config.max_review_iterations,
         )
         self.voting_manager = VotingManager(
             client=qwen_client,
@@ -131,31 +149,37 @@ class NovelCrewManager:
         self.character_review_handler = CharacterReviewHandler(
             client=qwen_client,
             cost_tracker=cost_tracker,
-            quality_threshold=character_quality_threshold,
-            max_iterations=max_character_review_iterations,
+            quality_threshold=config.character_quality_threshold,
+            max_iterations=config.max_character_review_iterations,
         )
 
         # 世界观审查处理器
         self.world_review_handler = WorldReviewHandler(
             client=qwen_client,
             cost_tracker=cost_tracker,
-            quality_threshold=world_quality_threshold,
-            max_iterations=max_world_review_iterations,
+            quality_threshold=config.world_quality_threshold,
+            max_iterations=config.max_world_review_iterations,
         )
 
         # 大纲审查处理器
         self.plot_review_handler = PlotReviewHandler(
             client=qwen_client,
             cost_tracker=cost_tracker,
-            quality_threshold=plot_quality_threshold,
-            max_iterations=max_plot_review_iterations,
+            quality_threshold=config.plot_quality_threshold,
+            max_iterations=config.max_plot_review_iterations,
         )
 
         # 章节连续性增强组件
-        self.context_compressor = ContextCompressor()
+        self.context_compressor = ContextCompressor(
+            max_total_tokens=config.context_compressor_max_tokens
+        )
         self.similarity_detector = SimilarityDetector()
         self.summary_generator = ChapterSummaryGenerator(
             client=qwen_client,
+            cost_tracker=cost_tracker,
+        )
+        self.continuity_fixer_pipeline = ContinuityFixerPipeline(
+            qwen_client=qwen_client,
             cost_tracker=cost_tracker,
         )
 
@@ -164,202 +188,30 @@ class NovelCrewManager:
         self._chapter_contents: dict[int, str] = {}
         self._chapter_detailed_outlines: dict[int, dict] = {}
 
+        # 跨章节人物关系累积（用于关系确认）
+        self._character_relationship_accumulator: dict[tuple[str, str], dict] = {}
+
+        # 角色出场统计（用于判断角色重要性）
+        self._character_appearance_tracker: dict[str, dict] = {}
+        # 结构: {
+        #   "角色名": {
+        #       "first_appearance": 1,      # 首次出场章节
+        #       "appearance_count": 3,      # 出场次数
+        #       "chapters": [1, 3, 5],      # 出场章节列表
+        #       "role_type": "supporting",  # 角色类型
+        #       "is_important": True        # 是否重要角色
+        #   }
+        # }
+
         # 反思代理（初始化为None，需要时通过setup_reflection设置）
         self.reflection_agent = None
 
-    def _extract_json_from_response(self, response: str) -> dict | list:
-        """从 LLM 响应中提取 JSON.
+    # ============================================================
+    # Agent 调用基础方法
+    # ============================================================
 
-        LLM 可能会在 JSON 前后添加 markdown 代码块标记或其他文本,
-        这个方法使用多种策略找到 JSON 内容并解析。
-
-        增强功能：
-        - 支持中文引号自动转换为英文引号
-        - 支持不规范的键名（无引号）
-        - 支持截断的 JSON
-        - 逐字段提取作为最后保障
-        - 优先匹配根级别的 JSON 结构（字典优先于数组）
-        - 更好的错误处理和异常捕获
-
-        Args:
-            response: LLM 的原始响应文本
-
-        Returns:
-            解析后的 JSON 对象（dict 或 list）
-
-        Raises:
-            ValueError: 如果无法找到或解析 JSON
-        """
-        if not response or not isinstance(response, str):
-            raise ValueError(f"无效的响应类型: {type(response)}, 期望字符串")
-
-        # 策略 1: 先尝试直接解析
-        try:
-            result = json.loads(response.strip())
-            if isinstance(result, (dict, list)):
-                return result
-        except json.JSONDecodeError:
-            pass
-
-        # 策略 2: 尝试提取 markdown 代码块中的内容
-        try:
-            code_block_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```"
-            for match in re.finditer(code_block_pattern, response):
-                block_content = match.group(1).strip()
-                if block_content:
-                    try:
-                        result = json.loads(block_content)
-                        if isinstance(result, (dict, list)):
-                            return result
-                    except json.JSONDecodeError:
-                        continue
-        except Exception:
-            pass
-
-        # 策略 3: 优先匹配根级别的 JSON（字典优先于数组）
-        # 先尝试匹配字典 { ... }
-        try:
-            result = self._find_json_by_brackets(response, "{", "}")
-            if result is not None:
-                return result
-        except Exception:
-            pass
-
-        # 如果没有找到字典，尝试匹配数组 [ ... ]
-        try:
-            result = self._find_json_by_brackets(response, "[", "]")
-            if result is not None:
-                return result
-        except Exception:
-            pass
-
-        # 策略 4: 修复中文引号后重试
-        try:
-            fixed_response = response.replace('"', '"').replace('"', '"')
-            result = json.loads(fixed_response.strip())
-            if isinstance(result, (dict, list)):
-                return result
-        except json.JSONDecodeError:
-            pass
-
-        # 策略 5: 逐字段提取（针对特定结构）
-        try:
-            extracted = self._extract_fields_manually(response)
-            if extracted is not None:
-                return extracted
-        except Exception:
-            pass
-
-        # 如果所有策略都失败，抛出更详细的错误信息
-        raise ValueError(
-            f"无法从响应中提取有效的 JSON。响应长度: {len(response)}, 开头: {response[:200]}..."
-        )
-
-    def _find_json_by_brackets(
-        self, response: str, start_char: str, end_char: str
-    ) -> Optional[dict | list]:
-        """使用括号匹配法找到完整的 JSON.
-
-        Args:
-            response: 原始响应文本
-            start_char: 开始字符 '{' 或 '['
-            end_char: 结束字符 '}' 或 ']'
-
-        Returns:
-            解析后的 JSON 对象，或 None 如果找不到
-        """
-        if not response or not isinstance(response, str):
-            return None
-
-        # 找到第一个指定类型开始字符的位置
-        start_idx = -1
-        try:
-            for idx, ch in enumerate(response):
-                if ch == start_char:
-                    start_idx = idx
-                    break
-        except Exception:
-            return None
-
-        if start_idx == -1:
-            return None
-
-        # 使用括号计数匹配完整的 JSON
-        depth = 0
-        in_string = False
-        escape_next = False
-        try:
-            for i in range(start_idx, len(response)):
-                ch = response[i]
-                if escape_next:
-                    escape_next = False
-                    continue
-                if ch == "\\" and in_string:
-                    escape_next = True
-                    continue
-                if ch == '"' and not escape_next:
-                    in_string = not in_string
-                    continue
-                if in_string:
-                    continue
-                if ch == start_char:
-                    depth += 1
-                elif ch == end_char:
-                    depth -= 1
-                    if depth == 0:
-                        candidate = response[start_idx : i + 1]
-                        try:
-                            result = json.loads(candidate)
-                            if isinstance(result, (dict, list)):
-                                return result
-                        except json.JSONDecodeError:
-                            break
-        except Exception:
-            # 如果在解析过程中发生任何异常，返回 None
-            return None
-        return None
-
-    def _extract_fields_manually(self, response: str) -> Optional[Dict[str, Any]]:
-        """
-        手动提取常见字段作为最后保障.
-
-        适用于连续性审查员等特定 Agent 的输出
-        """
-        if not response or not isinstance(response, str):
-            return None
-
-        result = {}
-
-        # 提取 has_issues
-        has_issues_match = re.search(
-            r'"has_issues"\s*:\s*(true|false)', response, re.IGNORECASE
-        )
-        if has_issues_match:
-            result["has_issues"] = has_issues_match.group(1).lower() == "true"
-
-        # 提取 quality_score
-        score_match = re.search(r'"quality_score"\s*:\s*([\d.]+)', response)
-        if score_match:
-            result["quality_score"] = float(score_match.group(1))
-
-        # 提取 overall_assessment
-        assessment_match = re.search(r'"overall_assessment"\s*:\s*"([^"]+)"', response)
-        if assessment_match:
-            result["overall_assessment"] = assessment_match.group(1)
-
-        # 如果有至少一个字段，返回部分结果
-        if result:
-            # 尝试提取 issues 数组
-            try:
-                issues_match = re.search(r'"issues"\s*:\s*\[', response)
-                if issues_match:
-                    result["issues"] = []  # 简化处理，返回空数组
-            except Exception:
-                pass
-
-            return result
-
-        return None
+    # 注意：JSON 提取方法已移至 agents.base.json_extractor.JsonExtractor
+    # 使用 JsonExtractor.extract_json() 或 JsonExtractor.safe_extract() 替代
 
     async def _call_agent(
         self,
@@ -409,9 +261,10 @@ class NovelCrewManager:
             content = response["content"]
 
             # 如果需要 JSON，解析之
+            # 使用 JsonExtractor 统一处理 JSON 提取，替代原有的重复方法
             if expect_json:
                 try:
-                    result = self._extract_json_from_response(content)
+                    result = JsonExtractor.extract_json(content)
                     logger.info(f"✅ [{agent_name}] 执行成功，返回 JSON 数据")
                     return result
                 except ValueError:
@@ -469,7 +322,8 @@ class NovelCrewManager:
             )
             last_response = response["content"]
             try:
-                result = self._extract_json_from_response(last_response)
+                # 使用 JsonExtractor 统一处理 JSON 提取
+                result = JsonExtractor.extract_json(last_response)
                 logger.info(f"✅ [{agent_name}] JSON重试成功 (第{attempt}次)")
                 return result
             except ValueError:
@@ -1019,7 +873,9 @@ class NovelCrewManager:
 """
 
         # 构建角色信息（仅包含本章出场角色）
-        chapter_characters = chapter_plan.get("scenes", [{}])[0].get("characters", [])
+        scenes = chapter_plan.get("scenes", [{}]) if isinstance(chapter_plan, dict) else [{}]
+        first_scene = scenes[0] if scenes and isinstance(scenes[0], dict) else {}
+        chapter_characters = first_scene.get("characters", []) if isinstance(first_scene, dict) else []
         character_info = ""
         for char in characters:
             if isinstance(char, dict) and char.get("name") in chapter_characters:
@@ -1041,30 +897,43 @@ class NovelCrewManager:
         # ── 构建前章关键事件列表（防止重复） ────────────────
         previous_key_events = self._build_previous_key_events(chapter_number)
 
-        # ── 提取卷级摘要（用于冷记忆）─────────────────────────
-        volume_summaries = None
-        if plot_outline:
+        # ── 动态生成卷级摘要（用于冷记忆）─────────────────────────
+        # 优先使用动态生成的卷摘要（基于实际写作进度）
+        volume_summaries = self._generate_volume_summaries_dynamically(
+            chapter_number=chapter_number,
+            plot_outline=plot_outline
+        )
+
+        # 如果动态生成失败，回退到静态大纲摘要
+        if volume_summaries is None and plot_outline:
             volumes = plot_outline.get("volumes", [])
             if volumes and isinstance(volumes, list):
                 volume_summaries = {}
                 for vol in volumes:
+                    # 防御性检查：确保vol是字典类型
+                    if not isinstance(vol, dict):
+                        logger.warning(f"[VolumeSummary] 跳过非字典类型的卷数据: {type(vol)}")
+                        continue
                     vol_num = vol.get("number")
                     vol_summary = vol.get("summary", "")
-                    vol_chapters = vol.get("chapters", [])  # [start, end]
+                    vol_chapters = vol.get("chapters", [])
                     if vol_num and vol_summary:
-                        # 包含摘要和章节范围，用于准确判断冷记忆范围
                         volume_summaries[vol_num] = {
                             "summary": vol_summary,
                             "chapters": vol_chapters if isinstance(vol_chapters, list) else [],
                         }
-                # 如果没有有效的卷摘要，置回None
                 if not volume_summaries:
                     volume_summaries = None
                 else:
                     logger.info(
-                        f"[VolumeSummary] 提取到 {len(volume_summaries)} 个卷摘要: "
-                        f"{list(volume_summaries.keys())}"
+                        f"[VolumeSummary] 使用静态大纲卷摘要: {list(volume_summaries.keys())}"
                     )
+
+        if volume_summaries:
+            logger.info(
+                f"[VolumeSummary] 提取到 {len(volume_summaries)} 个卷摘要: "
+                f"{list(volume_summaries.keys())}"
+            )
 
         # ── 使用分层压缩构建前章结尾 ─────────────────────
         compressed = self.context_compressor.compress(
@@ -1151,7 +1020,7 @@ class NovelCrewManager:
 
         # ── 3. Writer-Editor 审查反馈循环 ─────────────────────
         chapter_plan_json = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
-        
+
         # 构建时间线锚点信息（用于跨章节时间一致性检查）
         timeline_anchor = ""
         if team_context and team_context.timeline:
@@ -1162,7 +1031,7 @@ class NovelCrewManager:
 {recent_events}
 
 **检查要点**：本章的时间推进是否合理？是否与前文时间线矛盾？"""
-        
+
         review_result = await self.review_handler.execute(
             initial_draft=draft,
             chapter_number=chapter_number,
@@ -1235,35 +1104,42 @@ class NovelCrewManager:
                 )
                 break
 
-            # 调用修复
+            # 调用修复（使用带验证的修复流水线）
             logger.info(
                 f"[连续性检查] 第 {fix_round} 轮: 发现 {len(high_severity)} 个严重问题, "
                 f"请求修复..."
             )
-            fix_suggestions = "\n".join(
-                f"- [{i.get('type', '')}] {i.get('description', '')}: {i.get('suggestion', '')}"
-                for i in high_severity
+
+            # 构建上下文信息
+            fix_context = f"""世界观：{world_brief}
+角色信息：{character_info or "（主要角色）"}
+前章摘要：{previous_chapters_summary or "（本章为第一章）"}"""
+
+            # 使用 ContinuityFixerPipeline 进行修复和验证
+            fix_result = await self.continuity_fixer_pipeline.fix_with_verification(
+                content=final_content,
+                continuity_report=continuity_report,
+                context=fix_context,
+                max_attempts=2,  # 每轮最多2次修复尝试
             )
-            fix_task = f"""以下章节存在连续性问题，请修复.
 
-原文：
-{final_content}
+            fixed_content = fix_result.get("fixed_content", final_content)
+            verified = fix_result.get("verified", False)
+            attempts = fix_result.get("attempts", 0)
 
-发现的问题：
-{fix_suggestions}
+            if verified:
+                logger.info(
+                    f"[连续性检查] 修复已验证通过，共 {attempts} 次尝试"
+                )
+            else:
+                logger.warning(
+                    f"[连续性检查] 修复未完全验证通过，"
+                    f"尝试 {attempts} 次后仍有残留问题"
+                )
 
-请输出修复后的完整章节内容，不要输出修改说明。"""
-
-            fixed = await self._call_agent(
-                agent_name="编辑(修复)",
-                system_prompt=self.pm.EDITOR_SYSTEM,
-                task_prompt=fix_task,
-                temperature=0.5,
-                max_tokens=4096,
-                expect_json=False,
-            )
-            if fixed and len(fixed) > len(final_content) * 0.3:
-                final_content = fixed
+            # 更新内容（只要修复后有变化就接受，不管是否完全验证通过）
+            if fixed_content and len(fixed_content) > len(final_content) * 0.3:
+                final_content = fixed_content
 
         # 记录到 TeamContext
         if team_context:
@@ -1349,6 +1225,16 @@ class NovelCrewManager:
         self._chapter_summaries[chapter_number] = chapter_summary
         self._chapter_contents[chapter_number] = final_content
 
+        # ── 7. 异步提取人物关系（基于前N章累积分析）────────────────
+        # 使用 asyncio.create_task 实现异步执行，不阻塞主流程
+        if chapter_number >= 2:
+            asyncio.create_task(
+                self._extract_relationships_from_recent_chapters(
+                    chapter_number=chapter_number,
+                    max_lookback=5,
+                )
+            )
+
         logger.info("=" * 60)
         logger.info(f"🎉 第 {chapter_number} 章写作完成！")
         logger.info(
@@ -1379,10 +1265,282 @@ class NovelCrewManager:
             "chapter_summary": chapter_summary,
         }
 
+    def _update_character_importance(
+        self,
+        characters: list,
+        chapter_number: int,
+    ) -> list[str]:
+        """更新角色出场统计并返回重要角色列表.
+
+        Args:
+            characters: 本章抽取的角色列表
+            chapter_number: 当前章节号
+
+        Returns:
+            重要角色名称列表
+        """
+        from backend.services.entity_extractor_service import ExtractedCharacter
+
+        important_chars = []
+
+        for char in characters:
+            if not isinstance(char, ExtractedCharacter):
+                continue
+
+            name = char.name
+            if not name:
+                continue
+
+            # 更新出场统计
+            if name not in self._character_appearance_tracker:
+                self._character_appearance_tracker[name] = {
+                    "first_appearance": chapter_number,
+                    "appearance_count": 0,
+                    "chapters": [],
+                    "role_type": char.role_type,
+                    "is_important": False
+                }
+
+            tracker = self._character_appearance_tracker[name]
+            tracker["appearance_count"] += 1
+            tracker["chapters"].append(chapter_number)
+
+            # 更新角色类型（如果新抽取的类型更具体）
+            if char.role_type != "minor" and tracker["role_type"] == "minor":
+                tracker["role_type"] = char.role_type
+
+            # 判断角色重要性
+            # 规则1: 出场次数 >= 2
+            # 规则2: 角色类型不是 minor (protagonist/supporting/antagonist)
+            # 规则3: 在首章出场
+            is_important = (
+                tracker["appearance_count"] >= 2 or
+                tracker["role_type"] in ["protagonist", "supporting", "antagonist"] or
+                tracker["first_appearance"] == 1
+            )
+
+            tracker["is_important"] = is_important
+
+            if is_important:
+                important_chars.append(name)
+
+        return important_chars
+
+    async def _extract_relationships_from_recent_chapters(
+        self,
+        chapter_number: int,
+        max_lookback: int = 5,
+    ) -> list[dict]:
+        """异步提取最近章节的人物关系.
+
+        基于前N章内容累积分析，提高关系判定准确性。
+
+        Args:
+            chapter_number: 当前章节号
+            max_lookback: 最大回溯章节数（默认5章）
+
+        Returns:
+            确认的人物关系列表
+        """
+        # 确定要分析的章节范围
+        start_chapter = max(1, chapter_number - max_lookback + 1)
+        chapters_to_analyze = list(range(start_chapter, chapter_number + 1))
+
+        if len(chapters_to_analyze) < 2:
+            logger.info("[RelationshipExtraction] 章节数不足，跳过关系提取")
+            return []
+
+        # 收集可用章节内容
+        available_chapters = {}
+        for ch in chapters_to_analyze:
+            if ch in self._chapter_contents:
+                available_chapters[ch] = self._chapter_contents[ch]
+
+        if len(available_chapters) < 2:
+            logger.info("[RelationshipExtraction] 可用章节内容不足，跳过关系提取")
+            return []
+
+        logger.info(
+            f"[RelationshipExtraction] 开始分析第{start_chapter}-{chapter_number}章的人物关系，"
+            f"共{len(available_chapters)}章可用"
+        )
+
+        try:
+            # 构建合并的章节内容（不截断单章内容）
+            combined_content = ""
+            for ch_num in sorted(available_chapters.keys()):
+                content = available_chapters[ch_num]
+                # 不再截断单章内容，完整使用每章内容
+                # 平均每章3000-4000字符，5章最多约20000字符
+                combined_content += f"\n\n=== 第{ch_num}章 ===\n{content}"
+
+            # 仅作为安全保护，限制极端情况下的总长度（如超长章节）
+            if len(combined_content) > 25000:
+                combined_content = combined_content[:25000] + "\n...（内容过长已截断）"
+                logger.warning("[RelationshipExtraction] 合并内容超过25000字符，已截断")
+
+            # 调用LLM提取关系
+            from backend.services.entity_extractor_service import EntityExtractorService
+
+            extractor = EntityExtractorService()
+
+            # 获取已知角色
+            known_characters = list(set(
+                name for rel_key in self._character_relationship_accumulator.keys()
+                for name in rel_key
+            ))
+
+            # 提取实体和关系
+            extraction_result = await extractor.extract_from_chapter(
+                chapter_number=chapter_number,
+                chapter_content=combined_content,
+                known_characters=known_characters if known_characters else None,
+            )
+
+            # 更新角色重要性统计
+            important_chars = self._update_character_importance(
+                extraction_result.characters,
+                chapter_number
+            )
+
+            logger.info(
+                f"[RelationshipExtraction] 本章发现 {len(extraction_result.characters)} 个角色，"
+                f"其中重要角色 {len(important_chars)} 个: {important_chars[:5]}..."
+            )
+
+            # 过滤关系：只保留重要角色之间的关系
+            filtered_relationships = []
+            for rel in extraction_result.relationships:
+                if rel.from_character in important_chars and rel.to_character in important_chars:
+                    filtered_relationships.append(rel)
+                elif rel.from_character in important_chars or rel.to_character in important_chars:
+                    # 保留涉及至少一个重要角色的关系
+                    filtered_relationships.append(rel)
+
+            logger.info(
+                f"[RelationshipExtraction] 原始关系 {len(extraction_result.relationships)} 个，"
+                f"过滤后保留 {len(filtered_relationships)} 个（涉及重要角色）"
+            )
+
+            # 累积关系信息（只处理过滤后的关系）
+            confirmed_relationships = []
+            for rel in filtered_relationships:
+                rel_key = (rel.from_character, rel.to_character)
+                reverse_key = (rel.to_character, rel.from_character)
+
+                # 检查是否已有记录
+                if rel_key in self._character_relationship_accumulator:
+                    acc = self._character_relationship_accumulator[rel_key]
+                elif reverse_key in self._character_relationship_accumulator:
+                    acc = self._character_relationship_accumulator[reverse_key]
+                else:
+                    acc = {
+                        "mentions": 0,
+                        "types": [],
+                        "strengths": [],
+                        "first_chapter": chapter_number,
+                    }
+                    self._character_relationship_accumulator[rel_key] = acc
+
+                # 更新累积信息
+                acc["mentions"] += 1
+                acc["types"].append(rel.relation_type)
+                acc["strengths"].append(rel.strength)
+                acc["last_chapter"] = chapter_number
+
+                # 当关系被多次提及时，确认为稳定关系
+                if acc["mentions"] >= 2:
+                    # 使用多数投票确定关系类型
+                    from collections import Counter
+                    type_counts = Counter(acc["types"])
+                    confirmed_type = type_counts.most_common(1)[0][0]
+                    avg_strength = sum(acc["strengths"]) / len(acc["strengths"])
+
+                    confirmed_rel = {
+                        "from_character": rel.from_character,
+                        "to_character": rel.to_character,
+                        "relation_type": confirmed_type,
+                        "strength": round(avg_strength, 1),
+                        "mentions": acc["mentions"],
+                        "is_confirmed": True,
+                    }
+                    if confirmed_rel not in confirmed_relationships:
+                        confirmed_relationships.append(confirmed_rel)
+
+            logger.info(
+                f"[RelationshipExtraction] 关系提取完成: "
+                f"发现{len(extraction_result.relationships)}个关系，"
+                f"确认{len(confirmed_relationships)}个稳定关系"
+            )
+
+            return confirmed_relationships
+
+        except Exception as e:
+            logger.error(f"[RelationshipExtraction] 关系提取失败: {e}")
+            return []
+
+    def get_important_character_relationships(self) -> dict:
+        """获取重要角色的关系网络.
+
+        Returns:
+            {
+                "characters": {
+                    "角色名": {
+                        "appearance_count": 3,
+                        "role_type": "supporting",
+                        "relationships": [
+                            {"to": "角色B", "type": "friend", "strength": 8}
+                        ]
+                    }
+                },
+                "confirmed_relationships": [...]
+            }
+        """
+        result = {
+            "characters": {},
+            "confirmed_relationships": []
+        }
+
+        # 收集重要角色
+        for name, tracker in self._character_appearance_tracker.items():
+            if tracker.get("is_important", False):
+                result["characters"][name] = {
+                    "appearance_count": tracker["appearance_count"],
+                    "chapters": tracker["chapters"],
+                    "role_type": tracker["role_type"],
+                    "relationships": []
+                }
+
+        # 收集已确认的关系
+        for (from_char, to_char), acc in self._character_relationship_accumulator.items():
+            if acc["mentions"] >= 2:
+                from collections import Counter
+                confirmed_type = Counter(acc["types"]).most_common(1)[0][0]
+                avg_strength = sum(acc["strengths"]) / len(acc["strengths"])
+
+                rel_info = {
+                    "from": from_char,
+                    "to": to_char,
+                    "type": confirmed_type,
+                    "strength": round(avg_strength, 1),
+                    "mentions": acc["mentions"]
+                }
+                result["confirmed_relationships"].append(rel_info)
+
+                # 添加到角色的关系列表
+                if from_char in result["characters"]:
+                    result["characters"][from_char]["relationships"].append({
+                        "to": to_char,
+                        "type": confirmed_type,
+                        "strength": round(avg_strength, 1)
+                    })
+
+        return result
+
     def _build_plot_outline_context(
         self, plot_outline: dict | list, volume_number: int, chapter_number: int
     ) -> str:
-        """从全局大纲中提取与当前章节相关的上下文信息.
+        """构建大纲上下文（入口方法）.
 
         提取内容包括：
         - 主线剧情核心冲突
@@ -1403,26 +1561,63 @@ class NovelCrewManager:
             return "（无全局大纲信息）"
 
         parts = []
+        parts.extend(self._extract_main_plot_context(plot_outline))
+        parts.extend(self._extract_golden_chapters_context(plot_outline, chapter_number))
+        parts.extend(self._extract_turning_points_context(plot_outline))
+        parts.extend(self._extract_volume_context(plot_outline, volume_number))
+        return "\n".join(parts) if parts else "（无全局大纲信息）"
 
-        # 处理 dict 格式
+    def _extract_main_plot_context(self, plot_outline: dict | list) -> list[str]:
+        """提取主线剧情相关上下文.
+
+        Args:
+            plot_outline: 全局情节大纲
+
+        Returns:
+            主线剧情上下文字符串列表
+        """
+        parts = []
         if isinstance(plot_outline, dict):
-            # 主线剧情
             main_plot = plot_outline.get("main_plot", {})
             if main_plot:
                 parts.append(
                     f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}"
                 )
                 parts.append(f"  主题：{main_plot.get('theme', '未知')}")
+        return parts
 
-            # 黄金三章（前3章适用）
-            if chapter_number <= 3:
-                golden = plot_outline.get("golden_three_chapters", {})
-                if golden:
-                    parts.append("【黄金三章设计】")
-                    for key, val in golden.items():
-                        parts.append(f"  {key}: {val}")
+    def _extract_golden_chapters_context(
+        self, plot_outline: dict | list, chapter_number: int
+    ) -> list[str]:
+        """提取黄金三章/关键章节上下文.
 
-            # 关键转折点
+        Args:
+            plot_outline: 全局情节大纲
+            chapter_number: 当前章节号
+
+        Returns:
+            黄金三章上下文字符串列表
+        """
+        parts = []
+        if isinstance(plot_outline, dict) and chapter_number <= 3:
+            golden = plot_outline.get("golden_three_chapters", {})
+            if golden:
+                parts.append("【黄金三章设计】")
+                for key, val in golden.items():
+                    parts.append(f"  {key}: {val}")
+        return parts
+
+    def _extract_turning_points_context(self, plot_outline: dict | list) -> list[str]:
+        """提取转折点上下文.
+
+        Args:
+            plot_outline: 全局情节大纲
+
+        Returns:
+            转折点上下文字符串列表
+        """
+        parts = []
+        if isinstance(plot_outline, dict):
             turning_points = plot_outline.get("key_turning_points", [])
             if turning_points:
                 parts.append("【全局关键转折点】")
@@ -1433,8 +1628,22 @@ class NovelCrewManager:
                         parts.append(
                             f"  - {tp.get('event', tp.get('description', str(tp)))}"
                         )
+        return parts
 
-            # 当前卷信息
+    def _extract_volume_context(
+        self, plot_outline: dict | list, volume_number: int
+    ) -> list[str]:
+        """提取分卷上下文.
+
+        Args:
+            plot_outline: 全局情节大纲
+            volume_number: 当前卷号
+
+        Returns:
+            分卷上下文字符串列表
+        """
+        parts = []
+        if isinstance(plot_outline, dict):
             volumes = plot_outline.get("volumes", [])
             for vol in volumes:
                 if vol.get("volume_num") == volume_number:
@@ -1442,40 +1651,9 @@ class NovelCrewManager:
                         f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}"
                     )
                     parts.append(f"  概要：{vol.get('summary', '')}")
-
-                    # 张力循环
-                    tension_cycles = vol.get("tension_cycles", [])
-                    if tension_cycles:
-                        parts.append("  张力循环：")
-                        for tc in tension_cycles:
-                            if isinstance(tc, dict):
-                                suppress = tc.get(
-                                    "suppress_event", tc.get("suppress", "")
-                                )
-                                release = tc.get("release_event", tc.get("release", ""))
-                                parts.append(
-                                    f"    - 压制: {suppress} → 释放: {release}"
-                                )
-                            elif isinstance(tc, str):
-                                parts.append(f"    - {tc}")
-
-                    # 升级里程碑
-                    milestone = vol.get("upgrade_milestone", "")
-                    if milestone:
-                        parts.append(f"  升级里程碑：{milestone}")
-                    else:
-                        milestones = vol.get(
-                            "upgrade_milestones", vol.get("power_milestones", [])
-                        )
-                        if milestones:
-                            parts.append("  升级里程碑：")
-                            for ms in milestones:
-                                if isinstance(ms, str):
-                                    parts.append(f"    - {ms}")
-                                elif isinstance(ms, dict):
-                                    parts.append(f"    - {ms.get('event', str(ms))}")
+                    parts.extend(self._extract_tension_cycles(vol))
+                    parts.extend(self._extract_upgrade_milestones(vol))
                     break
-
         elif isinstance(plot_outline, list):
             # 直接是卷列表格式
             for vol in plot_outline:
@@ -1485,8 +1663,53 @@ class NovelCrewManager:
                     )
                     parts.append(f"  概要：{vol.get('summary', '')}")
                     break
+        return parts
 
-        return "\n".join(parts) if parts else "（无全局大纲信息）"
+    def _extract_tension_cycles(self, vol: dict) -> list[str]:
+        """提取张力循环信息.
+
+        Args:
+            vol: 卷信息字典
+
+        Returns:
+            张力循环上下文字符串列表
+        """
+        parts = []
+        tension_cycles = vol.get("tension_cycles", [])
+        if tension_cycles:
+            parts.append("  张力循环：")
+            for tc in tension_cycles:
+                if isinstance(tc, dict):
+                    suppress = tc.get("suppress_event", tc.get("suppress", ""))
+                    release = tc.get("release_event", tc.get("release", ""))
+                    parts.append(f"    - 压制: {suppress} → 释放: {release}")
+                elif isinstance(tc, str):
+                    parts.append(f"    - {tc}")
+        return parts
+
+    def _extract_upgrade_milestones(self, vol: dict) -> list[str]:
+        """提取升级里程碑信息.
+
+        Args:
+            vol: 卷信息字典
+
+        Returns:
+            升级里程碑上下文字符串列表
+        """
+        parts = []
+        milestone = vol.get("upgrade_milestone", "")
+        if milestone:
+            parts.append(f"  升级里程碑：{milestone}")
+        else:
+            milestones = vol.get("upgrade_milestones", vol.get("power_milestones", []))
+            if milestones:
+                parts.append("  升级里程碑：")
+                for ms in milestones:
+                    if isinstance(ms, str):
+                        parts.append(f"    - {ms}")
+                    elif isinstance(ms, dict):
+                        parts.append(f"    - {ms.get('event', str(ms))}")
+        return parts
 
     def _build_previous_key_events(self, chapter_number: int) -> str:
         """构建前几章的关键事件列表（用于防止重复）."""
@@ -1502,6 +1725,95 @@ class NovelCrewManager:
                 elif isinstance(event, dict):
                     events.append(f"第{ch}章: {event.get('event', str(event))}")
         return "\n".join(events) if events else "（无前章记录）"
+
+    def _generate_volume_summaries_dynamically(
+        self,
+        chapter_number: int,
+        plot_outline: Optional[dict] = None
+    ) -> Optional[dict[int, dict[str, any]]]:
+        """基于已生成章节摘要动态生成卷摘要.
+
+        Args:
+            chapter_number: 当前章节号
+            plot_outline: 大纲数据（用于获取卷章节范围）
+
+        Returns:
+            卷摘要字典: {卷号: {"summary": 摘要, "chapters": [start, end]}}
+        """
+        if not self._chapter_summaries:
+            return None
+
+        # 从大纲获取卷章节范围（如果可用）
+        volume_ranges = {}
+        if plot_outline:
+            volumes = plot_outline.get("volumes", [])
+            for vol in volumes:
+                if isinstance(vol, dict):
+                    vol_num = vol.get("number")
+                    vol_chapters = vol.get("chapters", [])
+                    if vol_num and isinstance(vol_chapters, list) and len(vol_chapters) >= 2:
+                        volume_ranges[vol_num] = (vol_chapters[0], vol_chapters[1])
+
+        # 按卷聚合章节摘要
+        volume_summaries = {}
+        cold_end = max(1, chapter_number - 10)  # 冷记忆起始点
+
+        for ch_num, summary in self._chapter_summaries.items():
+            if ch_num >= cold_end:
+                continue  # 只处理冷记忆范围内的章节
+
+            # 确定章节所属卷
+            if volume_ranges:
+                vol_num = None
+                for vnum, (start, end) in volume_ranges.items():
+                    if start <= ch_num <= end:
+                        vol_num = vnum
+                        break
+            else:
+                # 默认每卷10章
+                vol_num = (ch_num - 1) // 10 + 1
+
+            if vol_num is None:
+                continue
+
+            if vol_num not in volume_summaries:
+                volume_summaries[vol_num] = {
+                    "summaries": [],
+                    "chapters": []
+                }
+
+            # 提取章节关键信息
+            plot_progress = summary.get("plot_progress", "") if isinstance(summary, dict) else ""
+            key_events = summary.get("key_events", []) if isinstance(summary, dict) else []
+
+            volume_summaries[vol_num]["summaries"].append({
+                "chapter": ch_num,
+                "plot_progress": plot_progress,
+                "key_events": key_events
+            })
+            volume_summaries[vol_num]["chapters"].append(ch_num)
+
+        # 生成卷级摘要
+        result = {}
+        for vol_num, data in volume_summaries.items():
+            if not data["summaries"]:
+                continue
+
+            # 聚合关键事件
+            all_events = []
+            for s in data["summaries"]:
+                all_events.extend(s["key_events"])
+
+            # 生成简洁的卷摘要
+            event_text = "；".join(all_events[:5])  # 最多5个关键事件
+            chapter_range = [min(data["chapters"]), max(data["chapters"])]
+
+            result[vol_num] = {
+                "summary": f"本卷包含第{chapter_range[0]}-{chapter_range[1]}章。{event_text}",
+                "chapters": chapter_range
+            }
+
+        return result if result else None
 
     async def _handle_writer_queries(
         self,
@@ -1541,6 +1853,16 @@ class NovelCrewManager:
             # 处理每个查询
             answers = []
             for q in queries[:3]:  # 每轮最多 3 个查询
+                query_type = q["type"]
+
+                # 处理图数据库查询
+                if query_type.startswith("graph:"):
+                    graph_answer = await self._handle_graph_query(
+                        query=q, novel_id=getattr(self, "_novel_id", None)
+                    )
+                    answers.append(f"关于「{q['question'][:30]}」的回答: {graph_answer}")
+                    continue
+
                 kb_map = {
                     "world": json.dumps(world_setting, ensure_ascii=False),
                     "character": json.dumps(characters, ensure_ascii=False),
@@ -1548,9 +1870,9 @@ class NovelCrewManager:
                 }
                 answer = await self.query_service.query(
                     requester="作家",
-                    target_type=q["type"],
+                    target_type=query_type,
                     question=q["question"],
-                    knowledge_base=kb_map.get(q["type"], ""),
+                    knowledge_base=kb_map.get(query_type, ""),
                     chapter_number=chapter_number,
                 )
                 answers.append(f"关于「{q['question'][:30]}」的回答: {answer}")
@@ -1590,6 +1912,90 @@ class NovelCrewManager:
 
         # 最终确保没有残留的查询标记
         return AgentQueryService.remove_query_tags(draft)
+
+    async def _handle_graph_query(
+        self, query: dict, novel_id: Optional[str] = None
+    ) -> str:
+        """处理图数据库查询.
+
+        支持以下查询类型：
+        - graph:network: 查询角色关系网络
+        - graph:path: 查询两个角色间的关系路径
+        - graph:foreshadowing: 查询章节相关伏笔
+        - graph:conflict: 查询角色相关冲突
+
+        Args:
+            query: 查询字典，包含 type 和 question
+            novel_id: 小说ID
+
+        Returns:
+            查询结果文本
+        """
+        if not novel_id:
+            return "（图数据库查询失败：小说ID未设置）"
+
+        from backend.config import settings
+
+        if not getattr(settings, "ENABLE_GRAPH_QUERY_FOR_WRITER", True):
+            return "（图数据库查询功能未启用）"
+
+        try:
+            from agents.graph_query_mixin import GraphQueryMixin
+
+            mixin = GraphQueryMixin()
+            mixin.set_graph_context(novel_id)
+
+            query_subtype = query["type"].replace("graph:", "")
+            question = query["question"]
+
+            # 处理不同类型的图查询
+            if query_subtype == "network":
+                # 查询角色关系网络
+                network = await mixin.query_character_network(question, depth=2)
+                if network:
+                    return mixin.format_network_context(network)
+                return f"（未找到角色 '{question}' 的关系网络）"
+
+            elif query_subtype == "path":
+                # 查询两个角色间路径，格式："角色A->角色B"
+                if "->" in question:
+                    chars = question.split("->")
+                    if len(chars) == 2:
+                        path = await mixin.query_character_path(
+                            chars[0].strip(), chars[1].strip()
+                        )
+                        if path:
+                            return mixin.format_path_context(path)
+                        return f"（未找到 '{chars[0]}' 到 '{chars[1]}' 的关系路径）"
+                return "（路径查询格式错误，请使用：角色A->角色B）"
+
+            elif query_subtype == "foreshadowing":
+                # 查询章节相关伏笔
+                try:
+                    chapter_num = int(question)
+                    foreshadowings = await mixin.query_pending_foreshadowings(
+                        chapter_num
+                    )
+                    return mixin.format_foreshadowings_context(foreshadowings)
+                except ValueError:
+                    return "（伏笔查询需要章节号，请提供数字）"
+
+            elif query_subtype == "conflict":
+                # 查询角色相关冲突
+                conflicts = await mixin.check_conflicts()
+                char_conflicts = [
+                    c for c in conflicts if question in c.characters
+                ]
+                if char_conflicts:
+                    return mixin.format_conflicts_context(char_conflicts)
+                return f"（未找到角色 '{question}' 相关的冲突）"
+
+            else:
+                return f"（未知的图查询类型：{query_subtype}）"
+
+        except Exception as e:
+            logger.warning(f"[GraphQuery] 处理查询失败: {e}")
+            return f"（图数据库查询失败：{str(e)}）"
 
     async def refine_outline_comprehensive(
         self,
@@ -2328,27 +2734,74 @@ class NovelCrewManager:
 
             sections = []
 
-            # 1. 查询本章出场角色的关系网络（限制数量）
+            # 1. 查询本章出场角色的关系网络（支持可配置深度）
             max_chars = getattr(settings, "GRAPH_CONTEXT_MAX_CHARACTERS", 5)
+            query_depth = getattr(settings, "GRAPH_QUERY_DEPTH", 2)
             network_contexts = []
+            indirect_relations = []
+
             for char_name in chapter_characters[:max_chars]:
                 try:
-                    network = await mixin.query_character_network(char_name, depth=1)
+                    # 使用配置的查询深度（默认2层，可识别"朋友的朋友"）
+                    network = await mixin.query_character_network(
+                        char_name, depth=query_depth
+                    )
                     if network:
                         network_contexts.append(mixin.format_network_context(network))
+
+                        # 提取间接关联角色（depth>=2时）
+                        if query_depth >= 2 and getattr(
+                            settings, "GRAPH_ENABLE_INDIRECT_RELATIONS", True
+                        ):
+                            for node in network.nodes:
+                                if node.get("name") != char_name:
+                                    indirect_relations.append({
+                                        "from": char_name,
+                                        "to": node.get("name"),
+                                        "role_type": node.get("role_type", "unknown"),
+                                    })
                 except Exception as e:
                     logger.debug(f"[GraphContext] 角色{char_name}网络查询失败: {e}")
 
             if network_contexts:
                 sections.append("## 角色关系网络\n" + "\n".join(network_contexts))
 
-            # 2. 查询待回收伏笔
+                # 添加间接关系提示（帮助识别潜在关联）
+                if indirect_relations:
+                    unique_relations = []
+                    seen_pairs = set()
+                    for rel in indirect_relations:
+                        pair = tuple(sorted([rel["from"], rel["to"]]))
+                        if pair not in seen_pairs:
+                            seen_pairs.add(pair)
+                            unique_relations.append(rel)
+
+                    if unique_relations:
+                        indirect_text = "## 潜在关联角色（通过关系网络识别）\n"
+                        indirect_text += "以下角色可能在本章产生互动或影响：\n"
+                        for rel in unique_relations[:10]:  # 限制数量
+                            indirect_text += f"- {rel['from']} ↔ {rel['to']}\n"
+                        sections.append(indirect_text)
+
+            # 2. 查询待回收伏笔（增强策略）
             try:
                 foreshadowings = await mixin.query_pending_foreshadowings(
                     chapter_number
                 )
+
+                # 额外查询与出场角色相关的伏笔
+                if getattr(settings, "GRAPH_QUERY_RELATED_FORESHADOWINGS", True):
+                    related_fs = await mixin.query_foreshadowings_by_characters(
+                        chapter_characters, current_chapter=chapter_number
+                    )
+                    # 合并并去重
+                    seen_ids = {f.get("id") for f in foreshadowings}
+                    for f in related_fs:
+                        if f.get("id") not in seen_ids:
+                            foreshadowings.append(f)
+
                 if foreshadowings:
-                    max_f = getattr(settings, "GRAPH_CONTEXT_MAX_FORESHADOWINGS", 3)
+                    max_f = getattr(settings, "GRAPH_CONTEXT_MAX_FORESHADOWINGS", 5)
                     sections.append(
                         mixin.format_foreshadowings_context(foreshadowings[:max_f])
                     )
