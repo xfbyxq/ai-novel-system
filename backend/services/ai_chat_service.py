@@ -9,10 +9,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.graph.neo4j_client import Neo4jClient
 from llm.qwen_client import QwenClient
 
 from .agentmesh_memory_adapter import NovelMemoryAdapter
+from .graph_query_service import GraphQueryService
+from .graph_sync_service import GraphSyncService
 from .memory_service import get_novel_memory_service
+from .novel_tool_executor import NOVEL_QUERY_TOOLS, NovelToolExecutor
 from .revision_understanding_service import RevisionUnderstandingService
 
 logger = logging.getLogger(__name__)
@@ -179,29 +183,38 @@ SYSTEM_PROMPTS = {
 4. **市场洞察**：热门类型分析、读者偏好趋势、竞用中文回复，专业品分析
 
 请且务实。可以主动询问用户想了解哪方面的数据。""",
-    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑助手，专门帮助作者修订和完善小说内容。根据用户的需求和小说的现有内容，**直接生成具体的修订内容**，包括但不限于：.
+    SCENE_NOVEL_REVISION: """你是一位专业的小说编辑助手，专门帮助作者修订和完善小说内容。
 
-1. **世界观修订**：直接生成优化后的修炼体系、地理环境、势力划分、规则设定内容
-2. **角色修订**：直接生成优化后的角色性格、背景、能力、成长路线描述
-3. **大纲修订**：直接生成优化后的主线剧情、支线故事、关键转折点、高潮设计
-4. **简介优化**：直接生成新的小说简介，结合现有的世界观、角色、大纲信息
-5. **章节内容修订**：直接生成优化后的章节内容、对话、描写
+**重要**：你可以使用以下工具获取小说信息（按需调用，不要一次性获取所有数据）：
+- get_novel_info: 获取小说基本信息
+- list_chapters: 获取章节列表（不含内容）
+- get_chapter_content: 获取指定章节内容
+- get_character_info: 获取角色信息
+- get_world_setting: 获取世界观设定
+- get_outline: 获取剧情大纲
 
-**重要原则**：
-- **直接输出结果**：不要只提供分析和建议，而是直接生成可用的内容
-- **简洁明了**：避免冗长的分析，直接给出优化后的成果
-- **结合背景**：充分利用小说现有的世界观、角色、大纲信息，保持一致性
-- **直接可用**：生成的内容应该能直接替换原有内容使用
+**工作原则**：
+1. 根据用户问题，调用必要的工具获取所需信息
+2. 基于获取的信息，直接生成具体的修订内容
+3. 生成的内容应该可以直接使用
 
-请用中文回复，语气专业但亲切。如果用户需求不明确，可以简短询问确认，但不要过度分析。""",
-    SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。你需要根据小说的现有内容，提供全面的分析和建议，包括但不限于：.
+请用中文回复。""",
+    SCENE_NOVEL_ANALYSIS: """你是一位专业的小说分析师，专门帮助作者分析小说的整体情况和潜力。
 
-1. **整体结构分析**：小说结构的合理性、节奏的把控、情节的连贯性
-2. **元素分析**：世界观、角色、大纲、章节内容的质量和协调性
-3. **市场定位分析**：目标受众、竞争优势、潜在风险
-4. **改进建议**：具体的优化方向、实施步骤、预期效果
+**重要**：你可以使用以下工具获取小说信息：
+- get_novel_info: 获取小说基本信息
+- list_chapters: 获取章节列表
+- get_chapter_content: 获取指定章节内容
+- get_character_info: 获取角色信息
+- get_world_setting: 获取世界观设定
+- get_outline: 获取剧情大纲
 
-请用中文回复，语气专业但亲切。提供客观、全面的分析，并给出有针对性的建议。可以主动询问用户更多细节以便给出更准确的分析。""",
+**工作原则**：
+1. 根据分析需要，调用工具获取相关信息
+2. 提供客观、全面的分析
+3. 给出有针对性的改进建议
+
+请用中文回复。""",
 }
 
 WELCOME_MESSAGES = {
@@ -309,12 +322,155 @@ class AiChatService:
         self.persistent_memory = NovelMemoryAdapter()
         # 初始化修订理解服务
         self.revision_service = RevisionUnderstandingService(db=db, llm=self.client)
+        # 初始化图库服务（延迟初始化，避免 Neo4j 未配置时报错）
+        try:
+            from backend.config import settings
+
+            self.neo4j_client = Neo4jClient(
+                uri=settings.NEO4J_URI, user=settings.NEO4J_USER, password=settings.NEO4J_PASSWORD
+            )
+            self.graph_query = GraphQueryService(self.neo4j_client)
+            self.graph_sync = GraphSyncService(self.neo4j_client, db)
+            self.gallery_enabled = True
+        except Exception as e:
+            logger.warning(f"Neo4j 未配置，图库功能不可用：{e}")
+            self.neo4j_client = None
+            self.graph_query = None
+            self.graph_sync = None
+            self.gallery_enabled = False
 
     def _get_system_prompt(self, scene: str) -> str:
         return SYSTEM_PROMPTS.get(scene, "你是一位AI助手，请帮助用户解决问题。")
 
     def _get_welcome_message(self, scene: str) -> str:
         return WELCOME_MESSAGES.get(scene, "你好！有什么我可以帮助你的？")
+
+    # ===== 图库查询方法 =====
+
+    async def query_character_network(self, novel_id: UUID) -> Dict:
+        """查询角色关系网络.
+
+        Args:
+            novel_id: 小说 ID
+
+        Returns:
+            角色关系网络数据
+        """
+        if not self.gallery_enabled:
+            return {"error": "图库功能未启用，请先配置 Neo4j"}
+
+        try:
+            return await self.graph_query.get_character_network(novel_id)
+        except Exception as e:
+            logger.error(f"查询角色关系网络失败：{e}")
+            return {"error": f"查询失败：{str(e)}"}
+
+    async def query_world_setting_map(self, novel_id: UUID) -> Dict:
+        """查询世界观设定地图.
+
+        Args:
+            novel_id: 小说 ID
+
+        Returns:
+            世界观设定地图数据
+        """
+        if not self.gallery_enabled:
+            return {"error": "图库功能未启用，请先配置 Neo4j"}
+
+        try:
+            return await self.graph_query.get_world_setting_map(novel_id)
+        except Exception as e:
+            logger.error(f"查询世界观设定地图失败：{e}")
+            return {"error": f"查询失败：{str(e)}"}
+
+    async def query_plot_timeline(self, novel_id: UUID) -> Dict:
+        """查询情节时间线.
+
+        Args:
+            novel_id: 小说 ID
+
+        Returns:
+            情节时间线数据
+        """
+        if not self.gallery_enabled:
+            return {"error": "图库功能未启用，请先配置 Neo4j"}
+
+        try:
+            return await self.graph_query.get_plot_timeline(novel_id)
+        except Exception as e:
+            logger.error(f"查询情节时间线失败：{e}")
+            return {"error": f"查询失败：{str(e)}"}
+
+    async def query_gallery(self, novel_id: UUID, query_type: str) -> Dict:
+        """查询图库数据.
+
+        Args:
+            novel_id: 小说 ID
+            query_type: 查询类型 (character_network, world_map, plot_timeline)
+
+        Returns:
+            图库数据
+        """
+        if not self.gallery_enabled:
+            return {"error": "图库功能未启用，请先配置 Neo4j"}
+
+        if query_type == "character_network":
+            return await self.query_character_network(novel_id)
+        elif query_type == "world_map":
+            return await self.query_world_setting_map(novel_id)
+        elif query_type == "plot_timeline":
+            return await self.query_plot_timeline(novel_id)
+        else:
+            return {"error": f"未知的查询类型：{query_type}"}
+
+    # ===== 图库同步方法 =====
+
+    async def sync_chapter_to_gallery(
+        self,
+        novel_id: UUID,
+        chapter_number: int,
+        chapter_content: str,
+    ) -> Dict:
+        """同步章节到图库.
+
+        Args:
+            novel_id: 小说 ID
+            chapter_number: 章节号
+            chapter_content: 章节内容
+
+        Returns:
+            同步结果
+        """
+        if not self.gallery_enabled:
+            return {"success": False, "error": "图库功能未启用，请先配置 Neo4j"}
+
+        try:
+            await self.graph_sync.sync_chapter_incremental(
+                novel_id=novel_id, chapter_number=chapter_number, chapter_content=chapter_content
+            )
+            return {"success": True, "message": "同步成功"}
+        except Exception as e:
+            logger.error(f"同步章节到图库失败：{e}")
+            return {"success": False, "error": f"同步失败：{str(e)}"}
+
+    async def sync_novel_full_to_gallery(self, novel_id: UUID) -> Dict:
+        """全量同步小说到图库.
+
+        Args:
+            novel_id: 小说 ID
+
+        Returns:
+            同步结果
+        """
+        if not self.gallery_enabled:
+            return {"success": False, "error": "图库功能未启用，请先配置 Neo4j"}
+
+        try:
+            await self.graph_sync.sync_novel_full(novel_id)
+            return {"success": True, "message": "全量同步成功"}
+        except Exception as e:
+            logger.error(f"全量同步小说到图库失败：{e}")
+            return {"success": False, "error": f"同步失败：{str(e)}"}
 
     async def get_novel_info(
         self,
@@ -453,18 +609,30 @@ class AiChatService:
                     "content": novel.plot_outline.raw_content or "",
                 }
 
-            # 添加章节信息（根据指定范围加载）
-            # 支持3种模式：truncated(截断)、full(完整)、smart(智能摘要)
+            # 添加章节信息（按需加载）
+            # end=0 表示只加载元信息，不加载内容
+            # end>0 时加载指定范围内的章节内容
+            load_content = chapter_end >= chapter_start
             for chapter in novel.chapters:
-                if chapter_start <= chapter.chapter_number <= chapter_end:
+                if load_content and (chapter_start <= chapter.chapter_number <= chapter_end):
+                    # 加载完整章节内容
                     chapter_data = {
                         "id": str(chapter.id),
                         "chapter_number": chapter.chapter_number,
                         "title": chapter.title,
                         "word_count": len(chapter.content) if chapter.content else 0,
+                        "content": chapter.content or "",
                     }
-                    # 添加完整内容供后续智能分析使用
-                    chapter_data["content"] = chapter.content or ""
+                    novel_info["chapters"].append(chapter_data)
+                elif not load_content:
+                    # 只加载元信息，不加载内容
+                    chapter_data = {
+                        "id": str(chapter.id),
+                        "chapter_number": chapter.chapter_number,
+                        "title": chapter.title,
+                        "word_count": len(chapter.content) if chapter.content else 0,
+                        # 不包含 content 字段
+                    }
                     novel_info["chapters"].append(chapter_data)
 
             # 存储到记忆服务并检测变化
@@ -551,12 +719,14 @@ class AiChatService:
 
             if existing_summary and not force_regenerate:
                 # 使用已有摘要
-                results["summaries"].append({
-                    "chapter_number": chapter_num,
-                    "title": chapter.title,
-                    "summary": existing_summary,
-                    "source": "cached",
-                })
+                results["summaries"].append(
+                    {
+                        "chapter_number": chapter_num,
+                        "title": chapter.title,
+                        "summary": existing_summary,
+                        "source": "cached",
+                    }
+                )
                 results["cached_count"] += 1
                 logger.info(f"使用缓存的章节摘要: 第{chapter_num}章")
             else:
@@ -567,12 +737,14 @@ class AiChatService:
                     chapter_num,
                     novel.genre,
                 )
-                results["summaries"].append({
-                    "chapter_number": chapter_num,
-                    "title": chapter.title,
-                    "summary": summary,
-                    "source": "generated",
-                })
+                results["summaries"].append(
+                    {
+                        "chapter_number": chapter_num,
+                        "title": chapter.title,
+                        "summary": summary,
+                        "source": "generated",
+                    }
+                )
                 results["generated_count"] += 1
 
                 # 保存摘要到持久化记忆
@@ -716,14 +888,10 @@ class AiChatService:
         chapter_numbers = list(range(chapter_start, chapter_end + 1))
 
         if use_smart_summary:
-            return await self.generate_smart_chapter_summary(
-                novel_id, chapter_numbers
-            )
+            return await self.generate_smart_chapter_summary(novel_id, chapter_numbers)
         else:
             # 使用原有的截断方式（已优化为2000字）
-            novel_info = await self.get_novel_info(
-                novel_id, chapter_start, chapter_end
-            )
+            novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end)
             return {
                 "novel_id": novel_id,
                 "novel_title": novel_info.get("title"),
@@ -939,15 +1107,14 @@ class AiChatService:
 
         session = ChatSession(session_id, scene, context, novel_id=novel_id)
 
-        # 如果是小说相关场景，加载小说信息
+        # 如果是小说相关场景，加载小说信息（按需加载章节内容）
         if context and "novel_id" in context:
-            chapter_start = context.get("chapter_start", 1)
-            chapter_end = context.get("chapter_end", 10)
-            novel_info = await self.get_novel_info(novel_id, chapter_start, chapter_end)
+            # 初始只加载基本信息，不加载章节内容（按需加载）
+            novel_info = await self.get_novel_info(novel_id, 1, 0)  # end=0 表示不加载章节内容
             session.context["novel_info"] = novel_info
             session.context["chapter_range"] = {
-                "start": chapter_start,
-                "end": chapter_end,
+                "start": 1,
+                "end": 0,  # 表示尚未加载章节
             }
             # 记录当前版本号
             session.context["novel_version"] = self.memory_service.get_novel_version(novel_id)
@@ -956,7 +1123,7 @@ class AiChatService:
             has_changes = novel_info.get("has_changes", False)
 
             logger.info(
-                f"为场景 {scene} 加载小说信息: {novel_id}, 章节范围: {chapter_start}-{chapter_end}, 有变化: {has_changes}"
+                f"为场景 {scene} 加载小说信息: {novel_id}, 章节范围: 1-0(按需加载), 有变化: {has_changes}"
             )
 
             # 初始化持久化记忆（如果还没有）
@@ -1268,11 +1435,11 @@ class AiChatService:
             (r"删除(.+?)", "delete"),
             (r"移除(.+?)", "delete"),
         ]
-        
+
         for pattern, action in action_patterns:
             if re.search(pattern, user_message):
                 return "specific_revision"  # 特殊修订，需要精确执行
-        
+
         # 扩展关键词列表
         world_keywords = [
             "世界观",
@@ -1390,6 +1557,52 @@ class AiChatService:
             return "character"
 
         return "general"  # 通用修订
+
+    def _extract_chapter_range(
+        self, user_message: str, total_chapters: int
+    ) -> Optional[tuple[int, int]]:
+        """从用户消息中提取章节范围.
+
+        Args:
+            user_message: 用户消息
+            total_chapters: 小说总章节数
+
+        Returns:
+            (start, end) 章节范围，如果未识别到则返回 None
+        """
+        import re
+
+        # 1. 识别具体章节号："第3章"、"第5-8章"
+        single_chapter = re.search(r"第(\d+)章", user_message)
+        range_chapter = re.search(r"第(\d+)[-~至到](\d+)章", user_message)
+
+        if range_chapter:
+            start = int(range_chapter.group(1))
+            end = int(range_chapter.group(2))
+            return (max(1, start), min(end, total_chapters))
+        elif single_chapter:
+            ch_num = int(single_chapter.group(1))
+            # 加载该章节及其前后各1章（上下文）
+            start = max(1, ch_num - 1)
+            end = min(ch_num + 1, total_chapters)
+            return (start, end)
+
+        # 2. 识别关键词范围
+        if any(kw in user_message for kw in ["前几章", "开头", "开篇", "前面章节"]):
+            return (1, min(5, total_chapters))
+        elif any(kw in user_message for kw in ["后面章节", "后面", "结尾", "结局"]):
+            return (max(1, total_chapters - 4), total_chapters)
+        elif any(kw in user_message for kw in ["所有章节", "全部章节", "所有内容", "全部内容"]):
+            return (1, total_chapters)
+        elif any(kw in user_message for kw in ["最近章节", "最新章节", "最近几章"]):
+            return (max(1, total_chapters - 4), total_chapters)
+
+        # 3. 识别章节内容相关请求 - 加载前5章作为默认
+        chapter_keywords = ["章节", "内容", "情节", "描写", "对话", "节奏", "段落", "叙述"]
+        if any(kw in user_message for kw in chapter_keywords):
+            return (1, min(5, total_chapters))
+
+        return None  # 未识别到章节范围
 
     def _generate_follow_up_questions(
         self, intent: str, scene: str, novel_info: Optional[dict] = None
@@ -1885,50 +2098,60 @@ class AiChatService:
 
                 # 尝试获取智能摘要（如果已有）
                 novel_id = novel_info.get("id")
-                chapters_to_analyze = novel_info.get("chapters", [])[:5]
+                # 不限制章节数量，分析所有已加载的章节
+                chapters_to_analyze = novel_info.get("chapters", [])
 
-                for chapter in chapters_to_analyze:
-                    chapter_num = chapter.get("chapter_number", "?")
-                    chapter_title = chapter.get("title", "未知")
-                    chapter_content = chapter.get("content", "") or ""
-                    word_count = chapter.get("word_count", len(chapter_content))
+                # 检查是否有章节内容已加载
+                chapters_with_content = [ch for ch in chapters_to_analyze if ch.get("content")]
+                if not chapters_with_content:
+                    prompt += (
+                        '（章节内容尚未加载，请指定您想分析的章节范围，如"第1-5章"或"第3章"）\n'
+                    )
+                else:
+                    for chapter in chapters_with_content:
+                        chapter_num = chapter.get("chapter_number", "?")
+                        chapter_title = chapter.get("title", "未知")
+                        chapter_content = chapter.get("content", "") or ""
+                        word_count = chapter.get("word_count", len(chapter_content))
 
-                    prompt += f"\n### 第{chapter_num}章: {chapter_title}（{word_count}字）\n"
+                        prompt += f"\n### 第{chapter_num}章: {chapter_title}（{word_count}字）\n"
 
-                    # 尝试获取已有的智能摘要作为补充
-                    smart_summary = None
-                    if novel_id:
-                        try:
-                            smart_summary = self.persistent_memory.storage.get_chapter_summary(
-                                novel_id, chapter_num
-                            )
-                        except Exception:
-                            pass
+                        # 尝试获取已有的智能摘要作为补充
+                        smart_summary = None
+                        if novel_id:
+                            try:
+                                smart_summary = self.persistent_memory.storage.get_chapter_summary(
+                                    novel_id, chapter_num
+                                )
+                            except Exception:
+                                pass
 
-                    # 始终优先提供完整章节内容（不再截断）
-                    if chapter_content:
-                        prompt += "#### 章节完整内容\n"
-                        prompt += chapter_content + "\n"
-                    else:
-                        prompt += "（章节内容为空）\n"
+                        # 始终优先提供完整章节内容（不再截断）
+                        if chapter_content:
+                            prompt += "#### 章节完整内容\n"
+                            prompt += chapter_content + "\n"
+                        else:
+                            prompt += "（章节内容为空）\n"
 
-                    # 智能摘要作为补充信息
-                    if smart_summary:
-                        prompt += "\n#### 章节智能摘要（补充信息）\n"
-                        if smart_summary.get("plot_summary"):
-                            prompt += f"**情节概要**: {smart_summary['plot_summary']}\n"
-                        if smart_summary.get("key_events"):
-                            prompt += f"**关键事件**: {'、'.join(smart_summary['key_events'][:5])}\n"
-                        if smart_summary.get("character_interactions"):
-                            prompt += f"**人物互动**: {'、'.join(smart_summary['character_interactions'][:3])}\n"
-                        if smart_summary.get("emotional_arc"):
-                            prompt += f"**情感走向**: {smart_summary['emotional_arc']}\n"
-                        if smart_summary.get("foreshadowing"):
-                            prompt += f"**伏笔暗示**: {'、'.join(smart_summary['foreshadowing'][:3])}\n"
-                        if smart_summary.get("ending_state"):
-                            prompt += f"**结尾状态**: {smart_summary['ending_state']}\n"
+                        # 智能摘要作为补充信息
+                        if smart_summary:
+                            prompt += "\n#### 章节智能摘要（补充信息）\n"
+                            if smart_summary.get("plot_summary"):
+                                prompt += f"**情节概要**: {smart_summary['plot_summary']}\n"
+                            if smart_summary.get("key_events"):
+                                prompt += (
+                                    f"**关键事件**: {'、'.join(smart_summary['key_events'][:5])}\n"
+                                )
+                            if smart_summary.get("character_interactions"):
+                                prompt += f"**人物互动**: {'、'.join(smart_summary['character_interactions'][:3])}\n"
+                            if smart_summary.get("emotional_arc"):
+                                prompt += f"**情感走向**: {smart_summary['emotional_arc']}\n"
+                            if smart_summary.get("foreshadowing"):
+                                prompt += f"**伏笔暗示**: {'、'.join(smart_summary['foreshadowing'][:3])}\n"
+                            if smart_summary.get("ending_state"):
+                                prompt += f"**结尾状态**: {smart_summary['ending_state']}\n"
 
-                    prompt += "\n"
+                        prompt += "\n"
 
         else:  # general
             prompt += "\n# 详细分析要求\n"
@@ -1959,6 +2182,228 @@ class AiChatService:
         return prompt
 
     async def send_message(self, session_id: str, user_message: str) -> str:
+        """发送消息并获取AI回复（工具调用模式）."""
+        import asyncio
+
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"会话 {session_id} 不存在")
+
+        session.add_user_message(user_message)
+        system_prompt = self._get_system_prompt(session.scene)
+
+        # 小说相关场景使用工具调用模式
+        if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
+            novel_id = session.context.get("novel_id")
+            if not novel_id:
+                novel_info = session.context.get("novel_info", {})
+                novel_id = novel_info.get("id") if novel_info else None
+
+            if novel_id:
+                # 使用工具调用模式处理小说相关请求
+                return await self._send_message_with_tools(
+                    session, user_message, system_prompt, novel_id
+                )
+
+        # 非小说场景：直接调用LLM
+        response = await self.client.chat(
+            prompt=user_message,
+            system=system_prompt,
+            temperature=0.8,
+        )
+
+        assistant_message = response.get("content", "抱歉，我暂时无法回答这个问题。")
+        session.add_assistant_message(assistant_message)
+
+        asyncio.create_task(self.save_session(session))
+        if not session.title:
+            asyncio.create_task(self._update_session_title(session))
+
+        logger.info(f"会话 {session_id} 收到用户消息: {user_message[:50]}...")
+        return assistant_message
+
+    async def _send_message_with_tools(
+        self,
+        session: "ChatSession",
+        user_message: str,
+        system_prompt: str,
+        novel_id: str,
+    ) -> str:
+        """使用工具调用模式处理小说相关消息.
+
+        包含完整的对话历史，当上下文超过阈值时执行压缩。
+        """
+        import asyncio
+
+        from backend.config import settings
+        from llm.token_calculator import TokenCalculator
+
+        executor = NovelToolExecutor(db=self.db, novel_id=novel_id)
+        token_calc = TokenCalculator()
+
+        # 构建消息列表：system + 历史对话 + 当前用户消息
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # 添加历史对话
+        history = session.get_conversation_history(limit=20)  # 获取最近20条
+        if history:
+            messages.extend(history)
+
+        # 添加当前用户消息
+        messages.append({"role": "user", "content": user_message})
+
+        # 检查上下文长度，超过阈值时压缩
+        total_content = " ".join([m.get("content", "") for m in messages if m.get("content")])
+        total_tokens = token_calc.count_tokens(total_content)
+
+        if total_tokens > settings.CONTEXT_COMPRESSOR_MAX_TOKENS:
+            logger.info(
+                f"对话上下文达到 {total_tokens} tokens，超过阈值 {settings.CONTEXT_COMPRESSOR_MAX_TOKENS}，执行压缩"
+            )
+            messages = self._compress_conversation_history(
+                messages, system_prompt, token_calc, settings.CONTEXT_COMPRESSOR_MAX_TOKENS
+            )
+            # 重新计算token
+            total_content = " ".join([m.get("content", "") for m in messages if m.get("content")])
+            total_tokens = token_calc.count_tokens(total_content)
+            logger.info(f"压缩后上下文: {total_tokens} tokens")
+
+        # 工具调用循环
+        max_iterations = 5
+        for iteration in range(max_iterations):
+            response = await self.client.chat_with_tools(
+                messages=messages,
+                tools=NOVEL_QUERY_TOOLS,
+                temperature=0.7,
+            )
+
+            if response["type"] == "text":
+                # LLM返回文本回复，结束循环
+                assistant_message = response["content"]
+                break
+
+            if response["type"] == "tool_call":
+                # 处理工具调用
+                tool_results = []
+                for tool_call in response["tool_calls"]:
+                    tool_name = tool_call["function"]["name"]
+                    try:
+                        arguments = json.loads(tool_call["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        arguments = {}
+
+                    result = await executor.execute(tool_name, arguments)
+                    tool_results.append({
+                        "tool_call_id": tool_call["id"],
+                        "name": tool_name,
+                        "content": json.dumps(result, ensure_ascii=False),
+                    })
+
+                # 添加工具结果到消息
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": response["tool_calls"],
+                })
+                for tr in tool_results:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr["tool_call_id"],
+                        "content": tr["content"],
+                    })
+
+                continue
+
+            # 未知响应类型
+            assistant_message = "抱歉，处理您的请求时出现问题。"
+            break
+        else:
+            assistant_message = "抱歉，处理您的请求时超出了最大迭代次数。"
+
+        session.add_assistant_message(assistant_message)
+        asyncio.create_task(self.save_session(session))
+        if not session.title:
+            asyncio.create_task(self._update_session_title(session))
+
+        return assistant_message
+
+    def _compress_conversation_history(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        token_calc: "TokenCalculator",
+        max_tokens: int,
+    ) -> list[dict]:
+        """压缩对话历史，保留关键信息.
+
+        策略：
+        1. 始终保留 system 消息
+        2. 保留最近 4 轮对话（8条消息：4个user + 4个assistant）
+        3. 对更早的对话生成摘要压缩
+
+        Args:
+            messages: 原始消息列表
+            system_prompt: 系统提示词
+            token_calc: Token计算器
+            max_tokens: 最大token阈值
+
+        Returns:
+            压缩后的消息列表
+        """
+        # 分离 system 消息
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        other_messages = [m for m in messages if m.get("role") != "system"]
+
+        # 保留最近 4 轮对话（8条消息）
+        keep_recent_count = min(8, len(other_messages))
+        recent_messages = other_messages[-keep_recent_count:] if keep_recent_count > 0 else []
+        old_messages = other_messages[:-keep_recent_count] if keep_recent_count < len(other_messages) else []
+
+        if not old_messages:
+            # 没有旧消息需要压缩，直接返回
+            return messages
+
+        # 对旧消息生成摘要
+        old_content_parts = []
+        for msg in old_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if content:
+                old_content_parts.append(f"[{role}]: {content}")
+
+        old_content = "\n".join(old_content_parts)
+
+        # 生成压缩摘要（简单截取关键信息）
+        # 如果旧内容太长，截取关键部分
+        if token_calc.count_tokens(old_content) > 1000:
+            # 截取每条消息的前200字符
+            compressed_parts = []
+            for part in old_content_parts:
+                if len(part) > 200:
+                    compressed_parts.append(part[:200] + "...")
+                else:
+                    compressed_parts.append(part)
+            old_content = "\n".join(compressed_parts)
+
+        # 创建摘要消息
+        summary_message = {
+            "role": "system",
+            "content": f"【历史对话摘要】\n{old_content}",
+        }
+
+        # 构建压缩后的消息列表
+        compressed_messages = system_messages + [summary_message] + recent_messages
+
+        logger.info(
+            f"对话历史压缩完成: 原始 {len(messages)} 条消息 -> 压缩后 {len(compressed_messages)} 条消息"
+        )
+
+        return compressed_messages
+
+    # === 以下为保留的旧方法，供 send_message_stream 等其他方法使用 ===
+
+    async def _send_message_legacy(self, session_id: str, user_message: str) -> str:
+        """旧版消息处理方法（保留用于兼容）."""
         session = self.get_session(session_id)
         if not session:
             raise ValueError(f"会话 {session_id} 不存在")
@@ -2051,6 +2496,30 @@ class AiChatService:
                     logger.info(f"小说 {stored_novel_id} 信息已重新加载")
 
             if novel_info and "error" not in novel_info:
+                # 按需加载章节内容：根据用户消息识别需要加载的章节范围
+                total_chapters = novel_info.get("chapter_count", 0) or len(
+                    novel_info.get("chapters", [])
+                )
+                chapter_range_needed = self._extract_chapter_range(user_message, total_chapters)
+
+                # 检查当前已加载的章节范围
+                current_range = session.context.get("chapter_range", {})
+                current_start = current_range.get("start", 1)
+                current_end = current_range.get("end", 0)
+
+                # 如果需要加载新范围且与当前范围不同
+                if chapter_range_needed:
+                    need_start, need_end = chapter_range_needed
+                    # 检查是否需要重新加载（范围不同）
+                    if need_start != current_start or need_end != current_end:
+                        logger.info(f"按需加载章节内容: {novel_id}, 范围 {need_start}-{need_end}")
+                        # 重新加载指定范围的章节内容
+                        novel_info = await self.get_novel_info(
+                            novel_id, need_start, need_end, force_db=True
+                        )
+                        session.context["novel_info"] = novel_info
+                        session.context["chapter_range"] = {"start": need_start, "end": need_end}
+
                 # 检查用户是否询问世界观相关问题
                 is_worldview_question = any(
                     keyword in user_message
@@ -2070,12 +2539,29 @@ class AiChatService:
 
                     # 检查是否需要生成修订计划
                     pending_plan_id = session.context.get("pending_revision_plan_id")
-                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
-                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+                    is_confirming_revision = user_message.lower() in [
+                        "是",
+                        "好",
+                        "可以",
+                        "确认",
+                        "执行",
+                        "yes",
+                        "ok",
+                        "confirm",
+                    ]
+                    is_rejecting_revision = user_message.lower() in [
+                        "否",
+                        "不",
+                        "算了",
+                        "取消",
+                        "no",
+                        "cancel",
+                    ]
 
                     if pending_plan_id and is_confirming_revision:
                         # 用户确认执行修订
                         from .revision_execution_service import RevisionExecutionService
+
                         execution_service = RevisionExecutionService(db=self.db)
                         prompt = f"用户已确认执行修订计划 {pending_plan_id}"
                         session.context["pending_revision_plan_id"] = None
@@ -2087,32 +2573,48 @@ class AiChatService:
                         # 用户有明确的修订指令，调用parse_natural_revision解析并执行
                         try:
                             parse_result = await self.parse_natural_revision(
-                                novel_id=novel_info.get("id"),
-                                instruction=user_message
+                                novel_id=novel_info.get("id"), instruction=user_message
                             )
                             if parse_result.get("preview"):
                                 preview = parse_result["preview"]
                                 # 直接执行修订
                                 execute_result = await self.execute_revision(
-                                    novel_id=novel_info.get("id"),
-                                    preview_id=preview["preview_id"]
+                                    novel_id=novel_info.get("id"), preview_id=preview["preview_id"]
                                 )
                                 if execute_result.get("success"):
                                     return f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
                                 else:
-                                    return f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                                    return (
+                                        f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                                    )
                             else:
                                 # 解析失败，返回消息
-                                return parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                                return parse_result.get(
+                                    "message", "抱歉，我无法理解您的修订指令，请换一种表达方式。"
+                                )
                         except Exception as e:
                             logger.error(f"执行自然语言修订失败: {e}")
                             return f"抱歉，处理您的修订请求时出现错误：{str(e)}"
                     else:
                         # 检测是否是需要生成修订计划的反馈
-                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        revision_keywords = [
+                            "有问题",
+                            "不对",
+                            "不满意",
+                            "修改",
+                            "调整",
+                            "改一下",
+                            "性格",
+                            "不一致",
+                            "矛盾",
+                        ]
                         needs_plan = any(keyword in user_message for keyword in revision_keywords)
 
-                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                        if needs_plan and revision_type in [
+                            "character_revision",
+                            "chapter_revision",
+                            "plot_revision",
+                        ]:
                             # 使用修订理解服务生成计划
                             try:
                                 plan = await self.revision_service.understand_feedback(
@@ -2123,13 +2625,18 @@ class AiChatService:
                                 plan_display = self.revision_service.format_plan_for_display(plan)
                                 session.add_assistant_message(plan_display)
                                 import asyncio
+
                                 asyncio.create_task(self.save_session(session))
                                 return plan_display
                             except Exception as e:
                                 logger.warning(f"生成修订计划失败: {e}")
-                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                                prompt = self._generate_revision_prompt(
+                                    user_message, revision_type, novel_info
+                                )
                         else:
-                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                            prompt = self._generate_revision_prompt(
+                                user_message, revision_type, novel_info
+                            )
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -2305,12 +2812,29 @@ class AiChatService:
 
                     # 检查是否需要生成修订计划
                     pending_plan_id = session.context.get("pending_revision_plan_id")
-                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
-                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+                    is_confirming_revision = user_message.lower() in [
+                        "是",
+                        "好",
+                        "可以",
+                        "确认",
+                        "执行",
+                        "yes",
+                        "ok",
+                        "confirm",
+                    ]
+                    is_rejecting_revision = user_message.lower() in [
+                        "否",
+                        "不",
+                        "算了",
+                        "取消",
+                        "no",
+                        "cancel",
+                    ]
 
                     if pending_plan_id and is_confirming_revision:
                         # 用户确认执行修订
                         from .revision_execution_service import RevisionExecutionService
+
                         execution_service = RevisionExecutionService(db=self.db)
                         prompt = f"用户已确认执行修订计划 {pending_plan_id}"
                         session.context["pending_revision_plan_id"] = None
@@ -2322,15 +2846,13 @@ class AiChatService:
                         # 用户有明确的修订指令，调用parse_natural_revision解析并执行
                         try:
                             parse_result = await self.parse_natural_revision(
-                                novel_id=novel_info.get("id"),
-                                instruction=user_message
+                                novel_id=novel_info.get("id"), instruction=user_message
                             )
                             if parse_result.get("preview"):
                                 preview = parse_result["preview"]
                                 # 直接执行修订
                                 execute_result = await self.execute_revision(
-                                    novel_id=novel_info.get("id"),
-                                    preview_id=preview["preview_id"]
+                                    novel_id=novel_info.get("id"), preview_id=preview["preview_id"]
                                 )
                                 if execute_result.get("success"):
                                     yield f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
@@ -2340,7 +2862,9 @@ class AiChatService:
                                     return
                             else:
                                 # 解析失败，返回消息
-                                yield parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                                yield parse_result.get(
+                                    "message", "抱歉，我无法理解您的修订指令，请换一种表达方式。"
+                                )
                                 return
                         except Exception as e:
                             logger.error(f"执行自然语言修订失败: {e}")
@@ -2348,10 +2872,24 @@ class AiChatService:
                             return
                     else:
                         # 检测是否是需要生成修订计划的反馈
-                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        revision_keywords = [
+                            "有问题",
+                            "不对",
+                            "不满意",
+                            "修改",
+                            "调整",
+                            "改一下",
+                            "性格",
+                            "不一致",
+                            "矛盾",
+                        ]
                         needs_plan = any(keyword in user_message for keyword in revision_keywords)
 
-                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                        if needs_plan and revision_type in [
+                            "character_revision",
+                            "chapter_revision",
+                            "plot_revision",
+                        ]:
                             # 使用修订理解服务生成计划
                             try:
                                 plan = await self.revision_service.understand_feedback(
@@ -2362,14 +2900,19 @@ class AiChatService:
                                 plan_display = self.revision_service.format_plan_for_display(plan)
                                 session.add_assistant_message(plan_display)
                                 import asyncio
+
                                 asyncio.create_task(self.save_session(session))
                                 yield plan_display
                                 return
                             except Exception as e:
                                 logger.warning(f"生成修订计划失败: {e}")
-                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                                prompt = self._generate_revision_prompt(
+                                    user_message, revision_type, novel_info
+                                )
                         else:
-                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                            prompt = self._generate_revision_prompt(
+                                user_message, revision_type, novel_info
+                            )
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -3238,9 +3781,7 @@ AI修订建议内容：
     # 存储待执行的修订预览
     _revision_previews: dict[str, dict] = {}
 
-    async def parse_natural_revision(
-        self, novel_id: str, instruction: str
-    ) -> dict:
+    async def parse_natural_revision(self, novel_id: str, instruction: str) -> dict:
         """解析自然语言修订指令.
 
         Args:
@@ -3258,11 +3799,7 @@ AI修订建议内容：
         from core.models.novel import Novel
 
         # 获取小说信息
-        query = (
-            select(Novel)
-            .where(Novel.id == novel_id)
-            .options(selectinload(Novel.characters))
-        )
+        query = select(Novel).where(Novel.id == novel_id).options(selectinload(Novel.characters))
         result = await self.db.execute(query)
         novel = result.scalar_one_or_none()
 
@@ -3335,25 +3872,27 @@ AI修订建议内容：
             # 提取 JSON - 改进解析逻辑
             import json
             import re
-                        
+
             # 尝试多种方式解析 JSON
             parsed = None
-                        
+
             # 方式1: 直接解析完整内容
             try:
                 parsed = json.loads(content.strip())
             except json.JSONDecodeError:
                 pass
-                        
+
             # 方式2: 提取代码块中的 JSON
             if not parsed:
-                code_block_match = re.search(r"```(?:json)?\s*([^{}]+\{[^{}]+\}[^{}]*)\$", content, re.DOTALL)
+                code_block_match = re.search(
+                    r"```(?:json)?\s*([^{}]+\{[^{}]+\}[^{}]*)\$", content, re.DOTALL
+                )
                 if code_block_match:
                     try:
                         parsed = json.loads(code_block_match.group(1).strip())
                     except json.JSONDecodeError:
                         pass
-                        
+
             # 方式3: 提取普通 JSON 对象
             if not parsed:
                 json_match = re.search(r"\{[^{}]+\}", content, re.DOTALL)
@@ -3362,7 +3901,7 @@ AI修订建议内容：
                         parsed = json.loads(json_match.group())
                     except json.JSONDecodeError:
                         pass
-                        
+
             # 方式4: 尝试提取最外层的 JSON
             if not parsed:
                 try:
@@ -3370,11 +3909,11 @@ AI修订建议内容：
                     start = content.find("{")
                     end = content.rfind("}")
                     if start != -1 and end != -1 and end > start:
-                        json_str = content[start:end+1]
+                        json_str = content[start : end + 1]
                         parsed = json.loads(json_str)
                 except json.JSONDecodeError:
                     pass
-                        
+
             if not parsed:
                 logger.warning(f"无法解析LLM响应为JSON: {content[:200]}...")
                 parsed = {"action": "unknown", "description": content or "无法解析指令"}
@@ -3524,15 +4063,27 @@ AI修订建议内容：
                 if field == "age":
                     # 年龄转为整数
                     new_val_int = int(new_value) if new_value else None
-                    stmt = update(Character).where(Character.id == target_id).values(age=new_val_int)
+                    stmt = (
+                        update(Character).where(Character.id == target_id).values(age=new_val_int)
+                    )
                 elif field == "name":
                     stmt = update(Character).where(Character.id == target_id).values(name=new_value)
                 elif field == "gender":
-                    stmt = update(Character).where(Character.id == target_id).values(gender=new_value)
+                    stmt = (
+                        update(Character).where(Character.id == target_id).values(gender=new_value)
+                    )
                 elif field == "occupation":
-                    stmt = update(Character).where(Character.id == target_id).values(occupation=new_value)
+                    stmt = (
+                        update(Character)
+                        .where(Character.id == target_id)
+                        .values(occupation=new_value)
+                    )
                 elif field == "personality":
-                    stmt = update(Character).where(Character.id == target_id).values(personality=new_value)
+                    stmt = (
+                        update(Character)
+                        .where(Character.id == target_id)
+                        .values(personality=new_value)
+                    )
                 else:
                     return {
                         "success": False,

@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip, Alert,
+  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip,
 } from 'antd';
-import { EditOutlined, ThunderboltOutlined, SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
+import { EditOutlined, SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import { 
   createChatSession, 
   getWebSocketUrl, 
   sendChatMessage, 
   listSessions, 
+  getSession,
   deleteSession as deleteSessionApi,
   extractSuggestions,
   applySuggestion,
   applySuggestions,
   getNovelCharactersForRevision,
   getNovelChaptersForRevision,
-  generateSmartSummary,
   type RevisionSuggestion,
   type CharacterListItem,
   type ChapterListItem,
@@ -53,7 +53,7 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  const [chapterRange, setChapterRange] = useState({ start: 1, end: 10 });
+
 
   const [streaming, setStreaming] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -76,17 +76,11 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const [pendingSuggestion, setPendingSuggestion] = useState<RevisionSuggestion | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   
-  // 智能摘要相关状态
-  const [generatingSummary, setGeneratingSummary] = useState(false);
-  const [showSummaryHint, setShowSummaryHint] = useState(true);
+
 
   const initSession = async () => {
     try {
-      const context = novelId ? { 
-        novel_id: novelId, 
-        chapter_start: chapterRange.start, 
-        chapter_end: chapterRange.end 
-      } : undefined;
+      const context = novelId ? { novel_id: novelId } : undefined;
       const response = await createChatSession({ scene, context });
       setSessionId(response.session_id);
       setMessages([{ role: 'assistant', content: response.welcome_message }]);
@@ -96,38 +90,11 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     }
   };
 
-  // 生成智能章节摘要
-  const handleGenerateSmartSummary = async () => {
-    if (!novelId) return;
-    
-    setGeneratingSummary(true);
-    try {
-      // 获取指定范围内的章节号列表
-      const chapterNumbers = [];
-      for (let i = chapterRange.start; i <= chapterRange.end; i++) {
-        chapterNumbers.push(i);
-      }
-      
-      const response = await generateSmartSummary({
-        novel_id: novelId,
-        chapter_numbers: chapterNumbers,
-        force_regenerate: false, // 使用缓存
-      });
-      
-      setShowSummaryHint(false);
-      
-      const summaryMsg = `已生成 ${response.generated_count} 个章节的智能摘要，使用缓存 ${response.cached_count} 个。\n\n` +
-        `摘要包含：关键事件、情节概要、人物互动、情感走向、伏笔暗示等结构化信息。\n\n` +
-        `现在您可以询问关于这些章节的具体问题了！`;
-      
-      setMessages(prev => [...prev, { role: 'assistant', content: summaryMsg }]);
-      message.success('智能摘要生成完成');
-    } catch (error) {
-      console.error('生成智能摘要失败:', error);
-      message.error('生成智能摘要失败，请重试');
-    } finally {
-      setGeneratingSummary(false);
-    }
+  // 新建会话
+  const handleNewSession = () => {
+    setSessionId(null);
+    setMessages([]);
+    initSession();
   };
 
   useEffect(() => {
@@ -220,12 +187,6 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     }
   };
 
-  const handleRestart = () => {
-    setSessionId(null);
-    setMessages([]);
-    initSession();
-  };
-
   const loadSessions = async () => {
     try {
       setLoadingSessions(true);
@@ -239,10 +200,19 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     }
   };
 
-  const handleLoadSession = (session: SessionItem) => {
-    setSessionId(session.session_id);
-    // 这里可以添加加载历史消息的逻辑
-    setHistoryModalOpen(false);
+  const handleLoadSession = async (session: SessionItem) => {
+    try {
+      const sessionDetail = await getSession(session.session_id);
+      setSessionId(session.session_id);
+      setMessages(sessionDetail.messages.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content
+      })));
+      setHistoryModalOpen(false);
+    } catch (error) {
+      console.error('加载会话详情失败:', error);
+      message.error('加载会话失败，请重试');
+    }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
@@ -458,55 +428,14 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                 </Card>
               )}
             </Space>
-            {(scene === 'novel_revision' || scene === 'novel_analysis') && novelId && (
-              <Space style={{ marginTop: 8, justifyContent: 'space-between', width: '100%' }}>
-                <Typography.Text type="secondary">章节范围</Typography.Text>
-                <Space>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={chapterRange.start}
-                    onChange={(e) => setChapterRange({ ...chapterRange, start: parseInt(e.target.value) || 1 })}
-                    style={{ width: 80 }}
-                  />
-                  <span>至</span>
-                  <Input
-                    type="number"
-                    min={chapterRange.start}
-                    value={chapterRange.end}
-                    onChange={(e) => setChapterRange({ ...chapterRange, end: parseInt(e.target.value) || chapterRange.start })}
-                    style={{ width: 80 }}
-                  />
-                  <Tooltip title="读取完整章节内容并提炼关键点">
-                    <Button 
-                      size="small" 
-                      type="primary"
-                      icon={<ThunderboltOutlined />}
-                      loading={generatingSummary}
-                      onClick={handleGenerateSmartSummary}
-                    >
-                      智能摘要
-                    </Button>
-                  </Tooltip>
-                </Space>
-              </Space>
-            )}
-            {showSummaryHint && (scene === 'novel_revision' || scene === 'novel_analysis') && novelId && (
-              <Alert
-                type="info"
-                showIcon
-                style={{ marginTop: 8 }}
-                message="提示：点击「智能摘要」按钮，AI将读取完整章节内容并提炼关键点，提供更精准的分析建议。"
-                closable
-                onClose={() => setShowSummaryHint(false)}
-              />
-            )}
             <Space style={{ marginTop: 8 }}>
               <Button size="small" icon={<HistoryOutlined />} onClick={() => {
                 loadSessions();
                 setHistoryModalOpen(true);
               }} />
-              <Button size="small" icon={<ReloadOutlined />} onClick={handleRestart} />
+              <Tooltip title="新建会话">
+                <Button size="small" icon={<ReloadOutlined />} onClick={handleNewSession} />
+              </Tooltip>
             </Space>
           </Space>
         }
