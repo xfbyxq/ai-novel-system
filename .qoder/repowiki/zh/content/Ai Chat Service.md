@@ -338,7 +338,7 @@ API-->>Client : 编辑结果
 
 #### 支持的场景类型
 
-系统定义了四种主要的创作场景：
+系统定义了五种主要的创作场景：
 
 | 场景类型 | 用途 | 系统提示词 |
 |---------|------|----------|
@@ -346,6 +346,7 @@ API-->>Client : 编辑结果
 | crawler_task | 爬虫任务 | 数据分析师，制定爬取策略和市场分析 |
 | novel_revision | 小说修订 | 编辑助手，直接生成修订后的内容 |
 | novel_analysis | 小说分析 | 分析师，提供全面的分析和建议 |
+| chapter_assistant | 章节编辑 | 章节编辑助手，专门帮助作者编辑和改进章节内容 |
 
 **更新** 新增章节助手场景（chapter_assistant），专门用于章节内容的编辑和修改：
 
@@ -1189,8 +1190,6 @@ AiChat --> SuggestionExtraction
 AiChat --> SuggestionApplication
 AiChat --> ChapterAssistant
 ChapterAssistant --> ToolExecutor
-SuggestionExtraction --> RevisionAPI
-SuggestionApplication --> DB
 ToolExecutor --> DB
 Plan --> DB
 ```

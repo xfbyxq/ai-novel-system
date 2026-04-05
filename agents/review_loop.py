@@ -23,10 +23,9 @@ from llm.qwen_client import QwenClient
 
 EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色.
 
-你的工作包含三个部分：
+你的工作包含两个部分：
 1. 对内容进行多维度精确评分（8个维度）
-2. 生成聚合维度评分（连贯性、合理性、趣味性）
-3. 润色并输出修改后的完整内容
+2. 润色并输出修改后的完整内容
 
 【精确评分维度】（1-10分）：
 - satisfaction_design（爽感设计）：章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底？章末是否有有效卡章？
@@ -37,6 +36,13 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - setting_consistency（设定一致性）：世界观设定是否前后一致？角色设定是否矛盾？时间线是否清晰？
 - pacing（节奏把控）：场景节奏是否有变化？是否过于相似？张弛是否有度？
 - fluency（语言流畅度）：表达是否流畅？衔接是否自然？用词是否准确？
+
+【评分锚点示例】：
+- 7.0分：基本合格，无明显硬伤，但缺乏亮点
+- 7.5分：合格，情节流畅，有1-2个爽点，无逻辑漏洞
+- 8.0分：良好，情节紧凑，爽点有铺垫有释放，角色行为合理
+- 8.5分：优秀，情节精彩，爽点设计巧妙，伏笔埋设自然
+- 9.0分：出色，情节跌宕起伏，爽感强烈，角色鲜明，语言优美
 
 【跨章节一致性检查清单】（关键！影响setting_consistency和pacing评分）：
 1. 【章节边界检查】（最高优先级）：
@@ -50,40 +56,12 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 5. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
 6. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
 
-【聚合维度评分标准】（根据精确维度计算，以星级展示）：
-- 连贯性(coherence)：情节前后衔接是否自然、设定是否一致、角色行为逻辑是否流畅
-  ★★★★★(9-10)：完全连贯，无任何矛盾
-  ★★★★☆(7-8)：基本连贯，有少量不影响阅读的不一致
-  ★★★☆☆(5-6)：存在明显的衔接问题或设定矛盾
-  ★★☆☆☆(3-4)：多处不连贯，影响阅读体验
-  ★☆☆☆☆(1-2)：严重混乱，无法理解
-
-- 合理性(plausibility)：动机是否充分、因果关系是否清晰、伏笔铺垫是否合理
-  ★★★★★：动机充分合理，因果关系清晰，铺垫恰到好处
-  ★★★★☆：基本合理，有少量可接受的简化处理
-  ★★★☆☆：存在动机不够充分或因果跳跃
-  ★★☆☆☆：多处不合理，需要补充铺垫
-  ★☆☆☆☆：严重违背逻辑和设定
-
-- 趣味性(engagement)：爽点设计、悬念布局、角色吸引力
-  ★★★★★：爽点精彩，悬念布局巧妙，角色魅力十足
-  ★★★★☆：有明确的爽点和悬念，节奏紧凑
-  ★★★☆☆：趣味性一般，缺少高潮或悬念不足
-  ★★☆☆☆：较为平淡，缺少吸引点
-  ★☆☆☆☆：毫无吸引力，难以继续阅读
-
 【问题描述格式要求】：
-每条问题必须包含：
-1. location: 问题位置（type: paragraph/scene/character/global, identifier: 具体标识, excerpt: 可选摘录）
-2. description: 问题描述（精炼概括）
-3. manifestation: 具体表现（原文中的具体表现，可列举多个）
-4. severity: 严重程度（high/medium/low）
-5. priority_category: 优先级分类
-   - reading_experience: 影响阅读体验（称呼不一致、设定矛盾等）— 必须修改
-   - excitement: 提升精彩度（爽点不足、悬念缺失等）— 建议增强
-   - polish: 细节打磨（措辞优化、节奏调整等）— 可考虑优化
-6. suggestion: 修订建议（具体可操作）
-7. related_dimensions: 关联维度（如 ["coherence", "plausibility"]）"""
+每条问题必须包含4个字段：
+1. location: 问题位置（如：第3段、开篇场景、角色xxx）
+2. description: 问题描述（精炼概括，20字以内）
+3. severity: 严重程度（high/medium/low）
+4. suggestion: 修订建议（具体可操作）"""
 
 EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
@@ -101,7 +79,7 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
 请以JSON格式输出（不要输出其他内容）：
 {{
-    "overall_score": 综合评分(1-10浮点数),
+    "overall_score": 综合评分(1-10浮点数)，参考评分锚点,
     "dimension_scores": {{
         "satisfaction_design": 分数,
         "foreshadowing": 分数,
@@ -112,40 +90,29 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
         "pacing": 分数,
         "fluency": 分数
     }},
-    "aggregate_dimension_ratings": {{
-        "coherence": "★★★☆☆格式",
-        "plausibility": "★★★☆☆格式",
-        "engagement": "★★★★☆格式"
-    }},
-    "overall_assessment": "整体评价文本（2-3句话概括章节质量）",
-    "detailed_issues": [
+    "overall_assessment": "整体评价（1-2句话概括章节质量）",
+    "issues": [
         {{
-            "location": {{
-                "type": "paragraph/scene/character/global",
-                "identifier": "具体位置标识（如第3段、开篇场景、主角王明）",
-                "excerpt": "问题片段摘录（可选，50字以内）"
-            }},
-            "description": "问题描述（精炼概括）",
-            "manifestation": ["具体表现1", "具体表现2"],
+            "location": "问题位置（如第3段、开篇场景、角色xxx）",
+            "description": "问题描述（20字以内）",
             "severity": "high/medium/low",
-            "priority_category": "reading_experience/excitement/polish",
-            "suggestion": "修订建议",
-            "related_dimensions": ["coherence/plausibility/engagement"]
+            "suggestion": "修订建议"
         }}
     ],
-    "revision_by_priority": {{
-        "reading_experience": ["影响阅读体验的修订建议"],
-        "excitement": ["提升精彩度的修订建议"],
-        "polish": ["细节打磨的修订建议"]
-    }},
     "edited_content": "润色后的完整章节内容"
 }}"""
 
-WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title}）经过编辑审查，需要修订.
+WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title}）需要修订。
 
-编辑评分：{score}/10
-编辑反馈：
+**编辑评分**：{score}/10（目标：≥7.5）
+
+**核心问题**（按严重程度排序）：
 {suggestions}
+
+**修订原则**：
+1. 优先修复 [HIGH] 标记的问题
+2. 保持原文风格，不要大幅改写
+3. 确保修订后情节衔接自然
 
 你的上一版内容：
 {previous_content}
@@ -153,8 +120,7 @@ WRITER_REVISION_TASK = """你之前写的第{chapter_number}章（{chapter_title
 章节计划：
 {chapter_plan}
 
-请根据编辑的反馈修订内容，重点解决指出的问题。
-直接输出修订后的完整章节内容，不要输出JSON或其他格式标记。"""
+请直接输出修订后的完整章节内容."""
 
 
 class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQualityReport]):
@@ -523,100 +489,83 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             )
 
     def _build_issues_text(self, report: ChapterQualityReport, review_data: Dict[str, Any]) -> str:
-        """构建问题列表文本，按优先级分组输出.
+        """构建问题列表文本，按严重程度分组输出.
 
         支持新旧两种格式：
-        - 新格式：detailed_issues（包含位置、具体表现、优先级）
-        - 旧格式：revision_suggestions
+        - 新格式：issues（包含 location、description、severity、suggestion）
+        - 旧格式：revision_suggestions 或 detailed_issues
         """
         lines = []
 
-        # 优先使用新格式的 detailed_issues
-        detailed_issues = review_data.get("detailed_issues", [])
-        if detailed_issues:
-            # 按优先级分组
-            by_priority = {
-                "reading_experience": [],
-                "excitement": [],
-                "polish": [],
-            }
-            for issue in detailed_issues:
-                category = issue.get("priority_category", "polish")
-                if category in by_priority:
-                    by_priority[category].append(issue)
-                else:
-                    by_priority["polish"].append(issue)
+        # 优先使用新格式的 issues
+        issues = review_data.get("issues", [])
+        if issues:
+            # 按严重程度分组
+            high_issues = [i for i in issues if i.get("severity") == "high"]
+            medium_issues = [i for i in issues if i.get("severity") == "medium"]
+            low_issues = [i for i in issues if i.get("severity") == "low"]
 
-            # 优先级一：影响阅读体验
-            if by_priority["reading_experience"]:
-                lines.append("【优先级一：影响阅读体验 - 必须修改】")
-                for issue in by_priority["reading_experience"]:
-                    location = issue.get("location", {})
-                    location_str = ""
-                    if location:
-                        loc_type = {
-                            "paragraph": "段落",
-                            "scene": "场景",
-                            "character": "角色",
-                            "global": "整体",
-                        }.get(location.get("type", "global"), "整体")
-                        location_str = f"[{loc_type}]{location.get('identifier', '')}"
-                    else:
-                        location_str = "[整体]"
-
-                    lines.append(f"位置{location_str}: {issue.get('description', '')}")
-                    manifestation = issue.get("manifestation", [])
-                    if manifestation:
-                        lines.append(f"  表现: {', '.join(manifestation)}")
+            # 高优先级问题
+            if high_issues:
+                lines.append("[HIGH] 必须修改：")
+                for issue in high_issues:
+                    location = issue.get("location", "")
+                    desc = issue.get("description", "")
                     suggestion = issue.get("suggestion", "")
+                    lines.append(f"  - {location}：{desc}")
                     if suggestion:
-                        lines.append(f"  建议: {suggestion}")
+                        lines.append(f"    建议：{suggestion}")
 
-            # 优先级二：提升精彩度
-            if by_priority["excitement"]:
-                lines.append("\n【优先级二：提升精彩度 - 建议增强】")
-                for issue in by_priority["excitement"]:
-                    location = issue.get("location", {})
-                    location_str = ""
-                    if location:
-                        loc_type = {
-                            "paragraph": "段落",
-                            "scene": "场景",
-                            "character": "角色",
-                            "global": "整体",
-                        }.get(location.get("type", "global"), "整体")
-                        location_str = f"[{loc_type}]{location.get('identifier', '')}"
-                    else:
-                        location_str = "[整体]"
-
-                    lines.append(f"位置{location_str}: {issue.get('description', '')}")
+            # 中优先级问题
+            if medium_issues:
+                lines.append("\n[MEDIUM] 建议修改：")
+                for issue in medium_issues:
+                    location = issue.get("location", "")
+                    desc = issue.get("description", "")
                     suggestion = issue.get("suggestion", "")
+                    lines.append(f"  - {location}：{desc}")
                     if suggestion:
-                        lines.append(f"  建议: {suggestion}")
+                        lines.append(f"    建议：{suggestion}")
 
-            # 优先级三：细节打磨
-            if by_priority["polish"]:
-                lines.append("\n【优先级三：细节打磨 - 可考虑优化】")
-                for issue in by_priority["polish"]:
-                    lines.append(f"- {issue.get('description', '')}")
-                    suggestion = issue.get("suggestion", "")
-                    if suggestion:
-                        lines.append(f"  建议: {suggestion}")
+            # 低优先级问题
+            if low_issues:
+                lines.append("\n[LOW] 可考虑优化：")
+                for issue in low_issues:
+                    location = issue.get("location", "")
+                    desc = issue.get("description", "")
+                    lines.append(f"  - {location}：{desc}")
 
             return "\n".join(lines) if lines else "（无具体问题）"
 
-        # 回退到旧格式
+        # 回退到旧格式 detailed_issues（兼容）
+        detailed_issues = review_data.get("detailed_issues", [])
+        if detailed_issues:
+            for issue in detailed_issues:
+                severity = issue.get("severity", "medium").upper()
+                location = issue.get("location", {})
+                if isinstance(location, dict):
+                    location_str = location.get("identifier", "")
+                else:
+                    location_str = str(location)
+                desc = issue.get("description", "")
+                suggestion = issue.get("suggestion", "")
+                lines.append(f"[{severity}] {location_str}：{desc}")
+                if suggestion:
+                    lines.append(f"  建议：{suggestion}")
+            return "\n".join(lines) if lines else "（无具体问题）"
+
+        # 回退到旧格式 revision_suggestions
         suggestions = review_data.get("revision_suggestions", [])
         if not suggestions:
             return "（无具体问题）"
 
         for s in suggestions:
-            severity = s.get("severity", "medium")
-            issue = s.get("issue", "")
+            severity = s.get("severity", "medium").upper()
+            issue_text = s.get("issue", "")
             suggestion = s.get("suggestion", "")
-            lines.append(f"[{severity.upper()}] {issue}")
+            lines.append(f"[{severity}] {issue_text}")
             if suggestion:
-                lines.append(f"  建议: {suggestion}")
+                lines.append(f"  建议：{suggestion}")
 
         return "\n".join(lines)
 
@@ -780,6 +729,16 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
                 best_score = score
                 best_content = current_content
                 best_report = last_report
+
+            # 快速通过逻辑：score >= 7.5 且无 high severity 问题 → 直接采纳 Editor 润色内容
+            issues = review_data.get("issues", [])
+            has_high_severity = any(i.get("severity") == "high" for i in issues)
+            if score >= 7.5 and not has_high_severity:
+                logger.info(
+                    f"[ReviewLoop] 快速通过：score={score:.1f}>=7.5 且无high问题，"
+                    "跳过Writer修订"
+                )
+                break
 
             # 判断是否继续迭代
             if not controller.should_continue(score, iteration):
