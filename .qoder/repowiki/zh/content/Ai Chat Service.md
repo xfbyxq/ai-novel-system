@@ -26,15 +26,19 @@
 - [revision_plan.py](file://core/models/revision_plan.py)
 - [review_loop.py](file://agents/review_loop.py)
 - [continuity_integration_module.py](file://agents/continuity_integration_module.py)
+- [chapter_context_builder.py](file://backend/services/chapter_context_builder.py)
+- [novel_tool_executor.py](file://backend/services/novel_tool_executor.py)
+- [specific_agents.py](file://agents/specific_agents.py)
+- [crew_manager.py](file://agents/crew_manager.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增修订建议提取、应用和智能章节分析功能
-- 集成完整的修订系统，支持结构化建议提取和数据库应用
-- 增强AI聊天服务的修订能力，支持自然语言修订和智能摘要
-- 新增修订数据验证和执行服务，确保修订建议的准确性和安全性
-- 扩展前端界面，支持修订建议的可视化展示和一键应用
+- 新增章节编辑助手系统，包括章节分析、修改提取和执行功能
+- 新增章节上下文构建器，提供丰富的章节编辑上下文信息
+- 新增工具执行框架，支持LLM按需调用小说数据查询和修改工具
+- 集成章节助手场景，支持章节内容的智能编辑和修改
+- 增强AI聊天服务的章节编辑能力，提供完整的章节分析和修改流程
 
 ## 目录
 1. [简介](#简介)
@@ -42,19 +46,22 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [修订系统集成](#修订系统集成)
-7. [智能章节分析功能](#智能章节分析功能)
-8. [持久化记忆系统](#持久化记忆系统)
-9. [依赖关系分析](#依赖关系分析)
-10. [性能考虑](#性能考虑)
-11. [故障排除指南](#故障排除指南)
-12. [结论](#结论)
+6. [章节编辑助手系统](#章节编辑助手系统)
+7. [章节上下文构建器](#章节上下文构建器)
+8. [工具执行框架](#工具执行框架)
+9. [修订系统集成](#修订系统集成)
+10. [智能章节分析功能](#智能章节分析功能)
+11. [持久化记忆系统](#持久化记忆系统)
+12. [依赖关系分析](#依赖关系分析)
+13. [性能考虑](#性能考虑)
+14. [故障排除指南](#故障排除指南)
+15. [结论](#结论)
 
 ## 简介
 
 AI聊天服务是一个基于FastAPI构建的智能对话系统，专门为网络小说创作提供AI辅助功能。该系统集成了通义千问大模型，支持多种创作场景，包括小说创作、爬虫任务规划、小说修订和内容分析。系统采用内存缓存机制和数据库持久化相结合的方式，提供了高效的会话管理和内容存储能力。
 
-**更新** 系统现已显著增强了分析能力和稳定性，新增了修订建议提取、应用和智能章节分析功能，以及与新修订系统的完整集成。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析、关系网络查询和结构化修订建议方面。
+**更新** 系统现已显著增强了分析能力和稳定性，新增了章节编辑助手系统、章节上下文构建器和工具执行框架，以及修订建议提取、应用和智能章节分析功能。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析、关系网络查询和结构化修订建议方面。
 
 ## 项目结构
 
@@ -76,6 +83,8 @@ Memory[内存服务<br/>MemoryService]
 Context[上下文管理<br/>ContextManager]
 Cost[成本追踪<br/>CostTracker]
 Revision[修订服务<br/>RevisionServices]
+ChapterAssistant[章节编辑助手<br/>ChapterAssistant]
+ToolExecutor[工具执行器<br/>NovelToolExecutor]
 end
 subgraph "图数据库层"
 GraphAPI[图数据库API<br/>/api/v1/graph]
@@ -96,6 +105,11 @@ RevisionPlan[修订计划模型<br/>RevisionPlan]
 Validator[数据验证服务<br/>RevisionDataValidator]
 Executor[执行服务<br/>RevisionExecutionService]
 end
+subgraph "章节编辑系统"
+ContextBuilder[章节上下文构建器<br/>ChapterContextBuilder]
+ToolFramework[工具执行框架<br/>Function Calling]
+Agents[专用Agent<br/>编辑Agent]
+end
 FE --> API
 API --> Router
 Router --> Service
@@ -113,6 +127,11 @@ Service --> RevisionAPI
 RevisionAPI --> RevisionPlan
 RevisionAPI --> Validator
 RevisionAPI --> Executor
+Service --> ChapterAssistant
+ChapterAssistant --> ContextBuilder
+ChapterAssistant --> ToolExecutor
+ToolExecutor --> ToolFramework
+Service --> Agents
 ```
 
 **图表来源**
@@ -121,6 +140,8 @@ RevisionAPI --> Executor
 - [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 - [graph.py:29-30](file://backend/api/v1/graph.py#L29-L30)
 - [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
+- [chapter_context_builder.py:58-121](file://backend/services/chapter_context_builder.py#L58-L121)
+- [novel_tool_executor.py:286-356](file://backend/services/novel_tool_executor.py#L286-L356)
 
 **章节来源**
 - [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
@@ -160,6 +181,8 @@ class AiChatService {
 +apply_suggestions_batch(novel_id, suggestions) Dict
 +get_novel_characters(novel_id) Dict[]
 +get_novel_chapters(novel_id) Dict[]
++execute_chapter_editing_tasks(tasks) str
++_build_chapter_assistant_prompt(base_prompt, chapter_info, context) str
 }
 class ChatSession {
 +str session_id
@@ -250,6 +273,8 @@ participant Context as 上下文管理
 participant Memory as 内存服务
 participant Graph as 图数据库
 participant Revision as 修订系统
+participant ChapterAssistant as 章节编辑助手
+participant ToolExecutor as 工具执行器
 participant LLM as 通义千问
 participant DB as 数据库
 Client->>API : POST /ai-chat/sessions
@@ -284,6 +309,17 @@ LLM-->>Service : AI回复
 Service->>DB : 保存消息
 Service-->>API : 回复内容
 API-->>Client : 消息响应
+Client->>API : POST /ai-chat/sessions/{id}/messages (章节助手)
+API->>Service : send_message() (章节助手)
+Service->>ChapterAssistant : 构建章节上下文
+ChapterAssistant->>ToolExecutor : 执行工具调用
+ToolExecutor->>DB : 查询/修改小说数据
+DB-->>ToolExecutor : 返回数据
+ToolExecutor-->>ChapterAssistant : 工具执行结果
+ChapterAssistant->>LLM : 生成章节编辑回复
+LLM-->>Service : AI回复
+Service-->>API : 章节编辑回复
+API-->>Client : 编辑结果
 ```
 
 **图表来源**
@@ -291,6 +327,8 @@ API-->>Client : 消息响应
 - [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
 - [context_manager.py:157-190](file://backend/services/context_manager.py#L157-L190)
 - [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
+- [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
+- [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
 
 ## 详细组件分析
 
@@ -308,6 +346,12 @@ API-->>Client : 消息响应
 | crawler_task | 爬虫任务 | 数据分析师，制定爬取策略和市场分析 |
 | novel_revision | 小说修订 | 编辑助手，直接生成修订后的内容 |
 | novel_analysis | 小说分析 | 分析师，提供全面的分析和建议 |
+
+**更新** 新增章节助手场景（chapter_assistant），专门用于章节内容的编辑和修改：
+
+| 场景类型 | 用途 | 系统提示词 |
+|---------|------|----------|
+| chapter_assistant | 章节编辑 | 章节编辑助手，专门帮助作者编辑和改进章节内容 |
 
 #### 会话生命周期管理
 
@@ -543,6 +587,13 @@ Version --> Cache
 | /ai-chat/novels/{novel_id}/chapters-list | GET | 获取章节列表 | NovelChaptersResponse |
 | /ai-chat/sessions | GET | 获取会话列表 | 包含novel_id和title |
 
+**更新** 新增章节助手相关API端点：
+
+| 端点 | 方法 | 功能 | 返回类型 |
+|------|------|------|----------|
+| /ai-chat/sessions/{session_id}/messages | POST | 章节助手消息处理 | 编辑结果 |
+| /ai-chat/chapter-context | POST | 获取章节上下文 | 章节上下文信息 |
+
 #### WebSocket通信协议
 
 ```mermaid
@@ -744,6 +795,367 @@ InvalidateCache --> Success[返回成功结果]
 - [ai_chat_service.py:2618-3100](file://backend/services/ai_chat_service.py#L2618-L3100)
 - [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
 
+## 章节编辑助手系统
+
+### 系统概述
+
+**更新** 系统新增了完整的章节编辑助手系统，这是一个专门用于章节内容编辑和修改的智能助手。该系统集成了章节上下文构建器、工具执行框架和专用编辑Agent，为用户提供全方位的章节编辑支持。
+
+```mermaid
+graph TB
+subgraph "章节编辑助手系统"
+ChapterAssistant[章节编辑助手]
+ContextBuilder[章节上下文构建器]
+ToolExecutor[工具执行器]
+EditAgent[编辑Agent]
+end
+subgraph "核心功能"
+Analysis[章节分析]
+Editing[内容修改]
+Consistency[一致性检查]
+Improvement[质量提升]
+end
+subgraph "工具集"
+QueryTools[查询工具]
+ModifyTools[修改工具]
+FunctionCalling[Function Calling]
+end
+subgraph "上下文信息"
+NovelInfo[小说基本信息]
+PrevChapters[前序章节摘要]
+Characters[涉及角色]
+PlotContext[情节背景]
+ChapterContent[当前章节内容]
+end
+ChapterAssistant --> ContextBuilder
+ChapterAssistant --> ToolExecutor
+ChapterAssistant --> EditAgent
+ContextBuilder --> NovelInfo
+ContextBuilder --> PrevChapters
+ContextBuilder --> Characters
+ContextBuilder --> PlotContext
+ContextBuilder --> ChapterContent
+ToolExecutor --> QueryTools
+ToolExecutor --> ModifyTools
+ToolExecutor --> FunctionCalling
+Analysis --> Consistency
+Analysis --> Improvement
+Editing --> FunctionCalling
+```
+
+**图表来源**
+- [ai_chat_service.py:218-3023](file://backend/services/ai_chat_service.py#L218-L3023)
+- [chapter_context_builder.py:58-121](file://backend/services/chapter_context_builder.py#L58-L121)
+- [novel_tool_executor.py:286-356](file://backend/services/novel_tool_executor.py#L286-L356)
+
+### 章节编辑场景支持
+
+系统为章节编辑助手定义了专门的场景类型和系统提示词：
+
+#### 章节编辑场景配置
+
+| 场景类型 | 系统提示词 | 功能特性 |
+|---------|----------|----------|
+| chapter_assistant | 章节编辑助手，专门帮助作者编辑和改进章节内容 | - 支持章节分析<br/>- 支持内容修改<br/>- 支持一致性检查<br/>- 支持质量提升 |
+
+#### 章节编辑能力
+
+章节编辑助手具备以下核心能力：
+
+1. **章节分析维度**
+   - 情节逻辑连贯性：检查事件发展是否合理
+   - 角色行为一致性：验证角色行为是否符合人物设定
+   - 描写生动性：评估环境、动作、心理描写的效果
+   - 节奏控制：分析情节推进速度是否恰当
+   - 对话自然度：检查对话是否符合角色性格
+
+2. **修改操作指南**
+   - 替换内容：使用 `content_replace` 参数，指定 `old_text` 和 `new_text`
+   - 追加内容：使用 `content_append` 参数，在章节末尾添加内容
+   - 插入开头：使用 `content_prepend` 参数，在章节开头插入内容
+   - 完全替换：使用 `content` 参数，替换整个章节内容
+
+**章节来源**
+- [ai_chat_service.py:218-3023](file://backend/services/ai_chat_service.py#L218-L3023)
+
+### 章节编辑流程
+
+```mermaid
+sequenceDiagram
+participant User as 用户
+participant Assistant as 章节编辑助手
+participant ContextBuilder as 上下文构建器
+participant ToolExecutor as 工具执行器
+participant LLM as 通义千问
+participant DB as 数据库
+User->>Assistant : 发送章节编辑请求
+Assistant->>ContextBuilder : 构建章节上下文
+ContextBuilder->>DB : 查询小说信息
+DB-->>ContextBuilder : 返回小说数据
+ContextBuilder->>DB : 查询前序章节摘要
+DB-->>ContextBuilder : 返回摘要数据
+ContextBuilder->>DB : 查询角色信息
+DB-->>ContextBuilder : 返回角色数据
+ContextBuilder-->>Assistant : 返回完整上下文
+Assistant->>LLM : 分析章节内容
+LLM-->>Assistant : 分析结果
+User->>Assistant : 提出修改需求
+Assistant->>ToolExecutor : 执行工具调用
+ToolExecutor->>DB : 查询/修改数据
+DB-->>ToolExecutor : 返回结果
+ToolExecutor-->>Assistant : 工具执行结果
+Assistant->>LLM : 生成修改建议
+LLM-->>Assistant : 修改建议
+Assistant-->>User : 返回修改结果
+```
+
+**图表来源**
+- [ai_chat_service.py:1237-1290](file://backend/services/ai_chat_service.py#L1237-L1290)
+- [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
+- [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+
+**章节来源**
+- [ai_chat_service.py:1237-1290](file://backend/services/ai_chat_service.py#L1237-L1290)
+
+## 章节上下文构建器
+
+### 系统架构
+
+**更新** 新增了章节上下文构建器（ChapterContextBuilder），专门负责为章节编辑助手构建丰富的上下文信息：
+
+```mermaid
+classDiagram
+class ChapterContextBuilder {
++AsyncSession db
++Any memory_service
++build_context(novel_id, chapter_number, chapter_info) ChapterAssistantContext
++_get_novel_data(novel_id) dict
++_get_previous_chapters_summary(novel_id, current_chapter, count) str
++_identify_chapter_characters(chapter_content, all_characters) list
++_get_plot_context(novel_id) str
+}
+class ChapterAssistantContext {
++int chapter_number
++str chapter_title
++str chapter_content
++int word_count
++str novel_title
++str novel_genre
++str previous_chapters_summary
++list chapter_characters
++str plot_context
++to_dict() dict
+}
+ChapterContextBuilder --> ChapterAssistantContext : creates
+```
+
+**图表来源**
+- [chapter_context_builder.py:58-121](file://backend/services/chapter_context_builder.py#L58-L121)
+- [chapter_context_builder.py:20-55](file://backend/services/chapter_context_builder.py#L20-L55)
+
+### 上下文信息构成
+
+章节上下文构建器提供以下结构化信息：
+
+#### 核心章节信息
+
+| 字段名 | 类型 | 描述 | 示例 |
+|--------|------|------|------|
+| chapter_number | int | 章节编号 | 15 |
+| chapter_title | str | 章节标题 | "神秘的访客" |
+| chapter_content | str | 章节内容 | "夜幕降临..." |
+| word_count | int | 字数统计 | 2500 |
+
+#### 小说基本信息
+
+| 字段名 | 类型 | 描述 | 示例 |
+|--------|------|------|------|
+| novel_title | str | 小说标题 | "仙逆" |
+| novel_genre | str | 小说类型 | "修真" |
+
+#### 前序章节摘要
+
+系统会获取当前章节之前的3章摘要，用于提供上下文参考。
+
+#### 涉及角色信息
+
+系统会自动识别章节中涉及的角色，并提供角色的基本信息：
+- 角色姓名
+- 角色类型（主角、配角、反派等）
+- 角色性格描述
+
+#### 情节背景
+
+系统会获取小说的大纲信息，为章节编辑提供情节背景。
+
+**章节来源**
+- [chapter_context_builder.py:20-121](file://backend/services/chapter_context_builder.py#L20-L121)
+
+### 上下文构建流程
+
+```mermaid
+flowchart TD
+Start([开始构建章节上下文]) --> GetNovelData[获取小说基本信息]
+GetNovelData --> GetPreviousChapters[获取前序章节摘要]
+GetPreviousChapters --> IdentifyCharacters[识别涉及角色]
+IdentifyCharacters --> GetPlotContext[获取情节背景]
+GetPlotContext --> CreateContext[创建章节上下文对象]
+CreateContext --> ToDict[转换为字典格式]
+ToDict --> ReturnContext[返回上下文]
+```
+
+**图表来源**
+- [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
+
+**章节来源**
+- [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
+
+## 工具执行框架
+
+### 系统概述
+
+**更新** 新增了工具执行框架（NovelToolExecutor），支持LLM通过Function Calling按需调用小说数据查询和修改工具：
+
+```mermaid
+graph TB
+subgraph "工具执行框架"
+ToolExecutor[NovelToolExecutor]
+QueryTools[查询工具集合]
+ModifyTools[修改工具集合]
+FunctionCalling[Function Calling]
+end
+subgraph "查询工具"
+GetChapterContent[获取章节内容]
+GetCharacterInfo[获取角色信息]
+GetWorldSetting[获取世界观设定]
+GetOutline[获取剧情大纲]
+ListChapters[获取章节列表]
+GetNovelInfo[获取小说基本信息]
+end
+subgraph "修改工具"
+ModifyChapterContent[修改章节内容]
+ModifyOutline[修改剧情大纲]
+ModifyWorldSetting[修改世界观设定]
+ModifyCharacter[修改角色信息]
+AddCharacter[新增角色]
+end
+ToolExecutor --> QueryTools
+ToolExecutor --> ModifyTools
+ToolExecutor --> FunctionCalling
+QueryTools --> GetChapterContent
+QueryTools --> GetCharacterInfo
+QueryTools --> GetWorldSetting
+QueryTools --> GetOutline
+QueryTools --> ListChapters
+QueryTools --> GetNovelInfo
+ModifyTools --> ModifyChapterContent
+ModifyTools --> ModifyOutline
+ModifyTools --> ModifyWorldSetting
+ModifyTools --> ModifyCharacter
+ModifyTools --> AddCharacter
+```
+
+**图表来源**
+- [novel_tool_executor.py:27-97](file://backend/services/novel_tool_executor.py#L27-L97)
+- [novel_tool_executor.py:100-279](file://backend/services/novel_tool_executor.py#L100-L279)
+
+### 查询工具集合
+
+系统提供以下查询工具：
+
+#### 章节内容查询
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| get_chapter_content | chapter_start, chapter_end | 获取指定范围章节内容 | 分析具体章节内容 |
+| list_chapters | 无 | 获取章节列表（不含内容） | 查看章节概览 |
+
+#### 角色信息查询
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| get_character_info | character_name | 获取指定角色详细信息 | 确认角色设定一致性 |
+| get_character_info | 无 | 获取所有角色列表 | 角色关系分析 |
+
+#### 世界观查询
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| get_world_setting | 无 | 获取世界观设定 | 保持设定一致性 |
+| get_outline | 无 | 获取剧情大纲 | 了解情节走向 |
+
+#### 小说基本信息查询
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| get_novel_info | 无 | 获取小说基本信息 | 了解作品概况 |
+
+**章节来源**
+- [novel_tool_executor.py:27-97](file://backend/services/novel_tool_executor.py#L27-L97)
+
+### 修改工具集合
+
+系统提供以下修改工具：
+
+#### 章节内容修改
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| modify_chapter_content | chapter_number, title, content, content_append, content_prepend, content_replace | 修改章节内容 | 章节编辑和修改 |
+
+#### 剧情大纲修改
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| modify_outline | field, value, append_to_raw | 修改剧情大纲 | 调整情节走向 |
+
+#### 世界观设定修改
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| modify_world_setting | field, value, append_to_raw | 修改世界观设定 | 更新设定信息 |
+
+#### 角色信息修改
+
+| 工具名称 | 参数 | 功能 | 使用场景 |
+|---------|------|------|----------|
+| modify_character | character_name, field, value | 修改角色信息 | 调整人物设定 |
+| add_character | name, role_type, gender, age, personality, background, appearance | 新增角色 | 创建新角色 |
+
+**章节来源**
+- [novel_tool_executor.py:100-279](file://backend/services/novel_tool_executor.py#L100-L279)
+
+### 工具执行流程
+
+```mermaid
+flowchart TD
+Start([开始工具调用]) --> ValidateToolName[验证工具名称]
+ValidateToolName --> CheckQueryTool{查询工具?}
+CheckQueryTool --> |是| ExecuteQuery[执行查询工具]
+CheckQueryTool --> |否| CheckModifyTool{修改工具?}
+CheckModifyTool --> |是| ExecuteModify[执行修改工具]
+CheckModifyTool --> |否| ReturnError[返回未知工具错误]
+ExecuteQuery --> ValidateQueryArgs[验证查询参数]
+ValidateQueryArgs --> LoadNovelData[加载小说数据]
+LoadNovelData --> QueryDB[查询数据库]
+QueryDB --> FormatResult[格式化查询结果]
+FormatResult --> ReturnQueryResult[返回查询结果]
+ExecuteModify --> ValidateModifyArgs[验证修改参数]
+ValidateModifyArgs --> CheckContentLength[检查内容长度限制]
+CheckContentLength --> FindTarget[查找目标对象]
+FindTarget --> UpdateDB[更新数据库]
+UpdateDB --> ClearCache[清除缓存]
+ClearCache --> FormatModifyResult[格式化修改结果]
+FormatModifyResult --> ReturnModifyResult[返回修改结果]
+```
+
+**图表来源**
+- [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+- [novel_tool_executor.py:569-687](file://backend/services/novel_tool_executor.py#L569-L687)
+
+**章节来源**
+- [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+
 ## 修订系统集成
 
 ### 修订系统架构
@@ -763,6 +1175,8 @@ subgraph "AI聊天服务集成"
 AiChat[AI聊天服务<br/>AiChatService]
 SuggestionExtraction[建议提取]
 SuggestionApplication[建议应用]
+ChapterAssistant[章节编辑助手]
+ToolExecutor[工具执行器]
 end
 subgraph "数据库层"
 DB[(PostgreSQL数据库)]
@@ -773,8 +1187,11 @@ RevisionAPI --> Executor
 Understanding --> Plan
 AiChat --> SuggestionExtraction
 AiChat --> SuggestionApplication
+AiChat --> ChapterAssistant
+ChapterAssistant --> ToolExecutor
 SuggestionExtraction --> RevisionAPI
 SuggestionApplication --> DB
+ToolExecutor --> DB
 Plan --> DB
 ```
 
@@ -1215,6 +1632,8 @@ RevisionUnderstanding[backend/services/revision_understanding_service.py]
 RevisionExecution[backend/services/revision_execution_service.py]
 Validator[backend/services/revision_data_validator.py]
 Cost[llm/cost_tracker.py]
+ChapterContextBuilder[backend/services/chapter_context_builder.py]
+NovelToolExecutor[backend/services/novel_tool_executor.py]
 end
 subgraph "模型层"
 Models[core/models/ai_chat_session.py]
@@ -1237,6 +1656,8 @@ Service --> Context
 Service --> Qwen
 Service --> Models
 Service --> Config
+Service --> ChapterContextBuilder
+Service --> NovelToolExecutor
 GraphService --> Neo4jClient
 RevisionUnderstanding --> RevisionPlan
 Qwen --> Cost
@@ -1272,6 +1693,7 @@ Qwen --> Cost
 - **异步WebSocket处理**：支持高并发实时通信
 - **异步LLM调用**：避免阻塞事件循环
 - **异步图数据库查询**：支持高并发关系查询
+- **异步工具执行**：支持高并发工具调用
 
 ### 成本控制
 
@@ -1298,6 +1720,15 @@ Qwen --> Cost
 - **缓存机制**：缓存验证结果，避免重复查询
 - **批量应用**：支持批量应用修订建议，减少数据库往返
 - **增量更新**：只更新发生变化的数据，减少写操作
+
+### 章节编辑系统性能优化
+
+**更新** 章节编辑系统采用了多项性能优化措施：
+
+- **上下文预加载**：在会话创建时预加载当前章节内容
+- **工具调用缓存**：缓存工具执行结果，避免重复查询
+- **异步处理**：所有工具调用都是异步执行
+- **内容长度限制**：防止过大的内容影响性能
 
 ## 故障排除指南
 
@@ -1474,6 +1905,40 @@ Qwen --> Cost
 4. 检查中文数字转换函数的逻辑
 5. 确认角色名列表的加载是否成功
 
+#### 章节编辑助手异常
+
+**问题症状**：章节编辑助手无法正常工作
+
+**可能原因**：
+1. 章节上下文构建失败
+2. 工具执行器调用失败
+3. LLM调用失败
+4. 数据库连接问题
+
+**解决步骤**：
+1. 检查章节上下文构建器的日志
+2. 验证工具执行器的参数和权限
+3. 确认LLM服务状态和API密钥
+4. 检查数据库连接和权限
+5. 查看章节助手的完整错误堆栈
+
+#### 工具执行器调用失败
+
+**问题症状**：工具执行器返回错误或异常
+
+**可能原因**：
+1. 工具名称无效
+2. 参数验证失败
+3. 数据库操作异常
+4. 缓存清理失败
+
+**解决步骤**：
+1. 验证工具名称是否在支持的工具列表中
+2. 检查参数格式和必需参数
+3. 查看数据库操作的错误日志
+4. 确认缓存清理是否成功
+5. 检查工具执行器的完整错误信息
+
 **章节来源**
 - [ai_chat.py:98-104](file://backend/api/v1/ai_chat.py#L98-L104)
 - [qwen_client.py:97-106](file://llm/qwen_client.py#L97-L106)
@@ -1481,12 +1946,14 @@ Qwen --> Cost
 - [agentmesh_memory_adapter.py:46-88](file://backend/services/agentmesh_memory_adapter.py#L46-L88)
 - [revision_understanding_service.py:17-498](file://backend/services/revision_understanding_service.py#L17-L498)
 - [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
+- [chapter_context_builder.py:123-172](file://backend/services/chapter_context_builder.py#L123-L172)
+- [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
 
 ## 结论
 
 AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过合理的分层设计和多层缓存机制，系统能够在保证性能的同时提供高质量的AI服务。主要特点包括：
 
-1. **多场景支持**：涵盖小说创作、爬虫任务、修订和分析四大场景
+1. **多场景支持**：涵盖小说创作、爬虫任务、修订、分析和章节编辑五大场景
 2. **高性能架构**：异步处理、内存缓存、流式响应
 3. **成本控制**：完善的Token统计和成本追踪
 4. **易扩展性**：模块化设计，便于功能扩展和维护
@@ -1495,8 +1962,11 @@ AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过
 7. **持久化记忆**：基于AgentMesh理念的完整记忆系统
 8. **修订系统集成**：完整的修订建议提取、验证和应用功能
 9. **智能分析能力**：深度集成的智能章节分析和修订建议功能
+10. **章节编辑助手**：全新的章节编辑系统，支持智能分析和修改
+11. **工具执行框架**：基于Function Calling的工具调用系统
+12. **上下文构建器**：专门的章节上下文构建系统
 
-**更新** 系统现已显著增强了分析能力和稳定性，通过新增的修订建议提取、应用和智能章节分析功能，以及与新修订系统的完整集成，大幅提升了系统的智能化水平和用户体验。特别是修订系统的集成，使得系统能够从自然语言反馈中提取结构化的修订建议，并直接应用到数据库中，为用户提供了一站式的创作辅助解决方案。
+**更新** 系统现已显著增强了分析能力和稳定性，通过新增的章节编辑助手系统、章节上下文构建器和工具执行框架，以及与新修订系统的完整集成，大幅提升了系统的智能化水平和用户体验。特别是章节编辑助手系统的集成，使得系统能够为用户提供全方位的章节编辑支持，包括智能分析、内容修改、一致性检查和质量提升等功能。
 
 这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务，特别是在处理章节内容分析、角色关系理解和情节发展预测等方面表现出色。系统现在不仅能够理解文本内容，还能够利用图数据库的强大查询能力和修订系统的智能分析，为用户提供深层次的创作洞察和建议。
 

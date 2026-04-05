@@ -154,10 +154,15 @@ def setup_logging():
         log.propagate = False
         log.setLevel(logging.WARNING)
 
-    # 确保应用模块启用日志传播（llm, backend, agents 等子模块都会继承）
+    # 确保应用模块日志正确配置
+    # 这些logger不需要单独设置handler，让它们传播到root logger统一输出
     for prefix in ["novel_system", "llm", "backend", "agents", "core"]:
         log = logging.getLogger(prefix)
+        # 开启传播，让日志传播到root logger输出
         log.propagate = True
+        log.setLevel(log_level)
+        # 清除可能存在的重复handler
+        log.handlers = []
 
     # 5. 控制台 Handler（只保留一个）
     console_handler = logging.StreamHandler(sys.stdout)

@@ -874,6 +874,13 @@ class GenerationService:
             )
             chapter = existing_chapter_result.scalar_one_or_none()
 
+            # continuity_report 可能是 dict 或 list，提前解析供两个分支共用
+            continuity_report = writing_result.get("continuity_report", {})
+            if isinstance(continuity_report, list):
+                continuity_issues = continuity_report  # 直接是 issues 列表
+            else:
+                continuity_issues = continuity_report.get("issues", [])
+
             if chapter:
                 # 更新现有章节
                 chapter.title = title
@@ -883,9 +890,7 @@ class GenerationService:
                 chapter.plot_points = chapter_plan.get("plot_points", [])
                 chapter.foreshadowing = chapter_plan.get("foreshadowing", [])
                 chapter.quality_score = writing_result.get("quality_score", 0)
-                chapter.continuity_issues = writing_result.get("continuity_report", {}).get(
-                    "issues", []
-                )
+                chapter.continuity_issues = continuity_issues
                 chapter.detailed_outline = writing_result.get("detailed_outline", {})
                 logger.info(f"更新已存在的第{chapter_number}章记录")
             else:
@@ -902,7 +907,7 @@ class GenerationService:
                     plot_points=chapter_plan.get("plot_points", []),
                     foreshadowing=chapter_plan.get("foreshadowing", []),
                     quality_score=writing_result.get("quality_score", 0),
-                    continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+                    continuity_issues=continuity_issues,
                     detailed_outline=writing_result.get("detailed_outline", {}),
                 )
                 self.db.add(chapter)
@@ -1435,6 +1440,10 @@ class GenerationService:
         word_count = len(final_content)
         chapter_plan = writing_result.get("chapter_plan", {})
 
+        # continuity_report 可能是 dict 或 list
+        continuity_report = writing_result.get("continuity_report", {})
+        continuity_issues = continuity_report if isinstance(continuity_report, list) else continuity_report.get("issues", [])
+
         chapter = Chapter(
             novel_id=novel_id,
             chapter_number=chapter_number,
@@ -1447,7 +1456,7 @@ class GenerationService:
             plot_points=chapter_plan.get("plot_points", []),
             foreshadowing=chapter_plan.get("foreshadowing", []),
             quality_score=writing_result.get("quality_score", 0),
-            continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+            continuity_issues=continuity_issues,
             detailed_outline=writing_result.get("detailed_outline", {}),
         )
         self.db.add(chapter)

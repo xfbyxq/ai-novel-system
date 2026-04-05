@@ -1165,7 +1165,11 @@ class NovelCrewManager:
                     characters=chapter_characters,
                 )
 
-        quality_score = continuity_report.get("quality_score", 0) if continuity_report else 0
+        # 获取 quality_score，处理 continuity_report 可能是 list 的情况
+        if isinstance(continuity_report, dict):
+            quality_score = continuity_report.get("quality_score", 0)
+        else:
+            quality_score = 0
 
         # ── 5. 相似度检测 ─────────────────────────────────────
         similarity_report = None
@@ -1244,11 +1248,14 @@ class NovelCrewManager:
             f"converged={review_result.converged}"
         )
         logger.info(f"   连续性评分：{quality_score}")
-        logger.info(
-            f"   发现问题：{len(continuity_report.get('issues', []))} 个"
-            if continuity_report
-            else ""
-        )
+        # 处理 continuity_report 可能是 list 或 dict 的情况
+        if isinstance(continuity_report, dict):
+            issues_count = len(continuity_report.get("issues", []))
+        elif isinstance(continuity_report, list):
+            issues_count = len(continuity_report)
+        else:
+            issues_count = 0
+        logger.info(f"   发现问题：{issues_count} 个")
         logger.info("=" * 60)
 
         return {

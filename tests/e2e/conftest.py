@@ -27,7 +27,9 @@ E2E测试用例编号方案:
 """
 
 import os
+import uuid
 import pytest
+import requests
 from playwright.sync_api import Page, Browser
 from dotenv import load_dotenv
 
@@ -199,3 +201,60 @@ def test_data():
             "content": "这是测试章节的内容...",
         },
     }
+
+
+@pytest.fixture
+def test_novel_id(api_base_url: str):
+    """
+    创建一个测试小说并返回其ID.
+    用于需要访问小说详情页的测试.
+
+    Args:
+        api_base_url: API基础URL
+
+    Yields:
+        str: 创建的小说ID
+    """
+    # 生成唯一的小说标题
+    unique_title = f"E2E测试小说_{uuid.uuid4().hex[:8]}"
+
+    # 通过API创建小说
+    response = requests.post(
+        f"{api_base_url}/api/v1/novels",
+        json={
+            "title": unique_title,
+            "genre": "仙侠",
+            "synopsis": "自动化E2E测试创建的小说",
+        },
+        timeout=10
+    )
+
+    if response.status_code in (200, 201):
+        novel_id = response.json()["id"]
+        yield str(novel_id)
+        # 清理：删除测试小说
+        try:
+            requests.delete(f"{api_base_url}/api/v1/novels/{novel_id}", timeout=5)
+        except Exception:
+            pass  # 忽略清理失败
+    else:
+        # 如果创建失败，抛出异常
+        raise RuntimeError(f"创建测试小说失败: {response.status_code} - {response.text}")
+
+
+@pytest.fixture
+def test_novel_page(page: Page, test_novel_id: str, base_url: str):
+    """
+    导航到测试小说详情页的Page fixture.
+
+    Args:
+        page: Playwright页面对象
+        test_novel_id: 测试小说ID
+        base_url: 基础URL
+
+    Yields:
+        Page: 已导航到小说详情页的Page对象
+    """
+    page.goto(f"{base_url}/novels/{test_novel_id}")
+    page.wait_for_load_state("networkidle")
+    yield page
