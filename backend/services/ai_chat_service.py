@@ -218,22 +218,42 @@ SYSTEM_PROMPTS = {
 请用中文回复。""",
     SCENE_CHAPTER_ASSISTANT: """你是一位专业的章节编辑助手，专门帮助作者编辑和改进章节内容。
 
-**重要**：当前章节内容已经直接包含在本消息中，你可以直接阅读和分析，不需要调用任何工具。
+**重要**：你可以使用以下工具获取小说信息并执行修改操作：
+- get_character_info: 获取角色详细信息，确保角色描写一致性
+- get_world_setting: 获取世界观设定，保持设定一致
+- get_outline: 获取剧情大纲，了解情节走向
+- modify_chapter_content: 修改章节内容（替换/追加/插入）
 
-**你可以进行的操作**：
-- 润色章节文字
-- 扩展或精简情节
-- 修复连贯性问题
-- 增强描写和氛围
-- 调整节奏和结构
+## 你的能力
 
-**工作原则**：
-1. 首先阅读并理解当前章节的内容
-2. 根据用户需求提供具体的修改建议
-3. 保持角色一致性、情节连贯性
-4. 注意章节的质量评分标准
+### 1. 章节分析维度
+- 情节逻辑连贯性：检查事件发展是否合理
+- 角色行为一致性：验证角色行为是否符合人物设定
+- 描写生动性：评估环境、动作、心理描写的效果
+- 节奏控制：分析情节推进速度是否恰当
+- 对话自然度：检查对话是否符合角色性格
 
-请直接回答用户的问题，不要输出任何工具调用格式。""",
+### 2. 修改操作指南
+当用户要求修改章节时，使用 `modify_chapter_content` 工具：
+- **替换内容**：使用 `content_replace` 参数，指定 `old_text` 和 `new_text`
+- **追加内容**：使用 `content_append` 参数，在章节末尾添加内容
+- **插入开头**：使用 `content_prepend` 参数，在章节开头插入内容
+- **完全替换**：使用 `content` 参数，替换整个章节内容
+
+### 3. 工作流程
+1. 首先阅读并理解当前章节内容（已包含在上下文中）
+2. 如需了解角色或设定，调用相应工具获取信息
+3. 分析问题并提供修改建议
+4. 如用户确认修改，调用 `modify_chapter_content` 执行修改
+
+## 工作原则
+1. 保持与小说整体风格一致
+2. 尊重角色性格设定，确保行为合理
+3. 注意与前后章节的情节连贯
+4. 执行修改前向用户确认（重大修改）
+5. 提供具体、可操作的修改建议
+
+请用中文回复。""",
 }
 
 WELCOME_MESSAGES = {
@@ -1214,7 +1234,7 @@ class AiChatService:
                 novel_info["analysis"] = analysis
                 self.memory_service.set_novel_memory(novel_id, novel_info)
 
-            # 章节助手场景：预加载当前章节内容
+            # 章节助手场景：预加载当前章节内容和增强上下文
             if scene == SCENE_CHAPTER_ASSISTANT and "chapter_number" in context:
                 chapter_number = context["chapter_number"]
                 logger.info(f"章节助手场景: 尝试预加载第{chapter_number}章, novel_id={novel_id}")
@@ -1224,6 +1244,16 @@ class AiChatService:
                     if chapter_info and "error" not in chapter_info:
                         session.context["current_chapter"] = chapter_info
                         logger.info(f"章节助手场景预加载章节内容成功: 第{chapter_number}章 - {chapter_info.get('title', '无标题')}")
+
+                        # 构建增强上下文
+                        from .chapter_context_builder import ChapterContextBuilder
+
+                        context_builder = ChapterContextBuilder(self.db, self.memory_service)
+                        assistant_context = await context_builder.build_context(
+                            novel_id, chapter_number, chapter_info
+                        )
+                        session.context["assistant_context"] = assistant_context.to_dict()
+                        logger.info(f"章节助手场景构建增强上下文成功: 角色{len(assistant_context.chapter_characters)}个")
                     else:
                         logger.warning(f"章节助手场景预加载章节内容失败: {chapter_info}")
                 except Exception as e:
@@ -2297,7 +2327,7 @@ class AiChatService:
         system_prompt = self._get_system_prompt(session.scene)
 
         # 小说相关场景使用工具调用模式
-        if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS]:
+        if session.scene in [SCENE_NOVEL_REVISION, SCENE_NOVEL_ANALYSIS, SCENE_CHAPTER_ASSISTANT]:
             novel_id = session.context.get("novel_id")
             if not novel_id:
                 novel_info = session.context.get("novel_info", {})
@@ -2346,23 +2376,17 @@ class AiChatService:
         token_calc = TokenCalculator()
 
         # 构建消息列表：system + 历史对话 + 当前用户消息
-        # 对于 chapter_assistant 场景，添加预加载的章节内容到系统提示词
+        # 对于 chapter_assistant 场景，使用增强的 System Prompt
         actual_system_prompt = system_prompt
         if session.scene == SCENE_CHAPTER_ASSISTANT:
             current_chapter = session.context.get("current_chapter", {})
+            assistant_context = session.context.get("assistant_context", {})
             if current_chapter and "error" not in current_chapter:
-                chapter_num = current_chapter.get("chapter_number", "?")
-                chapter_title = current_chapter.get("title", f"第{chapter_num}章")
-                chapter_content = current_chapter.get("content", "")
-                # 将章节内容添加到系统提示词
-                actual_system_prompt = f"""{system_prompt}
-
----
-**当前章节内容（第{chapter_num}章：{chapter_title}）**：
-
-{chapter_content}
----"""
-                logger.info(f"章节助手场景: 已将第{chapter_num}章内容添加到系统提示词")
+                # 构建增强的 System Prompt
+                actual_system_prompt = self._build_chapter_assistant_prompt(
+                    system_prompt, current_chapter, assistant_context
+                )
+                logger.info("章节助手场景: 已构建增强的 System Prompt")
 
         messages = [{"role": "system", "content": actual_system_prompt}]
 
@@ -2391,8 +2415,9 @@ class AiChatService:
             logger.info(f"压缩后上下文: {total_tokens} tokens")
 
         # 工具调用循环（支持查询和修改工具）
-        max_iterations = 5
+        max_iterations = settings.MAX_TOOL_CALL_ITERATIONS
         for iteration in range(max_iterations):
+            logger.info(f"工具调用迭代: 第{iteration + 1}次")
             response = await self.client.chat_with_tools(
                 messages=messages,
                 tools=NOVEL_ALL_TOOLS,  # 包含查询和修改工具
@@ -2401,6 +2426,7 @@ class AiChatService:
 
             if response["type"] == "text":
                 # LLM返回文本回复，结束循环
+                logger.info(f"工具调用完成: 共{iteration}次迭代")
                 assistant_message = response["content"]
                 break
 
@@ -2414,6 +2440,7 @@ class AiChatService:
                     except json.JSONDecodeError:
                         arguments = {}
 
+                    logger.info(f"执行工具: {tool_name}, 参数: {list(arguments.keys())}")
                     result = await executor.execute(tool_name, arguments)
                     tool_results.append({
                         "tool_call_id": tool_call["id"],
@@ -2440,7 +2467,8 @@ class AiChatService:
             assistant_message = "抱歉，处理您的请求时出现问题。"
             break
         else:
-            assistant_message = "抱歉，处理您的请求时超出了最大迭代次数。"
+            # 达到最大迭代次数，生成一个总结性回复
+            assistant_message = "我已完成了部分修改操作。由于操作较多，我已暂停执行。请告诉我是否需要继续，或者您可以查看当前的修改结果。"
 
         session.add_assistant_message(assistant_message)
         asyncio.create_task(self.save_session(session))
@@ -2448,6 +2476,71 @@ class AiChatService:
             asyncio.create_task(self._update_session_title(session))
 
         return assistant_message
+
+    def _build_chapter_assistant_prompt(
+        self,
+        base_prompt: str,
+        chapter_info: dict,
+        context: dict,
+    ) -> str:
+        """构建章节助手的增强 System Prompt.
+
+        Args:
+            base_prompt: 基础 System Prompt
+            chapter_info: 当前章节信息
+            context: 增强上下文信息
+
+        Returns:
+            完整的 System Prompt
+        """
+        from .chapter_context_builder import format_characters_for_prompt
+
+        chapter_num = chapter_info.get("chapter_number", "?")
+        chapter_title = chapter_info.get("title", f"第{chapter_num}章")
+        chapter_content = chapter_info.get("content", "")
+        word_count = chapter_info.get("word_count", len(chapter_content))
+
+        # 小说基本信息
+        novel_title = context.get("novel_title", "未知小说")
+        novel_genre = context.get("novel_genre", "")
+
+        # 前序章节摘要
+        prev_summary = context.get("previous_chapters_summary", "暂无前序章节信息")
+
+        # 本章涉及角色
+        characters = context.get("chapter_characters", [])
+        characters_text = format_characters_for_prompt(characters)
+
+        # 情节上下文
+        plot_context = context.get("plot_context", "")
+
+        return f"""{base_prompt}
+
+---
+
+## 当前工作上下文
+
+### 小说信息
+- 标题: 《{novel_title}》
+- 类型: {novel_genre}
+- 当前章节: 第{chapter_num}章 - {chapter_title}（{word_count}字）
+
+### 前序章节摘要
+{prev_summary}
+
+### 本章涉及角色
+{characters_text}
+
+### 情节背景
+{plot_context if plot_context else "暂无情节大纲"}
+
+---
+
+## 当前章节内容
+
+{chapter_content}
+
+---"""
 
     def _compress_conversation_history(
         self,
@@ -4278,3 +4371,79 @@ AI修订建议内容：
                 "message": f"执行失败：{str(e)}",
                 "error": str(e),
             }
+
+    async def extract_chapter_modifications(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        ai_response: str,
+    ) -> dict:
+        """从AI响应中提取结构化的章节修改建议.
+
+        使用LLM解析AI响应中的修改建议，返回结构化数据供前端展示和应用。
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+            ai_response: AI助手的回复内容
+
+        Returns:
+            包含 suggestions, overall_score, pros, cons 的字典
+        """
+        extraction_prompt = f"""请从以下AI助手回复中提取章节修改建议，并以JSON格式返回。
+
+AI回复内容:
+{ai_response}
+
+请返回以下JSON格式:
+{{
+    "suggestions": [
+        {{
+            "type": "replace",
+            "position": "第X段" 或 "原文片段",
+            "old_text": "要替换的原文（仅replace类型需要）",
+            "new_text": "建议的新内容",
+            "reason": "修改理由",
+            "confidence": 0.85
+        }}
+    ],
+    "overall_score": 8,
+    "pros": ["本章优点1", "本章优点2"],
+    "cons": ["需要改进的方面1", "需要改进的方面2"]
+}}
+
+注意事项：
+1. type 只能是 replace、insert 或 append
+2. position 描述要具体，方便定位
+3. old_text 必须是原文中的精确片段
+4. confidence 范围是 0-1
+5. overall_score 范围是 1-10
+
+只返回JSON，不要有其他内容。"""
+
+        try:
+            response = await self.client.chat(
+                prompt=extraction_prompt,
+                system="你是一个文本解析专家，擅长从非结构化文本中提取结构化信息。只返回JSON格式的结果。",
+                temperature=0.1,
+            )
+
+            content = response.get("content", "{}")
+            # 尝试清理可能的前缀
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            result = json.loads(content)
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"解析章节修改建议JSON失败: {e}")
+            return {"suggestions": [], "error": "解析失败"}
+        except Exception as e:
+            logger.error(f"提取章节修改建议失败: {e}")
+            return {"suggestions": [], "error": str(e)}

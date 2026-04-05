@@ -15,9 +15,11 @@ import {
   applySuggestions,
   getNovelCharactersForRevision,
   getNovelChaptersForRevision,
+  extractChapterSuggestions,
   type RevisionSuggestion,
   type CharacterListItem,
   type ChapterListItem,
+  type ChapterModification,
 } from '@/api/aiChat';
 
 const { TextArea } = Input;
@@ -34,6 +36,9 @@ interface Props {
   novelId?: string;
   novelTitle?: string;
   chapterNumber?: number; // 章节号，用于 chapter_assistant 场景
+  chapterTitle?: string; // 章节标题
+  chapterContent?: string; // 章节内容
+  onChapterModified?: () => void; // 章节修改后的回调
 }
 
 interface SessionItem {
@@ -47,7 +52,20 @@ interface SessionItem {
   created_at: string;
 }
 
-export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle, chapterNumber }: Props) {
+export default function AIChatDrawer({ 
+  open, 
+  onClose, 
+  scene, 
+  novelId, 
+  novelTitle, 
+  chapterNumber,
+  // chapterTitle 和 chapterContent 预留供未来扩展使用
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  chapterTitle: _chapterTitle,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  chapterContent: _chapterContent,
+  onChapterModified 
+}: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -76,6 +94,12 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<RevisionSuggestion | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  
+  // 章节修改建议相关状态（chapter_assistant 场景专用）
+  const [chapterModifications, setChapterModifications] = useState<ChapterModification[]>([]);
+  const [chapterSuggestionsModalOpen, setChapterSuggestionsModalOpen] = useState(false);
+  const [applyingChapterModification, setApplyingChapterModification] = useState(false);
+  const [selectedModificationIndex, setSelectedModificationIndex] = useState<number | null>(null);
   
 
 
@@ -261,6 +285,77 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
       message.error('提取建议失败，请重试');
     } finally {
       setExtractingSuggestions(false);
+    }
+  };
+
+  // 新增：章节助手专用 - 提取章节修改建议
+  const handleExtractChapterSuggestions = async (content: string) => {
+    if (!novelId) {
+      message.error('缺少小说ID');
+      return;
+    }
+    if (chapterNumber === undefined) {
+      message.error('缺少章节号');
+      return;
+    }
+    
+    setExtractingSuggestions(true);
+    
+    try {
+      const response = await extractChapterSuggestions({
+        novel_id: novelId,
+        chapter_number: chapterNumber,
+        ai_response: content,
+      });
+      
+      if (response.suggestions && response.suggestions.length > 0) {
+        setChapterModifications(response.suggestions);
+        setSelectedModificationIndex(0);
+        setChapterSuggestionsModalOpen(true);
+      } else {
+        message.info('未检测到可提取的具体修改建议');
+      }
+    } catch (error) {
+      console.error('提取章节建议失败:', error);
+      message.error('提取章节建议失败，请重试');
+    } finally {
+      setExtractingSuggestions(false);
+    }
+  };
+
+  // 应用章节修改建议
+  const handleApplyChapterModification = async (modification: ChapterModification) => {
+    if (!novelId || chapterNumber === undefined) {
+      message.error('缺少必要参数');
+      return;
+    }
+    
+    setApplyingChapterModification(true);
+    try {
+      const { applyChapterModification } = await import('@/api/aiChat');
+      const result = await applyChapterModification({
+        novel_id: novelId,
+        chapter_number: chapterNumber,
+        modification,
+      });
+      
+      if (result.success) {
+        message.success(result.message || '修改成功！');
+        setChapterSuggestionsModalOpen(false);
+        setChapterModifications([]);
+        setSelectedModificationIndex(null);
+        // 触发刷新回调
+        if (onChapterModified) {
+          onChapterModified();
+        }
+      } else {
+        message.error(result.message || '修改失败');
+      }
+    } catch (error) {
+      console.error('应用章节修改失败:', error);
+      message.error('应用章节修改失败，请重试');
+    } finally {
+      setApplyingChapterModification(false);
     }
   };
 
@@ -483,6 +578,35 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                             提取建议
                           </Button>
                         </Tooltip>
+                      </div>
+                    )}
+                    {msg.role === 'assistant' && scene === 'chapter_assistant' && (
+                      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <Tooltip title="提取结构化的章节修改建议">
+                          <Button 
+                            size="small" 
+                            type="primary" 
+                            icon={<EditOutlined />}
+                            loading={extractingSuggestions}
+                            onClick={() => handleExtractChapterSuggestions(msg.content)}
+                          >
+                            提取修改建议
+                          </Button>
+                        </Tooltip>
+                        {onChapterModified && (
+                          <Tooltip title="刷新章节内容">
+                            <Button 
+                              size="small" 
+                              icon={<ReloadOutlined />}
+                              onClick={() => {
+                                onChapterModified();
+                                message.success('章节内容已刷新');
+                              }}
+                            >
+                              刷新章节
+                            </Button>
+                          </Tooltip>
+                        )}
                       </div>
                     )}
                   </div>
@@ -861,6 +985,103 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
             </Typography.Text>
           )}
         </Spin>
+      </Modal>
+
+      {/* 章节修改建议模态框（chapter_assistant 场景专用） */}
+      <Modal
+        title="章节修改建议"
+        open={chapterSuggestionsModalOpen}
+        onCancel={() => {
+          setChapterSuggestionsModalOpen(false);
+          setChapterModifications([]);
+          setSelectedModificationIndex(null);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setChapterSuggestionsModalOpen(false);
+            setChapterModifications([]);
+            setSelectedModificationIndex(null);
+          }}>
+            关闭
+          </Button>,
+        ]}
+        width={700}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Typography.Text type="secondary">
+            以下是从AI回复中提取的章节修改建议，点击可应用：
+          </Typography.Text>
+        </div>
+        <List
+          dataSource={chapterModifications}
+          renderItem={(modification, index) => (
+            <List.Item
+              style={{ 
+                background: selectedModificationIndex === index ? '#e6f7ff' : '#fafafa',
+                marginBottom: 8,
+                borderRadius: 8,
+                padding: '12px 16px',
+              }}
+            >
+              <List.Item.Meta
+                title={
+                  <Space>
+                    <Tag color={
+                      modification.type === 'replace' ? 'blue' :
+                      modification.type === 'insert' ? 'green' :
+                      modification.type === 'append' ? 'orange' : 'default'
+                    }>
+                      {modification.type === 'replace' ? '替换' :
+                       modification.type === 'insert' ? '插入' :
+                       modification.type === 'append' ? '追加' : modification.type}
+                    </Tag>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      位置: {modification.position}
+                    </Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      置信度: {Math.round(modification.confidence * 100)}%
+                    </Typography.Text>
+                  </Space>
+                }
+                description={
+                  <div style={{ marginTop: 8 }}>
+                    <Typography.Paragraph style={{ marginBottom: 4 }}>
+                      <strong>原因:</strong> {modification.reason}
+                    </Typography.Paragraph>
+                    {modification.old_text && (
+                      <Typography.Paragraph 
+                        type="secondary"
+                        ellipsis={{ rows: 2, expandable: true }}
+                        style={{ fontSize: 12, marginBottom: 4 }}
+                      >
+                        <strong>原文本:</strong> {modification.old_text}
+                      </Typography.Paragraph>
+                    )}
+                    <Typography.Paragraph 
+                      ellipsis={{ rows: 2, expandable: true }}
+                      style={{ fontSize: 12, marginBottom: 0 }}
+                    >
+                      <strong>新文本:</strong> {modification.new_text}
+                    </Typography.Paragraph>
+                  </div>
+                }
+              />
+              <Button
+                size="small"
+                type="primary"
+                loading={applyingChapterModification}
+                onClick={() => handleApplyChapterModification(modification)}
+              >
+                应用
+              </Button>
+            </List.Item>
+          )}
+        />
+        {chapterModifications.length === 0 && (
+          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: 20 }}>
+            未提取到建议
+          </Typography.Text>
+        )}
       </Modal>
     </>
   );

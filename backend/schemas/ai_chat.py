@@ -66,20 +66,14 @@ class NovelParseResponse(BaseModel):
 class CrawlerParseRequest(BaseModel):
     """爬虫任务意图解析请求."""
 
-    user_input: str = Field(
-        ..., description="用户输入的自然语言描述，如'爬取起点月票榜前10本书'"
-    )
+    user_input: str = Field(..., description="用户输入的自然语言描述，如'爬取起点月票榜前10本书'")
 
 
 class CrawlerParseResponse(BaseModel):
     """爬虫任务意图解析响应."""
 
-    crawl_type: str = Field(
-        ..., description="爬取类型：ranking(排行榜)、book_detail(书籍详情)等"
-    )
-    ranking_type: str = Field(
-        default="yuepiao", description="排行榜类型：yuepiao/recommend等"
-    )
+    crawl_type: str = Field(..., description="爬取类型：ranking(排行榜)、book_detail(书籍详情)等")
+    ranking_type: str = Field(default="yuepiao", description="排行榜类型：yuepiao/recommend等")
     max_pages: int = Field(default=3, description="最大爬取页数")
     book_ids: str = Field(default="", description="指定的书籍ID列表，多个用逗号分隔")
 
@@ -95,19 +89,13 @@ class RevisionSuggestion(BaseModel):
     target_id: Optional[str] = Field(
         None, description="目标对象ID（对于character/chapter类型必须有值）"
     )
-    target_name: Optional[str] = Field(
-        None, description="目标对象名称（如角色名、章节标题）"
-    )
-    field: Optional[str] = Field(
-        None, description="要修改的字段名，如name、personality、content等"
-    )
+    target_name: Optional[str] = Field(None, description="目标对象名称（如角色名、章节标题）")
+    field: Optional[str] = Field(None, description="要修改的字段名，如name、personality、content等")
     suggested_value: Optional[str] = Field(
         None, description="建议的新值（复杂对象会序列化为JSON字符串）"
     )
     description: str = Field(default="", description="修改原因和描述（给用户的解释）")
-    confidence: float = Field(
-        default=0.8, ge=0.0, le=1.0, description="建议的置信度（0.0-1.0）"
-    )
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="建议的置信度（0.0-1.0）")
 
 
 class ExtractSuggestionsRequest(BaseModel):
@@ -146,9 +134,7 @@ class ApplySuggestionResult(BaseModel):
     success: bool = Field(..., description="是否成功")
     type: Optional[str] = Field(None, description="建议类型")
     field: Optional[str] = Field(None, description="修改的字段")
-    character_name: Optional[str] = Field(
-        None, description="角色名称（如果是角色修改）"
-    )
+    character_name: Optional[str] = Field(None, description="角色名称（如果是角色修改）")
     chapter_number: Optional[int] = Field(None, description="章节号（如果是章节修改）")
     error: Optional[str] = Field(None, description="错误信息")
 
@@ -159,9 +145,7 @@ class ApplySuggestionsResponse(BaseModel):
     total: int = Field(..., description="总建议数")
     success_count: int = Field(..., description="成功数")
     failed_count: int = Field(..., description="失败数")
-    details: List[ApplySuggestionResult] = Field(
-        default_factory=list, description="详细结果"
-    )
+    details: List[ApplySuggestionResult] = Field(default_factory=list, description="详细结果")
 
 
 class CharacterListItem(BaseModel):
@@ -187,17 +171,13 @@ class ChapterListItem(BaseModel):
 class NovelCharactersResponse(BaseModel):
     """角色列表响应."""
 
-    characters: List[CharacterListItem] = Field(
-        default_factory=list, description="角色列表"
-    )
+    characters: List[CharacterListItem] = Field(default_factory=list, description="角色列表")
 
 
 class NovelChaptersResponse(BaseModel):
     """章节列表响应."""
 
-    chapters: List[ChapterListItem] = Field(
-        default_factory=list, description="章节列表"
-    )
+    chapters: List[ChapterListItem] = Field(default_factory=list, description="章节列表")
 
 
 # 新增：会话管理相关Schema
@@ -214,9 +194,7 @@ class SessionListItem(BaseModel):
 class SessionListResponse(BaseModel):
     """会话列表响应."""
 
-    sessions: List[SessionListItem] = Field(
-        default_factory=list, description="会话列表"
-    )
+    sessions: List[SessionListItem] = Field(default_factory=list, description="会话列表")
 
 
 class SessionMessage(BaseModel):
@@ -290,4 +268,51 @@ class ExecuteRevisionResponse(BaseModel):
     action: Optional[str] = Field(None, description="执行的操作类型")
     field: Optional[str] = Field(None, description="修改的字段")
     target_name: Optional[str] = Field(None, description="目标名称")
+    error: Optional[str] = Field(None, description="错误信息")
+
+
+# 章节修改建议相关 Schema
+class ChapterModification(BaseModel):
+    """章节修改建议."""
+
+    type: str = Field(..., description="修改类型：replace/insert/append")
+    position: str = Field(..., description="修改位置描述")
+    old_text: Optional[str] = Field(None, description="要替换的原文（仅replace类型）")
+    new_text: str = Field(..., description="建议的新内容")
+    reason: str = Field(..., description="修改理由")
+    confidence: float = Field(default=0.8, description="置信度（0-1）")
+
+
+class ExtractChapterSuggestionsRequest(BaseModel):
+    """提取章节修改建议请求."""
+
+    novel_id: str = Field(..., description="小说ID")
+    chapter_number: int = Field(..., description="章节号")
+    ai_response: str = Field(..., description="AI助手的回复内容")
+
+
+class ExtractChapterSuggestionsResponse(BaseModel):
+    """提取章节修改建议响应."""
+
+    suggestions: List[ChapterModification] = Field(default_factory=list, description="修改建议列表")
+    overall_score: Optional[float] = Field(None, description="整体评分（1-10）")
+    pros: Optional[List[str]] = Field(None, description="章节优点")
+    cons: Optional[List[str]] = Field(None, description="需要改进的方面")
+
+
+class ApplyChapterModificationRequest(BaseModel):
+    """应用章节修改请求."""
+
+    novel_id: str = Field(..., description="小说ID")
+    chapter_number: int = Field(..., description="章节号")
+    modification: ChapterModification = Field(..., description="要应用的修改")
+
+
+class ApplyChapterModificationResponse(BaseModel):
+    """应用章节修改响应."""
+
+    success: bool = Field(..., description="是否成功")
+    message: str = Field(..., description="执行结果消息")
+    old_word_count: Optional[int] = Field(None, description="修改前字数")
+    new_word_count: Optional[int] = Field(None, description="修改后字数")
     error: Optional[str] = Field(None, description="错误信息")

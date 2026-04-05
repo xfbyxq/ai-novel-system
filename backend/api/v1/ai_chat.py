@@ -14,6 +14,8 @@ from backend.schemas.ai_chat import (
     AIChatMessageResponse,
     AIChatSessionCreate,
     AIChatSessionResponse,
+    ApplyChapterModificationRequest,
+    ApplyChapterModificationResponse,
     ApplySuggestionRequest,
     ApplySuggestionResult,
     ApplySuggestionsRequest,
@@ -24,6 +26,8 @@ from backend.schemas.ai_chat import (
     CrawlerParseResponse,
     ExecuteRevisionRequest,
     ExecuteRevisionResponse,
+    ExtractChapterSuggestionsRequest,
+    ExtractChapterSuggestionsResponse,
     ExtractSuggestionsRequest,
     ExtractSuggestionsResponse,
     MessageResponse,
@@ -45,6 +49,8 @@ from backend.services.ai_chat_service import (
     SCENE_NOVEL_REVISION,
     AiChatService,
 )
+from backend.services.novel_tool_executor import NovelToolExecutor
+from core.logging_config import logger
 
 router = APIRouter(prefix="/ai-chat", tags=["ai-chat"])
 
@@ -84,9 +90,7 @@ async def create_session(
         SCENE_CHAPTER_ASSISTANT,
     ]
     if session_in.scene not in valid_scenes:
-        raise HTTPException(
-            status_code=400, detail=f"无效的场景。可选: {', '.join(valid_scenes)}"
-        )
+        raise HTTPException(status_code=400, detail=f"无效的场景。可选: {', '.join(valid_scenes)}")
 
     session = await service.create_session(
         scene=session_in.scene,
@@ -112,10 +116,6 @@ async def send_message(
 
     同步接口，等待完整响应返回。如需流式响应，请使用 WebSocket 接口。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         response_text = await service.send_message(session_id, message_in.message)
 
@@ -182,9 +182,7 @@ async def websocket_chat(
 
             full_response = ""
             try:
-                async for chunk in service.send_message_stream(
-                    session_id, user_message
-                ):
+                async for chunk in service.send_message_stream(session_id, user_message):
                     await websocket.send_json({"chunk": chunk, "done": False})
                     full_response += chunk
 
@@ -328,10 +326,6 @@ async def extract_suggestions(
 
     分析AI回复的文本，提取出可以应用到小说数据的具体修改建议。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         # 获取小说信息
         novel_info = await service.get_novel_info(request.novel_id)
@@ -390,10 +384,6 @@ async def apply_suggestion(
 
     将提取的建议直接应用到对应的小说数据。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await service.apply_suggestion_to_database(
             request.novel_id, request.suggestion.model_dump()
@@ -420,15 +410,9 @@ async def apply_suggestions_batch(
 
     一次性应用多个修订建议，返回每个建议的应用结果。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         suggestions_dicts = [s.model_dump() for s in request.suggestions]
-        result = await service.apply_suggestions_batch(
-            request.novel_id, suggestions_dicts
-        )
+        result = await service.apply_suggestions_batch(request.novel_id, suggestions_dicts)
 
         return ApplySuggestionsResponse(
             total=result["total"],
@@ -441,9 +425,7 @@ async def apply_suggestions_batch(
         raise HTTPException(status_code=500, detail=f"批量应用建议失败: {str(e)}")
 
 
-@router.get(
-    "/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse
-)
+@router.get("/novels/{novel_id}/characters-list", response_model=NovelCharactersResponse)
 async def get_novel_characters_for_revision(
     novel_id: str,
     service: AiChatService = Depends(get_ai_chat_service),
@@ -453,10 +435,6 @@ async def get_novel_characters_for_revision(
 
     用于修订建议时选择目标角色，返回精简的角色信息。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         characters = await service.get_novel_characters(novel_id)
 
@@ -487,10 +465,6 @@ async def get_novel_chapters_for_revision(
 
     用于修订建议时选择目标章节，返回精简的章节信息。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         chapters = await service.get_novel_chapters(novel_id)
 
@@ -558,10 +532,6 @@ async def generate_smart_chapter_summary(
     - foreshadowing: 伏笔暗示
     - ending_state: 结尾状态
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await service.generate_smart_chapter_summary(
             novel_id=request.novel_id,
@@ -610,10 +580,6 @@ async def get_chapters_summary(
     **简单模式** (use_smart_summary=False):
     返回章节内容（完整内容，不截断）
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await service.get_novel_chapters_summary(
             novel_id=request.novel_id,
@@ -641,10 +607,6 @@ async def parse_natural_revision(
 
     用户通过自然语言描述想要进行的修改，系统解析后返回预览，用户确认后再执行。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await service.parse_natural_revision(request.novel_id, request.instruction)
 
@@ -674,10 +636,6 @@ async def execute_revision(
 
     用户确认预览后，执行实际的数据库修改。
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         result = await service.execute_revision(request.novel_id, request.preview_id)
 
@@ -695,5 +653,115 @@ async def execute_revision(
         return ExecuteRevisionResponse(
             success=False,
             message=f"执行失败：{str(e)}",
+            error=str(e),
+        )
+
+
+# ==================== 章节修改建议API ====================
+
+
+@router.post("/extract-chapter-suggestions", response_model=ExtractChapterSuggestionsResponse)
+async def extract_chapter_suggestions(
+    request: ExtractChapterSuggestionsRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """从AI响应中提取结构化的章节修改建议.
+
+    使用LLM解析AI回复中的修改建议，返回结构化数据供前端展示和应用。
+    """
+    try:
+        result = await service.extract_chapter_modifications(
+            request.novel_id,
+            request.chapter_number,
+            request.ai_response,
+        )
+
+        return ExtractChapterSuggestionsResponse(
+            suggestions=result.get("suggestions", []),
+            overall_score=result.get("overall_score"),
+            pros=result.get("pros"),
+            cons=result.get("cons"),
+        )
+
+    except Exception as e:
+        logger.error(f"提取章节建议失败: {e}", exc_info=True)
+        return ExtractChapterSuggestionsResponse(
+            suggestions=[],
+        )
+
+
+@router.post("/apply-chapter-modification", response_model=ApplyChapterModificationResponse)
+async def apply_chapter_modification(
+    request: ApplyChapterModificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """应用章节修改建议.
+
+    根据修改类型执行相应的章节内容修改操作。
+    """
+    try:
+        executor = NovelToolExecutor(db, request.novel_id)
+        modification = request.modification
+
+        # 根据修改类型构建参数
+        if modification.type == "replace":
+            if not modification.old_text:
+                return ApplyChapterModificationResponse(
+                    success=False,
+                    message="替换操作需要提供 old_text",
+                    error="缺少 old_text 参数",
+                )
+            result = await executor.execute(
+                "modify_chapter_content",
+                {
+                    "chapter_number": request.chapter_number,
+                    "content_replace": {
+                        "old_text": modification.old_text,
+                        "new_text": modification.new_text,
+                    },
+                },
+            )
+        elif modification.type == "append":
+            result = await executor.execute(
+                "modify_chapter_content",
+                {
+                    "chapter_number": request.chapter_number,
+                    "content_append": modification.new_text,
+                },
+            )
+        elif modification.type == "insert":
+            result = await executor.execute(
+                "modify_chapter_content",
+                {
+                    "chapter_number": request.chapter_number,
+                    "content_prepend": modification.new_text,
+                },
+            )
+        else:
+            return ApplyChapterModificationResponse(
+                success=False,
+                message=f"不支持的修改类型: {modification.type}",
+                error=f"未知类型: {modification.type}",
+            )
+
+        if result.get("success"):
+            return ApplyChapterModificationResponse(
+                success=True,
+                message=result.get("message", "修改成功"),
+                old_word_count=result.get("old_word_count"),
+                new_word_count=result.get("new_word_count"),
+            )
+        else:
+            return ApplyChapterModificationResponse(
+                success=False,
+                message=result.get("error", "修改失败"),
+                error=result.get("error"),
+            )
+
+    except Exception as e:
+        logger.error(f"应用章节修改失败: {e}", exc_info=True)
+        return ApplyChapterModificationResponse(
+            success=False,
+            message=f"应用失败：{str(e)}",
             error=str(e),
         )

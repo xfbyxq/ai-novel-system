@@ -287,6 +287,7 @@ class Settings(BaseSettings):
     MAX_PLOT_REVIEW_ITERATIONS: int = 5  # 大纲审查最大迭代（从3增加到5）
     MAX_CHAPTER_REVIEW_ITERATIONS: int = 5  # 章节审查最大迭代（从3增加到5）
     MAX_FIX_ITERATIONS: int = 3  # 连续性修复最大迭代（从2增加到3）
+    MAX_TOOL_CALL_ITERATIONS: int = 10  # AI Chat 工具调用最大迭代次数
 
     # --- 超时机制（熔断保护） ---
     # 单次审查迭代超时时间（秒），防止 LLM 调用卡死导致整个循环挂起
@@ -427,6 +428,7 @@ class Settings(BaseSettings):
             "MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS
         )
         self._validate_positive_int("MAX_FIX_ITERATIONS", self.MAX_FIX_ITERATIONS)
+        self._validate_positive_int("MAX_TOOL_CALL_ITERATIONS", self.MAX_TOOL_CALL_ITERATIONS)
 
         # 验证超时时间 (>0)
         self._validate_positive_int("WORLD_REVIEW_TIMEOUT", self.WORLD_REVIEW_TIMEOUT)

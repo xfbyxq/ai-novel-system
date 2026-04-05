@@ -351,3 +351,85 @@ export const executeRevision = async (
   );
   return response.data;
 };
+
+// ==================== 章节修改建议API ====================
+
+/**
+ * 章节修改建议
+ */
+export interface ChapterModification {
+  type: 'replace' | 'insert' | 'append';
+  position: string;
+  old_text?: string;
+  new_text: string;
+  reason: string;
+  confidence: number;
+}
+
+/**
+ * 提取章节修改建议请求
+ */
+export interface ExtractChapterSuggestionsRequest {
+  novel_id: string;
+  chapter_number: number;
+  ai_response: string;
+}
+
+/**
+ * 提取章节修改建议响应
+ */
+export interface ExtractChapterSuggestionsResponse {
+  suggestions: ChapterModification[];
+  overall_score?: number;
+  pros?: string[];
+  cons?: string[];
+}
+
+/**
+ * 应用章节修改请求
+ */
+export interface ApplyChapterModificationRequest {
+  novel_id: string;
+  chapter_number: number;
+  modification: ChapterModification;
+}
+
+/**
+ * 应用章节修改响应
+ */
+export interface ApplyChapterModificationResponse {
+  success: boolean;
+  message: string;
+  old_word_count?: number;
+  new_word_count?: number;
+}
+
+/**
+ * 从AI响应中提取章节修改建议
+ * @param data 请求参数
+ * @returns 结构化的修改建议
+ */
+export const extractChapterSuggestions = async (
+  data: ExtractChapterSuggestionsRequest
+): Promise<ExtractChapterSuggestionsResponse> => {
+  const response = await apiClient.post<ExtractChapterSuggestionsResponse>(
+    '/ai-chat/extract-chapter-suggestions',
+    data
+  );
+  return response.data;
+};
+
+/**
+ * 应用章节修改建议
+ * @param data 请求参数
+ * @returns 执行结果
+ */
+export const applyChapterModification = async (
+  data: ApplyChapterModificationRequest
+): Promise<ApplyChapterModificationResponse> => {
+  const response = await apiClient.post<ApplyChapterModificationResponse>(
+    '/ai-chat/apply-chapter-modification',
+    data
+  );
+  return response.data;
+};

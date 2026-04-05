@@ -179,6 +179,13 @@ export default function ChapterReader() {
         novelId={novelId ? novelId : undefined}
         novelTitle={novel?.title ?? undefined}
         chapterNumber={chapter?.chapter_number}
+        chapterTitle={chapter?.title ?? undefined}
+        chapterContent={chapter?.content ?? undefined}
+        onChapterModified={() => {
+          if (novelId && number) {
+            fetchChapter(novelId, number);
+          }
+        }}
       />
     </div>
   );
