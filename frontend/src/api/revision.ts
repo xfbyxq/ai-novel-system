@@ -1,4 +1,4 @@
-"""修订和记忆管理 API 客户端."""
+/** 修订和记忆管理 API 客户端 */
 
 import { api } from "./client";
 
