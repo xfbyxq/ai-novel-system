@@ -60,20 +60,17 @@ def test_get_editor_stats():
         {
             "iteration": 1,
             "score": 7.0,
-            "editor_edit_applied": 1,
-            "editor_improvement_delta": 0.8
+            "passed": False
         },
         {
             "iteration": 2,
             "score": 7.8,
-            "editor_edit_rejected": 1,
-            "editor_reason": "质量未提升"
+            "passed": False
         },
         {
             "iteration": 3,
             "score": 8.2,
-            "editor_edit_applied": 1,
-            "editor_improvement_delta": 0.5
+            "passed": True
         }
     ]
 
@@ -81,16 +78,12 @@ def test_get_editor_stats():
     stats = handler._get_editor_stats(iterations)
 
     # 验证统计结果
-    assert stats["total_edits"] == 2, "应该有 2 次编辑被应用"
-    assert stats["rejected_edits"] == 1, "应该有 1 次编辑被拒绝"
-    assert abs(stats["avg_improvement"] - 0.65) < 0.01, f"平均提升应该为 0.65，实际为 {stats['avg_improvement']}"
-    assert abs(stats["acceptance_rate"] - 0.67) < 0.01, f"接受率应该为 0.67，实际为 {stats['acceptance_rate']}"
+    assert stats["total_iterations"] == 3, "应该有 3 次迭代"
+    assert stats["converged"] is True, "应该已收敛"
 
     print("✓ Editor 统计计算测试通过")
-    print(f"  - 总编辑次数：{stats['total_edits']}")
-    print(f"  - 拒绝次数：{stats['rejected_edits']}")
-    print(f"  - 平均提升：{stats['avg_improvement']:.2f}")
-    print(f"  - 接受率：{stats['acceptance_rate']:.2f}")
+    print(f"  - 总迭代次数：{stats['total_iterations']}")
+    print(f"  - 是否收敛：{stats['converged']}")
 
 
 async def test_validate_edited_content():

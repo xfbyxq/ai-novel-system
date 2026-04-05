@@ -769,11 +769,13 @@ class NovelCrewManager:
         if team_context:
             team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
 
-        # ── 1.5 章节大纲细化（可选步骤） ─────────────────────
+        # ── 1.5 章节大纲细化（动态决定是否需要） ─────────────────────
         detailed_outline = {}
-        detailed_outline_text = "（未启用大纲细化）"
+        # 默认使用章节策划师的输出作为大纲文本（简单章节跳过细化时）
+        detailed_outline_text = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
 
-        if self.enable_outline_refinement:
+        # 根据章节复杂度动态决定是否需要细化
+        if self.enable_outline_refinement and self._should_refine_outline(chapter_plan, chapter_number):
             logger.info(f"📋 大纲细化：开始细化第 {chapter_number} 章大纲...")
 
             # 构建全局大纲上下文
@@ -996,7 +998,7 @@ class NovelCrewManager:
                 "作家", {"draft_length": len(draft)}, f"第{chapter_number}章初稿"
             )
 
-        # ── 3. Writer-Editor 审查反馈循环 ─────────────────────
+        # ── 3. Writer-Editor 审查反馈循环（含跨章节连贯性检查） ─────────────────────
         chapter_plan_json = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
 
         # 构建时间线锚点信息（用于跨章节时间一致性检查）
@@ -1010,6 +1012,13 @@ class NovelCrewManager:
 
 **检查要点**：本章的时间推进是否合理？是否与前文时间线矛盾？"""
 
+        # 查询图库中与本章角色相关的冲突（注入编辑进行跨章节连贯性检查）
+        graph_conflicts_context = await self._query_graph_conflicts_for_continuity(
+            novel_id=str(novel_data.get("id", "")),
+            chapter_characters=chapter_characters,
+            chapter_number=chapter_number,
+        )
+
         review_result = await self.review_handler.execute(
             initial_draft=draft,
             chapter_number=chapter_number,
@@ -1020,6 +1029,7 @@ class NovelCrewManager:
             team_context=team_context,
             previous_chapters_summary=previous_chapters_summary,
             timeline_anchor=timeline_anchor,
+            graph_conflicts_context=graph_conflicts_context,
         )
 
         edited_content = review_result.final_content
@@ -1036,122 +1046,12 @@ class NovelCrewManager:
                 f"第{chapter_number}章审查循环",
             )
 
-        # ── 4. 连续性检查 + 修复循环 ─────────────────────────
+        # ── 4. 最终内容（连续性检查已合并到编辑中） ─────────────────────────
         final_content = edited_content
-        continuity_report = None
+        continuity_report = None  # 连续性检查已合并到编辑的cross_chapter_coherence维度
 
-        # 查询图库中与本章角色相关的冲突
-        graph_conflicts_context = await self._query_graph_conflicts_for_continuity(
-            novel_id=str(novel_data.get("id", "")),
-            chapter_characters=chapter_characters,
-            chapter_number=chapter_number,
-        )
-
-        for fix_round in range(1, self.max_fix_iterations + 1):
-            continuity_task = self.pm.format(
-                self.pm.CONTINUITY_CHECKER_TASK,
-                current_chapter=final_content,
-                world_setting_brief=world_brief,
-                character_info=character_info or "（主要角色）",
-                previous_key_info=previous_chapters_summary or "（本章为第一章）",
-            )
-
-            # 注入图库冲突检测结果
-            if graph_conflicts_context:
-                continuity_task += f"\n\n{graph_conflicts_context}"
-
-            # 注入反思经验到连续性检查系统提示词
-            continuity_system = self.pm.CONTINUITY_CHECKER_SYSTEM
-            if self.reflection_agent:
-                continuity_lessons = self.reflection_agent.get_lessons_for_continuity()
-                if continuity_lessons:
-                    continuity_system += "\n" + continuity_lessons
-
-            continuity_report = await self._call_agent(
-                agent_name="连续性审查员",
-                system_prompt=continuity_system,
-                task_prompt=continuity_task,
-                temperature=0.5,
-                expect_json=True,
-            )
-
-            # 检查是否有严重问题
-            # 处理 continuity_report 可能是 list 的情况（JsonExtractor 可能返回 list）
-            if isinstance(continuity_report, list):
-                # 如果是列表，提取其中的 issue 项
-                issues = []
-                for item in continuity_report:
-                    if isinstance(item, dict) and "severity" in item:
-                        issues.append(item)
-                    elif isinstance(item, dict) and "issues" in item:
-                        issues.extend(item.get("issues", []))
-                high_severity = [i for i in issues if i.get("severity") == "high"]
-                quality_score = "N/A"
-            else:
-                issues = (
-                    continuity_report.get("issues", [])
-                    if isinstance(continuity_report, dict)
-                    else []
-                )
-                high_severity = [i for i in issues if i.get("severity") == "high"]
-                quality_score = (
-                    continuity_report.get("quality_score", "N/A")
-                    if isinstance(continuity_report, dict)
-                    else "N/A"
-                )
-
-            if not high_severity:
-                logger.info(
-                    f"[连续性检查] 第 {fix_round} 轮: 无严重问题 " f"(score={quality_score})"
-                )
-                break
-
-            if fix_round >= self.max_fix_iterations:
-                logger.warning(
-                    f"[连续性检查] 达到最大修复轮次 ({self.max_fix_iterations}), "
-                    f"仍有 {len(high_severity)} 个严重问题"
-                )
-                break
-
-            # 调用修复（使用带验证的修复流水线）
-            logger.info(
-                f"[连续性检查] 第 {fix_round} 轮: 发现 {len(high_severity)} 个严重问题, "
-                f"请求修复..."
-            )
-
-            # 构建上下文信息
-            fix_context = f"""世界观：{world_brief}
-角色信息：{character_info or "（主要角色）"}
-前章摘要：{previous_chapters_summary or "（本章为第一章）"}"""
-
-            # 使用 ContinuityFixerPipeline 进行修复和验证
-            fix_result = await self.continuity_fixer_pipeline.fix_with_verification(
-                content=final_content,
-                continuity_report=continuity_report,
-                context=fix_context,
-                max_attempts=2,  # 每轮最多2次修复尝试
-            )
-
-            fixed_content = fix_result.get("fixed_content", final_content)
-            verified = fix_result.get("verified", False)
-            attempts = fix_result.get("attempts", 0)
-
-            if verified:
-                logger.info(f"[连续性检查] 修复已验证通过，共 {attempts} 次尝试")
-            else:
-                logger.warning(
-                    f"[连续性检查] 修复未完全验证通过，" f"尝试 {attempts} 次后仍有残留问题"
-                )
-
-            # 更新内容（只要修复后有变化就接受，不管是否完全验证通过）
-            if fixed_content and len(fixed_content) > len(final_content) * 0.3:
-                final_content = fixed_content
-
-        # 记录到 TeamContext
+        # 更新 TeamContext 的角色状态和时间线
         if team_context:
-            team_context.add_agent_output(
-                "连续性审查员", continuity_report, f"第{chapter_number}章检查"
-            )
             # 更新本章出场角色的状态
             for char_name in chapter_characters:
                 team_context.update_character_state(
@@ -1165,11 +1065,8 @@ class NovelCrewManager:
                     characters=chapter_characters,
                 )
 
-        # 获取 quality_score，处理 continuity_report 可能是 list 的情况
-        if isinstance(continuity_report, dict):
-            quality_score = continuity_report.get("quality_score", 0)
-        else:
-            quality_score = 0
+        # 获取质量评分
+        quality_score = review_result.final_score
 
         # ── 5. 相似度检测 ─────────────────────────────────────
         similarity_report = None
@@ -1541,6 +1438,48 @@ class NovelCrewManager:
                     )
 
         return result
+
+    def _should_refine_outline(
+        self, chapter_plan: dict, chapter_number: int
+    ) -> bool:
+        """评估章节是否需要细化步骤.
+
+        根据章节复杂度动态决定是否需要调用大纲细化师。
+        复杂章节启用细化可以提供更详细的写作指导。
+
+        Args:
+            chapter_plan: 章节策划结果
+            chapter_number: 章节号
+
+        Returns:
+            True 表示需要细化，False 表示可以跳过细化步骤
+        """
+        reasons_to_refine = []
+
+        # 1. 场景数量 > 3 则需要细化
+        scenes = chapter_plan.get("scenes", [])
+        if len(scenes) > 3:
+            reasons_to_refine.append("多场景章节")
+
+        # 2. 检查章节类型标记
+        if chapter_plan.get("is_milestone") or chapter_plan.get("is_climax"):
+            reasons_to_refine.append("关键章节")
+
+        # 3. 黄金三章（前3章）需要细化
+        if chapter_number <= 3:
+            reasons_to_refine.append("黄金三章")
+
+        # 4. 涉及多个转折点
+        plot_points = chapter_plan.get("plot_points", [])
+        if len(plot_points) > 2:
+            reasons_to_refine.append("多转折点")
+
+        if reasons_to_refine:
+            logger.info(f"章节{chapter_number}需要细化: {', '.join(reasons_to_refine)}")
+            return True
+
+        logger.info(f"章节{chapter_number}复杂度较低，跳过细化步骤")
+        return False
 
     def _build_plot_outline_context(
         self, plot_outline: dict | list, volume_number: int, chapter_number: int

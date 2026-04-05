@@ -24,41 +24,29 @@ from llm.qwen_client import QwenClient
 EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色.
 
 你的工作包含两个部分：
-1. 对内容进行多维度精确评分（8个维度）
+1. 对内容进行多维度精确评分（5个维度）
 2. 润色并输出修改后的完整内容
 
 【精确评分维度】（1-10分）：
-- satisfaction_design（爽感设计）：章节是否有明确的爽点（打脸/升级/逆转/揭秘）？爽点是否有足够铺垫（先抑后扬）？释放是否彻底？章末是否有有效卡章？
-- foreshadowing（伏笔设计）：伏笔是否埋设合理？是否有铺垫？后续是否可能兑现？悬念设置是否有效？
-- character_distinctiveness（角色辨识度）：主角是否有鲜明特征？职业能力是否发挥作用？是否有个人习惯或口头禅？
+- excitement（爽点设计）：章节是否有明确的爽点？铺垫是否充分？悬念是否有效？
 - plot_logic（情节逻辑）：因果关系是否清晰？动机是否充分？事件发展是否合理？
-- character_consistency（角色一致性）：称呼是否统一？行为是否矛盾？性格是否前后一致？
-- setting_consistency（设定一致性）：世界观设定是否前后一致？角色设定是否矛盾？时间线是否清晰？
-- pacing（节奏把控）：场景节奏是否有变化？是否过于相似？张弛是否有度？
-- fluency（语言流畅度）：表达是否流畅？衔接是否自然？用词是否准确？
+- character_quality（角色塑造）：主角是否有鲜明特征？行为是否一致？性格是否矛盾？
+- setting_consistency（设定一致性）：世界观是否前后一致？时间线是否清晰？
+- fluency（语言流畅度）：表达是否流畅？场景节奏是否有变化？用词是否准确？
 
 【评分锚点示例】：
-- 7.0分：基本合格，无明显硬伤，但缺乏亮点
-- 7.5分：合格，情节流畅，有1-2个爽点，无逻辑漏洞
-- 8.0分：良好，情节紧凑，爽点有铺垫有释放，角色行为合理
-- 8.5分：优秀，情节精彩，爽点设计巧妙，伏笔埋设自然
-- 9.0分：出色，情节跌宕起伏，爽感强烈，角色鲜明，语言优美
+- 6.0分：基本合格，无明显硬伤，但缺乏亮点
+- 7.0分：合格，情节流畅，有爽点铺垫，无逻辑漏洞
+- 7.5分：良好，情节紧凑，爽点设计合理，角色行为符合人设
+- 8.0分：优秀，情节精彩，爽点有铺垫有释放，设定一致
+- 8.5分：出色，情节跌宕起伏，爽感强烈，角色鲜明
 
-【跨章节一致性检查清单】（关键！影响setting_consistency和pacing评分）：
-1. 【章节边界检查】（最高优先级）：
-   - 本章开篇是否自然承接上一章结尾的场景/状态？
-   - 是否存在"跳跃"（上章角色在A地，本章突然在B地且无说明）？
-   - 是否存在"重复"（本章重写了上章已写过的场景或对话）？
-   - 本章情节是否有实质性推进，还是停留在上章的状态？
-2. 情节重复检测：本章的核心情节是否与前文重复？（如：破解暗号、发现线索的方式）
-3. 时间线检测：是否有明确的时间锚点？时间推进是否合理？是否与前文时间线矛盾？
-4. 人物设定演变：人物能力/性格/身份的转变是否有铺垫？转变是否突兀？
-5. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
-6. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
+【问题定位要求】：
+描述问题时要明确位置（如：第3段、开篇场景、结尾转折），便于定位修改。
 
-【问题描述格式要求】：
-每条问题必须包含4个字段：
-1. location: 问题位置（如：第3段、开篇场景、角色xxx）
+【问题描述格式】：
+每条问题包含4个字段：
+1. location: 问题位置（如：第3段、开篇场景、结尾转折）
 2. description: 问题描述（精炼概括，20字以内）
 3. severity: 严重程度（high/medium/low）
 4. suggestion: 修订建议（具体可操作）"""
@@ -81,19 +69,16 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 {{
     "overall_score": 综合评分(1-10浮点数)，参考评分锚点,
     "dimension_scores": {{
-        "satisfaction_design": 分数,
-        "foreshadowing": 分数,
-        "character_distinctiveness": 分数,
+        "excitement": 分数,
         "plot_logic": 分数,
-        "character_consistency": 分数,
+        "character_quality": 分数,
         "setting_consistency": 分数,
-        "pacing": 分数,
         "fluency": 分数
     }},
     "overall_assessment": "整体评价（1-2句话概括章节质量）",
     "issues": [
         {{
-            "location": "问题位置（如第3段、开篇场景、角色xxx）",
+            "location": "问题位置（如第3段、开篇场景、结尾转折）",
             "description": "问题描述（20字以内）",
             "severity": "high/medium/low",
             "suggestion": "修订建议"
@@ -172,6 +157,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         team_context: Optional[NovelTeamContext] = None,
         previous_chapters_summary: str = "",
         timeline_anchor: str = "",
+        graph_conflicts_context: str = "",
     ) -> ReviewLoopResult:
         """执行 Writer-Editor 反馈循环.
 
@@ -185,6 +171,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             team_context: 团队上下文（可选，用于记录审查反馈）
             previous_chapters_summary: 前文章节摘要（用于跨章节一致性检查）
             timeline_anchor: 时间线锚点信息（用于时间一致性检查）
+            graph_conflicts_context: 图数据库冲突信息（用于连贯性检查）
 
         Returns:
             ReviewLoopResult
@@ -198,6 +185,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         self._team_context = team_context
         self._previous_chapters_summary = previous_chapters_summary
         self._timeline_anchor = timeline_anchor
+        self._graph_conflicts_context = graph_conflicts_context
 
         return await super().execute(
             initial_content=initial_draft,
@@ -209,6 +197,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             team_context=team_context,
             previous_chapters_summary=previous_chapters_summary,
             timeline_anchor=timeline_anchor,
+            graph_conflicts_context=graph_conflicts_context,
         )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -241,11 +230,11 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
 
     def _get_dimension_names(self) -> Dict[str, str]:
         return {
-            "fluency": "语言流畅度",
+            "excitement": "爽点设计",
             "plot_logic": "情节逻辑",
-            "character_consistency": "角色一致性",
-            "pacing": "节奏把控",
-            "satisfaction_design": "爽感设计",
+            "character_quality": "角色塑造",
+            "setting_consistency": "设定一致性",
+            "fluency": "语言流畅度",
         }
 
     def _build_reviewer_task_prompt(
@@ -258,13 +247,14 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
     ) -> str:
         """构建 Editor 审查任务提示词.
 
-        支持注入前文摘要和时间线锚点，提升跨章节一致性检查能力。
+        支持注入前文摘要、时间线锚点和图数据库冲突信息，提升跨章节一致性检查能力。
         """
         chapter_number = context.get("chapter_number", 1)
         chapter_title = context.get("chapter_title", "")
         chapter_summary = context.get("chapter_summary", "")
         previous_chapters_summary = context.get("previous_chapters_summary", "")
         timeline_anchor = context.get("timeline_anchor", "")
+        graph_conflicts_context = context.get("graph_conflicts_context", "")
 
         # 构建前文章节摘要部分
         if previous_chapters_summary:
@@ -293,7 +283,17 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         else:
             timeline_anchor_section = ""
 
-        return EDITOR_REVIEW_TASK.format(
+        # 构建图数据库冲突信息部分
+        if graph_conflicts_context:
+            graph_conflicts_section = f"""## 图数据库冲突警告（自动检测）
+{graph_conflicts_context}
+
+**检查要点**：以上是系统自动检测到的潜在连贯性问题，请在评分时重点考虑。"""
+        else:
+            graph_conflicts_section = ""
+
+        # 构建完整的任务提示词
+        task_prompt = EDITOR_REVIEW_TASK.format(
             draft_content=content,
             chapter_number=chapter_number,
             chapter_title=chapter_title,
@@ -301,6 +301,15 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             previous_chapters_section=previous_chapters_section,
             timeline_anchor_section=timeline_anchor_section,
         )
+
+        # 追加图数据库冲突信息
+        if graph_conflicts_section:
+            task_prompt = task_prompt.replace(
+                "请以JSON格式输出",
+                f"{graph_conflicts_section}\n\n请以JSON格式输出"
+            )
+
+        return task_prompt
 
     def _build_revision_prompt(
         self,

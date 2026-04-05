@@ -275,58 +275,40 @@ class ChapterQualityReport(BaseQualityReport):
     """章节质量评估报告.
 
     在基类基础上添加修订建议和加权总分计算。
-    精确维度权重设计（8维度）：
-    - 爽感设计 20%（最高权重）
-    - 伏笔设计 15%（新增）
-    - 角色辨识度 15%（新增）
-    - 情节逻辑 12%
-    - 角色一致性 12%
-    - 设定一致性 10%（新增）
-    - 节奏把控 8%
-    - 语言流畅 8%
-
-    聚合维度（3个）：
-    - 连贯性 (coherence): 情节衔接、设定一致、角色行为逻辑
-    - 合理性 (plausibility): 动机合理、因果关系、伏笔铺垫
-    - 趣味性 (engagement): 爽点设计、悬念布局、角色吸引力
+    精简维度设计（5维度）：
+    - 爽点设计 25%（最高权重，核心吸引力）
+    - 情节逻辑 20%（因果关系合理性）
+    - 角色塑造 20%（角色一致性和辨识度）
+    - 设定一致性 20%（世界观和时间线一致性）
+    - 语言流畅度 15%（阅读体验）
     """
 
     # 修订建议列表（旧格式，保留向后兼容）
     suggestions: List[Dict[str, Any]] = field(default_factory=list)
 
-    # 精确维度权重配置（8维度）
+    # 精简维度权重配置（5维度）
     _weights: Dict[str, float] = field(
         default_factory=lambda: {
-            "satisfaction_design": 0.20,  # 爽感设计
-            "foreshadowing": 0.15,  # 伏笔设计（新增）
-            "character_distinctiveness": 0.15,  # 角色辨识度（新增）
-            "plot_logic": 0.12,  # 情节逻辑
-            "character_consistency": 0.12,  # 角色一致性
-            "setting_consistency": 0.10,  # 设定一致性（新增）
-            "pacing": 0.08,  # 节奏把控
-            "fluency": 0.08,  # 语言流畅
+            "excitement": 0.25,  # 爽点设计
+            "plot_logic": 0.20,  # 情节逻辑
+            "character_quality": 0.20,  # 角色塑造
+            "setting_consistency": 0.20,  # 设定一致性
+            "fluency": 0.15,  # 语言流畅度
         }
     )
 
-    # 聚合维度权重配置
+    # 聚合维度权重配置（简化为2个聚合维度）
     _aggregate_weights: Dict[str, Dict[str, float]] = field(
         default_factory=lambda: {
             "coherence": {
                 "plot_logic": 0.40,
-                "character_consistency": 0.35,
+                "character_quality": 0.35,
                 "setting_consistency": 0.25,
             },
-            "plausibility": {
-                "plot_logic": 0.35,
-                "character_consistency": 0.30,
-                "setting_consistency": 0.20,
-                "foreshadowing": 0.15,
-            },
             "engagement": {
-                "satisfaction_design": 0.50,
-                "foreshadowing": 0.25,
-                "pacing": 0.15,
-                "character_distinctiveness": 0.10,
+                "excitement": 0.60,
+                "fluency": 0.25,
+                "character_quality": 0.15,
             },
         }
     )
@@ -356,13 +338,13 @@ class ChapterQualityReport(BaseQualityReport):
 
     @property
     def aggregate_scores(self) -> Dict[str, float]:
-        """计算聚合维度评分（连贯性、合理性、趣味性）.
+        """计算聚合维度评分（连贯性、趣味性）.
 
         Returns:
             聚合维度评分字典
         """
         if not self.dimension_scores:
-            return {"coherence": 0.0, "plausibility": 0.0, "engagement": 0.0}
+            return {"coherence": 0.0, "engagement": 0.0}
 
         aggregate = {}
         for agg_name, weights in self._aggregate_weights.items():

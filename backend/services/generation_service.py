@@ -875,7 +875,7 @@ class GenerationService:
             chapter = existing_chapter_result.scalar_one_or_none()
 
             # continuity_report 可能是 dict 或 list，提前解析供两个分支共用
-            continuity_report = writing_result.get("continuity_report", {})
+            continuity_report = writing_result.get("continuity_report") or {}
             if isinstance(continuity_report, list):
                 continuity_issues = continuity_report  # 直接是 issues 列表
             else:
@@ -1441,7 +1441,7 @@ class GenerationService:
         chapter_plan = writing_result.get("chapter_plan", {})
 
         # continuity_report 可能是 dict 或 list
-        continuity_report = writing_result.get("continuity_report", {})
+        continuity_report = writing_result.get("continuity_report") or {}
         continuity_issues = continuity_report if isinstance(continuity_report, list) else continuity_report.get("issues", [])
 
         chapter = Chapter(

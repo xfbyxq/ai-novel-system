@@ -255,13 +255,18 @@ class Settings(BaseSettings):
     # 大纲审查：检查结构完整性、节奏把控、冲突张力、伏笔设计
     ENABLE_PLOT_REVIEW: bool = True
     # 章节审查：Writer-Editor 循环，检查语言流畅度、情节逻辑、角色一致性
+    # 注意：跨章节连贯性检查已合并到编辑的 cross_chapter_coherence 维度
     ENABLE_CHAPTER_REVIEW: bool = True
     # 投票共识：企划阶段关键决策由多 Agent 投票决定
     ENABLE_VOTING: bool = True
     # 设定查询：写作过程中 Writer 可查询世界观/角色/大纲设定
     ENABLE_QUERY: bool = True
     # 章节大纲细化：在 ChapterPlanner 之后、Writer 之前，将章节计划展开为详细大纲
+    # 注意：现已改为按需调用，根据章节复杂度动态决定是否需要细化
     ENABLE_OUTLINE_REFINEMENT: bool = True
+    # 独立连续性审查：已废弃，连续性检查已合并到编辑的 cross_chapter_coherence 维度
+    # 保留此配置作为降级开关，设为 False 时使用新流程
+    ENABLE_STANDALONE_CONTINUITY_CHECK: bool = False
 
     # --- 详细评估报告配置 ---
     # 启用详细问题报告：输出包含位置定位、具体表现、优先级分类的问题列表
