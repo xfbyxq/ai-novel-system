@@ -1,6 +1,6 @@
 /** 修订和记忆管理 API 客户端 */
 
-import { api } from "./client";
+import apiClient from "./client";
 
 /**
  * 修订反馈请求
@@ -117,7 +117,7 @@ export const revisionApi = {
    * 理解用户修订反馈，生成修订计划
    */
   async understandFeedback(request: RevisionFeedbackRequest): Promise<RevisionPlanResponse> {
-    const response = await api.post<RevisionPlanResponse>("/revision/understand", request);
+    const response = await apiClient.post<RevisionPlanResponse>("/revision/understand", request);
     return response.data;
   },
 
@@ -125,7 +125,7 @@ export const revisionApi = {
    * 执行修订计划
    */
   async executePlan(request: RevisionExecuteRequest): Promise<ExecutionResultResponse> {
-    const response = await api.post<ExecutionResultResponse>("/revision/execute", request);
+    const response = await apiClient.post<ExecutionResultResponse>("/revision/execute", request);
     return response.data;
   },
 
@@ -133,7 +133,7 @@ export const revisionApi = {
    * 预览修订计划的影响
    */
   async previewPlan(planId: string): Promise<RevisionPlanResponse> {
-    const response = await api.get<RevisionPlanResponse>(`/revision/preview/${planId}`);
+    const response = await apiClient.get<RevisionPlanResponse>(`/revision/preview/${planId}`);
     return response.data;
   },
 
@@ -150,7 +150,7 @@ export const revisionApi = {
       created_at: string;
     }>;
   }> {
-    const response = await api.get(`/revision/plans/${novelId}`);
+    const response = await apiClient.get(`/revision/plans/${novelId}`);
     return response.data;
   },
 
@@ -163,7 +163,7 @@ export const revisionApi = {
     chapter: number = 0,
     limit: number = 5
   ): Promise<LessonResponse> {
-    const response = await api.get<LessonResponse>("/revision/lessons/" + novelId, {
+    const response = await apiClient.get<LessonResponse>("/revision/lessons/" + novelId, {
       params: { task_type: taskType, chapter, limit },
     });
     return response.data;
@@ -177,7 +177,7 @@ export const revisionApi = {
     dimension?: string,
     limit: number = 5
   ): Promise<StrategyResponse> {
-    const response = await api.get<StrategyResponse>("/revision/strategies/" + novelId, {
+    const response = await apiClient.get<StrategyResponse>("/revision/strategies/" + novelId, {
       params: { dimension, limit },
     });
     return response.data;
@@ -198,7 +198,7 @@ export const revisionApi = {
     application_count: number;
     trend: string;
   }> {
-    const response = await api.post("/revision/strategies/record", null, { params });
+    const response = await apiClient.post("/revision/strategies/record", null, { params });
     return response.data;
   },
 
@@ -221,7 +221,7 @@ export const revisionApi = {
     failed_strategies: Array<{ Name: string; issue: string }>;
     recurring_pattern?: string;
   }> {
-    const response = await api.post("/revision/review", null, { params });
+    const response = await apiClient.post("/revision/review", null, { params });
     return response.data;
   },
 
@@ -229,7 +229,7 @@ export const revisionApi = {
    * 记录用户偏好
    */
   async recordPreference(request: PreferenceRecordRequest): Promise<PreferenceResponse> {
-    const response = await api.post<PreferenceResponse>("/revision/preferences", request);
+    const response = await apiClient.post<PreferenceResponse>("/revision/preferences", request);
     return response.data;
   },
 
@@ -250,7 +250,7 @@ export const revisionApi = {
       source: string;
     }>;
   }> {
-    const response = await api.get("/revision/preferences/" + userId, {
+    const response = await apiClient.get("/revision/preferences/" + userId, {
       params: { preference_types: preferenceTypes, min_confidence: minConfidence },
     });
     return response.data;
@@ -260,7 +260,7 @@ export const revisionApi = {
    * 获取偏好上下文文本（用于注入到Agent prompt）
    */
   async getPreferenceContext(userId: string): Promise<{ context: string }> {
-    const response = await api.get("/revision/preferences/" + userId + "/context");
+    const response = await apiClient.get("/revision/preferences/" + userId + "/context");
     return response.data;
   },
 };
