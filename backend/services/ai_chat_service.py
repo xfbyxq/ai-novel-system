@@ -16,7 +16,7 @@ from .agentmesh_memory_adapter import NovelMemoryAdapter
 from .graph_query_service import GraphQueryService
 from .graph_sync_service import GraphSyncService
 from .memory_service import get_novel_memory_service
-from .novel_tool_executor import NOVEL_QUERY_TOOLS, NovelToolExecutor
+from .novel_tool_executor import NOVEL_ALL_TOOLS, NovelToolExecutor
 from .revision_understanding_service import RevisionUnderstandingService
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,7 @@ SCENE_NOVEL_CREATION = "novel_creation"
 SCENE_CRAWLER_TASK = "crawler_task"
 SCENE_NOVEL_REVISION = "novel_revision"
 SCENE_NOVEL_ANALYSIS = "novel_analysis"
+SCENE_CHAPTER_ASSISTANT = "chapter_assistant"
 
 NOVEL_GENRES = [
     "玄幻",
@@ -215,6 +216,24 @@ SYSTEM_PROMPTS = {
 3. 给出有针对性的改进建议
 
 请用中文回复。""",
+    SCENE_CHAPTER_ASSISTANT: """你是一位专业的章节编辑助手，专门帮助作者编辑和改进章节内容。
+
+**重要**：当前章节内容已经直接包含在本消息中，你可以直接阅读和分析，不需要调用任何工具。
+
+**你可以进行的操作**：
+- 润色章节文字
+- 扩展或精简情节
+- 修复连贯性问题
+- 增强描写和氛围
+- 调整节奏和结构
+
+**工作原则**：
+1. 首先阅读并理解当前章节的内容
+2. 根据用户需求提供具体的修改建议
+3. 保持角色一致性、情节连贯性
+4. 注意章节的质量评分标准
+
+请直接回答用户的问题，不要输出任何工具调用格式。""",
 }
 
 WELCOME_MESSAGES = {
@@ -222,6 +241,7 @@ WELCOME_MESSAGES = {
     SCENE_CRAWLER_TASK: "你好！我是爬虫策略AI助手。你可以告诉我你想爬取什么数据，或者想了解哪些市场趋势，我来帮你分析并制定合适的爬取方案。",
     SCENE_NOVEL_REVISION: "你好！我是小说修订AI助手。告诉我你想修订什么内容，比如「优化下小说简介」、「丰富世界观设定」、「完善主角背景」等，我会直接生成优化后的内容。",
     SCENE_NOVEL_ANALYSIS: "你好！我是小说分析AI助手。我可以帮你全面分析小说的整体情况，包括结构、元素、市场定位等方面，并提供有针对性的改进建议。请选择你想分析的小说。",
+    # SCENE_CHAPTER_ASSISTANT 的欢迎消息在 create_session 中动态生成
 }
 
 
@@ -650,6 +670,47 @@ class AiChatService:
         except Exception as e:
             logger.error(f"获取小说信息失败: {e}")
             return {"error": "获取小说信息失败，请稍后重试"}
+
+    async def _get_chapter_by_number(self, novel_id: str, chapter_number: int) -> dict:
+        """获取指定章节的内容.
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 章节号
+
+        Returns:
+            章节信息字典
+        """
+        from sqlalchemy import select
+
+        from core.models.chapter import Chapter
+
+        try:
+            novel_uuid = UUID(novel_id)
+        except ValueError:
+            return {"error": "无效的小说 ID 格式"}
+
+        try:
+            query = select(Chapter).where(
+                Chapter.novel_id == novel_uuid,
+                Chapter.chapter_number == chapter_number,
+            )
+            result = await self.db.execute(query)
+            chapter = result.scalar_one_or_none()
+
+            if not chapter:
+                return {"error": f"章节不存在: 第{chapter_number}章"}
+
+            return {
+                "chapter_number": chapter.chapter_number,
+                "title": chapter.title or f"第{chapter.chapter_number}章",
+                "content": chapter.content or "",
+                "word_count": len(chapter.content) if chapter.content else 0,
+                "status": chapter.status.value if hasattr(chapter.status, "value") else chapter.status,
+            }
+        except Exception as e:
+            logger.error(f"获取章节内容失败: {e}")
+            return {"error": f"获取章节内容失败: {str(e)}"}
 
     async def generate_smart_chapter_summary(
         self,
@@ -1152,6 +1213,49 @@ class AiChatService:
             else:
                 novel_info["analysis"] = analysis
                 self.memory_service.set_novel_memory(novel_id, novel_info)
+
+            # 章节助手场景：预加载当前章节内容
+            if scene == SCENE_CHAPTER_ASSISTANT and "chapter_number" in context:
+                chapter_number = context["chapter_number"]
+                logger.info(f"章节助手场景: 尝试预加载第{chapter_number}章, novel_id={novel_id}")
+                try:
+                    # 加载当前章节内容
+                    chapter_info = await self._get_chapter_by_number(novel_id, chapter_number)
+                    if chapter_info and "error" not in chapter_info:
+                        session.context["current_chapter"] = chapter_info
+                        logger.info(f"章节助手场景预加载章节内容成功: 第{chapter_number}章 - {chapter_info.get('title', '无标题')}")
+                    else:
+                        logger.warning(f"章节助手场景预加载章节内容失败: {chapter_info}")
+                except Exception as e:
+                    logger.warning(f"预加载章节内容失败: {e}")
+        else:
+            logger.info(f"非小说相关场景或无novel_id: scene={scene}, context={context}")
+
+        # 章节助手场景：动态生成欢迎消息
+        welcome_message = WELCOME_MESSAGES.get(scene, "你好！我是AI助手，有什么可以帮助你的吗？")
+        if scene == SCENE_CHAPTER_ASSISTANT:
+            novel_title = session.context.get("novel_info", {}).get("title", "未知小说")
+            chapter_info = session.context.get("current_chapter", {})
+            chapter_num = chapter_info.get("chapter_number", context.get("chapter_number", "?")) if context else "?"
+            chapter_title = chapter_info.get("title", f"第{chapter_num}章")
+            logger.info(f"生成章节助手欢迎消息: novel_title={novel_title}, chapter_num={chapter_num}, chapter_title={chapter_title}")
+            welcome_message = f"""你好！我是章节编辑AI助手。
+
+当前正在编辑：**《{novel_title}》** - **第{chapter_num}章：{chapter_title}**
+
+我可以帮助你：
+- 润色章节文字
+- 扩展或精简情节
+- 修复连贯性问题
+- 增强描写和氛围
+
+请告诉我你想对这章做什么修改？"""
+
+        # 替换初始化时添加的默认欢迎消息
+        if session.messages:
+            session.messages[0] = ChatMessage("assistant", welcome_message)
+        else:
+            session.add_assistant_message(welcome_message)
 
         self.sessions[session_id] = session
 
@@ -2242,7 +2346,25 @@ class AiChatService:
         token_calc = TokenCalculator()
 
         # 构建消息列表：system + 历史对话 + 当前用户消息
-        messages = [{"role": "system", "content": system_prompt}]
+        # 对于 chapter_assistant 场景，添加预加载的章节内容到系统提示词
+        actual_system_prompt = system_prompt
+        if session.scene == SCENE_CHAPTER_ASSISTANT:
+            current_chapter = session.context.get("current_chapter", {})
+            if current_chapter and "error" not in current_chapter:
+                chapter_num = current_chapter.get("chapter_number", "?")
+                chapter_title = current_chapter.get("title", f"第{chapter_num}章")
+                chapter_content = current_chapter.get("content", "")
+                # 将章节内容添加到系统提示词
+                actual_system_prompt = f"""{system_prompt}
+
+---
+**当前章节内容（第{chapter_num}章：{chapter_title}）**：
+
+{chapter_content}
+---"""
+                logger.info(f"章节助手场景: 已将第{chapter_num}章内容添加到系统提示词")
+
+        messages = [{"role": "system", "content": actual_system_prompt}]
 
         # 添加历史对话
         history = session.get_conversation_history(limit=20)  # 获取最近20条
@@ -2268,12 +2390,12 @@ class AiChatService:
             total_tokens = token_calc.count_tokens(total_content)
             logger.info(f"压缩后上下文: {total_tokens} tokens")
 
-        # 工具调用循环
+        # 工具调用循环（支持查询和修改工具）
         max_iterations = 5
         for iteration in range(max_iterations):
             response = await self.client.chat_with_tools(
                 messages=messages,
-                tools=NOVEL_QUERY_TOOLS,
+                tools=NOVEL_ALL_TOOLS,  # 包含查询和修改工具
                 temperature=0.7,
             )
 
@@ -2787,6 +2909,25 @@ class AiChatService:
 
         session.get_messages_for_api()
         system_prompt = self._get_system_prompt(session.scene)
+
+        # 如果是章节助手场景，添加章节内容到系统提示词
+        if session.scene == SCENE_CHAPTER_ASSISTANT:
+            current_chapter = session.context.get("current_chapter", {})
+            logger.info(f"章节助手场景检查: current_chapter存在={bool(current_chapter)}, keys={list(current_chapter.keys()) if current_chapter else 'empty'}")
+            if current_chapter and "error" not in current_chapter:
+                chapter_num = current_chapter.get("chapter_number", "?")
+                chapter_title = current_chapter.get("title", f"第{chapter_num}章")
+                chapter_content = current_chapter.get("content", "")
+                system_prompt = f"""{system_prompt}
+
+---
+**当前章节内容（第{chapter_num}章：{chapter_title}）**：
+
+{chapter_content}
+---"""
+                logger.info(f"章节助手流式消息: 已将第{chapter_num}章内容添加到系统提示词, 内容长度={len(chapter_content)}")
+            else:
+                logger.warning(f"章节助手场景: current_chapter为空或包含错误, current_chapter={type(current_chapter)}, error={'error' in current_chapter if current_chapter else 'N/A'}")
 
         # 如果是小说相关场景，添加小说信息到提示词
         prompt = user_message

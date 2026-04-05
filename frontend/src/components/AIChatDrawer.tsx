@@ -30,9 +30,10 @@ interface Message {
 interface Props {
   open: boolean;
   onClose: () => void;
-  scene: 'novel_creation' | 'crawler_task' | 'novel_revision' | 'novel_analysis';
+  scene: 'novel_creation' | 'crawler_task' | 'novel_revision' | 'novel_analysis' | 'chapter_assistant';
   novelId?: string;
   novelTitle?: string;
+  chapterNumber?: number; // 章节号，用于 chapter_assistant 场景
 }
 
 interface SessionItem {
@@ -46,7 +47,7 @@ interface SessionItem {
   created_at: string;
 }
 
-export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle }: Props) {
+export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle, chapterNumber }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -80,8 +81,15 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
 
   const initSession = async () => {
     try {
-      const context = novelId ? { novel_id: novelId } : undefined;
-      const response = await createChatSession({ scene, context });
+      // 构建上下文，包含章节号信息
+      const context: Record<string, unknown> = {};
+      if (novelId) {
+        context.novel_id = novelId;
+      }
+      if (chapterNumber !== undefined) {
+        context.chapter_number = chapterNumber;
+      }
+      const response = await createChatSession({ scene, context: Object.keys(context).length > 0 ? context : undefined });
       setSessionId(response.session_id);
       setMessages([{ role: 'assistant', content: response.welcome_message }]);
     } catch (error) {
@@ -101,7 +109,7 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     if (open && !sessionId) {
       initSession();
     }
-  }, [open, sessionId, scene, novelId]);
+  }, [open, sessionId, scene, novelId, chapterNumber]);
 
   useEffect(() => {
     if (!sessionId || !open) return;

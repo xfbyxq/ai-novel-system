@@ -38,6 +38,7 @@ from backend.schemas.ai_chat import (
     SessionListResponse,
 )
 from backend.services.ai_chat_service import (
+    SCENE_CHAPTER_ASSISTANT,
     SCENE_CRAWLER_TASK,
     SCENE_NOVEL_ANALYSIS,
     SCENE_NOVEL_CREATION,
@@ -73,12 +74,14 @@ async def create_session(
     - `crawler_task`: 爬虫任务配置
     - `novel_revision`: 小说修订建议
     - `novel_analysis`: 小说内容分析
+    - `chapter_assistant`: 章节编辑助手
     """
     valid_scenes = [
         SCENE_NOVEL_CREATION,
         SCENE_CRAWLER_TASK,
         SCENE_NOVEL_REVISION,
         SCENE_NOVEL_ANALYSIS,
+        SCENE_CHAPTER_ASSISTANT,
     ]
     if session_in.scene not in valid_scenes:
         raise HTTPException(
@@ -153,7 +156,14 @@ async def websocket_chat(
     """
     await websocket.accept()
 
+    # 先尝试从内存获取，如果不存在则从数据库加载
     session = service.get_session(session_id)
+    if not session:
+        session = await service.load_session(session_id)
+        if session:
+            # 加载到内存
+            service.sessions[session_id] = session
+
     if not session:
         await websocket.send_json({"error": f"会话 {session_id} 不存在"})
         await websocket.close()

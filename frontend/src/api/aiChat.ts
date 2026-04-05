@@ -1,7 +1,7 @@
 import apiClient from './client';
 
 export interface AIChatSessionCreate {
-  scene: 'novel_creation' | 'crawler_task' | 'novel_revision' | 'novel_analysis';
+  scene: 'novel_creation' | 'crawler_task' | 'novel_revision' | 'novel_analysis' | 'chapter_assistant';
   context?: Record<string, unknown>;
 }
 
