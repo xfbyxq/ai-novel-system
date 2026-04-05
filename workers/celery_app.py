@@ -23,3 +23,11 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["workers"])
+
+# 设置 Worker 日志（必须在所有任务注册之后）
+from core.logging_config import setup_logging, setup_worker_logging
+
+# 先确保日志系统初始化
+setup_logging()
+# 再配置 Worker 专用日志
+setup_worker_logging()

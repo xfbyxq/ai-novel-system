@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip,
+import { 
+  Drawer, Input, Button, Typography, Spin, Space, Divider, List, Modal, Popconfirm, message, Card, Tag, Radio, Tooltip, Alert,
 } from 'antd';
-import { SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, CheckCircleOutlined, BookOutlined, EditOutlined } from '@ant-design/icons';
+import { EditOutlined, ThunderboltOutlined, SendOutlined, RobotOutlined, UserOutlined, ReloadOutlined, HistoryOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import { 
   createChatSession, 
   getWebSocketUrl, 
@@ -14,11 +14,11 @@ import {
   applySuggestions,
   getNovelCharactersForRevision,
   getNovelChaptersForRevision,
+  generateSmartSummary,
   type RevisionSuggestion,
   type CharacterListItem,
   type ChapterListItem,
 } from '@/api/aiChat';
-import { updateWorldSetting, updatePlotOutline } from '@/api/novels';
 
 const { TextArea } = Input;
 
@@ -44,12 +44,6 @@ interface SessionItem {
     novel_id?: string;
   };
   created_at: string;
-}
-
-interface LegacySuggestion {
-  type: string;
-  content: string;
-  description: string;
 }
 
 export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle }: Props) {
@@ -81,6 +75,10 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<RevisionSuggestion | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  
+  // 智能摘要相关状态
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [showSummaryHint, setShowSummaryHint] = useState(true);
 
   const initSession = async () => {
     try {
@@ -95,6 +93,40 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     } catch (error) {
       console.error('创建会话失败:', error);
       message.error('创建会话失败，请重试');
+    }
+  };
+
+  // 生成智能章节摘要
+  const handleGenerateSmartSummary = async () => {
+    if (!novelId) return;
+    
+    setGeneratingSummary(true);
+    try {
+      // 获取指定范围内的章节号列表
+      const chapterNumbers = [];
+      for (let i = chapterRange.start; i <= chapterRange.end; i++) {
+        chapterNumbers.push(i);
+      }
+      
+      const response = await generateSmartSummary({
+        novel_id: novelId,
+        chapter_numbers: chapterNumbers,
+        force_regenerate: false, // 使用缓存
+      });
+      
+      setShowSummaryHint(false);
+      
+      const summaryMsg = `已生成 ${response.generated_count} 个章节的智能摘要，使用缓存 ${response.cached_count} 个。\n\n` +
+        `摘要包含：关键事件、情节概要、人物互动、情感走向、伏笔暗示等结构化信息。\n\n` +
+        `现在您可以询问关于这些章节的具体问题了！`;
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: summaryMsg }]);
+      message.success('智能摘要生成完成');
+    } catch (error) {
+      console.error('生成智能摘要失败:', error);
+      message.error('生成智能摘要失败，请重试');
+    } finally {
+      setGeneratingSummary(false);
     }
   };
 
@@ -221,49 +253,6 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     } catch (error) {
       console.error('删除会话失败:', error);
     }
-  };
-
-  const parseRevisionSuggestion = (content: string): LegacySuggestion[] => {
-    /** 解析AI的修订建议 - 简单的本地解析用于快速检测 */
-    const suggestions: LegacySuggestion[] = [];
-    
-    // 检测世界观修订建议
-    if (content.includes('世界观') || content.includes('世界设定')) {
-      suggestions.push({
-        type: 'world_setting',
-        content: content,
-        description: '世界观修订建议'
-      });
-    }
-    
-    // 检测角色修订建议
-    if (content.includes('角色') || content.includes('人物')) {
-      suggestions.push({
-        type: 'character',
-        content: content,
-        description: '角色修订建议'
-      });
-    }
-    
-    // 检测大纲修订建议
-    if (content.includes('大纲') || content.includes('剧情')) {
-      suggestions.push({
-        type: 'outline',
-        content: content,
-        description: '大纲修订建议'
-      });
-    }
-    
-    // 检测章节修订建议
-    if (content.includes('章节') || content.includes('内容')) {
-      suggestions.push({
-        type: 'chapter',
-        content: content,
-        description: '章节修订建议'
-      });
-    }
-    
-    return suggestions;
   };
 
   // 新增：从后端提取结构化建议
@@ -434,58 +423,6 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
     }
   };
 
-  const applySuggestionLegacy = async (suggestion: LegacySuggestion) => {
-    /** 旧版应用修订建议（兼容） */
-    if (!novelId) {
-      message.error('缺少小说ID，无法应用建议');
-      return;
-    }
-    
-    try {
-      message.loading('正在应用建议...');
-      
-      switch (suggestion.type) {
-        case 'world_setting':
-          await updateWorldSetting(novelId, { raw_content: suggestion.content });
-          message.success('世界观修订建议已应用！');
-          break;
-        case 'outline':
-          await updatePlotOutline(novelId, { raw_content: suggestion.content });
-          message.success('大纲修订建议已应用！');
-          break;
-        case 'character':
-          // 需要选择具体角色
-          loadCharacters();
-          setCharacterSelectModalOpen(true);
-          setPendingSuggestion({ 
-            type: 'character', 
-            field: 'personality',
-            suggested_value: suggestion.content,
-            description: suggestion.description,
-            confidence: 0.8
-          });
-          return;
-        case 'chapter':
-          // 需要选择具体章节
-          loadChapters();
-          setChapterSelectModalOpen(true);
-          setPendingSuggestion({ 
-            type: 'chapter', 
-            field: 'content',
-            suggested_value: suggestion.content,
-            description: suggestion.description,
-            confidence: 0.8
-          });
-          return;
-        default:
-          message.error('未知的修订类型');
-          return;
-      }
-    } catch (error) {
-      console.error('应用建议失败:', error);
-      message.error('应用建议失败，请重试');
-    }
-  };
 
   const getSceneTitle = () => {
     switch (scene) {
@@ -540,11 +477,29 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                     onChange={(e) => setChapterRange({ ...chapterRange, end: parseInt(e.target.value) || chapterRange.start })}
                     style={{ width: 80 }}
                   />
-                  <Button size="small" onClick={handleRestart}>
-                    应用
-                  </Button>
+                  <Tooltip title="读取完整章节内容并提炼关键点">
+                    <Button 
+                      size="small" 
+                      type="primary"
+                      icon={<ThunderboltOutlined />}
+                      loading={generatingSummary}
+                      onClick={handleGenerateSmartSummary}
+                    >
+                      智能摘要
+                    </Button>
+                  </Tooltip>
                 </Space>
               </Space>
+            )}
+            {showSummaryHint && (scene === 'novel_revision' || scene === 'novel_analysis') && novelId && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 8 }}
+                message="提示：点击「智能摘要」按钮，AI将读取完整章节内容并提炼关键点，提供更精准的分析建议。"
+                closable
+                onClose={() => setShowSummaryHint(false)}
+              />
             )}
             <Space style={{ marginTop: 8 }}>
               <Button size="small" icon={<HistoryOutlined />} onClick={() => {
@@ -589,22 +544,6 @@ export default function AIChatDrawer({ open, onClose, scene, novelId, novelTitle
                             onClick={() => handleExtractSuggestions(msg.content)}
                           >
                             提取建议
-                          </Button>
-                        </Tooltip>
-                        <Tooltip title="快速应用检测到的第一个建议">
-                          <Button 
-                            size="small" 
-                            icon={<CheckCircleOutlined />}
-                            onClick={() => {
-                              const localSuggestions = parseRevisionSuggestion(msg.content);
-                              if (localSuggestions.length > 0) {
-                                applySuggestionLegacy(localSuggestions[0]);
-                              } else {
-                                message.info('未检测到可应用的修订建议');
-                              }
-                            }}
-                          >
-                            快速应用
                           </Button>
                         </Tooltip>
                       </div>

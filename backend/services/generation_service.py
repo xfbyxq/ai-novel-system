@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agents.agent_dispatcher import AgentDispatcher
-from agents.foreshadowing_tracker import ForeshadowingTracker
+from agents.crew_manager import CrewConfig, NovelCrewManager
 from agents.team_context import NovelTeamContext
 from backend.config import settings
 
@@ -26,10 +26,13 @@ from core.models.world_setting import WorldSetting
 from llm.cost_tracker import CostTracker
 from llm.qwen_client import QwenClient
 
-from .agentmesh_memory_adapter import get_novel_memory_adapter
-from .memory_service import get_novel_memory_service
+from .activity_logger import ActivityLogger
 from .agent_activity_recorder import get_agent_activity_recorder
+from .agentmesh_memory_adapter import get_novel_memory_adapter
+from .chapter_data_processor import ChapterDataProcessor
+from .context_builder import ContextBuilder
 from .context_manager import UnifiedContextManager
+from .memory_service import get_novel_memory_service
 
 
 class GenerationService:
@@ -68,6 +71,8 @@ class GenerationService:
             max_world_review_iterations=settings.MAX_WORLD_REVIEW_ITERATIONS,
             max_character_review_iterations=settings.MAX_CHARACTER_REVIEW_ITERATIONS,
             max_plot_review_iterations=settings.MAX_PLOT_REVIEW_ITERATIONS,
+            # 上下文压缩器配置
+            context_compressor_max_tokens=settings.CONTEXT_COMPRESSOR_MAX_TOKENS,
         )
 
         self.memory_service = get_novel_memory_service()
@@ -80,18 +85,29 @@ class GenerationService:
         # 记录小说最后活跃时间，用于清理长期未使用的计数器
         self._last_active_time: dict[str, datetime] = {}
 
+        # 辅助类实例（委托调用）
+        self.chapter_data_processor = ChapterDataProcessor()
+        self.context_builder = ContextBuilder(
+            memory_service=self.memory_service,
+            persistent_memory=self.persistent_memory,
+            get_context_manager=self._get_context_manager,
+        )
+        self.activity_logger = ActivityLogger(
+            activity_recorder=self.activity_recorder
+        )
+
     def _get_context_manager(self, novel_id: UUID) -> UnifiedContextManager:
         """
         获取或创建小说的上下文管理器.
-        
+
         Args:
             novel_id: 小说 ID
-        
+
         Returns:
             UnifiedContextManager 实例
         """
         novel_id_str = str(novel_id)
-        
+
         if novel_id_str not in self._context_managers:
             self._context_managers[novel_id_str] = UnifiedContextManager(
                 db=self.db,
@@ -100,10 +116,10 @@ class GenerationService:
                 cache_ttl_minutes=30,
             )
             logger.info(f"Created context manager for novel {novel_id}")
-        
+
         # 更新活跃时间
         self._last_active_time[novel_id_str] = datetime.now(timezone.utc)
-        
+
         return self._context_managers[novel_id_str]
 
     async def run_planning(self, novel_id: UUID, task_id: UUID) -> dict:
@@ -127,9 +143,7 @@ class GenerationService:
         )
         existing_task = existing_result.scalar_one_or_none()
         if existing_task:
-            raise ValueError(
-                f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})"
-            )
+            raise ValueError(f"该小说已有企划任务在运行中 (Task ID: {existing_task.id})")
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -175,15 +189,9 @@ class GenerationService:
             # 删除旧的企划数据（如果存在），以便重新生成
             from sqlalchemy import delete
 
-            await self.db.execute(
-                delete(WorldSetting).where(WorldSetting.novel_id == novel_id)
-            )
-            await self.db.execute(
-                delete(Character).where(Character.novel_id == novel_id)
-            )
-            await self.db.execute(
-                delete(PlotOutline).where(PlotOutline.novel_id == novel_id)
-            )
+            await self.db.execute(delete(WorldSetting).where(WorldSetting.novel_id == novel_id))
+            await self.db.execute(delete(Character).where(Character.novel_id == novel_id))
+            await self.db.execute(delete(PlotOutline).where(PlotOutline.novel_id == novel_id))
             await self.db.flush()
 
             # 保存世界观设定（LLM 可能返回非标准结构）
@@ -335,7 +343,7 @@ class GenerationService:
             )
 
             # 记录企划阶段的 Agent 活动摘要
-            await self._record_planning_activities(
+            await self.activity_logger.record_planning_activities(
                 novel_id=novel_id,
                 task_id=task_id,
                 planning_result=planning_result,
@@ -358,11 +366,12 @@ class GenerationService:
 
     async def run_outline_refinement(self, novel_id: UUID, task_id: UUID) -> dict:
         """执行大纲完善任务并保存结果到数据库."""
+        from sqlalchemy import select
+
         from agents.crew_manager import NovelCrewManager
+        from core.models.character import Character
         from core.models.plot_outline import PlotOutline
         from core.models.world_setting import WorldSetting
-        from core.models.character import Character
-        from sqlalchemy import select
 
         # 加载小说和相关数据
         result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
@@ -384,9 +393,7 @@ class GenerationService:
         existing_tasks = existing_result.scalars().all()
         if existing_tasks:
             existing_task = existing_tasks[0]  # 取最新的一条
-            raise ValueError(
-                f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})"
-            )
+            raise ValueError(f"该小说已有大纲完善任务在运行中 (Task ID: {existing_task.id})")
 
         # 更新任务状态
         task_result = await self.db.execute(
@@ -434,12 +441,8 @@ class GenerationService:
 
             # 确保outline_data是字典类型
             if not isinstance(outline_data, dict):
-                logger.error(
-                    f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}"
-                )
-                raise ValueError(
-                    f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}"
-                )
+                logger.error(f"outline_data类型错误: {type(outline_data)}, 内容: {outline_data}")
+                raise ValueError(f"大纲数据格式错误，期望dict，实际得到{type(outline_data)}")
 
             world_data = (
                 {
@@ -450,9 +453,7 @@ class GenerationService:
                     "factions": world_setting.factions if world_setting else [],
                     "rules": world_setting.rules if world_setting else [],
                     "timeline": world_setting.timeline if world_setting else [],
-                    "special_elements": (
-                        world_setting.special_elements if world_setting else []
-                    ),
+                    "special_elements": (world_setting.special_elements if world_setting else []),
                 }
                 if world_setting
                 else {}
@@ -499,8 +500,26 @@ class GenerationService:
             # 执行大纲完善
             self.cost_tracker.reset()
 
-            # 使用crew_manager执行完善
-            crew_manager = NovelCrewManager(self.client, self.cost_tracker)
+            # 使用crew_manager执行完善（从settings加载配置）
+            crew_config = CrewConfig(
+                quality_threshold=settings.CHAPTER_QUALITY_THRESHOLD,
+                max_review_iterations=settings.MAX_CHAPTER_REVIEW_ITERATIONS,
+                max_fix_iterations=settings.MAX_FIX_ITERATIONS,
+                enable_voting=settings.ENABLE_VOTING,
+                enable_query=settings.ENABLE_QUERY,
+                enable_character_review=settings.ENABLE_CHARACTER_REVIEW,
+                enable_world_review=settings.ENABLE_WORLD_REVIEW,
+                enable_plot_review=settings.ENABLE_PLOT_REVIEW,
+                enable_outline_refinement=settings.ENABLE_OUTLINE_REFINEMENT,
+                character_quality_threshold=settings.CHARACTER_QUALITY_THRESHOLD,
+                world_quality_threshold=settings.WORLD_QUALITY_THRESHOLD,
+                plot_quality_threshold=settings.PLOT_QUALITY_THRESHOLD,
+                max_character_review_iterations=settings.MAX_CHARACTER_REVIEW_ITERATIONS,
+                max_world_review_iterations=settings.MAX_WORLD_REVIEW_ITERATIONS,
+                max_plot_review_iterations=settings.MAX_PLOT_REVIEW_ITERATIONS,
+                context_compressor_max_tokens=settings.CONTEXT_COMPRESSOR_MAX_TOKENS,
+            )
+            crew_manager = NovelCrewManager(self.client, self.cost_tracker, config=crew_config)
             enhancement_result = await crew_manager.refine_outline_comprehensive(
                 outline=outline_data,
                 world_setting=world_data,
@@ -514,27 +533,17 @@ class GenerationService:
             logger.info(f"enhancement_result内容: {enhancement_result}")
 
             if "enhancement_result" in enhancement_result:
-                enhanced_outline = enhancement_result["enhancement_result"][
-                    "enhanced_outline"
-                ]
+                enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
                 logger.info(f"enhanced_outline类型: {type(enhanced_outline)}")
                 logger.info(f"enhanced_outline内容: {enhanced_outline}")
 
             # 保存完善结果到任务输出
             task_output = {
                 "original_outline": outline_data,
-                "enhanced_outline": enhancement_result["enhancement_result"][
-                    "enhanced_outline"
-                ],
-                "improvements_made": enhancement_result["enhancement_result"][
-                    "improvements_made"
-                ],
-                "round_history": enhancement_result["enhancement_result"][
-                    "round_history"
-                ],
-                "total_rounds": enhancement_result["enhancement_result"][
-                    "total_rounds"
-                ],
+                "enhanced_outline": enhancement_result["enhancement_result"]["enhanced_outline"],
+                "improvements_made": enhancement_result["enhancement_result"]["improvements_made"],
+                "round_history": enhancement_result["enhancement_result"]["round_history"],
+                "total_rounds": enhancement_result["enhancement_result"]["total_rounds"],
                 "quality_comparison": {},  # 可以在这里添加质量对比逻辑
             }
 
@@ -560,15 +569,42 @@ class GenerationService:
             task.cost = cost_summary["total_cost"]
 
             # 自动应用增强结果到大纲表
-            enhanced_outline = enhancement_result["enhancement_result"][
-                "enhanced_outline"
-            ]
+            enhanced_outline = enhancement_result["enhancement_result"]["enhanced_outline"]
             if enhanced_outline and isinstance(enhanced_outline, dict):
                 # 更新PlotOutline表中的数据
-                outline.main_plot = enhanced_outline.get("main_plot", outline.main_plot)
-                outline.main_plot_detailed = enhanced_outline.get(
-                    "main_plot_detailed", outline.main_plot_detailed
-                )
+                enhanced_main_plot = enhanced_outline.get("main_plot", {})
+                logger.info(f"增强后的main_plot: {json.dumps(enhanced_main_plot, ensure_ascii=False, indent=2)}")
+                logger.info(f"main_plot字段数: {len(enhanced_main_plot) if enhanced_main_plot else 0}")
+
+                # 字段级合并：只用非空的增强字段覆盖，不丢失已有数据
+                if enhanced_main_plot:
+                    existing_main_plot = outline.main_plot or {}
+                    # 处理 JSON 字符串的情况
+                    if isinstance(existing_main_plot, str):
+                        try:
+                            existing_main_plot = json.loads(existing_main_plot)
+                        except (json.JSONDecodeError, TypeError):
+                            existing_main_plot = {}
+                    # 合并非空字段
+                    for field, value in enhanced_main_plot.items():
+                        if value:  # 只覆盖非空值
+                            existing_main_plot[field] = value
+                    outline.main_plot = existing_main_plot
+                    logger.info(f"合并后main_plot字段数: {len(existing_main_plot)}")
+
+                # main_plot_detailed 也做字段级合并
+                enhanced_detailed = enhanced_outline.get("main_plot_detailed")
+                if enhanced_detailed:
+                    existing_detailed = outline.main_plot_detailed or {}
+                    if isinstance(existing_detailed, str):
+                        try:
+                            existing_detailed = json.loads(existing_detailed)
+                        except (json.JSONDecodeError, TypeError):
+                            existing_detailed = {}
+                    for field, value in enhanced_detailed.items():
+                        if value:
+                            existing_detailed[field] = value
+                    outline.main_plot_detailed = existing_detailed
                 outline.sub_plots = enhanced_outline.get("sub_plots", outline.sub_plots)
                 outline.key_turning_points = enhanced_outline.get(
                     "key_turning_points", outline.key_turning_points
@@ -695,22 +731,20 @@ class GenerationService:
             # 构建前几章摘要（使用统一上下文管理器）
             context_manager = self._get_context_manager(novel_id)
             previous_summary = await context_manager.build_previous_context(
-                chapter_number=chapter_number,
+                current_chapter=chapter_number,
                 count=3,
             )
 
             # 获取角色状态（优先从持久化记忆获取）
-            character_states_dict = (
-                self.persistent_memory.storage.get_all_character_states(str(novel_id))
+            character_states_dict = self.persistent_memory.storage.get_all_character_states(
+                str(novel_id)
             )
             if character_states_dict:
                 # 将字典格式转换为字符串格式（用于提示词）
-                character_states = self._format_character_states(character_states_dict)
+                character_states = self.chapter_data_processor.format_character_states(character_states_dict)
             else:
                 # 回退到内存缓存
-                character_states = self.memory_service.get_character_states(
-                    str(novel_id)
-                )
+                character_states = self.memory_service.get_character_states(str(novel_id))
 
             novel_data = {
                 "title": novel.title,
@@ -752,17 +786,53 @@ class GenerationService:
             # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
             if chapter_number > 1:
                 prev_chapter = next(
-                    (
-                        ch
-                        for ch in novel.chapters
-                        if ch.chapter_number == chapter_number - 1
-                    ),
+                    (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
                     None,
                 )
                 if prev_chapter and prev_chapter.detailed_outline:
-                    self.dispatcher.crew_manager._chapter_detailed_outlines[
-                        chapter_number - 1
-                    ] = prev_chapter.detailed_outline
+                    self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
+                        prev_chapter.detailed_outline
+                    )
+
+                # 预加载章节摘要和内容到 crew_manager 缓存（用于上下文压缩）
+                # 从持久化存储和内存缓存获取之前章节的摘要
+                logger.info(
+                    f"[run_chapter_writing] 预加载数据诊断: novel_id={novel_id}, "
+                    f"chapter_number={chapter_number}, novel.chapters 数量={len(novel.chapters)}"
+                )
+                persistent_summaries = self.persistent_memory.storage.get_chapter_summaries(
+                    str(novel_id), start_chapter=1, end_chapter=chapter_number - 1
+                )
+                logger.info(
+                    f"[run_chapter_writing] persistent_memory 返回 {len(persistent_summaries)} 个摘要"
+                )
+                for summary in persistent_summaries:
+                    ch_num = summary.get("chapter_number")
+                    if ch_num:
+                        self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+                # 补充从 memory_service 获取
+                mem_summaries = self.memory_service.get_chapter_summaries(str(novel_id))
+                logger.info(
+                    f"[run_chapter_writing] memory_service 返回 {len(mem_summaries)} 个摘要"
+                )
+                for ch_num_str, summary in mem_summaries.items():
+                    ch_num = int(ch_num_str)
+                    if ch_num < chapter_number and ch_num not in self.dispatcher.crew_manager._chapter_summaries:
+                        self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+                # 加载章节内容
+                content_count = 0
+                for ch in novel.chapters:
+                    if ch.chapter_number < chapter_number and ch.content:
+                        self.dispatcher.crew_manager._chapter_contents[ch.chapter_number] = ch.content
+                        content_count += 1
+
+                logger.info(
+                    f"[run_chapter_writing] 预加载上下文: "
+                    f"{len(self.dispatcher.crew_manager._chapter_summaries)} 个摘要, "
+                    f"{content_count} 个内容"
+                )
 
             # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
@@ -777,7 +847,7 @@ class GenerationService:
                 team_context=team_context,
             )
 
-            # 保存章节
+            # 保存章节（使用 upsert 避免重复记录）
             final_content = writing_result.get("final_content", "")
             word_count = len(final_content)
             chapter_plan = writing_result.get("chapter_plan", {})
@@ -795,27 +865,50 @@ class GenerationService:
                 # 没有标题，使用默认值
                 title = f"第{chapter_number}章"
 
-            chapter = Chapter(
-                novel_id=novel_id,
-                chapter_number=chapter_number,
-                volume_number=volume_number,
-                title=title,
-                content=final_content,
-                word_count=word_count,
-                status=ChapterStatus.draft,
-                outline=chapter_plan,
-                plot_points=chapter_plan.get("plot_points", []),
-                foreshadowing=chapter_plan.get("foreshadowing", []),
-                quality_score=writing_result.get("quality_score", 0),
-                continuity_issues=writing_result.get("continuity_report", {}).get(
-                    "issues", []
-                ),
-                detailed_outline=writing_result.get("detailed_outline", {}),
+            # 检查是否已存在该章节，存在则更新，不存在则创建
+            existing_chapter_result = await self.db.execute(
+                select(Chapter).where(
+                    Chapter.novel_id == novel_id,
+                    Chapter.chapter_number == chapter_number,
+                )
             )
-            self.db.add(chapter)
+            chapter = existing_chapter_result.scalar_one_or_none()
+
+            if chapter:
+                # 更新现有章节
+                chapter.title = title
+                chapter.content = final_content
+                chapter.word_count = word_count
+                chapter.outline = chapter_plan
+                chapter.plot_points = chapter_plan.get("plot_points", [])
+                chapter.foreshadowing = chapter_plan.get("foreshadowing", [])
+                chapter.quality_score = writing_result.get("quality_score", 0)
+                chapter.continuity_issues = writing_result.get("continuity_report", {}).get(
+                    "issues", []
+                )
+                chapter.detailed_outline = writing_result.get("detailed_outline", {})
+                logger.info(f"更新已存在的第{chapter_number}章记录")
+            else:
+                # 创建新章节
+                chapter = Chapter(
+                    novel_id=novel_id,
+                    chapter_number=chapter_number,
+                    volume_number=volume_number,
+                    title=title,
+                    content=final_content,
+                    word_count=word_count,
+                    status=ChapterStatus.draft,
+                    outline=chapter_plan,
+                    plot_points=chapter_plan.get("plot_points", []),
+                    foreshadowing=chapter_plan.get("foreshadowing", []),
+                    quality_score=writing_result.get("quality_score", 0),
+                    continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
+                    detailed_outline=writing_result.get("detailed_outline", {}),
+                )
+                self.db.add(chapter)
 
             # 提取并存储章节摘要到记忆系统
-            chapter_summary = self._extract_chapter_summary(
+            chapter_summary = self.chapter_data_processor.extract_chapter_summary(
                 content=final_content,
                 chapter_plan=chapter_plan,
                 chapter_number=chapter_number,
@@ -835,9 +928,7 @@ class GenerationService:
             # 更新角色状态（如果 writing_result 中包含角色更新信息）
             character_updates = writing_result.get("character_updates", {})
             for char_name, state in character_updates.items():
-                self.memory_service.update_character_state(
-                    str(novel_id), char_name, state
-                )
+                self.memory_service.update_character_state(str(novel_id), char_name, state)
                 # 同时更新持久化记忆
                 await self.persistent_memory.update_character_state(
                     novel_id=str(novel_id),
@@ -853,9 +944,7 @@ class GenerationService:
                         CharacterAutoDetector,
                     )
 
-                    detector = CharacterAutoDetector(
-                        self.db, self.client, self.cost_tracker
-                    )
+                    detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
                     new_characters = await detector.detect_and_register_new_characters(
                         novel_id=novel_id,
                         chapter_number=chapter_number,
@@ -919,18 +1008,40 @@ class GenerationService:
                 # 更新最后活跃时间
                 self._last_active_time[novel_id_str] = datetime.now()
                 if (
-                    self._chapter_write_counter[novel_id_str]
-                    % settings.OUTLINE_UPDATE_INTERVAL
+                    self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL
                     == 0
                 ):
                     await self._try_dynamic_outline_update(novel_id, chapter_number)
             # ===== 大纲动态更新触发结束 =====
+
+            # ===== 新增：图数据库同步 =====
+            # 章节生成后异步同步实体到Neo4j图数据库
+            # 使用 asyncio.create_task 实现非阻塞执行
+            if settings.ENABLE_GRAPH_DATABASE and settings.ENABLE_GRAPH_SYNC_ON_CHAPTER:
+                try:
+                    import asyncio
+
+                    asyncio.create_task(
+                        self._sync_chapter_to_graph_safe(
+                            novel_id=novel_id,
+                            chapter_number=chapter_number,
+                            chapter_content=final_content,
+                            chapter_plan=chapter_plan,
+                        )
+                    )
+                    logger.debug(f"[GraphSync] 第{chapter_number}章同步任务已提交")
+                except Exception as e:
+                    logger.warning(f"[GraphSync] 同步任务提交失败: {e}")
+            # ===== 图数据库同步结束 =====
 
             logger.info(
                 f"第{chapter_number}章写作完成，"
                 f"{word_count}字，质量评分 {writing_result.get('quality_score', 'N/A')}，"
                 f"消耗 {cost_summary['total_tokens']} tokens"
             )
+            # 将成本信息添加到返回值中，供批量写作汇总使用
+            writing_result['token_usage'] = cost_summary['total_tokens']
+            writing_result['cost'] = cost_summary['total_cost']
             return writing_result
 
         except Exception as e:
@@ -978,8 +1089,7 @@ class GenerationService:
             all_results = []
 
             logger.info(
-                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，"
-                f"共 {total_chapters} 章"
+                f"开始批量生成章节: 第{from_chapter}-{to_chapter}章，" f"共 {total_chapters} 章"
             )
 
             # 初始化Agent调度器
@@ -1080,9 +1190,7 @@ class GenerationService:
                         )
                         batch_interrupted = True
                         # 记录剩余未生成的章节
-                        remaining_chapters = list(
-                            range(chapter_num + 1, to_chapter + 1)
-                        )
+                        remaining_chapters = list(range(chapter_num + 1, to_chapter + 1))
                         if remaining_chapters:
                             logger.warning(f"剩余未生成章节: {remaining_chapters}")
                         break
@@ -1126,9 +1234,7 @@ class GenerationService:
                 task.completed_at = datetime.now(timezone.utc)
 
                 # 构建摘要信息
-                summary = (
-                    f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
-                )
+                summary = f"成功 {completed_chapters} 章，失败 {failed_chapters_list} 章"
                 if batch_interrupted:
                     summary += f"，因连续失败中断（跳过 {skipped_chapters} 章）"
 
@@ -1145,9 +1251,7 @@ class GenerationService:
 
                 # 构建错误信息
                 if batch_interrupted:
-                    task.error_message = (
-                        f"连续{max_continuous_failures}章生成失败，批量任务已中断"
-                    )
+                    task.error_message = f"连续{max_continuous_failures}章生成失败，批量任务已中断"
                 elif failed_chapters_list > 0:
                     task.error_message = f"{failed_chapters_list} 章生成失败"
                 else:
@@ -1243,7 +1347,7 @@ class GenerationService:
         # 构建前几章摘要（使用统一上下文管理器）
         context_manager = self._get_context_manager(novel_id)
         previous_summary = await context_manager.build_previous_context(
-            chapter_number=chapter_number,
+            current_chapter=chapter_number,
             count=3,
         )
 
@@ -1264,17 +1368,55 @@ class GenerationService:
         # 预加载前一章的细化大纲到 crew_manager 缓存（跨会话恢复）
         if chapter_number > 1:
             prev_chapter = next(
-                (
-                    ch
-                    for ch in novel.chapters
-                    if ch.chapter_number == chapter_number - 1
-                ),
+                (ch for ch in novel.chapters if ch.chapter_number == chapter_number - 1),
                 None,
             )
             if prev_chapter and prev_chapter.detailed_outline:
-                self.dispatcher.crew_manager._chapter_detailed_outlines[
-                    chapter_number - 1
-                ] = prev_chapter.detailed_outline
+                self.dispatcher.crew_manager._chapter_detailed_outlines[chapter_number - 1] = (
+                    prev_chapter.detailed_outline
+                )
+
+            # 预加载章节摘要和内容到 crew_manager 缓存（用于上下文压缩）
+            # 从持久化存储和内存缓存获取之前章节的摘要
+            # 1. 尝试从 persistent_memory 获取
+            logger.info(
+                f"[_write_single_chapter] 预加载数据诊断: novel_id={novel_id}, "
+                f"chapter_number={chapter_number}, novel.chapters 数量={len(novel.chapters)}"
+            )
+            persistent_summaries = self.persistent_memory.storage.get_chapter_summaries(
+                str(novel_id), start_chapter=1, end_chapter=chapter_number - 1
+            )
+            logger.info(
+                f"[_write_single_chapter] persistent_memory 返回 {len(persistent_summaries)} 个摘要"
+            )
+            # persistent_summaries 是列表格式，转换为字典
+            for summary in persistent_summaries:
+                ch_num = summary.get("chapter_number")
+                if ch_num:
+                    self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+            # 2. 尝试从 memory_service 获取（补充）
+            mem_summaries = self.memory_service.get_chapter_summaries(str(novel_id))
+            logger.info(
+                f"[_write_single_chapter] memory_service 返回 {len(mem_summaries)} 个摘要"
+            )
+            for ch_num_str, summary in mem_summaries.items():
+                ch_num = int(ch_num_str)
+                if ch_num < chapter_number and ch_num not in self.dispatcher.crew_manager._chapter_summaries:
+                    self.dispatcher.crew_manager._chapter_summaries[ch_num] = summary
+
+            # 3. 加载章节内容
+            content_count = 0
+            for ch in novel.chapters:
+                if ch.chapter_number < chapter_number and ch.content:
+                    self.dispatcher.crew_manager._chapter_contents[ch.chapter_number] = ch.content
+                    content_count += 1
+
+            logger.info(
+                f"[_write_single_chapter] 预加载上下文: "
+                f"{len(self.dispatcher.crew_manager._chapter_summaries)} 个摘要, "
+                f"{content_count} 个内容（从 novel.chapters 中有内容的章节）"
+            )
 
         # 执行写作阶段
         self.cost_tracker.reset()
@@ -1305,22 +1447,18 @@ class GenerationService:
             plot_points=chapter_plan.get("plot_points", []),
             foreshadowing=chapter_plan.get("foreshadowing", []),
             quality_score=writing_result.get("quality_score", 0),
-            continuity_issues=writing_result.get("continuity_report", {}).get(
-                "issues", []
-            ),
+            continuity_issues=writing_result.get("continuity_report", {}).get("issues", []),
             detailed_outline=writing_result.get("detailed_outline", {}),
         )
         self.db.add(chapter)
 
         # 提取并存储章节摘要到记忆系统
-        chapter_summary = self._extract_chapter_summary(
+        chapter_summary = self.chapter_data_processor.extract_chapter_summary(
             content=final_content,
             chapter_plan=chapter_plan,
             chapter_number=chapter_number,
         )
-        self.memory_service.update_chapter_summary(
-            str(novel_id), chapter_number, chapter_summary
-        )
+        self.memory_service.update_chapter_summary(str(novel_id), chapter_number, chapter_summary)
 
         # ===== 新增：角色自动检测 =====
         if settings.ENABLE_CHARACTER_AUTO_DETECTION:
@@ -1329,9 +1467,7 @@ class GenerationService:
                     CharacterAutoDetector,
                 )
 
-                detector = CharacterAutoDetector(
-                    self.db, self.client, self.cost_tracker
-                )
+                detector = CharacterAutoDetector(self.db, self.client, self.cost_tracker)
                 new_characters = await detector.detect_and_register_new_characters(
                     novel_id=novel_id,
                     chapter_number=chapter_number,
@@ -1370,11 +1506,7 @@ class GenerationService:
             )
             # 更新最后活跃时间
             self._last_active_time[novel_id_str] = datetime.now()
-            if (
-                self._chapter_write_counter[novel_id_str]
-                % settings.OUTLINE_UPDATE_INTERVAL
-                == 0
-            ):
+            if self._chapter_write_counter[novel_id_str] % settings.OUTLINE_UPDATE_INTERVAL == 0:
                 await self._try_dynamic_outline_update(novel_id, chapter_number)
         # ===== 大纲动态更新触发结束 =====
 
@@ -1389,14 +1521,10 @@ class GenerationService:
 
     # ==================== 大纲动态更新 ====================
 
-    async def _try_dynamic_outline_update(
-        self, novel_id: UUID, current_chapter: int
-    ) -> None:
+    async def _try_dynamic_outline_update(self, novel_id: UUID, current_chapter: int) -> None:
         """尝试执行大纲动态更新（不阻塞章节写作流程）."""
         try:
-            logger.info(
-                f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}"
-            )
+            logger.info(f"[DynamicOutline] 触发大纲偏差评估，当前章节: {current_chapter}")
 
             # 加载最近 N 章的摘要
             interval = settings.OUTLINE_UPDATE_INTERVAL
@@ -1483,14 +1611,12 @@ class GenerationService:
 
             if update_result.get("updated"):
                 logger.info(
-                    f"[DynamicOutline] 大纲已更新: "
-                    f"{update_result.get('change_summary', [])}"
+                    f"[DynamicOutline] 大纲已更新: " f"{update_result.get('change_summary', [])}"
                 )
                 await self.db.commit()
             else:
                 logger.info(
-                    f"[DynamicOutline] 跳过更新: "
-                    f"{update_result.get('reason', '未知原因')}"
+                    f"[DynamicOutline] 跳过更新: " f"{update_result.get('reason', '未知原因')}"
                 )
 
         except Exception as e:
@@ -1498,6 +1624,56 @@ class GenerationService:
         finally:
             # 定期清理过期的计数器，防止内存泄漏
             self._cleanup_expired_counters()
+
+    # ==================== 团队上下文管理 ====================
+
+    def _get_or_create_team_context(
+        self,
+        novel_id: str,
+        novel_title: str,
+        novel_data: dict,
+    ) -> "NovelTeamContext":
+        """获取或创建小说团队共享上下文.
+
+        Args:
+            novel_id: 小说ID
+            novel_title: 小说标题
+            novel_data: 小说数据字典
+
+        Returns:
+            NovelTeamContext 实例
+        """
+        if novel_id not in self._context_managers:
+            from agents.team_context import NovelTeamContext
+
+            # 创建新的 TeamContext
+            team_context = NovelTeamContext(novel_id=novel_id, novel_title=novel_title)
+            # 初始化小说元数据
+            team_context.novel_metadata = {
+                "title": novel_data.get("title", ""),
+                "genre": novel_data.get("genre", ""),
+                "world_setting": novel_data.get("world_setting", {}),
+                "characters": novel_data.get("characters", []),
+                "plot_outline": novel_data.get("plot_outline", {}),
+            }
+            return team_context
+
+        # 返回现有的上下文管理器（包含 TeamContext）
+        context_manager = self._context_managers[novel_id]
+        if not hasattr(context_manager, "_team_context"):
+            from agents.team_context import NovelTeamContext
+
+            context_manager._team_context = NovelTeamContext(
+                novel_id=novel_id, novel_title=novel_title
+            )
+            context_manager._team_context.novel_metadata = {
+                "title": novel_data.get("title", ""),
+                "genre": novel_data.get("genre", ""),
+                "world_setting": novel_data.get("world_setting", {}),
+                "characters": novel_data.get("characters", []),
+                "plot_outline": novel_data.get("plot_outline", {}),
+            }
+        return context_manager._team_context
 
     # ==================== 辅助方法 ====================
 
@@ -1522,202 +1698,9 @@ class GenerationService:
             self._last_active_time.pop(novel_id, None)
             logger.debug(f"清理过期计数器: {novel_id}")
 
-    def _build_previous_context(
-        self, novel_id: UUID, novel: Novel, chapter_number: int
-    ) -> str:
-        """构建结构化的前置章节上下文.
-
-        优先使用记忆系统中的结构化摘要，回退到智能截取.
-
-        Args:
-            novel_id: 小说ID
-            novel: Novel对象（包含已加载的chapters）
-            chapter_number: 当前章节号
-
-        Returns:
-            前置章节上下文字符串
-        """
-        # 首先尝试从记忆系统获取结构化摘要
-        summaries = self.memory_service.get_chapter_summaries(str(novel_id))
-
-        previous_context = ""
-        for ch in sorted(novel.chapters, key=lambda c: c.chapter_number):
-            if ch.chapter_number < chapter_number and ch.content:
-                ch_num_str = str(ch.chapter_number)
-                if ch_num_str in summaries:
-                    # 使用结构化摘要
-                    summary = summaries[ch_num_str]
-                    previous_context += (
-                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n"
-                    )
-
-                    key_events = summary.get("key_events", [])
-                    if key_events:
-                        if isinstance(key_events, list):
-                            previous_context += f"**主要事件**: {', '.join(str(e) for e in key_events[:5])}\n"
-                        else:
-                            previous_context += f"**主要事件**: {key_events}\n"
-
-                    char_changes = summary.get("character_changes", "")
-                    if char_changes:
-                        previous_context += f"**角色变化**: {char_changes}\n"
-
-                    plot_progress = summary.get("plot_progress", "")
-                    if plot_progress:
-                        # 限制情节摘要长度
-                        if len(plot_progress) > 300:
-                            plot_progress = plot_progress[:300] + "..."
-                        previous_context += f"**情节推进**: {plot_progress}\n"
-
-                    foreshadowing = summary.get("foreshadowing", [])
-                    if foreshadowing:
-                        if isinstance(foreshadowing, list) and foreshadowing:
-                            previous_context += f"**伏笔**: {', '.join(str(f) for f in foreshadowing[:3])}\n"
-                else:
-                    # 回退到智能截取（取前500字，找到完整句子边界）
-                    content = ch.content[:500]
-                    last_period = content.rfind("。")
-                    if last_period > 300:
-                        content = content[: last_period + 1]
-                    previous_context += (
-                        f"\n## 第{ch.chapter_number}章 {ch.title or ''}\n{content}\n"
-                    )
-
-        return previous_context
-
-    def _extract_chapter_summary(
-        self, content: str, chapter_plan: dict, chapter_number: int
-    ) -> dict:
-        """从章节内容提取结构化摘要.
-
-        Args:
-            content: 章节完整内容
-            chapter_plan: 章节大纲（包含plot_points, foreshadowing等）
-            chapter_number: 章节号
-
-        Returns:
-            结构化摘要字典
-        """
-        # 从章节内容中提取摘要信息
-        plot_progress = ""
-        if content:
-            # 取内容前200字作为情节摘要
-            plot_progress = content[:200]
-            # 尝试找到完整句子
-            last_period = plot_progress.rfind("。")
-            if last_period > 100:
-                plot_progress = plot_progress[: last_period + 1]
-
-        # 提取结尾状态（最后100字）
-        ending_state = ""
-        if content and len(content) > 100:
-            ending_state = content[-100:]
-            # 尝试从句子开头开始
-            first_period = ending_state.find("。")
-            if first_period > 0 and first_period < 50:
-                ending_state = ending_state[first_period + 1 :]
-        elif content:
-            ending_state = content
-
-        return {
-            "chapter_number": chapter_number,
-            "title": chapter_plan.get("title", f"第{chapter_number}章"),
-            "key_events": chapter_plan.get("plot_points", [])[
-                :5
-            ],  # 主要事件（最多5个）
-            "character_changes": self._extract_character_mentions(content),  # 角色变化
-            "plot_progress": plot_progress,  # 情节摘要
-            "foreshadowing": chapter_plan.get("foreshadowing", []),  # 伏笔
-            "ending_state": ending_state,  # 结尾状态
-        }
-
-    def _format_character_states(self, states_dict: dict) -> str:
-        """将角色状态字典格式化为提示词字符串.
-
-        Args:
-            states_dict: 角色状态字典 {角色名: 状态信息}
-
-        Returns:
-            格式化的角色状态字符串
-        """
-        if not states_dict:
-            return ""
-
-        parts = []
-        for name, state in states_dict.items():
-            info = [f"**{name}**"]
-            if state.get("current_location"):
-                info.append(f"  - 位置: {state['current_location']}")
-            if state.get("cultivation_level"):
-                info.append(f"  - 修为: {state['cultivation_level']}")
-            if state.get("emotional_state"):
-                info.append(f"  - 情绪: {state['emotional_state']}")
-            if state.get("status") and state["status"] != "active":
-                info.append(f"  - 状态: {state['status']}")
-            if state.get("pending_events"):
-                events = state["pending_events"]
-                if isinstance(events, list) and events:
-                    info.append(f"  - 待办: {', '.join(str(e) for e in events[:3])}")
-            parts.append("\n".join(info))
-
-        return "\n\n".join(parts) if parts else ""
-
-    def _extract_character_mentions(self, content: str) -> str:
-        """提取角色变化描述.
-
-        简化实现：返回内容中可能的角色状态变化关键词.
-        后续可增强为 LLM 提取或更复杂的规则匹配。
-
-        Args:
-            content: 章节内容
-
-        Returns:
-            角色变化描述字符串
-        """
-        if not content:
-            return ""
-
-        # 简化实现：检测常见的状态变化关键词
-        change_keywords = [
-            "突破",
-            "晋升",
-            "受伤",
-            "死亡",
-            "离开",
-            "加入",
-            "觉醒",
-            "领悟",
-            "失去",
-            "获得",
-            "决定",
-            "背叛",
-        ]
-
-        found_changes = []
-        for keyword in change_keywords:
-            if keyword in content:
-                # 找到关键词所在的句子
-                idx = content.find(keyword)
-                start = max(0, content.rfind("。", 0, idx) + 1)
-                end = content.find("。", idx)
-                if end == -1:
-                    end = min(len(content), idx + 50)
-                else:
-                    end = min(end + 1, idx + 100)
-
-                sentence = content[start:end].strip()
-                if sentence and len(sentence) < 80:
-                    found_changes.append(sentence)
-                    if len(found_changes) >= 3:  # 最多提取3个变化
-                        break
-
-        return "; ".join(found_changes) if found_changes else ""
-
     # ==================== 新增：持久化记忆集成方法 ====================
 
-    async def _initialize_novel_persistent_memory(
-        self, novel_id: UUID, planning_result: dict
-    ):
+    async def _initialize_novel_persistent_memory(self, novel_id: UUID, planning_result: dict):
         """初始化小说的持久化长期记忆.
 
         在企划阶段完成后调用，保存世界观、角色、大纲等核心设定.
@@ -1749,119 +1732,99 @@ class GenerationService:
 
         logger.info(f"Initialized persistent memory for novel {novel_id}")
 
-    async def _build_previous_context_enhanced(
-        self, novel_id: UUID, novel: Novel, chapter_number: int
-    ) -> str:
-        """构建增强的前置章节上下文.
+    # =========================================================================
+    # 图数据库同步方法
+    # =========================================================================
 
-        优先使用持久化记忆系统，回退到内存缓存和数据库.
+    async def _sync_chapter_to_graph_safe(
+        self,
+        novel_id: UUID,
+        chapter_number: int,
+        chapter_content: str,
+        chapter_plan: dict,
+    ) -> None:
+        """后台执行的图同步任务，失败不影响主流程.
+
+        将章节中的实体（角色、事件、伏笔）同步到Neo4j图数据库，
+        为后续Agent查询提供数据基础。
 
         Args:
             novel_id: 小说ID
-            novel: Novel对象
-            chapter_number: 当前章节号
+            chapter_number: 章节号
+            chapter_content: 章节内容
+            chapter_plan: 章节计划（包含plot_points, foreshadowing等）
 
-        Returns:
-            前置章节上下文字符串
-        """
-        novel_id_str = str(novel_id)
-
-        # 1. 首先尝试从持久化记忆获取上下文
-        try:
-            persistent_context = await self.persistent_memory.get_chapter_context(
-                novel_id=novel_id_str, chapter_number=chapter_number, context_chapters=5
-            )
-            if persistent_context:
-                logger.debug(
-                    f"Using persistent memory context for chapter {chapter_number}"
-                )
-                return persistent_context
-        except Exception as e:
-            logger.warning(f"Failed to get persistent memory context: {e}")
-
-        # 2. 回退到统一上下文管理器
-        context_manager = self._get_context_manager(novel_id)
-        return await context_manager.build_previous_context(
-            chapter_number=chapter_number,
-            count=3,
-        )
-
-    async def _record_planning_activities(
-        self, novel_id: UUID, task_id: UUID, planning_result: dict, cost_summary: dict
-    ):
-        """记录企划阶段的 Agent 活动摘要.
-
-        Args:
-            novel_id: 小说 ID
-            task_id: 任务 ID
-            planning_result: 企划结果
-            cost_summary: 成本摘要
+        Note:
+            - 使用独立的数据库会话，避免与主事务冲突
+            - 完整的异常处理，失败不影响章节生成结果
+            - 需要 ENABLE_GRAPH_DATABASE=True 才会执行
         """
         try:
-            # 记录主题分析活动
-            if "topic_analysis" in planning_result:
-                await self.activity_recorder.record_planning_activity(
-                    novel_id=novel_id,
-                    task_id=task_id,
-                    agent_name="主题分析师",
-                    agent_role="市场趋势分析和选题推荐",
-                    activity_subtype="topic_analysis",
-                    input_data={"genre": planning_result.get("genre")},
-                    output_data=planning_result.get("topic_analysis", {}),
-                    total_tokens=cost_summary.get("total_tokens", 0),
-                    cost=cost_summary.get("total_cost", 0),
+            from uuid import uuid4
+
+            from backend.services.graph_sync_service import GraphSyncService
+            from core.database import async_session_factory
+            from core.graph.neo4j_client import get_neo4j_client
+
+            # 检查图数据库连接
+            client = get_neo4j_client()
+            if not client:
+                logger.debug("[GraphSync] 图数据库客户端不可用，跳过同步")
+                return
+
+            # 尝试连接
+            if not client.is_connected:
+                try:
+                    client.connect()
+                except Exception as conn_err:
+                    logger.warning(f"[GraphSync] 图数据库连接失败: {conn_err}")
+                    return
+
+            # 使用独立的数据库会话
+            async with async_session_factory() as session:
+                sync_service = GraphSyncService(client, session)
+
+                # 1. 同步章节实体（角色、事件等）
+                result = await sync_service.sync_chapter_entities(
+                    novel_id, chapter_number, chapter_content
                 )
 
-            # 记录世界观构建活动
-            if "world_setting" in planning_result:
-                await self.activity_recorder.record_planning_activity(
-                    novel_id=novel_id,
-                    task_id=task_id,
-                    agent_name="世界观架构师",
-                    agent_role="世界观体系构建",
-                    activity_subtype="world_building",
-                    input_data={
-                        "topic_analysis": planning_result.get("topic_analysis")
-                    },
-                    output_data=planning_result.get("world_setting", {}),
+                # 2. 同步伏笔（兼容字符串列表和字典列表两种格式）
+                foreshadowings = chapter_plan.get("foreshadowing", [])
+                for f in foreshadowings[:3]:  # 限制数量避免过多API调用
+                    try:
+                        if isinstance(f, str):
+                            content = f
+                            ftype = "plot"
+                            related_characters = []
+                        elif isinstance(f, dict):
+                            content = f.get("content", "") or f.get("description", "")
+                            ftype = f.get("type", "plot")
+                            related_characters = f.get("characters", [])
+                        else:
+                            continue
+
+                        if not content:
+                            continue
+
+                        await sync_service.sync_foreshadowing(
+                            novel_id=novel_id,
+                            foreshadowing_id=str(uuid4()),
+                            content=content,
+                            planted_chapter=chapter_number,
+                            ftype=ftype,
+                            status="pending",
+                            related_characters=related_characters,
+                        )
+                    except Exception as fe:
+                        logger.warning(f"[GraphSync] 伏笔同步失败: {fe}")
+
+                logger.info(
+                    f"[GraphSync] 第{chapter_number}章同步完成: "
+                    f"实体{result.entities_created}个, "
+                    f"关系{result.relationships_created}条"
                 )
 
-            # 记录角色设计活动
-            if "characters" in planning_result:
-                await self.activity_recorder.record_planning_activity(
-                    novel_id=novel_id,
-                    task_id=task_id,
-                    agent_name="角色设计师",
-                    agent_role="主要角色设计",
-                    activity_subtype="character_design",
-                    input_data={"world_setting": planning_result.get("world_setting")},
-                    output_data={
-                        "characters_count": len(planning_result.get("characters", []))
-                    },
-                )
-
-            # 记录情节架构活动
-            if "plot_outline" in planning_result:
-                await self.activity_recorder.record_planning_activity(
-                    novel_id=novel_id,
-                    task_id=task_id,
-                    agent_name="情节架构师",
-                    agent_role="整体情节架构规划",
-                    activity_subtype="plot_architecture",
-                    input_data={
-                        "world_setting": planning_result.get("world_setting"),
-                        "characters": planning_result.get("characters"),
-                    },
-                    output_data={
-                        "structure_type": planning_result.get("plot_outline", {}).get(
-                            "structure_type"
-                        ),
-                        "volumes_count": len(
-                            planning_result.get("plot_outline", {}).get("volumes", [])
-                        ),
-                    },
-                )
-
-            logger.info(f"✅ 企划阶段 Agent 活动记录完成")
         except Exception as e:
-            logger.error(f"记录企划阶段 Agent 活动失败：{e}")
+            # 记录错误但不抛出异常，避免影响主流程
+            logger.error(f"[GraphSync] 第{chapter_number}章同步失败: {e}")

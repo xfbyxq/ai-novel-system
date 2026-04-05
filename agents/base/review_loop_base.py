@@ -18,17 +18,16 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, Set, TypeVar
-
-from core.logging_config import logger
-from llm.cost_tracker import CostTracker
-from llm.qwen_client import QwenClient
 
 from agents.base.json_extractor import JsonExtractor
 from agents.base.quality_report import BaseQualityReport
 from agents.base.review_result import BaseReviewResult
+from core.logging_config import logger
+from llm.cost_tracker import CostTracker
+from llm.qwen_client import QwenClient
 
 # 泛型类型
 TContent = TypeVar("TContent")  # 内容类型：str, Dict, List
@@ -55,11 +54,11 @@ class ReviewLoopConfig:
     # Builder 调用温度
     builder_temperature: float = 0.7
 
-    # Reviewer 最大 token 数
-    reviewer_max_tokens: int = 4096
+    # Reviewer 最大 token 数（None 表示不限制，避免 JSON 截断）
+    reviewer_max_tokens: Optional[int] = None
 
-    # Builder 最大 token 数
-    builder_max_tokens: int = 6000
+    # Builder 最大 token 数（None 表示不限制，避免输出截断）
+    builder_max_tokens: Optional[int] = None
 
     # ── 增强功能配置 ──────────────────────────────────────────
 
@@ -142,16 +141,12 @@ class QualityLevel(Enum):
                 "当前质量远低于标准，请重点关注以下核心问题，进行结构性重写而非局部修补："
             ),
             QualityLevel.LOW: (
-                "【质量偏低 - 需要重点修订】\n"
-                "存在较多问题需要系统性改进，请按优先级逐一解决："
+                "【质量偏低 - 需要重点修订】\n" "存在较多问题需要系统性改进，请按优先级逐一解决："
             ),
             QualityLevel.MEDIUM: (
-                "【基本合格 - 需要针对性提升】\n"
-                "整体框架可接受，请聚焦以下具体问题进行精准修改："
+                "【基本合格 - 需要针对性提升】\n" "整体框架可接受，请聚焦以下具体问题进行精准修改："
             ),
-            QualityLevel.HIGH: (
-                "【质量良好 - 细节优化】\n" "整体质量不错，请进行以下微调和润色："
-            ),
+            QualityLevel.HIGH: ("【质量良好 - 细节优化】\n" "整体质量不错，请进行以下微调和润色："),
             QualityLevel.EXCELLENT: (
                 "【质量优秀 - 微调润色】\n" "当前质量已达到较高水准，仅需少量微调："
             ),
@@ -172,6 +167,11 @@ class IssueRecord:
     last_seen_round: int  # 最后出现的轮次
     status: str = "open"  # open / resolved / recurring
     resolution_round: Optional[int] = None  # 解决的轮次
+    # 新增字段：详细问题报告
+    priority_category: str = "polish"  # reading_experience/excitement/polish
+    location: Optional[Dict[str, str]] = None  # 问题位置信息
+    manifestation: List[str] = field(default_factory=list)  # 具体表现
+    related_dimensions: List[str] = field(default_factory=list)  # 关联维度
 
 
 class IssueTracker:
@@ -242,6 +242,11 @@ class IssueTracker:
                     first_seen_round=round_num,
                     last_seen_round=round_num,
                     status="open",
+                    # 新增字段
+                    priority_category=issue_dict.get("priority_category", "polish"),
+                    location=issue_dict.get("location"),
+                    manifestation=issue_dict.get("manifestation", []),
+                    related_dimensions=issue_dict.get("related_dimensions", []),
                 )
                 self._records.append(record)
                 self._new_this_round.append(record)
@@ -316,9 +321,7 @@ class IssueTracker:
             lines.append(f"仍未解决({len(active)})：")
             # 按 severity 排序：high > medium > low
             severity_order = {"high": 0, "medium": 1, "low": 2}
-            sorted_active = sorted(
-                active, key=lambda r: severity_order.get(r.severity, 1)
-            )
+            sorted_active = sorted(active, key=lambda r: severity_order.get(r.severity, 1))
             for r in sorted_active:
                 area_tag = f"[{r.area}] " if r.area else ""
                 persist_info = (
@@ -364,14 +367,10 @@ class IssueTracker:
         if open_issues:
             lines.append("\n本轮待解决：")
             severity_order = {"high": 0, "medium": 1, "low": 2}
-            sorted_open = sorted(
-                open_issues, key=lambda r: severity_order.get(r.severity, 1)
-            )
+            sorted_open = sorted(open_issues, key=lambda r: severity_order.get(r.severity, 1))
             for r in sorted_open:
                 area_tag = f"[{r.area}] " if r.area else ""
-                lines.append(
-                    f"  {idx}. [{r.severity.upper()}] {area_tag}{r.description}"
-                )
+                lines.append(f"  {idx}. [{r.severity.upper()}] {area_tag}{r.description}")
                 if r.suggestion:
                     lines.append(f"     建议：{r.suggestion}")
                 idx += 1
@@ -388,14 +387,27 @@ class IssueTracker:
         report: BaseQualityReport,
         review_data: Dict[str, Any],
         round_num: int,
-    ) -> List[Dict[str, str]]:
-        """从报告和审查数据中提取所有问题（兼容所有子类格式）."""
-        issues: List[Dict[str, str]] = []
+    ) -> List[Dict[str, Any]]:
+        """从报告和审查数据中提取所有问题（兼容所有子类格式）.
+
+        按优先级依次调用各数据源的提取器，支持新旧两种格式：
+        - 新格式：detailed_issues（包含 location, manifestation, priority_category）
+        - 旧格式：issues, revision_suggestions, character_assessments 等
+        """
+        issues: List[Dict[str, Any]] = []
         seen_descs: Set[str] = set()  # 去重
 
         def add_issue(
-            area: str, desc: str, severity: str = "medium", suggestion: str = ""
+            area: str,
+            desc: str,
+            severity: str = "medium",
+            suggestion: str = "",
+            priority_category: str = "polish",
+            location: Optional[Dict[str, str]] = None,
+            manifestation: Optional[List[str]] = None,
+            related_dimensions: Optional[List[str]] = None,
         ):
+            """添加问题到列表，自动去重."""
             if desc and desc not in seen_descs:
                 seen_descs.add(desc)
                 issues.append(
@@ -404,10 +416,57 @@ class IssueTracker:
                         "description": desc,
                         "severity": severity,
                         "suggestion": suggestion,
+                        "priority_category": priority_category,
+                        "location": location,
+                        "manifestation": manifestation or [],
+                        "related_dimensions": related_dimensions or [],
                     }
                 )
 
-        # 1. 从 report.issues 提取（通用格式）
+        # 依次调用各数据源的提取器
+        self._extract_from_detailed_issues(review_data, add_issue)
+        self._extract_from_report_issues(report, add_issue)
+        self._extract_from_critical_issues(review_data, add_issue)
+        self._extract_from_revision_suggestions(review_data, add_issue)
+        self._extract_from_character_assessments(review_data, add_issue)
+        self._extract_from_volume_assessments(review_data, add_issue)
+        self._extract_from_missing_elements(review_data, add_issue)
+
+        return issues
+
+    # ── Issue 提取器方法（策略模式）──────────────────────────────────────
+
+    def _extract_from_detailed_issues(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 detailed_issues 提取问题（新格式，优先级最高）.
+
+        新格式包含更详细的字段：location, manifestation, priority_category。
+        """
+        for issue in review_data.get("detailed_issues", []):
+            location_data = issue.get("location", {})
+            add_issue(
+                area=location_data.get("type", "global"),
+                desc=issue.get("description", ""),
+                severity=issue.get("severity", "medium"),
+                suggestion=issue.get("suggestion", ""),
+                priority_category=issue.get("priority_category", "polish"),
+                location=location_data if location_data else None,
+                manifestation=issue.get("manifestation", []),
+                related_dimensions=issue.get("related_dimensions", []),
+            )
+
+    def _extract_from_report_issues(
+        self,
+        report: BaseQualityReport,
+        add_issue: Any,
+    ) -> None:
+        """从 report.issues 提取问题（通用格式）.
+
+        兼容 area/character 和 issue/description 两种字段命名。
+        """
         for issue in report.issues:
             add_issue(
                 area=issue.get("area", issue.get("character", "")),
@@ -416,7 +475,15 @@ class IssueTracker:
                 suggestion=issue.get("suggestion", ""),
             )
 
-        # 2. 从 critical_issues 提取（世界观/角色/大纲）
+    def _extract_from_critical_issues(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 critical_issues 提取问题（世界观/角色/大纲审查）.
+
+        兼容 area/character 和 issue/description 两种字段命名。
+        """
         for issue in review_data.get("critical_issues", []):
             add_issue(
                 area=issue.get("area", issue.get("character", "")),
@@ -425,7 +492,15 @@ class IssueTracker:
                 suggestion=issue.get("suggestion", ""),
             )
 
-        # 3. 从 revision_suggestions 提取（章节审查）
+    def _extract_from_revision_suggestions(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 revision_suggestions 提取问题（章节审查）.
+
+        问题领域固定为【章节内容】。
+        """
         for s in review_data.get("revision_suggestions", []):
             add_issue(
                 area="章节内容",
@@ -434,27 +509,47 @@ class IssueTracker:
                 suggestion=s.get("suggestion", ""),
             )
 
-        # 4. 从 character_assessments 提取（角色审查）
+    def _extract_from_character_assessments(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 character_assessments 提取问题（角色审查）.
+
+        每个角色的 weaknesses 列表被拆分为独立问题。
+        """
         for ca in review_data.get("character_assessments", []):
             char_name = ca.get("name", "")
             for w in ca.get("weaknesses", []):
                 add_issue(area=char_name, desc=w, severity="medium")
 
-        # 5. 从 volume_assessments 提取（大纲审查）
+    def _extract_from_volume_assessments(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 volume_assessments 提取问题（大纲审查）.
+
+        每卷的 weaknesses 列表被拆分为独立问题，问题领域为【第N卷】。
+        """
         for va in review_data.get("volume_assessments", []):
             vol_num = va.get("volume_num", "?")
             for w in va.get("weaknesses", []):
                 add_issue(area=f"第{vol_num}卷", desc=w, severity="medium")
 
-        # 6. 从 missing_elements 提取
+    def _extract_from_missing_elements(
+        self,
+        review_data: Dict[str, Any],
+        add_issue: Any,
+    ) -> None:
+        """从 missing_elements 提取问题.
+
+        问题领域固定为【缺失】，严重级别默认为 medium。
+        """
         for m in review_data.get("missing_elements", []):
             add_issue(area="缺失", desc=m, severity="medium")
 
-        return issues
-
-    def _find_matching_record(
-        self, issue_dict: Dict[str, str]
-    ) -> Optional[IssueRecord]:
+    def _find_matching_record(self, issue_dict: Dict[str, str]) -> Optional[IssueRecord]:
         """在已有记录中查找与当前问题匹配的记录."""
         area = issue_dict.get("area", "")
         desc = issue_dict.get("description", "")
@@ -463,10 +558,7 @@ class IssueTracker:
         best_sim = 0.0
 
         for record in self._records:
-            if (
-                record.status == "resolved"
-                and record.resolution_round == self._current_round
-            ):
+            if record.status == "resolved" and record.resolution_round == self._current_round:
                 # 本轮刚标记为 resolved 的不参与匹配（避免循环）
                 continue
 
@@ -490,11 +582,7 @@ class IssueTracker:
             return 1.0
 
         def get_bigrams(text: str) -> Set[str]:
-            return (
-                {text[i : i + 2] for i in range(len(text) - 1)}
-                if len(text) >= 2
-                else {text}
-            )
+            return {text[i : i + 2] for i in range(len(text) - 1)} if len(text) >= 2 else {text}
 
         bigrams1 = get_bigrams(text1)
         bigrams2 = get_bigrams(text2)
@@ -547,9 +635,7 @@ class ReviewProgressSummary:
             round_info["issues_open"] = summary["open"]
             round_info["issues_resolved"] = summary["resolved"]
             round_info["issues_recurring"] = summary["recurring"]
-            round_info["resolved_this_round"] = len(
-                issue_tracker.get_resolved_this_round()
-            )
+            round_info["resolved_this_round"] = len(issue_tracker.get_resolved_this_round())
             round_info["new_this_round"] = len(issue_tracker.get_new_this_round())
 
         self._rounds.append(round_info)
@@ -580,13 +666,9 @@ class ReviewProgressSummary:
 
         # 评分趋势
         scores_text = " → ".join(f"{s:.1f}" for s in self._scores)
-        total_change = (
-            self._scores[-1] - self._scores[0] if len(self._scores) > 1 else 0
-        )
+        total_change = self._scores[-1] - self._scores[0] if len(self._scores) > 1 else 0
         change_text = (
-            f"{'+'if total_change >= 0 else ''}{total_change:.1f}"
-            if len(self._scores) > 1
-            else ""
+            f"{'+'if total_change >= 0 else ''}{total_change:.1f}" if len(self._scores) > 1 else ""
         )
         lines.append(
             f"评分趋势：{scores_text}（{self.score_trend}{', ' + change_text if change_text else ''}）"
@@ -783,19 +865,13 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
                 review_data=review_data,
                 quality_level=self._quality_level.value,
                 issues_resolved=(
-                    len(self._issue_tracker.get_resolved_this_round())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_resolved_this_round()) if self._issue_tracker else 0
                 ),
                 issues_new=(
-                    len(self._issue_tracker.get_new_this_round())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_new_this_round()) if self._issue_tracker else 0
                 ),
                 issues_recurring=(
-                    len(self._issue_tracker.get_recurring_issues())
-                    if self._issue_tracker
-                    else 0
+                    len(self._issue_tracker.get_recurring_issues()) if self._issue_tracker else 0
                 ),
             )
 
@@ -859,9 +935,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
             # ── Step 6: 更新状态 ────────────────────────────────
             if self._validate_revision(revised_content, current_content):
                 current_content = revised_content
-                previous_issues = self._collect_issues_for_next_round(
-                    last_report, review_data
-                )
+                previous_issues = self._collect_issues_for_next_round(last_report, review_data)
                 logger.info(f"[{loop_name}] 修订完成")
             else:
                 logger.warning(f"[{loop_name}] 修订失败，保留原内容")
@@ -1185,25 +1259,19 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
 
         # 第一段：全局进度（来自 ReviewProgressSummary）
         if self._progress_summary:
-            progress_text = self._progress_summary.format_for_reviewer(
-                max_chars=max_chars // 3
-            )
+            progress_text = self._progress_summary.format_for_reviewer(max_chars=max_chars // 3)
             if progress_text:
                 sections.append(progress_text)
 
         # 第二段：问题追踪（来自 IssueTracker）
         if self._issue_tracker:
-            tracker_text = self._issue_tracker.format_for_reviewer(
-                max_chars=max_chars // 3
-            )
+            tracker_text = self._issue_tracker.format_for_reviewer(max_chars=max_chars // 3)
             if tracker_text:
                 sections.append(tracker_text)
 
         # 如果增强组件均无数据，回退到原始逻辑
         if not sections:
-            issues_text = "\n".join(
-                f"  - {issue}" for issue in (previous_issues or [])[:10]
-            )
+            issues_text = "\n".join(f"  - {issue}" for issue in (previous_issues or [])[:10])
             sections.append(
                 f"上一轮评分：{previous_score}/10\n"
                 f"上一轮发现的主要问题：\n{issues_text or '  （无）'}"
@@ -1238,9 +1306,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         """
         return QualityLevel.from_score(score)
 
-    def _build_revision_strategy_text(
-        self, quality_level: QualityLevel, score: float
-    ) -> str:
+    def _build_revision_strategy_text(self, quality_level: QualityLevel, score: float) -> str:
         """根据质量级别生成修订策略指引.
 
         子类可覆盖以添加领域特定的策略细节。
@@ -1349,7 +1415,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
                         temperature=self.config.reviewer_temperature,
                         max_tokens=self.config.reviewer_max_tokens,
                     ),
-                    timeout=self.timeout
+                    timeout=self.timeout,
                 )
             else:
                 response = await self.client.chat(
@@ -1425,7 +1491,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
                         temperature=self.config.builder_temperature,
                         max_tokens=self.config.builder_max_tokens,
                     ),
-                    timeout=self.timeout
+                    timeout=self.timeout,
                 )
             else:
                 response = await self.client.chat(
@@ -1442,10 +1508,38 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
                 completion_tokens=usage["completion_tokens"],
             )
 
-            return self._parse_builder_response(response["content"])
+            content = response["content"]
+            # 尝试解析 JSON，失败时重试一次
+            try:
+                return self._parse_builder_response(content)
+            except ValueError as e:
+                # JSON 解析失败，记录警告但不立即返回空值
+                # 因为可能是 LLM 输出格式问题，而非网络问题
+                logger.warning(
+                    f"[{self._get_loop_name()}] Builder 响应 JSON 解析失败: {e}\n"
+                    f"响应片段: {content[:200]}..."
+                )
+                # 返回空内容，让审查循环继续（下次迭代会重新尝试）
+                return self._get_empty_content()
 
+        except asyncio.TimeoutError:
+            logger.error(f"[{self._get_loop_name()}] Builder 超时（timeout={self.timeout}s）")
+            return self._get_empty_content()
         except Exception as e:
-            logger.error(f"[{self._get_loop_name()}] Builder 修订失败: {e}")
+            # 区分 Connection error 和其他错误
+            error_type = type(e).__name__
+            error_msg = str(e)
+            is_connection_error = any(
+                keyword in error_msg.lower()
+                for keyword in ["connection", "connect", "timeout", "network"]
+            )
+            if is_connection_error:
+                logger.error(
+                    f"[{self._get_loop_name()}] Builder 网络错误: {error_type}: {error_msg}\n"
+                    f"LLM 调用重试已由 qwen_client 处理，本次返回空内容"
+                )
+            else:
+                logger.error(f"[{self._get_loop_name()}] Builder 修订失败: {error_type}: {error_msg}")
             return self._get_empty_content()
 
     def _parse_builder_response(self, response_text: str) -> TContent:
@@ -1460,9 +1554,7 @@ class BaseReviewLoopHandler(ABC, Generic[TContent, TResult, TReport]):
         Returns:
             解析后的内容
         """
-        return JsonExtractor.extract_json(
-            response_text, default=self._get_empty_content()
-        )
+        return JsonExtractor.extract_json(response_text, default=self._get_empty_content())
 
     def _get_empty_content(self) -> TContent:
         """获取空内容（修订失败时的默认值）.

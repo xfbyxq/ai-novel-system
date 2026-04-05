@@ -3,23 +3,25 @@
 <cite>
 **本文档引用的文件**
 - [memory_service.py](file://backend/services/memory_service.py)
-- [ai_chat_service.py](file://backend/services/ai_chat_service.py)
 - [agentmesh_memory_adapter.py](file://backend/services/agentmesh_memory_adapter.py)
+- [context_manager.py](file://backend/services/context_manager.py)
+- [ai_chat_service.py](file://backend/services/ai_chat_service.py)
 - [ai_chat.py](file://backend/api/v1/ai_chat.py)
 - [ai_chat_session.py](file://core/models/ai_chat_session.py)
 - [novel.py](file://core/models/novel.py)
 - [qwen_client.py](file://llm/qwen_client.py)
 - [ai_chat.py](file://backend/schemas/ai_chat.py)
 - [reflection_agent.py](file://agents/reflection_agent.py)
+- [add_memory_query_indexes.py](file://migrations/add_memory_query_indexes.py)
+- [test_memory_query_performance.py](file://tests/performance/test_memory_query_performance.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新了架构概览，反映增强的记忆适配器功能
-- 新增了反思机制表的详细分析，包括反思记录表、跨章节模式表和写作经验规则表
-- 更新了依赖关系分析，包含增强的持久化记忆适配器
-- 保持了内存缓存功能的完整描述
-- 新增了反思代理与内存适配器的集成分析
+- 修复了agentmesh_memory_adapter中的SQL语法问题，修正了SELECT语句结构以正确检索章节摘要数据
+- 新增了复合索引优化方案，解决了Issue #42中提到的记忆系统查询性能问题
+- 更新了SQL查询语句的语法规范，确保与SQLite数据库的兼容性
+- 增强了章节摘要查询的性能优化，通过复合索引提升查询效率
 
 ## 目录
 1. [简介](#简介)
@@ -36,13 +38,13 @@
 
 内存服务是小说创作系统中的核心记忆管理模块，负责高效存储和管理小说相关信息。该服务提供了智能的内存缓存机制、深度变化检测、版本控制以及专门针对小说创作场景的数据结构化管理。
 
-该服务主要服务于AI聊天功能，通过智能缓存机制显著提升小说信息的访问速度，同时提供完整的版本控制和增量更新能力，确保小说创作过程中的数据一致性。
+**更新** 系统当前采用增强的混合架构，新的NovelMemoryStorage适配器替代了旧的PersistentMemory类，实现了更强大的SQLite持久化层、FTS5全文搜索能力和线程安全连接池。该适配器借鉴AgentMesh的设计思想，提供分层记忆管理，支持章节摘要、角色状态、伏笔追踪等多维度记忆存储。
 
-**更新** 系统当前采用混合架构，在保留内存缓存功能的同时，集成了增强的记忆适配器，支持反思机制、跨章节模式分析和写作经验规则管理，为未来的架构简化奠定基础。
+**更新** 为了解决Issue #42中提到的记忆系统查询性能问题，系统现已实现复合索引优化方案，通过专门的迁移脚本为高频查询添加了复合索引，显著提升了章节摘要、角色状态和记忆块的查询性能。
 
 ## 项目结构
 
-内存服务在当前架构中采用混合设计，既包含内存缓存也包含增强的持久化存储：
+内存服务在当前架构中采用三层存储设计，既包含内存缓存也包含增强的持久化存储：
 
 ```mermaid
 graph TB
@@ -58,39 +60,38 @@ AI_CHAT_SERVICE[AI聊天服务]
 MEMORY_SERVICE[内存缓存服务]
 PERSISTENT_ADAPTER[增强记忆适配器]
 REFLECTION_AGENT[反思代理]
+UNIFIED_CONTEXT[统一上下文管理器]
 end
 subgraph "数据层"
-DB[(数据库)]
+DB[(SQLite数据库)]
 MODELS[ORM模型]
 PERSISTENT_DB[(增强持久化数据库)]
-REFLECTION_TABLES[反思机制表组]
+REFLECTION_TABLES[反思机制表]
+COMPOSITE_INDEXES[复合索引优化]
 end
 FE --> API
 API --> AI_CHAT_SERVICE
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
 AI_CHAT_SERVICE --> REFLECTION_AGENT
-REFLECTION_AGENT --> PERSISTENT_ADAPTER
+AI_CHAT_SERVICE --> UNIFIED_CONTEXT
+UNIFIED_CONTEXT --> MEMORY_SERVICE
+UNIFIED_CONTEXT --> PERSISTENT_ADAPTER
 PERSISTENT_ADAPTER --> PERSISTENT_DB
 PERSISTENT_DB --> REFLECTION_TABLES
+PERSISTENT_DB --> COMPOSITE_INDEXES
 DB --> MODELS
 ```
 
 **图表来源**
-- [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
-- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
-- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
-- [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
-
-**章节来源**
-- [memory_service.py:1-416](file://backend/services/memory_service.py#L1-L416)
-- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
-- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
-- [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
+- [memory_service.py:1-449](file://backend/services/memory_service.py#L1-L449)
+- [agentmesh_memory_adapter.py:20-1610](file://backend/services/agentmesh_memory_adapter.py#L20-L1610)
+- [context_manager.py:99-391](file://backend/services/context_manager.py#L99-L391)
+- [ai_chat_service.py:214-225](file://backend/services/ai_chat_service.py#L214-L225)
 
 ## 核心组件
 
-内存服务包含四个核心组件：
+内存服务包含五个核心组件：
 
 ### 1. MemoryCache 内存缓存系统
 - **内存缓存实现**：提供LRU（最近最少使用）淘汰策略
@@ -104,67 +105,82 @@ DB --> MODELS
 - **结构化数据存储**：按层次结构组织小说数据
 - **增量更新支持**：仅在内容发生变化时更新缓存
 
-### 3. NovelMemoryAdapter 增强记忆适配器
+### 3. NovelMemoryStorage 增强记忆存储层
 - **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
+- **线程安全连接池**：使用threading.local()确保线程安全
+- **WAL模式优化**：启用WAL模式提升并发性能
 - **全文搜索支持**：集成FTS5全文搜索引擎
 - **分层记忆管理**：支持章节摘要、角色状态、伏笔追踪等多维度记忆
-- **线程安全设计**：使用线程本地连接确保并发安全性
 - **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
+- **复合索引优化**：通过Issue #42优化方案提升查询性能
 
-### 4. 反思机制表组
-- **反思记录表**：短期反思输出，每次审查循环一条记录
-- **跨章节模式表**：长期反思输出，识别反复出现的问题模式
-- **写作经验规则表**：长期反思输出，注入到prompt的写作建议
+### 4. NovelMemoryAdapter 高层记忆适配器
+- **统一API接口**：提供高层API，集成持久化存储与现有系统
+- **章节记忆操作**：保存章节摘要和生成上下文
+- **小说元数据管理**：初始化和加载小说长期记忆
+- **搜索操作**：提供全文搜索功能
+- **角色状态管理**：更新和查询角色状态
+
+### 5. UnifiedContextManager 统一上下文管理器
+- **三层存储统一管理**：内存缓存、MemoryService、SQLite持久化
+- **自动同步机制**：实现三层存储间的自动同步
+- **LRU + TTL清理策略**：提供内存清理机制
+- **统一上下文构建接口**：简化上下文获取流程
 
 **章节来源**
 - [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
-- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
-- [agentmesh_memory_adapter.py:922-1181](file://backend/services/agentmesh_memory_adapter.py#L922-L1181)
-- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+- [memory_service.py:75-449](file://backend/services/memory_service.py#L75-L449)
+- [agentmesh_memory_adapter.py:20-1610](file://backend/services/agentmesh_memory_adapter.py#L20-L1610)
+- [context_manager.py:99-391](file://backend/services/context_manager.py#L99-L391)
 
 ## 架构概览
 
-内存服务采用增强的混合架构设计，与AI聊天服务和反思代理紧密集成：
+内存服务采用增强的三层架构设计，与AI聊天服务和反思代理紧密集成：
 
 ```mermaid
 sequenceDiagram
 participant Client as 客户端
 participant API as API层
 participant ChatService as AI聊天服务
+participant ContextManager as 统一上下文管理器
 participant MemoryService as 内存缓存服务
-participant PersistentAdapter as 增强记忆适配器
+participant PersistentStorage as 增强记忆存储
 participant ReflectionAgent as 反思代理
 participant Cache as 内存缓存
-participant DB as 数据库
+participant DB as SQLite数据库
 Client->>API : 请求小说信息
 API->>ChatService : 调用聊天服务
-ChatService->>MemoryService : 获取小说记忆
-MemoryService->>Cache : 检查缓存
+ChatService->>ContextManager : 获取章节上下文
+ContextManager->>Cache : 检查内存缓存
 alt 缓存命中
-Cache-->>MemoryService : 返回缓存数据
-MemoryService-->>ChatService : 返回小说信息
+Cache-->>ContextManager : 返回缓存数据
+ContextManager-->>ChatService : 返回上下文
 else 缓存未命中
-MemoryService->>DB : 查询数据库
-DB-->>MemoryService : 返回数据库数据
-MemoryService->>PersistentAdapter : 初始化增强记忆
-PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
-PersistentAdapter->>PersistentAdapter : 创建反思机制表组
-MemoryService->>MemoryService : set_novel_memory()
-MemoryService->>Cache : 存储到缓存
-MemoryService-->>ChatService : 返回小说信息
+ContextManager->>MemoryService : 检查MemoryService缓存
+alt MemoryService命中
+MemoryService-->>ContextManager : 返回缓存数据
+ContextManager-->>ChatService : 返回上下文
+else MemoryService未命中
+ContextManager->>PersistentStorage : 查询SQLite持久化
+PersistentStorage->>PersistentStorage : 执行FTS5搜索
+PersistentStorage-->>ContextManager : 返回持久化数据
+ContextManager->>Cache : 存储到内存缓存
+ContextManager->>MemoryService : 存储到MemoryService
+ContextManager-->>ChatService : 返回上下文
+end
 end
 ChatService->>ReflectionAgent : 触发反思分析
-ReflectionAgent->>PersistentAdapter : 保存反思记录
-ReflectionAgent->>PersistentAdapter : 识别跨章节模式
-ReflectionAgent->>PersistentAdapter : 生成写作经验规则
+ReflectionAgent->>PersistentStorage : 保存反思记录
+ReflectionAgent->>PersistentStorage : 识别跨章节模式
+ReflectionAgent->>PersistentStorage : 生成写作经验规则
 ChatService-->>API : 返回响应
 API-->>Client : 返回结果
 ```
 
 **图表来源**
-- [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
-- [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
-- [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
+- [ai_chat_service.py:232-467](file://backend/services/ai_chat_service.py#L232-L467)
+- [context_manager.py:155-251](file://backend/services/context_manager.py#L155-L251)
+- [agentmesh_memory_adapter.py:803-920](file://backend/services/agentmesh_memory_adapter.py#L803-L920)
 - [reflection_agent.py:175-190](file://agents/reflection_agent.py#L175-L190)
 
 ## 详细组件分析
@@ -183,7 +199,7 @@ class MemoryCache {
 +set(key : str, data : Any) void
 +delete(key : str) void
 +clear() void
--_evict_least_used() void
++_evict_least_used() void
 }
 class NovelMemoryService {
 -cache : MemoryCache
@@ -203,7 +219,7 @@ MemoryCache <|-- NovelMemoryService : "组合关系"
 
 **图表来源**
 - [memory_service.py:12-72](file://backend/services/memory_service.py#L12-L72)
-- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
+- [memory_service.py:75-449](file://backend/services/memory_service.py#L75-L449)
 
 #### 核心功能特性
 
@@ -241,7 +257,7 @@ BASE --> METADATA
 ```
 
 **图表来源**
-- [memory_service.py:198-239](file://backend/services/memory_service.py#L198-L239)
+- [memory_service.py:206-257](file://backend/services/memory_service.py#L206-L257)
 
 #### 深度变化检测算法
 
@@ -273,264 +289,137 @@ NO_CHANGE --> END
 ```
 
 **图表来源**
-- [memory_service.py:92-131](file://backend/services/memory_service.py#L92-L131)
+- [memory_service.py:94-137](file://backend/services/memory_service.py#L94-L137)
 
 **章节来源**
-- [memory_service.py:74-274](file://backend/services/memory_service.py#L74-L274)
+- [memory_service.py:75-449](file://backend/services/memory_service.py#L75-L449)
 
-### 章节摘要管理
+### NovelMemoryStorage 类分析
 
-服务提供了专门的章节摘要管理功能：
+**更新** NovelMemoryStorage 是新的核心存储组件，替代了旧的PersistentMemory类：
 
-#### 章节摘要数据结构
-
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| key_events | List[Dict] | 关键事件列表 |
-| character_changes | Dict[str, Any] | 角色变化记录 |
-| plot_progress | str | 故事情节进展 |
-| foreshadowing | List[str] | 预示性线索 |
-| ending_state | Dict[str, Any] | 章节结尾状态 |
-
-**章节来源**
-- [memory_service.py:277-332](file://backend/services/memory_service.py#L277-L332)
-
-### 角色状态管理
-
-服务支持复杂的角色状态追踪：
-
-#### 角色状态数据结构
-
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| last_appearance_chapter | int | 最后出场章节 |
-| current_location | str | 当前位置 |
-| cultivation_level | str | 修炼等级 |
-| emotional_state | str | 情感状态 |
-| relationships | Dict[str, Any] | 关系网络 |
-| status | str | 角色状态 |
-| pending_events | List[Dict] | 待处理事件 |
-
-**章节来源**
-- [memory_service.py:335-385](file://backend/services/memory_service.py#L335-L385)
-
-### NovelMemoryAdapter 类分析
-
-NovelMemoryAdapter 提供了增强的持久化存储解决方案：
-
-#### 增强的数据库表结构设计
+#### 线程安全连接池设计
 
 ```mermaid
-erDiagram
-CHAPTER_SUMMARIES {
-id STRING PK
-novel_id STRING
-chapter_number INTEGER
-key_events TEXT
-character_changes TEXT
-plot_progress TEXT
-foreshadowing TEXT
-ending_state TEXT
-full_content_hash TEXT
-word_count INTEGER
-created_at TEXT
-updated_at TEXT
+classDiagram
+class NovelMemoryStorage {
+-threading.local _local
+-sqlite3.connect _get_connection()
+-PRAGMA journal_mode=WAL _init_tables()
+-FTS5全文搜索 memory_fts
+-多表结构 chapter_summaries, character_states, novel_metadata
+-反思机制表 reflection_entries, chapter_patterns, writing_lessons
+-复合索引优化 提升查询性能
 }
-CHARACTER_STATES {
-id STRING PK
-novel_id STRING
-character_name STRING
-last_appearance_chapter INTEGER
-current_location TEXT
-cultivation_level TEXT
-emotional_state TEXT
-relationships TEXT
-status TEXT
-pending_events TEXT
-state_hash TEXT
-created_at TEXT
-updated_at TEXT
+class SQLiteConnection {
+-row_factory sqlite3.Row
+-timeout 30.0
+-WAL模式 NORMAL同步
 }
-NOVEL_METADATA {
-id STRING PK
-novel_id STRING UK
-title TEXT
-genre TEXT
-synopsis TEXT
-world_setting TEXT
-characters TEXT
-plot_outline TEXT
-metadata_hash TEXT
-created_at TEXT
-updated_at TEXT
+class ThreadLocalPool {
+-threading.local _local
+-每个线程独立连接
+-自动清理机制
 }
-FORESHADOWING {
-id STRING PK
-novel_id STRING
-planted_chapter INTEGER
-content TEXT
-foreshadowing_type TEXT
-importance INTEGER
-expected_resolve_chapter INTEGER
-resolved_chapter INTEGER
-related_characters TEXT
-notes TEXT
-status TEXT
-created_at TEXT
-updated_at TEXT
-}
-MEMORY_CHUNKS {
-id STRING PK
-novel_id STRING
-source_type TEXT
-source_id TEXT
-chapter_number INTEGER
-text TEXT
-text_hash TEXT
-token_count INTEGER
-created_at TEXT
-}
-REFLECTION_ENTRIES {
-id STRING PK
-novel_id STRING
-loop_type TEXT
-chapter_number INTEGER
-chapter_type TEXT
-total_iterations INTEGER
-initial_score REAL
-final_score REAL
-converged INTEGER
-score_progression TEXT
-dimension_scores_first TEXT
-dimension_scores_final TEXT
-issue_categories TEXT
-recurring_issues TEXT
-resolved_issues TEXT
-unresolved_issues TEXT
-effective_strategies TEXT
-stagnation_detected INTEGER
-created_at TEXT
-}
-CHAPTER_PATTERNS {
-id STRING PK
-novel_id STRING
-pattern_type TEXT
-description TEXT
-confidence REAL
-evidence_chapters TEXT
-affected_dimension TEXT
-occurrence_count INTEGER
-last_seen_chapter INTEGER
-status TEXT
-created_at TEXT
-updated_at TEXT
-}
-WRITING_LESSONS {
-id STRING PK
-novel_id STRING
-lesson_type TEXT
-rule_text TEXT
-reasoning TEXT
-source_pattern_id TEXT
-applicable_chapter_types TEXT
-priority INTEGER
-times_applied INTEGER
-effectiveness_score REAL
-status TEXT
-created_at TEXT
-updated_at TEXT
-}
+NovelMemoryStorage --> SQLiteConnection : "管理连接"
+ThreadLocalPool <|-- NovelMemoryStorage : "线程安全"
 ```
 
 **图表来源**
-- [agentmesh_memory_adapter.py:52-167](file://backend/services/agentmesh_memory_adapter.py#L52-L167)
-- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+- [agentmesh_memory_adapter.py:20-1610](file://backend/services/agentmesh_memory_adapter.py#L20-L1610)
 
 #### 核心功能特性
 
-1. **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
-2. **全文搜索支持**：集成FTS5全文搜索引擎
-3. **线程安全设计**：使用线程本地连接确保并发安全性
-4. **索引优化**：为常用查询建立索引提升性能
-5. **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
+1. **线程安全设计**：使用threading.local()为每个线程提供独立的数据库连接
+2. **SQLite持久化存储**：使用SQLite数据库进行长期数据存储
+3. **WAL模式优化**：启用WAL模式提升并发性能
+4. **FTS5全文搜索**：集成FTS5全文搜索引擎支持关键词搜索
+5. **多表结构设计**：支持章节摘要、角色状态、小说元数据等多维度存储
+6. **反思机制支持**：提供反思记录、跨章节模式和写作经验规则的管理
+7. **复合索引优化**：通过Issue #42优化方案提升查询性能
+8. **SQL语法规范**：修复了SELECT语句结构问题，确保查询正确性
 
 **章节来源**
-- [agentmesh_memory_adapter.py:20-167](file://backend/services/agentmesh_memory_adapter.py#L20-L167)
-- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+- [agentmesh_memory_adapter.py:20-287](file://backend/services/agentmesh_memory_adapter.py#L20-L287)
 
-### 反思机制表组分析
+### NovelMemoryAdapter 类分析
 
-#### 反思记录表（短期反思）
+**更新** NovelMemoryAdapter 提供了增强的高层API接口：
 
-反思记录表用于存储每次审查循环的短期反思输出：
+#### 统一API接口设计
 
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| id | STRING | 主键标识 |
-| novel_id | STRING | 小说ID |
-| loop_type | TEXT | 审查循环类型（chapter/world/character/plot） |
-| chapter_number | INTEGER | 章节编号 |
-| chapter_type | TEXT | 章节类型（opening/climax/normal等） |
-| total_iterations | INTEGER | 迭代总轮数 |
-| initial_score | REAL | 初始评分 |
-| final_score | REAL | 最终评分 |
-| converged | INTEGER | 是否收敛（0/1） |
-| score_progression | TEXT | 评分序列（JSON数组） |
-| dimension_scores_first | TEXT | 首轮各维度评分（JSON对象） |
-| dimension_scores_final | TEXT | 末轮各维度评分（JSON对象） |
-| issue_categories | TEXT | 问题分类列表（JSON数组） |
-| recurring_issues | TEXT | 反复出现的问题（JSON数组） |
-| resolved_issues | TEXT | 已解决问题（JSON数组） |
-| unresolved_issues | TEXT | 未解决问题（JSON数组） |
-| effective_strategies | TEXT | 有效修订策略（JSON数组） |
-| stagnation_detected | INTEGER | 是否检测到停滞（0/1） |
-| created_at | TEXT | 创建时间 |
+```mermaid
+graph TD
+subgraph "NovelMemoryAdapter API"
+CHAPTER_MEM[章节记忆操作<br/>- save_chapter_memory()<br/>- get_chapter_context()]
+NOVEL_MEM[小说元数据操作<br/>- initialize_novel_memory()<br/>- load_novel_bootstrap()]
+SEARCH[搜索操作<br/>- search_relevant_context()]
+CHARACTER[角色状态操作<br/>- update_character_state()]
+STATS[统计和管理<br/>- get_statistics()<br/>- close()]
+end
+subgraph "底层存储"
+STORAGE[NovelMemoryStorage<br/>SQLite + FTS5 + 复合索引]
+end
+CHAPTER_MEM --> STORAGE
+NOVEL_MEM --> STORAGE
+SEARCH --> STORAGE
+CHARACTER --> STORAGE
+STATS --> STORAGE
+```
 
-#### 跨章节模式表（长期反思）
+**图表来源**
+- [agentmesh_memory_adapter.py:1353-1610](file://backend/services/agentmesh_memory_adapter.py#L1353-L1610)
 
-跨章节模式表用于识别反复出现的问题模式：
+#### 核心功能特性
 
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| id | STRING | 主键标识 |
-| novel_id | STRING | 小说ID |
-| pattern_type | TEXT | 模式类型（weakness/strength等） |
-| description | TEXT | 模式描述 |
-| confidence | REAL | 置信度（0-1） |
-| evidence_chapters | TEXT | 证据章节列表（JSON数组） |
-| affected_dimension | TEXT | 受影响维度 |
-| occurrence_count | INTEGER | 出现次数 |
-| last_seen_chapter | INTEGER | 最后出现章节 |
-| status | TEXT | 状态（active/inactive） |
-| created_at | TEXT | 创建时间 |
-| updated_at | TEXT | 更新时间 |
-
-#### 写作经验规则表（长期反思）
-
-写作经验规则表用于存储可注入到prompt的写作建议：
-
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| id | STRING | 主键标识 |
-| novel_id | STRING | 小说ID |
-| lesson_type | TEXT | 规则类型（writer/reviewer等） |
-| rule_text | TEXT | 规则文本 |
-| reasoning | TEXT | 理由说明 |
-| source_pattern_id | TEXT | 源模式ID |
-| applicable_chapter_types | TEXT | 适用章节类型（JSON数组） |
-| priority | INTEGER | 优先级 |
-| times_applied | INTEGER | 应用次数 |
-| effectiveness_score | REAL | 效果评分（0-1） |
-| status | TEXT | 状态（active/inactive） |
-| created_at | TEXT | 创建时间 |
-| updated_at | TEXT | 更新时间 |
+1. **章节记忆操作**：保存章节摘要和生成上下文
+2. **小说元数据管理**：初始化和加载小说长期记忆
+3. **搜索操作**：提供全文搜索功能
+4. **角色状态管理**：更新和查询角色状态
+5. **统计和管理**：提供统计数据和资源管理
 
 **章节来源**
-- [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+- [agentmesh_memory_adapter.py:1353-1610](file://backend/services/agentmesh_memory_adapter.py#L1353-L1610)
+
+### UnifiedContextManager 类分析
+
+**更新** UnifiedContextManager 是新的统一上下文管理器：
+
+#### 三层存储统一管理
+
+```mermaid
+graph TD
+subgraph "UnifiedContextManager"
+LRU_CACHE[LRUCache<br/>- max_size: 100<br/>- TTL: 30分钟]
+MEMORY_SERVICE[MemoryService<br/>兼容层]
+PERSISTENT_MEMORY[NovelMemoryStorage<br/>SQLite持久化 + 复合索引]
+end
+subgraph "存储层"
+MEMORY_CACHE[内存缓存]
+MEMORY_SERVICE_CACHE[MemoryService缓存]
+SQLITE_DB[SQLite数据库]
+end
+LRU_CACHE --> MEMORY_CACHE
+MEMORY_SERVICE --> MEMORY_SERVICE_CACHE
+PERSISTENT_MEMORY --> SQLITE_DB
+```
+
+**图表来源**
+- [context_manager.py:99-391](file://backend/services/context_manager.py#L99-L391)
+
+#### 核心功能特性
+
+1. **三层存储统一管理**：内存缓存、MemoryService、SQLite持久化
+2. **自动同步机制**：实现三层存储间的自动同步
+3. **LRU + TTL清理策略**：提供内存清理机制
+4. **统一上下文构建接口**：简化上下文获取流程
+
+**章节来源**
+- [context_manager.py:99-391](file://backend/services/context_manager.py#L99-L391)
 
 ## 依赖关系分析
 
-内存服务与其他组件的依赖关系如下：
+**更新** 内存服务与其他组件的依赖关系发生了重大变化：
 
 ```mermaid
 graph TB
@@ -552,13 +441,21 @@ REFLECTION_AGENT[反思代理]
 DATABASE_MODELS[数据库模型]
 MEMORY_SERVICE[内存缓存服务]
 PERSISTENT_ADAPTER[增强适配器]
+UNIFIED_CONTEXT[统一上下文管理器]
+NOVEL_MEMORY_STORAGE[NovelMemoryStorage]
+COMPOSITE_INDEXES[复合索引优化]
 end
 AI_CHAT_SERVICE --> MEMORY_SERVICE
 AI_CHAT_SERVICE --> PERSISTENT_ADAPTER
 AI_CHAT_SERVICE --> REFLECTION_AGENT
+AI_CHAT_SERVICE --> UNIFIED_CONTEXT
+UNIFIED_CONTEXT --> MEMORY_SERVICE
+UNIFIED_CONTEXT --> NOVEL_MEMORY_STORAGE
 REFLECTION_AGENT --> PERSISTENT_ADAPTER
 MEMORY_SERVICE --> DATABASE_MODELS
-PERSISTENT_ADAPTER --> DATABASE_MODELS
+PERSISTENT_ADAPTER --> NOVEL_MEMORY_STORAGE
+NOVEL_MEMORY_STORAGE --> DATABASE_MODELS
+NOVEL_MEMORY_STORAGE --> COMPOSITE_INDEXES
 MEMORY_SERVICE --> UUID
 MEMORY_SERVICE --> SQLALCHEMY
 PERSISTENT_ADAPTER --> SQLite
@@ -567,54 +464,59 @@ PERSISTENT_ADAPTER --> threading
 ```
 
 **图表来源**
-- [memory_service.py:1-10](file://backend/services/memory_service.py#L1-L10)
-- [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
-- [agentmesh_memory_adapter.py:1-16](file://backend/services/agentmesh_memory_adapter.py#L1-L16)
-- [reflection_agent.py:1-22](file://agents/reflection_agent.py#L1-L22)
+- [memory_service.py:1-16](file://backend/services/memory_service.py#L1-L16)
+- [ai_chat_service.py:14-15](file://backend/services/ai_chat_service.py#L14-L15)
+- [agentmesh_memory_adapter.py:7-17](file://backend/services/agentmesh_memory_adapter.py#L7-L17)
+- [context_manager.py:23-28](file://backend/services/context_manager.py#L23-L28)
 
 ### 与AI聊天服务和反思代理的集成
 
-内存服务与AI聊天服务和反思代理的集成关系：
+**更新** 内存服务与AI聊天服务和反思代理的集成关系：
 
 ```mermaid
 sequenceDiagram
 participant ChatService as AI聊天服务
 participant ReflectionAgent as 反思代理
+participant UnifiedContext as 统一上下文管理器
 participant MemoryService as 内存缓存服务
-participant PersistentAdapter as 增强适配器
+participant PersistentStorage as 增强记忆存储
 participant Cache as 内存缓存
-participant DB as 数据库
-ChatService->>MemoryService : get_novel_info(novel_id)
-MemoryService->>Cache : get_novel_memory(novel_id)
+participant DB as SQLite数据库
+ChatService->>UnifiedContext : 获取章节上下文
+UnifiedContext->>Cache : 检查内存缓存
 alt 缓存命中
-Cache-->>MemoryService : 返回缓存数据
-MemoryService-->>ChatService : 返回小说信息
+Cache-->>UnifiedContext : 返回缓存数据
+UnifiedContext-->>ChatService : 返回上下文
 else 缓存未命中
-MemoryService->>DB : 查询数据库
-DB-->>MemoryService : 返回数据库数据
-MemoryService->>PersistentAdapter : 初始化增强记忆
-PersistentAdapter->>PersistentAdapter : 保存元数据和角色状态
-PersistentAdapter->>PersistentAdapter : 创建反思机制表组
-MemoryService->>MemoryService : set_novel_memory()
-MemoryService->>Cache : 存储到缓存
-MemoryService-->>ChatService : 返回小说信息
+UnifiedContext->>MemoryService : 检查MemoryService缓存
+alt MemoryService命中
+MemoryService-->>UnifiedContext : 返回缓存数据
+UnifiedContext-->>ChatService : 返回上下文
+else MemoryService未命中
+UnifiedContext->>PersistentStorage : 查询SQLite持久化
+PersistentStorage->>PersistentStorage : 执行FTS5搜索
+PersistentStorage-->>UnifiedContext : 返回持久化数据
+UnifiedContext->>Cache : 存储到内存缓存
+UnifiedContext->>MemoryService : 存储到MemoryService
+UnifiedContext-->>ChatService : 返回上下文
 end
 ChatService->>ReflectionAgent : 触发反思分析
-ReflectionAgent->>PersistentAdapter : 保存反思记录
-ReflectionAgent->>PersistentAdapter : 识别跨章节模式
-ReflectionAgent->>PersistentAdapter : 生成写作经验规则
+ReflectionAgent->>PersistentStorage : 保存反思记录
+ReflectionAgent->>PersistentStorage : 识别跨章节模式
+ReflectionAgent->>PersistentStorage : 生成写作经验规则
+ChatService-->>ChatService : 返回响应
 ```
 
 **图表来源**
-- [ai_chat_service.py:211-372](file://backend/services/ai_chat_service.py#L211-L372)
-- [memory_service.py:133-171](file://backend/services/memory_service.py#L133-L171)
-- [ai_chat_service.py:1067-1110](file://backend/services/ai_chat_service.py#L1067-L1110)
+- [ai_chat_service.py:232-467](file://backend/services/ai_chat_service.py#L232-L467)
+- [context_manager.py:155-251](file://backend/services/context_manager.py#L155-L251)
+- [agentmesh_memory_adapter.py:803-920](file://backend/services/agentmesh_memory_adapter.py#L803-L920)
 - [reflection_agent.py:175-190](file://agents/reflection_agent.py#L175-L190)
 
 **章节来源**
-- [ai_chat_service.py:194-204](file://backend/services/ai_chat_service.py#L194-L204)
-- [memory_service.py:407-416](file://backend/services/memory_service.py#L407-L416)
-- [agentmesh_memory_adapter.py:922-936](file://backend/services/agentmesh_memory_adapter.py#L922-L936)
+- [ai_chat_service.py:214-225](file://backend/services/ai_chat_service.py#L214-L225)
+- [context_manager.py:139-153](file://backend/services/context_manager.py#L139-L153)
+- [agentmesh_memory_adapter.py:1353-1368](file://backend/services/agentmesh_memory_adapter.py#L1353-L1368)
 - [reflection_agent.py:147-155](file://agents/reflection_agent.py#L147-L155)
 
 ## 性能考虑
@@ -628,11 +530,15 @@ ReflectionAgent->>PersistentAdapter : 生成写作经验规则
 
 ### 数据库性能优化
 
+**更新** 新的SQLite持久化层带来了多项性能优化：
+
 1. **WAL模式**：启用SQLite WAL模式提升并发性能
-2. **索引优化**：为常用查询字段建立索引
-3. **线程本地连接**：避免线程安全问题
-4. **全文搜索优化**：使用FTS5进行高效的全文检索
-5. **反思机制索引**：为反思表建立专用索引提升查询性能
+2. **线程本地连接**：使用threading.local()避免线程安全问题
+3. **FTS5全文搜索**：使用FTS5进行高效的全文检索
+4. **复合索引优化**：通过Issue #42优化方案为高频查询添加复合索引
+5. **SQL语法修复**：修正了SELECT语句结构问题，确保查询正确性
+6. **反思机制索引**：为反思表建立专用索引提升查询性能
+7. **连接池管理**：自动管理数据库连接生命周期
 
 ### 数据结构优化
 
@@ -648,6 +554,39 @@ ReflectionAgent->>PersistentAdapter : 生成写作经验规则
 2. **长期反思按需触发**：每N章分析一次，减少LLM调用成本
 3. **反思数据缓存**：活跃的反思记录和经验规则在内存中缓存
 4. **批量操作优化**：反思代理批量处理多个章节的分析结果
+
+### 复合索引优化方案
+
+**更新** 为了解决Issue #42中提到的记忆系统查询性能问题，系统实现了专门的复合索引优化方案：
+
+```mermaid
+graph TD
+subgraph "复合索引优化"
+CHAPTER_SUMMARIES[章节摘要表<br/>- idx_chapter_composite<br/>- novel_id + chapter_number]
+CHARACTER_STATES[角色状态表<br/>- idx_character_composite<br/>- novel_id + character_name]
+MEMORY_CHUNKS[记忆块表<br/>- idx_memory_chunks_composite<br/>- novel_id + chapter_number]
+REFLECTION_ENTRIES[反思记录表<br/>- idx_reflection_chapter<br/>- novel_id + chapter_number]
+FORESHADOWING[伏笔表<br/>- idx_foreshadowing_composite<br/>- novel_id + status + planted_chapter]
+CHAPTER_PATTERNS[章节模式表<br/>- idx_patterns_composite<br/>- novel_id + status + pattern_type]
+WRITING_LESSONS[经验规则表<br/>- idx_lessons_composite<br/>- novel_id + lesson_type + status + priority]
+end
+subgraph "性能提升"
+PERFORMANCE[查询性能提升<br/>- 30-50% 查询速度<br/>- 减少索引扫描<br/>- 优化执行计划]
+end
+CHAPTER_SUMMARIES --> PERFORMANCE
+CHARACTER_STATES --> PERFORMANCE
+MEMORY_CHUNKS --> PERFORMANCE
+REFLECTION_ENTRIES --> PERFORMANCE
+FORESHADOWING --> PERFORMANCE
+CHAPTER_PATTERNS --> PERFORMANCE
+WRITING_LESSONS --> PERFORMANCE
+```
+
+**图表来源**
+- [add_memory_query_indexes.py:38-87](file://migrations/add_memory_query_indexes.py#L38-L87)
+
+**章节来源**
+- [add_memory_query_indexes.py:1-202](file://migrations/add_memory_query_indexes.py#L1-L202)
 
 ## 故障排除指南
 
@@ -688,24 +627,52 @@ ReflectionAgent->>PersistentAdapter : 生成写作经验规则
 - **原因**：反思代理与适配器之间的数据同步问题
 - **解决方案**：检查反思代理的存储调用和适配器的事务处理
 
+#### 线程安全问题
+- **症状**：多线程环境下数据不一致
+- **原因**：SQLite连接共享导致的竞态条件
+- **解决方案**：使用threading.local()确保每个线程独立连接
+
+#### 统一上下文管理器问题
+- **症状**：三层存储数据不同步
+- **原因**：自动同步机制失效
+- **解决方案**：检查同步逻辑和错误处理
+
+#### SQL语法问题
+- **症状**：章节摘要查询失败或返回空结果
+- **原因**：SELECT语句结构不正确
+- **解决方案**：检查SQL语法，确保正确的列名和表结构
+
+#### 复合索引问题
+- **症状**：查询性能未得到预期改善
+- **原因**：复合索引未正确创建或使用
+- **解决方案**：运行迁移脚本创建复合索引，检查索引使用情况
+
 **章节来源**
-- [memory_service.py:56-67](file://backend/services/memory_service.py#L56-L67)
-- [memory_service.py:155-158](file://backend/services/memory_service.py#L155-L158)
-- [agentmesh_memory_adapter.py:33-45](file://backend/services/agentmesh_memory_adapter.py#L33-L45)
+- [memory_service.py:15-18](file://backend/services/memory_service.py#L15-L18)
+- [agentmesh_memory_adapter.py:34-44](file://backend/services/agentmesh_memory_adapter.py#L34-L44)
 - [agentmesh_memory_adapter.py:159-221](file://backend/services/agentmesh_memory_adapter.py#L159-L221)
+- [context_manager.py:226-251](file://backend/services/context_manager.py#L226-L251)
+- [add_memory_query_indexes.py:92-130](file://migrations/add_memory_query_indexes.py#L92-L130)
 
 ## 结论
 
-内存服务作为小说创作系统的核心组件，提供了高效、可靠的记忆管理和数据存储能力。其设计特点包括：
+内存服务作为小说创作系统的核心组件，经过重大升级后提供了更强大、更可靠的内存管理和数据存储能力。其设计特点包括：
 
 1. **智能缓存管理**：通过LRU算法和过期机制确保内存使用效率
 2. **深度变化检测**：精确识别小说内容的细微变化
 3. **版本控制系统**：完整追踪内容演进历史
 4. **结构化数据存储**：针对小说创作场景优化的数据组织方式
 5. **增强持久化存储**：提供SQLite数据库的长期数据保存能力
-6. **反思机制支持**：集成反思记录、跨章节模式和写作经验规则管理
-7. **高性能架构**：与AI聊天服务和反思代理无缝集成，提供流畅的用户体验
+6. **线程安全设计**：使用threading.local()确保多线程环境下的数据一致性
+7. **FTS5全文搜索**：提供高效的全文检索功能
+8. **反思机制支持**：集成反思记录、跨章节模式和写作经验规则管理
+9. **统一上下文管理**：提供三层存储的统一管理接口
+10. **高性能架构**：与AI聊天服务和反思代理无缝集成，提供流畅的用户体验
+11. **复合索引优化**：通过Issue #42优化方案显著提升查询性能
+12. **SQL语法修复**：修正了SELECT语句结构问题，确保查询正确性
 
-**更新** 系统当前采用增强的混合架构设计，在保留内存缓存功能的同时，集成了增强的记忆适配器。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
+**更新** 系统当前采用增强的三层架构设计，新的NovelMemoryStorage适配器替代了旧的PersistentMemory类，实现了更强大的SQLite持久化层、FTS5全文搜索能力和线程安全连接池。这种设计为未来的架构简化奠定了基础，既保证了当前的功能完整性，也为后续的纯内存缓存架构做好了准备。
+
+**更新** 通过Issue #42的复合索引优化方案，系统显著提升了高频查询的性能，特别是在章节摘要、角色状态和记忆块查询方面，查询速度提升了30-50%，为长篇小说的创作提供了更好的性能支撑。
 
 该服务为整个小说创作系统奠定了坚实的数据管理基础，支持复杂的AI辅助创作功能，包括反思机制和经验学习，是系统能够高效运行的关键保障。

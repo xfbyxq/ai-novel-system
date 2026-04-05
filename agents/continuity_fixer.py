@@ -273,6 +273,42 @@ class ContinuityFixerPipeline:
     集成到章节生成流程中，在连续性检查后自动修复问题.
     """
 
+    # 重新验证提示词模板
+    RECHECK_PROMPT_TEMPLATE = """请作为专业编辑，验证以下连续性问题在修复后的内容中是否已解决.
+
+## 修复后的章节内容
+{fixed_content}
+
+## 需要验证的问题清单
+{issues_list}
+
+## 验证任务
+请逐一检查每个问题在修复后的内容中是否仍然存在.
+对于每个问题，判断：
+1. 已解决（resolved）：问题已被修复，内容正确
+2. 仍存在（remaining）：问题未被修复，或修复不彻底
+
+## 输出格式
+请以 JSON 格式输出：
+{{
+    "resolved": [
+        {{
+            "type": "问题类型",
+            "description": "问题描述",
+            "verification": "验证说明，为什么认为已解决"
+        }}
+    ],
+    "remaining": [
+        {{
+            "type": "问题类型",
+            "description": "问题描述",
+            "severity": "critical/high/medium/low",
+            "reason": "为什么认为仍未解决"
+        }}
+    ]
+}}
+"""
+
     def __init__(self, qwen_client: QwenClient, cost_tracker: CostTracker):
         """初始化方法."""
         self.fixer = ContinuityFixerAgent(qwen_client, cost_tracker)
@@ -344,3 +380,248 @@ class ContinuityFixerPipeline:
             "fix_history": fix_history,
             "quality_score": continuity_report.get("quality_score", 0),
         }
+
+    async def fix_with_verification(
+        self,
+        content: str,
+        continuity_report: Dict[str, Any],
+        context: str = "",
+        max_attempts: int = 3,
+    ) -> Dict[str, Any]:
+        """修复连贯性问题并自动验证修复结果.
+
+        实现修复-验证闭环：修复后重新检查问题是否真正解决.
+
+        Args:
+            content: 待修复的章节内容
+            continuity_report: 连贯性检查报告，包含 issues 列表
+            context: 上下文信息
+            max_attempts: 最大修复尝试次数
+
+        Returns:
+            包含 fixed_content, attempts, verified, fix_history 的字典
+        """
+        issues = continuity_report.get("issues", [])
+        critical_issues = self.fixer._filter_critical_issues(issues)
+
+        if not critical_issues:
+            logger.info("无严重问题需要修复，跳过验证流程")
+            return {
+                "fixed_content": content,
+                "attempts": 0,
+                "verified": True,
+                "fix_history": [],
+                "all_resolved": True,
+            }
+
+        current_content = content
+        fix_history: List[Dict[str, Any]] = []
+        verified = False
+        all_resolved = False
+
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"🔧 修复尝试 {attempt}/{max_attempts}，当前问题数: {len(critical_issues)}")
+
+            # 调用修复方法
+            fix_result = await self.fixer.fix_issues(
+                content=current_content,
+                continuity_report={"issues": critical_issues},
+                context=context,
+            )
+
+            fixed_content = fix_result.get("fixed_content", current_content)
+            unchanged = fix_result.get("unchanged", True)
+
+            # 如果内容未变更，提前退出
+            if unchanged or fixed_content == current_content:
+                logger.warning("修复未产生变更，提前退出修复循环")
+                fix_history.append({
+                    "attempt": attempt,
+                    "fixed_issues": 0,
+                    "unchanged": True,
+                    "verified": False,
+                })
+                break
+
+            # 重新验证修复结果
+            recheck_result = await self._recheck_fixes(fixed_content, {"issues": critical_issues})
+            all_resolved = recheck_result.get("all_resolved", False)
+            resolved_count = len(recheck_result.get("resolved_issues", []))
+            remaining_count = len(recheck_result.get("remaining_issues", []))
+
+            fix_history.append({
+                "attempt": attempt,
+                "fixed_issues": len(fix_result.get("fixed_issues", [])),
+                "unchanged": False,
+                "verified": all_resolved,
+                "resolved_count": resolved_count,
+                "remaining_count": remaining_count,
+            })
+
+            logger.info(
+                f"✅ 验证结果: 已解决 {resolved_count} 个问题，"
+                f"剩余 {remaining_count} 个问题"
+            )
+
+            if all_resolved:
+                verified = True
+                current_content = fixed_content
+                logger.info(f"🎉 所有严重问题已在第 {attempt} 轮修复完成")
+                break
+
+            # 准备下一轮修复
+            current_content = fixed_content
+            remaining_report = recheck_result.get("remaining_report", {})
+            critical_issues = remaining_report.get("issues", [])
+
+            if not critical_issues:
+                verified = True
+                all_resolved = True
+                logger.info("无剩余严重问题，修复完成")
+                break
+
+        return {
+            "fixed_content": current_content,
+            "attempts": len(fix_history),
+            "verified": verified,
+            "all_resolved": all_resolved,
+            "fix_history": fix_history,
+        }
+
+    async def _recheck_fixes(
+        self,
+        fixed_content: str,
+        original_report: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """重新检查修复后的内容，验证问题是否已解决.
+
+        使用 LLM 快速验证修复效果，不需要完整的连贯性检查.
+
+        Args:
+            fixed_content: 修复后的章节内容
+            original_report: 原始问题报告
+
+        Returns:
+            {
+                "all_resolved": bool,
+                "resolved_issues": List[Dict],
+                "remaining_issues": List[Dict],
+                "remaining_report": Dict (用于下一轮修复)
+            }
+        """
+        issues = original_report.get("issues", [])
+
+        # 筛选严重问题
+        critical_severities = ["critical", "high", "严重", "高"]
+        critical_issues = [
+            issue for issue in issues
+            if issue.get("severity") in critical_severities
+        ]
+
+        if not critical_issues:
+            return {
+                "all_resolved": True,
+                "resolved_issues": [],
+                "remaining_issues": [],
+                "remaining_report": {"issues": []},
+            }
+
+        # 构建问题清单
+        issues_list = []
+        for i, issue in enumerate(critical_issues, 1):
+            issue_type = issue.get("type", issue.get("category", "未知类型"))
+            description = issue.get("description", issue.get("detail", ""))
+            severity = issue.get("severity", "unknown")
+            issues_list.append(
+                f"{i}. [{severity}] {issue_type}: {description}"
+            )
+
+        # 构建验证提示词
+        recheck_prompt = self.RECHECK_PROMPT_TEMPLATE.format(
+            fixed_content=fixed_content[:3000],  # 限制长度避免token过多
+            issues_list="\n".join(issues_list),
+        )
+
+        try:
+            # 调用 LLM 进行验证
+            response = await self.fixer.client.chat(
+                prompt=recheck_prompt,
+                system="你是一位专业的编辑，擅长验证小说内容的连续性问题修复效果。",
+                temperature=0.3,
+                max_tokens=2048,
+            )
+
+            # 记录成本
+            usage = response.get("usage", {})
+            self.fixer.cost_tracker.record(
+                agent_name="连续性修复验证",
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+            )
+
+            # 解析 JSON 响应
+            import json
+            content = response.get("content", "")
+
+            # 尝试直接解析
+            try:
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                # 尝试提取 JSON 代码块
+                import re
+                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group(1))
+                    except json.JSONDecodeError:
+                        result = {"resolved": [], "remaining": []}
+                else:
+                    # 尝试提取花括号内容
+                    brace_match = re.search(r"(\{.*\})", content, re.DOTALL)
+                    if brace_match:
+                        try:
+                            result = json.loads(brace_match.group(1))
+                        except json.JSONDecodeError:
+                            result = {"resolved": [], "remaining": []}
+                    else:
+                        result = {"resolved": [], "remaining": []}
+
+            resolved_issues = result.get("resolved", [])
+            remaining_issues = result.get("remaining", [])
+
+            all_resolved = len(remaining_issues) == 0 and len(resolved_issues) > 0
+
+            # 构造 remaining_report 供下一轮修复使用
+            remaining_report = {
+                "issues": [
+                    {
+                        "type": issue.get("type", "未知"),
+                        "description": issue.get("description", ""),
+                        "severity": issue.get("severity", "high"),
+                        "reason": issue.get("reason", ""),
+                    }
+                    for issue in remaining_issues
+                ]
+            }
+
+            logger.info(
+                f"重新验证完成: 已解决 {len(resolved_issues)} 个，"
+                f"剩余 {len(remaining_issues)} 个"
+            )
+
+            return {
+                "all_resolved": all_resolved,
+                "resolved_issues": resolved_issues,
+                "remaining_issues": remaining_issues,
+                "remaining_report": remaining_report,
+            }
+
+        except Exception as e:
+            logger.error(f"重新验证失败: {e}")
+            # 验证失败时保守返回，认为问题未解决
+            return {
+                "all_resolved": False,
+                "resolved_issues": [],
+                "remaining_issues": critical_issues,
+                "remaining_report": {"issues": critical_issues},
+            }

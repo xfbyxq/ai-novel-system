@@ -13,6 +13,7 @@ from llm.qwen_client import QwenClient
 
 from .agentmesh_memory_adapter import NovelMemoryAdapter
 from .memory_service import get_novel_memory_service
+from .revision_understanding_service import RevisionUnderstandingService
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,7 @@ class RevisionSuggestion:
         confidence: float = 0.8,
     ):
         """初始化方法."""
-        self.suggestion_type = (
-            suggestion_type  # world_setting, character, outline, chapter
-        )
+        self.suggestion_type = suggestion_type  # world_setting, character, outline, chapter
         self.target_id = target_id  # 目标对象ID（如角色ID、章节ID）
         self.target_name = target_name  # 目标对象名称（如角色名、章节标题）
         self.field = field  # 要修改的字段
@@ -76,6 +75,92 @@ NOVEL_GENRES = [
 ]
 CRAWLER_TYPES = ["ranking", "trending_tags", "book_metadata", "genre_list"]
 RANKING_TYPES = ["yuepiao", "hotsales", "readIndex", "recom", "collect"]
+
+# Intent classification tools for OpenAI Function Calling
+INTENT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "classify_intent",
+            "description": "Classifies the user's intent from a novel-related message and extracts relevant entities.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "primary_intent": {
+                        "type": "string",
+                        "enum": [
+                            "world_creation",
+                            "world_revision",
+                            "character_creation",
+                            "character_revision",
+                            "plot_creation",
+                            "plot_revision",
+                            "chapter_revision",
+                            "analysis",
+                            "general",
+                        ],
+                        "description": "The primary intent of the user's message",
+                    },
+                    "confidence": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Confidence score for the classification (0-1)",
+                    },
+                    "reasoning": {
+                        "type": "string",
+                        "description": "Brief explanation of why this intent was selected",
+                    },
+                    "entities": {
+                        "type": "object",
+                        "properties": {
+                            "mentioned_characters": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of character names mentioned in the message",
+                            },
+                            "mentioned_chapters": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "Chapter numbers mentioned in the message",
+                            },
+                            "genre": {
+                                "type": "string",
+                                "description": "Genre mentioned or inferred from the message",
+                            },
+                        },
+                        "description": "Entities extracted from the message",
+                    },
+                },
+                "required": ["primary_intent", "confidence", "reasoning", "entities"],
+            },
+        },
+    }
+]
+
+# System prompt for intent classification
+INTENT_CLASSIFICATION_PROMPT = """You are an expert at classifying user intentions in a novel writing and editing assistant.
+
+Your task is to analyze the user's message and classify their primary intent.
+
+Intent Types:
+- world_creation: Creating new world settings, magic systems, geography, factions
+- world_revision: Modifying existing world settings
+- character_creation: Creating new characters
+- character_revision: Modifying existing characters
+- plot_creation: Creating new plot outlines or storylines
+- plot_revision: Modifying existing plot/structure
+- chapter_revision: Revising specific chapter content
+- analysis: Analyzing novel structure, market, strengths/weaknesses
+- general: General questions, greetings, or unclear intents
+
+When analyzing:
+1. Consider the context (scene) provided
+2. Look for keywords and semantic meaning
+3. Extract any mentioned characters, chapters, or genre preferences
+4. Provide a confidence score based on how certain you are
+
+Be precise and conservative with confidence - only give high scores when intent is clearly expressed."""
 
 SYSTEM_PROMPTS = {
     SCENE_NOVEL_CREATION: """你是一位专业的小说创作顾问，专门帮助作者规划小说世界。你需要根据用户的需求提供创意建议，包括但不限于：.
@@ -222,6 +307,8 @@ class AiChatService:
         self.memory_service = get_novel_memory_service()
         # 初始化持久化记忆适配器
         self.persistent_memory = NovelMemoryAdapter()
+        # 初始化修订理解服务
+        self.revision_service = RevisionUnderstandingService(db=db, llm=self.client)
 
     def _get_system_prompt(self, scene: str) -> str:
         return SYSTEM_PROMPTS.get(scene, "你是一位AI助手，请帮助用户解决问题。")
@@ -234,7 +321,7 @@ class AiChatService:
         novel_id: str,
         chapter_start: int = 1,
         chapter_end: int = 10,
-        force_db: bool = False,
+        force_db: bool = True,  # 默认强制从数据库获取，确保内容是最新的完整内容
     ) -> dict:
         """获取小说的完整信息，包括世界观、角色、大纲和章节.
 
@@ -242,7 +329,7 @@ class AiChatService:
             novel_id: 小说ID
             chapter_start: 开始章节（默认1）
             chapter_end: 结束章节（默认10）
-            force_db: 强制从数据库加载，忽略记忆缓存（默认False）
+            force_db: 强制从数据库加载，忽略记忆缓存（默认True）
 
         Returns:
             小说信息字典，包含一个额外的'has_changes'字段表示内容是否有变化
@@ -260,9 +347,8 @@ class AiChatService:
             return {"error": "无效的小说 ID 格式"}
 
         # 首先尝试从记忆服务获取（除非强制使用数据库）
-        memory_data = (
-            None if force_db else self.memory_service.get_novel_memory(novel_id)
-        )
+        # 注意：默认强制使用数据库，因为记忆服务可能缓存了旧的截断数据
+        memory_data = None if force_db else self.memory_service.get_novel_memory(novel_id)
         if memory_data:
             logger.info(f"从记忆服务获取小说信息: {novel_id}")
             # 转换为预期的格式
@@ -318,11 +404,7 @@ class AiChatService:
                 "author": novel.author,
                 "genre": novel.genre,
                 "tags": novel.tags or [],
-                "status": (
-                    novel.status.value
-                    if hasattr(novel.status, "value")
-                    else novel.status
-                ),
+                "status": (novel.status.value if hasattr(novel.status, "value") else novel.status),
                 "length_type": (
                     novel.length_type.value
                     if hasattr(novel.length_type, "value")
@@ -338,12 +420,8 @@ class AiChatService:
                 "plot_outline": None,
                 "chapters": [],
                 "metadata": novel.metadata_ or {},
-                "created_at": (
-                    novel.created_at.isoformat() if novel.created_at else None
-                ),
-                "updated_at": (
-                    novel.updated_at.isoformat() if novel.updated_at else None
-                ),
+                "created_at": (novel.created_at.isoformat() if novel.created_at else None),
+                "updated_at": (novel.updated_at.isoformat() if novel.updated_at else None),
             }
 
             # 添加世界观信息
@@ -362,9 +440,7 @@ class AiChatService:
                         "id": str(character.id),
                         "name": character.name,
                         "role_type": character.role_type,
-                        "description": character.appearance
-                        or character.personality
-                        or "",
+                        "description": character.appearance or character.personality or "",
                         "personality": character.personality,
                         "background": character.background,
                     }
@@ -377,30 +453,19 @@ class AiChatService:
                     "content": novel.plot_outline.raw_content or "",
                 }
 
-            # 优化章节内容截断逻辑
-            def truncate_content(content, max_length=500):
-                if content is None:
-                    return ""
-                if len(content) <= max_length:
-                    return content
-                # 尝试在句子边界截断
-                truncated = content[:max_length]
-                last_period = truncated.rfind("。")
-                if last_period > max_length * 0.8:  # 确保截断位置合理
-                    return truncated[: last_period + 1] + "..."
-                return truncated + "..."
-
             # 添加章节信息（根据指定范围加载）
+            # 支持3种模式：truncated(截断)、full(完整)、smart(智能摘要)
             for chapter in novel.chapters:
                 if chapter_start <= chapter.chapter_number <= chapter_end:
-                    novel_info["chapters"].append(
-                        {
-                            "id": str(chapter.id),
-                            "chapter_number": chapter.chapter_number,
-                            "title": chapter.title,
-                            "content": truncate_content(chapter.content),
-                        }
-                    )
+                    chapter_data = {
+                        "id": str(chapter.id),
+                        "chapter_number": chapter.chapter_number,
+                        "title": chapter.title,
+                        "word_count": len(chapter.content) if chapter.content else 0,
+                    }
+                    # 添加完整内容供后续智能分析使用
+                    chapter_data["content"] = chapter.content or ""
+                    novel_info["chapters"].append(chapter_data)
 
             # 存储到记忆服务并检测变化
             has_changes = self.memory_service.set_novel_memory(novel_id, novel_info)
@@ -417,6 +482,267 @@ class AiChatService:
         except Exception as e:
             logger.error(f"获取小说信息失败: {e}")
             return {"error": "获取小说信息失败，请稍后重试"}
+
+    async def generate_smart_chapter_summary(
+        self,
+        novel_id: str,
+        chapter_numbers: List[int],
+        force_regenerate: bool = False,
+    ) -> Dict[str, Any]:
+        """智能章节摘要生成 - 使用LLM提炼章节关键点.
+
+        读取完整章节内容，使用AI提炼关键信息，避免固定截断导致信息丢失。
+
+        Args:
+            novel_id: 小说ID
+            chapter_numbers: 要生成摘要的章节号列表
+            force_regenerate: 是否强制重新生成（忽略已有摘要）
+
+        Returns:
+            包含所有章节摘要的结果字典
+        """
+        from sqlalchemy import select
+
+        from core.models.novel import Novel
+
+        try:
+            UUID(novel_id)
+        except ValueError:
+            logger.error(f"无效的小说 ID 格式: {novel_id}")
+            return {"error": "无效的小说 ID 格式"}
+
+        results = {
+            "novel_id": novel_id,
+            "summaries": [],
+            "total_chapters_requested": len(chapter_numbers),
+            "generated_count": 0,
+            "cached_count": 0,
+        }
+
+        # 验证小说存在
+        novel_result = await self.db.execute(select(Novel).where(Novel.id == novel_id))
+        novel = novel_result.scalar_one_or_none()
+        if not novel:
+            return {"error": "小说不存在"}
+
+        results["novel_title"] = novel.title
+
+        # 获取所有请求的章节
+        from core.models.chapter import Chapter
+
+        chapters_query = (
+            select(Chapter)
+            .where(Chapter.novel_id == novel_id)
+            .where(Chapter.chapter_number.in_(chapter_numbers))
+            .order_by(Chapter.chapter_number)
+        )
+        chapters_result = await self.db.execute(chapters_query)
+        chapters = chapters_result.scalars().all()
+
+        for chapter in chapters:
+            chapter_num = chapter.chapter_number
+
+            # 检查是否已有摘要（除非强制重新生成）
+            existing_summary = None
+            if not force_regenerate:
+                existing_summary = self.persistent_memory.storage.get_chapter_summary(
+                    novel_id, chapter_num
+                )
+
+            if existing_summary and not force_regenerate:
+                # 使用已有摘要
+                results["summaries"].append({
+                    "chapter_number": chapter_num,
+                    "title": chapter.title,
+                    "summary": existing_summary,
+                    "source": "cached",
+                })
+                results["cached_count"] += 1
+                logger.info(f"使用缓存的章节摘要: 第{chapter_num}章")
+            else:
+                # 使用AI生成新摘要
+                summary = await self._extract_chapter_key_points(
+                    chapter.content or "",
+                    chapter.title,
+                    chapter_num,
+                    novel.genre,
+                )
+                results["summaries"].append({
+                    "chapter_number": chapter_num,
+                    "title": chapter.title,
+                    "summary": summary,
+                    "source": "generated",
+                })
+                results["generated_count"] += 1
+
+                # 保存摘要到持久化记忆
+                self.persistent_memory.storage.save_chapter_summary(
+                    novel_id,
+                    chapter_num,
+                    summary,
+                    self.persistent_memory.storage._compute_hash(chapter.content),
+                )
+                logger.info(f"生成并保存章节摘要: 第{chapter_num}章")
+
+        return results
+
+    async def _extract_chapter_key_points(
+        self,
+        content: str,
+        title: str,
+        chapter_number: int,
+        genre: str = "",
+    ) -> Dict[str, Any]:
+        """使用LLM从章节内容中提炼关键点.
+
+        Args:
+            content: 章节完整内容
+            title: 章节标题
+            chapter_number: 章节号
+            genre: 小说类型（用于类型特定的分析）
+
+        Returns:
+            结构化的章节摘要
+        """
+        if not content or len(content.strip()) < 100:
+            return {
+                "key_events": [],
+                "plot_summary": "章节内容过短或为空",
+                "character_interactions": [],
+                "emotional_arc": "",
+                "foreshadowing": [],
+                "ending_state": "",
+                "word_count": len(content) if content else 0,
+            }
+
+        # 构建AI分析提示词
+        prompt = f"""请分析以下小说章节内容，提炼关键信息。章节标题：{title}（第{chapter_number}章）
+小说类型：{genre or "未知"}
+
+章节内容：
+{content[:8000]}{"...(内容过长，仅显示前8000字)" if len(content) > 8000 else ""}
+
+请以JSON格式输出以下信息：
+1. key_events: 关键事件列表（3-5个重要事件，简短描述）
+2. plot_summary: 情节摘要（100字以内概括本章主要情节）
+3. character_interactions: 人物互动列表（主要角色的对话、冲突、合作等）
+4. emotional_arc: 情感走向（本章的情感基调变化）
+5. foreshadowing: 伏笔/暗示列表（为后续情节埋下的线索）
+6. ending_state: 结尾状态（本章结尾时的人物处境或悬念）
+
+只输出JSON，不要其他内容。"""
+
+        try:
+            response = await self.client.chat(
+                prompt=prompt,
+                system="你是一位专业的小说分析助手，擅长提炼章节关键信息。请以结构化的方式输出分析结果。",
+                temperature=0.3,
+            )
+
+            # 解析AI响应
+            content_response = response.get("content", "{}")
+            # 清理可能的markdown格式
+            content_response = content_response.strip()
+            if content_response.startswith("```json"):
+                content_response = content_response[7:]
+            if content_response.startswith("```"):
+                content_response = content_response[3:]
+            if content_response.endswith("```"):
+                content_response = content_response[:-3]
+            content_response = content_response.strip()
+
+            summary = json.loads(content_response)
+
+            # 确保所有字段存在
+            summary.setdefault("key_events", [])
+            summary.setdefault("plot_summary", "")
+            summary.setdefault("character_interactions", [])
+            summary.setdefault("emotional_arc", "")
+            summary.setdefault("foreshadowing", [])
+            summary.setdefault("ending_state", "")
+            summary["word_count"] = len(content)
+            summary["chapter_number"] = chapter_number
+            summary["title"] = title
+
+            return summary
+
+        except json.JSONDecodeError as e:
+            logger.error(f"解析章节摘要JSON失败: {e}")
+            # 返回基础摘要
+            return {
+                "key_events": [],
+                "plot_summary": content[:200] + "..." if len(content) > 200 else content,
+                "character_interactions": [],
+                "emotional_arc": "",
+                "foreshadowing": [],
+                "ending_state": content[-100:] if len(content) > 100 else content,
+                "word_count": len(content),
+                "chapter_number": chapter_number,
+                "title": title,
+            }
+        except Exception as e:
+            logger.error(f"生成章节摘要失败: {e}")
+            return {
+                "key_events": [],
+                "plot_summary": "",
+                "character_interactions": [],
+                "emotional_arc": "",
+                "foreshadowing": [],
+                "ending_state": "",
+                "word_count": len(content),
+                "chapter_number": chapter_number,
+                "title": title,
+                "error": str(e),
+            }
+
+    async def get_novel_chapters_summary(
+        self,
+        novel_id: str,
+        chapter_start: int = 1,
+        chapter_end: int = 10,
+        use_smart_summary: bool = True,
+    ) -> Dict[str, Any]:
+        """获取小说章节摘要（支持智能摘要模式）.
+
+        Args:
+            novel_id: 小说ID
+            chapter_start: 开始章节号
+            chapter_end: 结束章节号
+            use_smart_summary: 是否使用智能摘要（LLM提炼），否则使用简单截断
+
+        Returns:
+            章节摘要结果
+        """
+        chapter_numbers = list(range(chapter_start, chapter_end + 1))
+
+        if use_smart_summary:
+            return await self.generate_smart_chapter_summary(
+                novel_id, chapter_numbers
+            )
+        else:
+            # 使用原有的截断方式（已优化为2000字）
+            novel_info = await self.get_novel_info(
+                novel_id, chapter_start, chapter_end
+            )
+            return {
+                "novel_id": novel_id,
+                "novel_title": novel_info.get("title"),
+                "summaries": [
+                    {
+                        "chapter_number": ch.get("chapter_number"),
+                        "title": ch.get("title"),
+                        "summary": {
+                            "plot_summary": ch.get("content", ""),
+                            "word_count": len(ch.get("content", "")),
+                        },
+                        "source": "truncated",
+                    }
+                    for ch in novel_info.get("chapters", [])
+                ],
+                "total_chapters_requested": len(chapter_numbers),
+                "generated_count": 0,
+                "cached_count": 0,
+            }
 
     async def save_session(self, session: ChatSession) -> None:
         """保存会话到数据库."""
@@ -440,9 +766,7 @@ class AiChatService:
                 from sqlalchemy import select
 
                 existing = await db.execute(
-                    select(AIChatSession).where(
-                        AIChatSession.session_id == session.session_id
-                    )
+                    select(AIChatSession).where(AIChatSession.session_id == session.session_id)
                 )
                 if existing.scalar_one_or_none():
                     # 更新现有会话
@@ -503,9 +827,7 @@ class AiChatService:
                     session_data.session_id,
                     session_data.scene,
                     session_data.context,
-                    novel_id=(
-                        str(session_data.novel_id) if session_data.novel_id else None
-                    ),
+                    novel_id=(str(session_data.novel_id) if session_data.novel_id else None),
                     title=session_data.title,
                 )
 
@@ -555,9 +877,7 @@ class AiChatService:
                     # 按小说ID过滤会话
                     import uuid as uuid_module
 
-                    query = query.where(
-                        AIChatSession.novel_id == uuid_module.UUID(novel_id)
-                    )
+                    query = query.where(AIChatSession.novel_id == uuid_module.UUID(novel_id))
                 query = query.order_by(AIChatSession.updated_at.desc())
 
                 result = await db.execute(query)
@@ -570,9 +890,7 @@ class AiChatService:
                             "id": str(session.id),
                             "session_id": session.session_id,
                             "scene": session.scene,
-                            "novel_id": (
-                                str(session.novel_id) if session.novel_id else None
-                            ),
+                            "novel_id": (str(session.novel_id) if session.novel_id else None),
                             "title": session.title,
                             "context": session.context,
                             "created_at": session.created_at.isoformat(),
@@ -611,9 +929,7 @@ class AiChatService:
                 await db.rollback()
                 return False
 
-    async def create_session(
-        self, scene: str, context: Optional[dict] = None
-    ) -> ChatSession:
+    async def create_session(self, scene: str, context: Optional[dict] = None) -> ChatSession:
         import uuid
 
         session_id = str(uuid.uuid4())
@@ -634,9 +950,7 @@ class AiChatService:
                 "end": chapter_end,
             }
             # 记录当前版本号
-            session.context["novel_version"] = self.memory_service.get_novel_version(
-                novel_id
-            )
+            session.context["novel_version"] = self.memory_service.get_novel_version(novel_id)
 
             # 获取变化状态
             has_changes = novel_info.get("has_changes", False)
@@ -730,11 +1044,7 @@ class AiChatService:
             # 回退方案：从第一条用户消息截取
             for msg in session.messages:
                 if msg.role == "user":
-                    return (
-                        msg.content[:20] + "..."
-                        if len(msg.content) > 20
-                        else msg.content
-                    )
+                    return msg.content[:20] + "..." if len(msg.content) > 20 else msg.content
             return "新会话"
 
     async def _update_session_title(self, session: ChatSession) -> None:
@@ -770,15 +1080,155 @@ class AiChatService:
                 logger.error(f"更新会话标题失败: {e}")
                 await db.rollback()
 
-    def _analyze_user_intent(self, user_message: str, scene: str) -> str:
-        """分析用户的意图，识别用户需求类型."""
+    async def _classify_intent_llm(self, user_message: str, scene: str) -> dict[str, Any]:
+        """使用LLM进行意图分类.
+
+        Args:
+            user_message: 用户消息
+            scene: 当前场景
+
+        Returns:
+            包含 primary_intent, confidence, reasoning, entities 的字典
+        """
+        scene_descriptions = {
+            SCENE_NOVEL_CREATION: "用户正在创建新小说，需要世界观、角色、情节等方面的帮助",
+            SCENE_NOVEL_REVISION: "用户正在修订已有的小说内容",
+            SCENE_NOVEL_ANALYSIS: "用户正在分析小说的结构、市场定位或质量",
+        }
+        scene_context = scene_descriptions.get(scene, "用户在 general 对话中")
+
+        messages = [
+            {
+                "role": "system",
+                "content": INTENT_CLASSIFICATION_PROMPT + f"\n\n当前场景: {scene_context}",
+            },
+            {"role": "user", "content": user_message},
+        ]
+
+        try:
+            response = await self.client.chat_with_tools(
+                messages=messages,
+                tools=INTENT_TOOLS,
+                tool_choice="auto",
+                temperature=0.3,
+                max_tokens=1024,
+            )
+
+            if response.get("type") == "tool_call":
+                tool_calls = response.get("tool_calls", [])
+                for tool_call in tool_calls:
+                    if tool_call.get("function", {}).get("name") == "classify_intent":
+                        args_str = tool_call.get("function", {}).get("arguments", "{}")
+                        result = json.loads(args_str)
+                        logger.info(
+                            f"LLM意图分类结果: {result.get('primary_intent')}, "
+                            f"confidence: {result.get('confidence')}"
+                        )
+                        return result
+
+            if response.get("type") == "text":
+                content = response.get("content", "{}")
+                result = json.loads(content)
+                logger.info(
+                    f"LLM意图分类结果(文本): {result.get('primary_intent')}, "
+                    f"confidence: {result.get('confidence')}"
+                )
+                return result
+
+            logger.warning(f"LLM返回了意外格式: {response}")
+            return await self._classify_intent_fallback(user_message, scene)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"LLM意图分类JSON解析失败: {e}")
+            return await self._classify_intent_fallback(user_message, scene)
+        except Exception as e:
+            logger.error(f"LLM意图分类失败: {e}")
+            return await self._classify_intent_fallback(user_message, scene)
+
+    async def _classify_intent_fallback(self, user_message: str, scene: str) -> dict[str, Any]:
+        """基于规则的工具意图分类（fallback方法）.
+
+        Args:
+            user_message: 用户消息
+            scene: 当前场景
+
+        Returns:
+            包含 primary_intent, confidence, reasoning, entities 的字典
+        """
+        import re
+
+        intent = self._analyze_user_intent_rule_based(user_message, scene)
+
+        mentioned_characters = []
+        char_patterns = [
+            r"[主角|配角|角色|人物]\s*名叫[叫做]?\s*([^\s，。,\.]+)",
+            r"([^\s，。,\.]+)\s*(?:这个角色|这个人物|主角|配角)",
+        ]
+        for pattern in char_patterns:
+            matches = re.finditer(pattern, user_message)
+            for match in matches:
+                name = match.group(1).strip()
+                if name and len(name) <= 10:
+                    mentioned_characters.append(name)
+
+        mentioned_chapters = []
+        chapter_matches = re.finditer(r"第(\d+)章", user_message)
+        for match in chapter_matches:
+            try:
+                mentioned_chapters.append(int(match.group(1)))
+            except ValueError:
+                pass
+
+        genre = ""
+        genre_keywords = {
+            "玄幻": "玄幻",
+            "都市": "都市",
+            "仙侠": "仙侠",
+            "历史": "历史",
+            "科幻": "科幻",
+            "游戏": "游戏",
+            "轻小说": "轻小说",
+        }
+        for keyword, genre_value in genre_keywords.items():
+            if keyword in user_message:
+                genre = genre_value
+                break
+
+        confidence = 0.5
+        reasoning = "Based on keyword matching"
+
+        logger.info(f"Fallback意图分类结果: {intent}, confidence: {confidence}")
+        return {
+            "primary_intent": intent,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "entities": {
+                "mentioned_characters": list(set(mentioned_characters)),
+                "mentioned_chapters": list(set(mentioned_chapters)),
+                "genre": genre,
+            },
+        }
+
+    async def _analyze_user_intent(self, user_message: str, scene: str) -> str:
+        """分析用户的意图，识别用户需求类型（LLM + fallback）."""
+        try:
+            result = await self._classify_intent_llm(user_message, scene)
+            if result.get("confidence", 0) >= 0.5:
+                return result.get("primary_intent", "general")
+            return result.get(
+                "primary_intent", self._analyze_user_intent_rule_based(user_message, scene)
+            )
+        except Exception as e:
+            logger.error(f"LLM意图分类异常: {e}")
+            return self._analyze_user_intent_rule_based(user_message, scene)
+
+    def _analyze_user_intent_rule_based(self, user_message: str, scene: str) -> str:
+        """基于规则的意图分析（原始逻辑）."""
         if scene == SCENE_NOVEL_REVISION:
             return self._analyze_revision_intent(user_message)
         elif scene == SCENE_NOVEL_CREATION:
             # 分析创作意图
-            if any(
-                keyword in user_message for keyword in ["世界观", "世界设定", "背景"]
-            ):
+            if any(keyword in user_message for keyword in ["世界观", "世界设定", "背景"]):
                 return "world_creation"
             elif any(keyword in user_message for keyword in ["角色", "人物", "主角"]):
                 return "character_creation"
@@ -805,6 +1255,24 @@ class AiChatService:
 
     def _analyze_revision_intent(self, user_message: str) -> str:
         """分析用户的修订意图，识别修订类型."""
+        # 特殊模式识别：包含"改成"、"改为"等操作指令的消息
+        action_patterns = [
+            (r"把(.+?)改成", "update_field"),
+            (r"把(.+?)改为", "update_field"),
+            (r"把(.+?)修改", "update_field"),
+            (r"(.+?)改成", "update_field"),
+            (r"(.+?)改为", "update_field"),
+            (r"(.+?)修改成", "update_field"),
+            (r"添加(.+?)", "add"),
+            (r"增加(.+?)", "add"),
+            (r"删除(.+?)", "delete"),
+            (r"移除(.+?)", "delete"),
+        ]
+        
+        for pattern, action in action_patterns:
+            if re.search(pattern, user_message):
+                return "specific_revision"  # 特殊修订，需要精确执行
+        
         # 扩展关键词列表
         world_keywords = [
             "世界观",
@@ -1114,9 +1582,7 @@ class AiChatService:
                 "作为玄幻小说，建议加强修炼体系的设定和战斗场景的描写"
             )
         elif genre == "都市":
-            analysis["genre_specific"].append(
-                "作为都市小说，建议加强人物关系和现实感的描写"
-            )
+            analysis["genre_specific"].append("作为都市小说，建议加强人物关系和现实感的描写")
         elif genre == "仙侠":
             analysis["genre_specific"].append(
                 "作为仙侠小说，建议加强仙风道骨的氛围营造和修仙境界的设定"
@@ -1128,9 +1594,7 @@ class AiChatService:
 
         return analysis
 
-    def _get_persistent_memory_context(
-        self, novel_id: str, current_chapter: int = 0
-    ) -> str:
+    def _get_persistent_memory_context(self, novel_id: str, current_chapter: int = 0) -> str:
         """从持久化记忆获取增强上下文信息.
 
         Args:
@@ -1144,12 +1608,10 @@ class AiChatService:
 
         try:
             # 1. 获取章节摘要（最近10章）- 直接使用 storage 的同步方法
-            recent_summaries = (
-                self.persistent_memory.storage.get_recent_chapter_summaries(
-                    novel_id,
-                    current_chapter or 100,  # 如果未指定章节，假设获取最近章节
-                    count=10,
-                )
+            recent_summaries = self.persistent_memory.storage.get_recent_chapter_summaries(
+                novel_id,
+                current_chapter or 100,  # 如果未指定章节，假设获取最近章节
+                count=10,
             )
             if recent_summaries:
                 context_parts.append("## 章节摘要（最近章节）")
@@ -1161,14 +1623,10 @@ class AiChatService:
                         context_parts.append(f"- 第{chapter_num}章: {events_str}")
 
             # 2. 获取角色状态
-            character_states = self.persistent_memory.storage.get_all_character_states(
-                novel_id
-            )
+            character_states = self.persistent_memory.storage.get_all_character_states(novel_id)
             if character_states:
                 context_parts.append("\n## 主要角色当前状态")
-                for name, state in list(character_states.items())[
-                    :5
-                ]:  # 只取5个主要角色
+                for name, state in list(character_states.items())[:5]:  # 只取5个主要角色
                     location = state.get("current_location", "未知")
                     level = state.get("cultivation_level", "")
                     emotional = state.get("emotional_state", "")
@@ -1191,9 +1649,7 @@ class AiChatService:
                     context_parts.append(f"- 第{planted_ch}章埋下: {desc[:50]}...")
 
             # 4. 获取时间线事件
-            timeline = self.persistent_memory.storage.get_timeline_events(
-                novel_id, limit=5
-            )
+            timeline = self.persistent_memory.storage.get_timeline_events(novel_id, limit=5)
             if timeline:
                 context_parts.append("\n## 关键时间线")
                 for event in timeline:
@@ -1209,9 +1665,7 @@ class AiChatService:
             return "\n".join(context_parts)
         return ""
 
-    def _initialize_persistent_memory_for_novel(
-        self, novel_id: str, novel_info: dict
-    ) -> None:
+    def _initialize_persistent_memory_for_novel(self, novel_id: str, novel_info: dict) -> None:
         """为小说初始化持久化记忆.
 
         Args:
@@ -1248,9 +1702,7 @@ class AiChatService:
                         "emotional_state": "正常",
                         "last_appearance_chapter": 0,
                     }
-                    self.persistent_memory.storage.save_character_state(
-                        novel_id, char_name, state
-                    )
+                    self.persistent_memory.storage.save_character_state(novel_id, char_name, state)
 
             logger.info(f"为小说 {novel_id} 初始化持久化记忆完成")
 
@@ -1321,9 +1773,7 @@ class AiChatService:
             prompt += "并提供具体的修订建议，包括如何扩展世界观深度和广度。\n"
             if novel_info.get("world_setting"):
                 prompt += "\n## 当前世界观\n"
-                world_content = (
-                    novel_info.get("world_setting", {}).get("content", "") or ""
-                )
+                world_content = novel_info.get("world_setting", {}).get("content", "") or ""
                 # 优化内容呈现，确保重要信息不被截断
                 if len(world_content) > 600:
                     # 提取关键信息
@@ -1340,9 +1790,7 @@ class AiChatService:
                             key_points.append(f"世界类型: {world_data['world_type']}")
                         if "power_system" in world_data:
                             power_system = world_data["power_system"]
-                            key_points.append(
-                                f"修炼体系: {power_system.get('name', '未知')}"
-                            )
+                            key_points.append(f"修炼体系: {power_system.get('name', '未知')}")
                             if "levels" in power_system:
                                 levels = power_system["levels"][:3]  # 只取前3个境界
                                 for level in levels:
@@ -1354,9 +1802,7 @@ class AiChatService:
                             if geography:
                                 # 安全处理 geography，可能是字典、列表或字符串
                                 if isinstance(geography, (dict, list)):
-                                    geography_str = json.dumps(
-                                        geography, ensure_ascii=False
-                                    )
+                                    geography_str = json.dumps(geography, ensure_ascii=False)
                                 else:
                                     geography_str = str(geography)
                                 key_points.append(f"地理环境: {geography_str[:100]}...")
@@ -1365,9 +1811,7 @@ class AiChatService:
                             if factions:
                                 # 安全处理 factions，可能是字典、列表或字符串
                                 if isinstance(factions, (dict, list)):
-                                    factions_str = json.dumps(
-                                        factions, ensure_ascii=False
-                                    )
+                                    factions_str = json.dumps(factions, ensure_ascii=False)
                                 else:
                                     factions_str = str(factions)
                                 key_points.append(f"势力划分: {factions_str[:100]}...")
@@ -1415,9 +1859,7 @@ class AiChatService:
             prompt += "并提供具体的修订建议，包括如何让剧情更加紧凑和引人入胜。\n"
             if novel_info.get("plot_outline"):
                 prompt += "\n## 当前大纲\n"
-                outline_content = (
-                    novel_info.get("plot_outline", {}).get("content", "") or ""
-                )
+                outline_content = novel_info.get("plot_outline", {}).get("content", "") or ""
                 if len(outline_content) > 600:
                     # 提取关键信息
                     key_points = []
@@ -1437,21 +1879,55 @@ class AiChatService:
             prompt += "3. 人物对话的自然性和个性化\n"
             prompt += "4. 节奏控制的张弛度和吸引力\n"
             prompt += "并提供具体的修订建议，包括如何让章节内容更加精彩和流畅。\n"
+
             if novel_info.get("chapters"):
-                prompt += "\n## 当前章节\n"
-                for chapter in novel_info.get("chapters", [])[:2]:
-                    prompt += f"### 第{chapter.get('chapter_number', '未知')}章: {chapter.get('title', '未知')}\n"
+                prompt += "\n## 当前章节内容分析\n"
+
+                # 尝试获取智能摘要（如果已有）
+                novel_id = novel_info.get("id")
+                chapters_to_analyze = novel_info.get("chapters", [])[:5]
+
+                for chapter in chapters_to_analyze:
+                    chapter_num = chapter.get("chapter_number", "?")
+                    chapter_title = chapter.get("title", "未知")
                     chapter_content = chapter.get("content", "") or ""
-                    if len(chapter_content) > 400:
-                        # 提取关键段落
-                        paragraphs = chapter_content.split("\n")
-                        key_paragraphs = []
-                        for para in paragraphs:
-                            if para.strip() and len(" ".join(key_paragraphs)) < 300:
-                                key_paragraphs.append(para.strip())
-                        prompt += "\n".join(key_paragraphs[:3]) + "...\n"
-                    else:
+                    word_count = chapter.get("word_count", len(chapter_content))
+
+                    prompt += f"\n### 第{chapter_num}章: {chapter_title}（{word_count}字）\n"
+
+                    # 尝试获取已有的智能摘要作为补充
+                    smart_summary = None
+                    if novel_id:
+                        try:
+                            smart_summary = self.persistent_memory.storage.get_chapter_summary(
+                                novel_id, chapter_num
+                            )
+                        except Exception:
+                            pass
+
+                    # 始终优先提供完整章节内容（不再截断）
+                    if chapter_content:
+                        prompt += "#### 章节完整内容\n"
                         prompt += chapter_content + "\n"
+                    else:
+                        prompt += "（章节内容为空）\n"
+
+                    # 智能摘要作为补充信息
+                    if smart_summary:
+                        prompt += "\n#### 章节智能摘要（补充信息）\n"
+                        if smart_summary.get("plot_summary"):
+                            prompt += f"**情节概要**: {smart_summary['plot_summary']}\n"
+                        if smart_summary.get("key_events"):
+                            prompt += f"**关键事件**: {'、'.join(smart_summary['key_events'][:5])}\n"
+                        if smart_summary.get("character_interactions"):
+                            prompt += f"**人物互动**: {'、'.join(smart_summary['character_interactions'][:3])}\n"
+                        if smart_summary.get("emotional_arc"):
+                            prompt += f"**情感走向**: {smart_summary['emotional_arc']}\n"
+                        if smart_summary.get("foreshadowing"):
+                            prompt += f"**伏笔暗示**: {'、'.join(smart_summary['foreshadowing'][:3])}\n"
+                        if smart_summary.get("ending_state"):
+                            prompt += f"**结尾状态**: {smart_summary['ending_state']}\n"
+
                     prompt += "\n"
 
         else:  # general
@@ -1473,12 +1949,12 @@ class AiChatService:
                 if novel_info.get("synopsis"):
                     prompt += f"- 简介: {novel_info.get('synopsis')[:200]}...\n"
 
-        # 添加输出格式要求
-        prompt += "\n# 输出格式\n"
-        prompt += "请按照以下格式输出分析结果：\n"
-        prompt += "1. 分析结论：简要总结分析结果\n"
-        prompt += "2. 具体建议：详细列出修订建议，每条建议要有具体的改进方向\n"
-        prompt += "3. 实施步骤：提供实施这些建议的具体步骤\n"
+        # 根据问题类型给出回复指导
+        prompt += "\n# 回复要求\n"
+        prompt += "请根据用户的具体问题自然地回复，不要拘泥于固定格式。\n"
+        prompt += "- 如果用户问的是简单问题，直接简洁回答即可\n"
+        prompt += "- 如果用户需要详细分析，再提供结构化的分析结果\n"
+        prompt += "- 回复要贴合用户的问题意图，语气亲切自然\n"
 
         return prompt
 
@@ -1490,7 +1966,7 @@ class AiChatService:
         session.add_user_message(user_message)
 
         # 分析用户意图
-        user_intent = self._analyze_user_intent(user_message, session.scene)
+        user_intent = await self._analyze_user_intent(user_message, session.scene)
         session.set_last_user_intent(user_intent)
 
         # 检查是否需要澄清
@@ -1511,9 +1987,7 @@ class AiChatService:
             follow_up_questions = self._generate_follow_up_questions(
                 user_intent, session.scene, session.context.get("novel_info")
             )
-            session.add_follow_up_question(
-                follow_up_questions[0] if follow_up_questions else ""
-            )
+            session.add_follow_up_question(follow_up_questions[0] if follow_up_questions else "")
 
             # 生成追问回复
             clarification_message = "为了给你提供更准确的帮助，我需要了解更多信息。"
@@ -1549,12 +2023,8 @@ class AiChatService:
                     logger.info(
                         f"检测到小说 {novel_id} 数据更新（版本 {session_version} -> {current_version}），重新加载小说信息"
                     )
-                    chapter_start = session.context.get("chapter_range", {}).get(
-                        "start", 1
-                    )
-                    chapter_end = session.context.get("chapter_range", {}).get(
-                        "end", 10
-                    )
+                    chapter_start = session.context.get("chapter_range", {}).get("start", 1)
+                    chapter_end = session.context.get("chapter_range", {}).get("end", 10)
                     # 强制从数据库加载最新数据
                     novel_info = await self.get_novel_info(
                         novel_id, chapter_start, chapter_end, force_db=True
@@ -1569,18 +2039,14 @@ class AiChatService:
                     logger.warning(
                         f"会话 {session.session_id} 的 novel_info 为空，重新加载小说 {stored_novel_id} 信息"
                     )
-                    chapter_start = session.context.get("chapter_range", {}).get(
-                        "start", 1
-                    )
-                    chapter_end = session.context.get("chapter_range", {}).get(
-                        "end", 10
-                    )
+                    chapter_start = session.context.get("chapter_range", {}).get("start", 1)
+                    chapter_end = session.context.get("chapter_range", {}).get("end", 10)
                     novel_info = await self.get_novel_info(
                         stored_novel_id, chapter_start, chapter_end, force_db=True
                     )
                     session.context["novel_info"] = novel_info
-                    session.context["novel_version"] = (
-                        self.memory_service.get_novel_version(stored_novel_id)
+                    session.context["novel_version"] = self.memory_service.get_novel_version(
+                        stored_novel_id
                     )
                     logger.info(f"小说 {stored_novel_id} 信息已重新加载")
 
@@ -1602,10 +2068,68 @@ class AiChatService:
                     # 分析用户修订意图
                     revision_type = self._analyze_revision_intent(user_message)
 
-                    # 生成针对性的提示词（已包含小说信息）
-                    prompt = self._generate_revision_prompt(
-                        user_message, revision_type, novel_info
-                    )
+                    # 检查是否需要生成修订计划
+                    pending_plan_id = session.context.get("pending_revision_plan_id")
+                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
+                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+
+                    if pending_plan_id and is_confirming_revision:
+                        # 用户确认执行修订
+                        from .revision_execution_service import RevisionExecutionService
+                        execution_service = RevisionExecutionService(db=self.db)
+                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        session.context["pending_revision_plan_id"] = None
+                    elif is_rejecting_revision:
+                        # 用户拒绝修订
+                        session.context["pending_revision_plan_id"] = None
+                        prompt = "好的，已取消本次修订。"
+                    elif revision_type == "specific_revision":
+                        # 用户有明确的修订指令，调用parse_natural_revision解析并执行
+                        try:
+                            parse_result = await self.parse_natural_revision(
+                                novel_id=novel_info.get("id"),
+                                instruction=user_message
+                            )
+                            if parse_result.get("preview"):
+                                preview = parse_result["preview"]
+                                # 直接执行修订
+                                execute_result = await self.execute_revision(
+                                    novel_id=novel_info.get("id"),
+                                    preview_id=preview["preview_id"]
+                                )
+                                if execute_result.get("success"):
+                                    return f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
+                                else:
+                                    return f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                            else:
+                                # 解析失败，返回消息
+                                return parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                        except Exception as e:
+                            logger.error(f"执行自然语言修订失败: {e}")
+                            return f"抱歉，处理您的修订请求时出现错误：{str(e)}"
+                    else:
+                        # 检测是否是需要生成修订计划的反馈
+                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        needs_plan = any(keyword in user_message for keyword in revision_keywords)
+
+                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                            # 使用修订理解服务生成计划
+                            try:
+                                plan = await self.revision_service.understand_feedback(
+                                    user_feedback=user_message,
+                                    novel_id=novel_info.get("id"),
+                                )
+                                session.context["pending_revision_plan_id"] = str(plan.id)
+                                plan_display = self.revision_service.format_plan_for_display(plan)
+                                session.add_assistant_message(plan_display)
+                                import asyncio
+                                asyncio.create_task(self.save_session(session))
+                                return plan_display
+                            except Exception as e:
+                                logger.warning(f"生成修订计划失败: {e}")
+                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                        else:
+                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -1615,9 +2139,7 @@ class AiChatService:
                         current_memory = self.memory_service.get_novel_memory(novel_id)
                         if current_memory:
                             current_memory["analysis"] = analysis
-                            self.memory_service.set_novel_memory(
-                                novel_id, current_memory
-                            )
+                            self.memory_service.set_novel_memory(novel_id, current_memory)
                         else:
                             # 如果记忆中没有，创建新的记忆
                             novel_info["analysis"] = analysis
@@ -1639,9 +2161,7 @@ class AiChatService:
                     # 特别添加世界观信息
                     if is_worldview_question and novel_info.get("world_setting"):
                         prompt += "\n## 世界观信息\n"
-                        world_content = (
-                            novel_info.get("world_setting", {}).get("content", "") or ""
-                        )
+                        world_content = novel_info.get("world_setting", {}).get("content", "") or ""
                         if len(world_content) > 500:
                             # 提取关键信息
                             key_points = []
@@ -1677,20 +2197,11 @@ class AiChatService:
                         prompt += "\n# 持久化记忆上下文\n"
                         prompt += persistent_context + "\n"
 
-                    prompt += "\n# 分析要求\n"
-                    prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
-                    prompt += "1. 整体结构分析\n"
-                    prompt += "2. 各元素质量评估\n"
-                    prompt += "3. 市场定位分析\n"
-                    prompt += "4. 具体改进建议\n"
-                    prompt += "5. 实施步骤\n"
-
-                    prompt += "\n# 输出格式\n"
-                    prompt += "请按照以下格式输出分析结果：\n"
-                    prompt += "1. 分析结论：简要总结分析结果\n"
-                    prompt += "2. 详细分析：分点详细分析小说各方面\n"
-                    prompt += "3. 改进建议：具体的优化方向和实施步骤\n"
-                    prompt += "4. 预期效果：实施建议后的预期改进效果\n"
+                    prompt += "\n# 回复指导\n"
+                    prompt += "请根据用户的具体问题自然地回复：\n"
+                    prompt += "- 如果用户问的是简单问题，直接简洁回答\n"
+                    prompt += "- 如果用户需要全面分析，再提供详细的分析结果\n"
+                    prompt += "- 回复要贴合用户的问题意图，不要拘泥于固定格式\n"
 
         response = await self.client.chat(
             prompt=prompt,
@@ -1705,9 +2216,7 @@ class AiChatService:
             user_intent, session.scene, session.context.get("novel_info")
         )
         if follow_up_questions:
-            assistant_message += (
-                f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
-            )
+            assistant_message += f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
 
         session.add_assistant_message(assistant_message)
 
@@ -1724,9 +2233,7 @@ class AiChatService:
 
         return assistant_message
 
-    async def send_message_stream(
-        self, session_id: str, user_message: str
-    ) -> AsyncIterator[str]:
+    async def send_message_stream(self, session_id: str, user_message: str) -> AsyncIterator[str]:
         session = self.get_session(session_id)
         if not session:
             raise ValueError(f"会话 {session_id} 不存在")
@@ -1734,7 +2241,7 @@ class AiChatService:
         session.add_user_message(user_message)
 
         # 分析用户意图
-        user_intent = self._analyze_user_intent(user_message, session.scene)
+        user_intent = await self._analyze_user_intent(user_message, session.scene)
         session.set_last_user_intent(user_intent)
 
         # 检查是否需要澄清
@@ -1755,9 +2262,7 @@ class AiChatService:
             follow_up_questions = self._generate_follow_up_questions(
                 user_intent, session.scene, session.context.get("novel_info")
             )
-            session.add_follow_up_question(
-                follow_up_questions[0] if follow_up_questions else ""
-            )
+            session.add_follow_up_question(follow_up_questions[0] if follow_up_questions else "")
 
             # 生成追问回复
             clarification_message = "为了给你提供更准确的帮助，我需要了解更多信息。"
@@ -1798,10 +2303,73 @@ class AiChatService:
                     # 分析用户修订意图
                     revision_type = self._analyze_revision_intent(user_message)
 
-                    # 生成针对性的提示词（已包含小说信息）
-                    prompt = self._generate_revision_prompt(
-                        user_message, revision_type, novel_info
-                    )
+                    # 检查是否需要生成修订计划
+                    pending_plan_id = session.context.get("pending_revision_plan_id")
+                    is_confirming_revision = user_message.lower() in ["是", "好", "可以", "确认", "执行", "yes", "ok", "confirm"]
+                    is_rejecting_revision = user_message.lower() in ["否", "不", "算了", "取消", "no", "cancel"]
+
+                    if pending_plan_id and is_confirming_revision:
+                        # 用户确认执行修订
+                        from .revision_execution_service import RevisionExecutionService
+                        execution_service = RevisionExecutionService(db=self.db)
+                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        session.context["pending_revision_plan_id"] = None
+                    elif is_rejecting_revision:
+                        # 用户拒绝修订
+                        session.context["pending_revision_plan_id"] = None
+                        prompt = "好的，已取消本次修订。"
+                    elif revision_type == "specific_revision":
+                        # 用户有明确的修订指令，调用parse_natural_revision解析并执行
+                        try:
+                            parse_result = await self.parse_natural_revision(
+                                novel_id=novel_info.get("id"),
+                                instruction=user_message
+                            )
+                            if parse_result.get("preview"):
+                                preview = parse_result["preview"]
+                                # 直接执行修订
+                                execute_result = await self.execute_revision(
+                                    novel_id=novel_info.get("id"),
+                                    preview_id=preview["preview_id"]
+                                )
+                                if execute_result.get("success"):
+                                    yield f"✅ 修订完成：{execute_result.get('message', '修订已成功执行')}"
+                                    return
+                                else:
+                                    yield f"修订执行失败：{execute_result.get('error', '未知错误')}"
+                                    return
+                            else:
+                                # 解析失败，返回消息
+                                yield parse_result.get("message", "抱歉，我无法理解您的修订指令，请换一种表达方式。")
+                                return
+                        except Exception as e:
+                            logger.error(f"执行自然语言修订失败: {e}")
+                            yield f"抱歉，处理您的修订请求时出现错误：{str(e)}"
+                            return
+                    else:
+                        # 检测是否是需要生成修订计划的反馈
+                        revision_keywords = ["有问题", "不对", "不满意", "修改", "调整", "改一下", "性格", "不一致", "矛盾"]
+                        needs_plan = any(keyword in user_message for keyword in revision_keywords)
+
+                        if needs_plan and revision_type in ["character_revision", "chapter_revision", "plot_revision"]:
+                            # 使用修订理解服务生成计划
+                            try:
+                                plan = await self.revision_service.understand_feedback(
+                                    user_feedback=user_message,
+                                    novel_id=novel_info.get("id"),
+                                )
+                                session.context["pending_revision_plan_id"] = str(plan.id)
+                                plan_display = self.revision_service.format_plan_for_display(plan)
+                                session.add_assistant_message(plan_display)
+                                import asyncio
+                                asyncio.create_task(self.save_session(session))
+                                yield plan_display
+                                return
+                            except Exception as e:
+                                logger.warning(f"生成修订计划失败: {e}")
+                                prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
+                        else:
+                            prompt = self._generate_revision_prompt(user_message, revision_type, novel_info)
 
                     # 生成并存储分析结果到记忆服务
                     analysis = self._analyze_novel_content(novel_info)
@@ -1811,9 +2379,7 @@ class AiChatService:
                         current_memory = self.memory_service.get_novel_memory(novel_id)
                         if current_memory:
                             current_memory["analysis"] = analysis
-                            self.memory_service.set_novel_memory(
-                                novel_id, current_memory
-                            )
+                            self.memory_service.set_novel_memory(novel_id, current_memory)
                         else:
                             # 如果记忆中没有，创建新的记忆
                             novel_info["analysis"] = analysis
@@ -1835,9 +2401,7 @@ class AiChatService:
                     # 特别添加世界观信息
                     if is_worldview_question and novel_info.get("world_setting"):
                         prompt += "\n## 世界观信息\n"
-                        world_content = (
-                            novel_info.get("world_setting", {}).get("content", "") or ""
-                        )
+                        world_content = novel_info.get("world_setting", {}).get("content", "") or ""
                         if len(world_content) > 500:
                             # 提取关键信息
                             key_points = []
@@ -1870,27 +2434,16 @@ class AiChatService:
                     # 添加持久化记忆上下文
                     novel_id = novel_info.get("id")
                     if novel_id:
-                        persistent_context = self._get_persistent_memory_context(
-                            novel_id
-                        )
+                        persistent_context = self._get_persistent_memory_context(novel_id)
                         if persistent_context:
                             prompt += "\n# 持久化记忆上下文\n"
                             prompt += persistent_context + "\n"
 
-                    prompt += "\n# 分析要求\n"
-                    prompt += "请根据用户的需求，提供详细的小说分析结果，包括：\n"
-                    prompt += "1. 整体结构分析\n"
-                    prompt += "2. 各元素质量评估\n"
-                    prompt += "3. 市场定位分析\n"
-                    prompt += "4. 具体改进建议\n"
-                    prompt += "5. 实施步骤\n"
-
-                    prompt += "\n# 输出格式\n"
-                    prompt += "请按照以下格式输出分析结果：\n"
-                    prompt += "1. 分析结论：简要总结分析结果\n"
-                    prompt += "2. 详细分析：分点详细分析小说各方面\n"
-                    prompt += "3. 改进建议：具体的优化方向和实施步骤\n"
-                    prompt += "4. 预期效果：实施建议后的预期改进效果\n"
+                    prompt += "\n# 回复指导\n"
+                    prompt += "请根据用户的具体问题自然地回复：\n"
+                    prompt += "- 如果用户问的是简单问题，直接简洁回答\n"
+                    prompt += "- 如果用户需要全面分析，再提供详细的分析结果\n"
+                    prompt += "- 回复要贴合用户的问题意图，不要拘泥于固定格式\n"
 
         full_response = ""
 
@@ -1908,9 +2461,7 @@ class AiChatService:
                 user_intent, session.scene, session.context.get("novel_info")
             )
             if follow_up_questions:
-                follow_up_text = (
-                    f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
-                )
+                follow_up_text = f"\n\n为了进一步帮助你，我可以：{follow_up_questions[0]}"
                 full_response += follow_up_text
                 yield follow_up_text
 
@@ -1972,11 +2523,7 @@ class AiChatService:
 
             validated_result = {
                 "title": result.get("title", ""),
-                "genre": (
-                    result.get("genre", "")
-                    if result.get("genre") in NOVEL_GENRES
-                    else ""
-                ),
+                "genre": (result.get("genre", "") if result.get("genre") in NOVEL_GENRES else ""),
                 "tags": result.get("tags", []),
                 "synopsis": result.get("synopsis", ""),
             }
@@ -2157,9 +2704,7 @@ AI修订建议内容：
                                 :2000
                             ],  # 限制长度
                             "description": suggestion.get("description", "")[:500],
-                            "confidence": min(
-                                max(float(suggestion.get("confidence", 0.7)), 0), 1
-                            ),
+                            "confidence": min(max(float(suggestion.get("confidence", 0.7)), 0), 1),
                         }
                     )
 
@@ -2288,9 +2833,7 @@ AI修订建议内容：
                         suggested_value = items
                     else:
                         # 无法解析为结构化数据，拒绝更新
-                        logger.warning(
-                            f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}"
-                        )
+                        logger.warning(f"无法将字符串解析为结构化列表数据，拒绝更新字段 {field}")
                         return {
                             "success": False,
                             "error": f"字段 {field} 需要结构化数据，无法从文本自动解析。请手动编辑。",
@@ -2320,9 +2863,7 @@ AI修订建议内容：
 
                 elif suggestion_type == "world_setting":
                     # 更新世界观设定
-                    query = select(WorldSetting).where(
-                        WorldSetting.novel_id == novel_id
-                    )
+                    query = select(WorldSetting).where(WorldSetting.novel_id == novel_id)
                     result = await db.execute(query)
                     world_setting = result.scalar_one_or_none()
 
@@ -2344,13 +2885,9 @@ AI修订建议内容：
                 elif suggestion_type == "character":
                     # 更新角色信息
                     # 检查是否是创建新角色的建议（target_id 为虚拟标识符）
-                    if target_id and (
-                        target_id.startswith("new_") or len(target_id) < 32
-                    ):
+                    if target_id and (target_id.startswith("new_") or len(target_id) < 32):
                         # 这是创建新角色的建议，跳过
-                        logger.warning(
-                            f"跳过创建新角色的建议: {target_name}, 需要手动创建角色"
-                        )
+                        logger.warning(f"跳过创建新角色的建议: {target_name}, 需要手动创建角色")
                         return {
                             "success": False,
                             "error": f"请先创建角色: {target_name}，然后再应用修订建议",
@@ -2503,9 +3040,7 @@ AI修订建议内容：
             # 增加版本号
             current_version = self.memory_service.get_novel_version(novel_id)
             self.memory_service.version_map[novel_id] = current_version + 1
-            logger.info(
-                f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}"
-            )
+            logger.info(f"已使小说 {novel_id} 的记忆缓存失效，版本号更新为 {current_version + 1}")
 
         return results
 
@@ -2578,9 +3113,7 @@ AI修订建议内容：
                         "title": chap.title,
                         "word_count": chap.word_count,
                         "status": (
-                            chap.status.value
-                            if hasattr(chap.status, "value")
-                            else chap.status
+                            chap.status.value if hasattr(chap.status, "value") else chap.status
                         ),
                     }
                     for chap in chapters
@@ -2591,9 +3124,7 @@ AI修订建议内容：
 
     # ==================== 小说对话流程集成方法 ====================
 
-    async def start_novel_dialogue_flow(
-        self, session_id: str, scene: str = "create"
-    ) -> str:
+    async def start_novel_dialogue_flow(self, session_id: str, scene: str = "create") -> str:
         """启动小说对话流程（创建/查询/修改）.
 
         Args:
@@ -2603,10 +3134,10 @@ AI修订建议内容：
         Returns:
             欢迎消息
         """
+        from backend.schemas.novel_creation_flow import NovelDialogueScene
         from backend.services.novel_creation_flow_manager import (
             NovelCreationFlowManager,
         )
-        from backend.schemas.novel_creation_flow import NovelDialogueScene
 
         # 映射场景字符串到枚举
         scene_mapping = {
@@ -2664,9 +3195,7 @@ AI修订建议内容：
         else:
             return "您好！我是您的小说创作助手，请问有什么可以帮助您的？"
 
-    async def process_novel_dialogue_message(
-        self, session_id: str, user_message: str
-    ) -> str:
+    async def process_novel_dialogue_message(self, session_id: str, user_message: str) -> str:
         """处理小说对话流程中的消息.
 
         Args:
@@ -2704,3 +3233,356 @@ AI修订建议内容：
             asyncio.create_task(self.save_session(session))
 
         return response.message
+
+    # 自然语言修订相关
+    # 存储待执行的修订预览
+    _revision_previews: dict[str, dict] = {}
+
+    async def parse_natural_revision(
+        self, novel_id: str, instruction: str
+    ) -> dict:
+        """解析自然语言修订指令.
+
+        Args:
+            novel_id: 小说ID
+            instruction: 用户指令，如「把主角年龄改成25岁」
+
+        Returns:
+            解析结果，包含预览信息和消息
+        """
+        import uuid
+
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from core.models.novel import Novel
+
+        # 获取小说信息
+        query = (
+            select(Novel)
+            .where(Novel.id == novel_id)
+            .options(selectinload(Novel.characters))
+        )
+        result = await self.db.execute(query)
+        novel = result.scalar_one_or_none()
+
+        if not novel:
+            return {
+                "preview": None,
+                "message": "未找到该小说",
+                "needs_confirmation": False,
+                "error": "小说不存在",
+            }
+
+        # 构建上下文信息
+        characters_info = []
+        for char in novel.characters:
+            role_type = char.role_type or "配角"
+            characters_info.append(
+                f"角色「{char.name}」(ID:{char.id}): "
+                f"类型={role_type}, 性别={char.gender or '未设置'}, "
+                f"年龄={char.age or '未设置'}, 职业={char.occupation or '未设置'}"
+            )
+
+        characters_text = "\n".join(characters_info) if characters_info else "暂无角色"
+
+        # 使用 LLM 解析指令
+        system_prompt = f"""你是一个小说修订指令解析器。
+
+小说信息：
+- 小说ID: {novel_id}
+- 小说标题: {novel.title}
+
+已有角色列表：
+{characters_text}
+
+你的任务是根据用户的自然语言指令，生成一个结构化的修订操作。
+
+支持的指令类型：
+1. 修改角色信息：「把XX年龄改成YY」「修改XX的名字为YY」
+2. 新增角色：「增加一个配角叫XX」
+3. 删除角色：「删除角色XX」
+4. 修改小说信息：「把小说名改成XX」
+
+请严格按照以下JSON格式输出（不要有其他内容）：
+{{
+  "action": "update_field|add|delete",
+  "target_type": "character|novel|world_setting|outline",
+  "target_name": "角色名或目标名",
+  "target_id": "目标ID（如果能找到的话）",
+  "field": "要修改的字段名",
+  "old_value": "旧值",
+  "new_value": "新值",
+  "description": "用中文描述这个操作"
+}}
+
+如果无法解析指令，返回：
+{{
+  "action": "unknown",
+  "description": "无法理解你的指令，请换一种说法"
+}}"""
+
+        try:
+            response = await self.client.chat(
+                prompt=instruction,
+                system=system_prompt,
+                temperature=0.3,
+                max_tokens=500,
+            )
+
+            content = response.get("content", "")
+
+            # 提取 JSON - 改进解析逻辑
+            import json
+            import re
+                        
+            # 尝试多种方式解析 JSON
+            parsed = None
+                        
+            # 方式1: 直接解析完整内容
+            try:
+                parsed = json.loads(content.strip())
+            except json.JSONDecodeError:
+                pass
+                        
+            # 方式2: 提取代码块中的 JSON
+            if not parsed:
+                code_block_match = re.search(r"```(?:json)?\s*([^{}]+\{[^{}]+\}[^{}]*)\$", content, re.DOTALL)
+                if code_block_match:
+                    try:
+                        parsed = json.loads(code_block_match.group(1).strip())
+                    except json.JSONDecodeError:
+                        pass
+                        
+            # 方式3: 提取普通 JSON 对象
+            if not parsed:
+                json_match = re.search(r"\{[^{}]+\}", content, re.DOTALL)
+                if json_match:
+                    try:
+                        parsed = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        pass
+                        
+            # 方式4: 尝试提取最外层的 JSON
+            if not parsed:
+                try:
+                    # 找第一个 { 和最后一个 }
+                    start = content.find("{")
+                    end = content.rfind("}")
+                    if start != -1 and end != -1 and end > start:
+                        json_str = content[start:end+1]
+                        parsed = json.loads(json_str)
+                except json.JSONDecodeError:
+                    pass
+                        
+            if not parsed:
+                logger.warning(f"无法解析LLM响应为JSON: {content[:200]}...")
+                parsed = {"action": "unknown", "description": content or "无法解析指令"}
+
+            if parsed.get("action") == "unknown":
+                return {
+                    "preview": None,
+                    "message": parsed.get("description", "无法理解你的指令"),
+                    "needs_confirmation": False,
+                    "error": None,
+                }
+
+            # 如果是 update_field，尝试查找目标角色
+            if parsed.get("action") in ["update_field", "delete"]:
+                target_name = parsed.get("target_name", "")
+                # 忽略「主角」「男主」「女主」等通用称呼，改为查找第一个主角/男主/女主
+                if target_name in ["主角", "男主", "女主"]:
+                    # 查找对应类型的角色
+                    for char in novel.characters:
+                        if char.role_type in ["主角", "男主", "女主"]:
+                            parsed["target_id"] = str(char.id)
+                            parsed["target_name"] = char.name
+                            break
+                else:
+                    # 根据名称查找角色
+                    for char in novel.characters:
+                        if char.name == target_name:
+                            parsed["target_id"] = str(char.id)
+                            break
+
+                # 获取旧值
+                if parsed.get("target_id"):
+                    for char in novel.characters:
+                        if str(char.id) == parsed["target_id"]:
+                            field = parsed.get("field", "")
+                            if field == "age":
+                                parsed["old_value"] = str(char.age) if char.age else "未设置"
+                            elif field == "name":
+                                parsed["old_value"] = char.name
+                            elif field == "gender":
+                                parsed["old_value"] = char.gender or "未设置"
+                            elif field == "occupation":
+                                parsed["old_value"] = char.occupation or "未设置"
+                            elif field == "personality":
+                                parsed["old_value"] = char.personality or "未设置"
+                            break
+
+            # 生成预览ID
+            preview_id = str(uuid.uuid4())
+
+            # 保存预览
+            self._revision_previews[preview_id] = {
+                "novel_id": novel_id,
+                "action": parsed.get("action"),
+                "target_type": parsed.get("target_type"),
+                "target_name": parsed.get("target_name"),
+                "target_id": parsed.get("target_id"),
+                "field": parsed.get("field"),
+                "old_value": parsed.get("old_value"),
+                "new_value": parsed.get("new_value"),
+                "description": parsed.get("description"),
+            }
+
+            preview = {
+                "preview_id": preview_id,
+                "action": parsed.get("action"),
+                "target_type": parsed.get("target_type"),
+                "target_name": parsed.get("target_name"),
+                "target_id": parsed.get("target_id"),
+                "field": parsed.get("field"),
+                "old_value": parsed.get("old_value"),
+                "new_value": parsed.get("new_value"),
+                "description": parsed.get("description"),
+            }
+
+            # 生成确认消息
+            action = parsed.get("action")
+            target = parsed.get("target_name", "目标")
+            field = parsed.get("field", "")
+            old_val = parsed.get("old_value", "")
+            new_val = parsed.get("new_value", "")
+
+            if action == "update_field":
+                msg = f"📝 确认修改：\n- 目标：{target}\n- 字段：{field}\n- {old_val} → {new_val}"
+            elif action == "add":
+                msg = f"➕ 确认新增：\n- {parsed.get('description', '')}"
+            elif action == "delete":
+                msg = f"🗑️ 确认删除：\n- {target}\n- {parsed.get('description', '')}"
+            else:
+                msg = parsed.get("description", "请确认操作")
+
+            return {
+                "preview": preview,
+                "message": msg,
+                "needs_confirmation": True,
+                "error": None,
+            }
+
+        except Exception as e:
+            logger.error(f"解析自然语言修订指令失败: {e}")
+            return {
+                "preview": None,
+                "message": f"解析失败：{str(e)}",
+                "needs_confirmation": False,
+                "error": str(e),
+            }
+
+    async def execute_revision(self, novel_id: str, preview_id: str) -> dict:
+        """执行已确认的修订操作.
+
+        Args:
+            novel_id: 小说ID
+            preview_id: 预览ID
+
+        Returns:
+            执行结果
+        """
+        from sqlalchemy import update
+
+        from core.models.character import Character
+
+        # 获取预览
+        preview = self._revision_previews.get(preview_id)
+        if not preview:
+            return {
+                "success": False,
+                "message": "预览已过期或不存在，请重新解析指令",
+                "error": "预览不存在",
+            }
+
+        if preview.get("novel_id") != novel_id:
+            return {
+                "success": False,
+                "message": "小说ID不匹配",
+                "error": "小说ID不匹配",
+            }
+
+        action = preview.get("action")
+        target_id = preview.get("target_id")
+        field = preview.get("field")
+        new_value = preview.get("new_value")
+        target_name = preview.get("target_name", "")
+
+        try:
+            if action == "update_field" and target_id:
+                # 更新角色字段
+                if field == "age":
+                    # 年龄转为整数
+                    new_val_int = int(new_value) if new_value else None
+                    stmt = update(Character).where(Character.id == target_id).values(age=new_val_int)
+                elif field == "name":
+                    stmt = update(Character).where(Character.id == target_id).values(name=new_value)
+                elif field == "gender":
+                    stmt = update(Character).where(Character.id == target_id).values(gender=new_value)
+                elif field == "occupation":
+                    stmt = update(Character).where(Character.id == target_id).values(occupation=new_value)
+                elif field == "personality":
+                    stmt = update(Character).where(Character.id == target_id).values(personality=new_value)
+                else:
+                    return {
+                        "success": False,
+                        "message": f"不支持的字段：{field}",
+                        "error": f"不支持的字段：{field}",
+                    }
+
+                await self.db.execute(stmt)
+                await self.db.commit()
+
+                # 删除预览
+                del self._revision_previews[preview_id]
+
+                return {
+                    "success": True,
+                    "message": f"✅ 已更新「{target_name}」的{field}为「{new_value}」",
+                    "action": action,
+                    "field": field,
+                    "target_name": target_name,
+                }
+
+            elif action == "delete" and target_id:
+                # 删除角色
+                from core.models.character import Character
+
+                stmt = update(Character).where(Character.id == target_id).values(is_deleted=True)
+                await self.db.execute(stmt)
+                await self.db.commit()
+
+                del self._revision_previews[preview_id]
+
+                return {
+                    "success": True,
+                    "message": f"✅ 已删除角色「{target_name}」",
+                    "action": action,
+                    "target_name": target_name,
+                }
+
+            else:
+                return {
+                    "success": False,
+                    "message": "暂不支持该操作类型",
+                    "error": "不支持的操作类型",
+                }
+
+        except Exception as e:
+            logger.error(f"执行修订失败: {e}")
+            await self.db.rollback()
+            return {
+                "success": False,
+                "message": f"执行失败：{str(e)}",
+                "error": str(e),
+            }

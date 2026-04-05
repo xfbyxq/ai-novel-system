@@ -1,17 +1,17 @@
 """Agent调度器 - 负责在不同Agent实现之间进行调度."""
 
 import asyncio
-from typing import Dict, Any
+from typing import Any, Dict
 from uuid import UUID, uuid4
 
 from agents.agent_manager import get_agent_manager
-from agents.agent_scheduler import AgentTask, TaskStatus, TaskPriority
-from agents.crew_manager import NovelCrewManager
-from llm.qwen_client import QwenClient
-from llm.cost_tracker import CostTracker
+from agents.agent_scheduler import AgentTask, TaskPriority, TaskStatus
+from agents.crew_manager import CrewConfig, NovelCrewManager
 
 # Use the project-wide logger
 from core.logging_config import logger
+from llm.cost_tracker import CostTracker
+from llm.qwen_client import QwenClient
 
 
 class AgentDispatcher:
@@ -41,6 +41,8 @@ class AgentDispatcher:
         max_world_review_iterations: int = 2,
         max_character_review_iterations: int = 2,
         max_plot_review_iterations: int = 2,
+        # 上下文压缩器配置
+        context_compressor_max_tokens: int = 8000,
     ):
         """初始化Agent调度器.
 
@@ -62,13 +64,14 @@ class AgentDispatcher:
             max_world_review_iterations: 世界观审查最大迭代次数
             max_character_review_iterations: 角色审查最大迭代次数
             max_plot_review_iterations: 大纲审查最大迭代次数
+            context_compressor_max_tokens: 上下文压缩器token阈值
         """
         self.client = client
         self.cost_tracker = cost_tracker
         self.agent_manager = get_agent_manager()
-        self.crew_manager = NovelCrewManager(
-            client,
-            cost_tracker,
+
+        # 构建 CrewConfig 并传给 NovelCrewManager
+        crew_config = CrewConfig(
             quality_threshold=quality_threshold,
             max_review_iterations=max_review_iterations,
             max_fix_iterations=max_fix_iterations,
@@ -84,7 +87,9 @@ class AgentDispatcher:
             max_world_review_iterations=max_world_review_iterations,
             max_character_review_iterations=max_character_review_iterations,
             max_plot_review_iterations=max_plot_review_iterations,
+            context_compressor_max_tokens=context_compressor_max_tokens,
         )
+        self.crew_manager = NovelCrewManager(client, cost_tracker, config=crew_config)
         self.use_scheduled_agents = False  # 默认使用CrewAI风格系统，确保完整的企划阶段
 
     async def initialize(self):
@@ -424,8 +429,8 @@ class AgentDispatcher:
             task_id: 任务ID
             timeout: 超时时间（秒）
         """
-        start_time = asyncio.get_event_loop().time()
-        while asyncio.get_event_loop().time() - start_time < timeout:
+        start_time = asyncio.get_running_loop().time()
+        while asyncio.get_running_loop().time() - start_time < timeout:
             task = scheduler.tasks.get(task_id)
             if task:
                 if task.status in [

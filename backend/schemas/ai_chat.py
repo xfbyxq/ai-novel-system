@@ -240,3 +240,54 @@ class MessageResponse(BaseModel):
     """通用消息响应."""
 
     message: str = Field(..., description="操作结果消息")
+
+
+# 自然语言修订相关Schema
+class NaturalRevisionRequest(BaseModel):
+    """自然语言修订请求."""
+
+    novel_id: str = Field(..., description="小说ID")
+    instruction: str = Field(..., description="用户的自然语言指令，如「把主角年龄改成25岁」")
+
+
+class RevisionPreview(BaseModel):
+    """修订预览."""
+
+    preview_id: str = Field(..., description="预览ID，用于确认执行")
+    action: str = Field(..., description="操作类型：update/update_field/add/delete")
+    target_type: str = Field(
+        ..., description="目标类型：character/world_setting/outline/novel/chapter"
+    )
+    target_name: Optional[str] = Field(None, description="目标名称")
+    target_id: Optional[str] = Field(None, description="目标ID")
+    field: Optional[str] = Field(None, description="要修改的字段")
+    old_value: Optional[str] = Field(None, description="旧值")
+    new_value: Optional[str] = Field(None, description="新值")
+    description: str = Field(..., description="操作描述")
+
+
+class NaturalRevisionResponse(BaseModel):
+    """自然语言修订响应."""
+
+    preview: Optional[RevisionPreview] = Field(None, description="修订预览")
+    message: str = Field(..., description="AI的说明消息")
+    needs_confirmation: bool = Field(default=True, description="是否需要用户确认")
+    error: Optional[str] = Field(None, description="错误信息")
+
+
+class ExecuteRevisionRequest(BaseModel):
+    """确认执行修订请求."""
+
+    novel_id: str = Field(..., description="小说ID")
+    preview_id: str = Field(..., description="预览ID")
+
+
+class ExecuteRevisionResponse(BaseModel):
+    """执行修订响应."""
+
+    success: bool = Field(..., description="是否成功")
+    message: str = Field(..., description="执行结果消息")
+    action: Optional[str] = Field(None, description="执行的操作类型")
+    field: Optional[str] = Field(None, description="修改的字段")
+    target_name: Optional[str] = Field(None, description="目标名称")
+    error: Optional[str] = Field(None, description="错误信息")

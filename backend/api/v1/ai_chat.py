@@ -2,9 +2,10 @@
 
 import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dependencies import get_db
@@ -21,9 +22,13 @@ from backend.schemas.ai_chat import (
     CharacterListItem,
     CrawlerParseRequest,
     CrawlerParseResponse,
+    ExecuteRevisionRequest,
+    ExecuteRevisionResponse,
     ExtractSuggestionsRequest,
     ExtractSuggestionsResponse,
     MessageResponse,
+    NaturalRevisionRequest,
+    NaturalRevisionResponse,
     NovelChaptersResponse,
     NovelCharactersResponse,
     NovelParseRequest,
@@ -494,3 +499,191 @@ async def get_novel_chapters_for_revision(
     except Exception as e:
         logger.error(f"获取章节列表失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取章节列表失败: {str(e)}")
+
+
+# ==================== 智能章节摘要API ====================
+
+
+class SmartSummaryRequest(BaseModel):
+    """智能章节摘要请求."""
+
+    novel_id: str
+    chapter_numbers: List[int]
+    force_regenerate: bool = False
+
+
+class SmartSummaryResponse(BaseModel):
+    """智能章节摘要响应."""
+
+    novel_id: str
+    novel_title: Optional[str] = None
+    summaries: List[dict]
+    total_chapters_requested: int
+    generated_count: int
+    cached_count: int
+
+
+@router.post("/smart-summary", response_model=SmartSummaryResponse)
+async def generate_smart_chapter_summary(
+    request: SmartSummaryRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """
+    生成智能章节摘要.
+
+    使用AI读取完整章节内容并提炼关键点，生成结构化的章节摘要。
+    支持多章节批量处理，自动缓存已生成的摘要。
+
+    **功能特点**:
+    - 读取完整章节内容（不截断）
+    - 使用LLM提炼关键事件、人物互动、情感走向等
+    - 支持多章节范围选择
+    - 自动缓存摘要结果
+
+    **返回的摘要结构**:
+    - key_events: 关键事件列表
+    - plot_summary: 情节摘要
+    - character_interactions: 人物互动
+    - emotional_arc: 情感走向
+    - foreshadowing: 伏笔暗示
+    - ending_state: 结尾状态
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.generate_smart_chapter_summary(
+            novel_id=request.novel_id,
+            chapter_numbers=request.chapter_numbers,
+            force_regenerate=request.force_regenerate,
+        )
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+        return SmartSummaryResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"生成智能摘要失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"生成智能摘要失败: {str(e)}")
+
+
+class ChapterSummaryQuery(BaseModel):
+    """章节摘要查询请求."""
+
+    novel_id: str
+    chapter_start: int = 1
+    chapter_end: int = 10
+    use_smart_summary: bool = True
+
+
+@router.post("/chapters-summary")
+async def get_chapters_summary(
+    request: ChapterSummaryQuery,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """
+    获取章节摘要（支持智能摘要模式）.
+
+    **参数说明**:
+    - novel_id: 小说ID
+    - chapter_start: 开始章节号（默认1）
+    - chapter_end: 结束章节号（默认10）
+    - use_smart_summary: 是否使用智能摘要（默认True）
+
+    **智能摘要模式** (use_smart_summary=True):
+    使用AI提炼章节关键点，生成结构化摘要
+
+    **简单模式** (use_smart_summary=False):
+    返回章节内容（完整内容，不截断）
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.get_novel_chapters_summary(
+            novel_id=request.novel_id,
+            chapter_start=request.chapter_start,
+            chapter_end=request.chapter_end,
+            use_smart_summary=request.use_smart_summary,
+        )
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
+
+
+# 自然语言修订 API
+@router.post("/natural-revision", response_model=NaturalRevisionResponse)
+async def parse_natural_revision(
+    request: NaturalRevisionRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """解析自然语言修订指令.
+
+    用户通过自然语言描述想要进行的修改，系统解析后返回预览，用户确认后再执行。
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.parse_natural_revision(request.novel_id, request.instruction)
+
+        return NaturalRevisionResponse(
+            preview=result.get("preview"),
+            message=result.get("message", ""),
+            needs_confirmation=result.get("needs_confirmation", True),
+            error=result.get("error"),
+        )
+
+    except Exception as e:
+        logger.error(f"解析自然语言修订指令失败: {e}", exc_info=True)
+        return NaturalRevisionResponse(
+            preview=None,
+            message=f"解析失败：{str(e)}",
+            needs_confirmation=False,
+            error=str(e),
+        )
+
+
+@router.post("/execute-revision", response_model=ExecuteRevisionResponse)
+async def execute_revision(
+    request: ExecuteRevisionRequest,
+    service: AiChatService = Depends(get_ai_chat_service),
+):
+    """确认执行修订操作.
+
+    用户确认预览后，执行实际的数据库修改。
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        result = await service.execute_revision(request.novel_id, request.preview_id)
+
+        return ExecuteRevisionResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            action=result.get("action"),
+            field=result.get("field"),
+            target_name=result.get("target_name"),
+            error=result.get("error"),
+        )
+
+    except Exception as e:
+        logger.error(f"执行修订失败: {e}", exc_info=True)
+        return ExecuteRevisionResponse(
+            success=False,
+            message=f"执行失败：{str(e)}",
+            error=str(e),
+        )

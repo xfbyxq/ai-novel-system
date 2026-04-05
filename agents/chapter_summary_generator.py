@@ -39,8 +39,8 @@ class ChapterSummaryGenerator:
         """
         logger.info(f"[SummaryGenerator] 生成第{chapter_number}章 LLM 摘要...")
 
-        # 截取内容（避免过长 token）
-        content_for_summary = chapter_content[:6000]
+        # 截取内容（支持更长摘要生成）
+        content_for_summary = chapter_content[:8000]
 
         task_prompt = self.pm.format(
             self.pm.CHAPTER_SUMMARY_TASK,
@@ -69,9 +69,7 @@ class ChapterSummaryGenerator:
 
             # 检查是否返回了空摘要（解析失败的标志）
             if not summary.get("key_events") and not summary.get("plot_progress"):
-                logger.warning(
-                    f"[SummaryGenerator] JSON 解析返回空摘要，使用回退方案..."
-                )
+                logger.warning(f"[SummaryGenerator] JSON 解析返回空摘要，使用回退方案...")
                 return self._fallback_summary(chapter_content, chapter_plan)
 
             # 确保必要字段
@@ -81,6 +79,9 @@ class ChapterSummaryGenerator:
             summary.setdefault("foreshadowing", [])
             summary.setdefault("ending_state", "")
             summary.setdefault("new_information", "")
+            # 新增增强字段
+            summary.setdefault("dialogue_highlights", [])
+            summary.setdefault("scene_transitions", [])
 
             # 补充 ending_state（从原文结尾提取作为备份）
             if not summary["ending_state"] and chapter_content:
@@ -126,11 +127,11 @@ class ChapterSummaryGenerator:
             "key_events": key_events,
             "character_changes": "",
             "plot_progress": plot_progress,
-            "foreshadowing": (
-                chapter_plan.get("foreshadowing", []) if chapter_plan else []
-            ),
+            "foreshadowing": (chapter_plan.get("foreshadowing", []) if chapter_plan else []),
             "ending_state": ending_state,
             "new_information": "",
+            "dialogue_highlights": [],
+            "scene_transitions": [],
         }
 
     @staticmethod
@@ -220,4 +221,6 @@ class ChapterSummaryGenerator:
             "foreshadowing": [],
             "ending_state": "",
             "new_information": "",
+            "dialogue_highlights": [],
+            "scene_transitions": [],
         }

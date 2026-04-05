@@ -1,8 +1,8 @@
 """Agent调度系统."""
 
 import asyncio
-from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from agents.agent_communicator import AgentCommunicator, Message
@@ -209,7 +209,7 @@ class BaseAgent:
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.error(f"❌ Agent '{self.name}' 任务处理错误: {e}")
+                logger.error(f"❌ Agent '{self.name}' 任务处理错误: {e}", exc_info=True)
                 self.status = AgentStatus.ERROR
 
     async def _process_task(self, task_data: Dict[str, Any]):
@@ -515,7 +515,7 @@ class AgentScheduler:
 
             # 处理任务完成
             if status == TaskStatus.COMPLETED or status == TaskStatus.FAILED:
-                task.complete_time = asyncio.get_event_loop().time()
+                task.complete_time = asyncio.get_running_loop().time()
                 if task in self.running_tasks:
                     self.running_tasks.remove(task)
 

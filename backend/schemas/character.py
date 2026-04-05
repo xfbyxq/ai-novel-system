@@ -182,7 +182,7 @@ class CharacterResponse(BaseModel):
     name: str = Field(..., description="角色名称")
     role_type: Optional[str] = Field(default=None, description="角色类型")
     gender: Optional[str] = Field(default=None, description="性别")
-    age: Optional[int] = Field(default=None, description="年龄", ge=0, le=150)
+    age: Optional[int] = Field(default=None, description="年龄", ge=0)
     appearance: Optional[str] = Field(default=None, description="外貌描述")
     personality: Optional[str] = Field(default=None, description="性格描述")
     background: Optional[str] = Field(default=None, description="背景故事")

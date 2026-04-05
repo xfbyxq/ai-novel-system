@@ -72,7 +72,8 @@ async def get_world_setting(
     if not world_setting:
         return None
 
-    return world_setting
+    # 将 ORM 对象转换为字典返回
+    return model_to_dict(world_setting)
 
 
 @router.patch("/world-setting", response_model=WorldSettingResponse)
@@ -142,11 +143,24 @@ async def get_plot_outline(
     if not plot_outline:
         return None
 
-    # 修复数据格式：确保volumes中的每个卷都有number字段
-    plot_outline = fix_plot_outline_volumes(plot_outline)
 
-    return plot_outline
-
+    # 手动转换为字典，避免 SQLAlchemy 内部状态导致的序列化错误
+    return {
+        "id": str(plot_outline.id),
+        "novel_id": str(plot_outline.novel_id),
+        "structure_type": plot_outline.structure_type,
+        "volumes": plot_outline.volumes or [],
+        "main_plot": plot_outline.main_plot or {},
+        "main_plot_detailed": plot_outline.main_plot_detailed or {},
+        "sub_plots": plot_outline.sub_plots or [],
+        "key_turning_points": plot_outline.key_turning_points or [],
+        "climax_chapter": plot_outline.climax_chapter,
+        "raw_content": plot_outline.raw_content,
+        "update_history": plot_outline.update_history or [],
+        "version": plot_outline.version,
+        "created_at": plot_outline.created_at.isoformat() if plot_outline.created_at else None,
+        "updated_at": plot_outline.updated_at.isoformat() if plot_outline.updated_at else None,
+    }
 
 @router.patch("/outline", response_model=PlotOutlineResponse)
 async def update_plot_outline(
@@ -525,15 +539,34 @@ async def ai_assist_outline_field(
 
     if characters:
         context["characters"] = [
-            {"name": c.name, "role": c.role, "archetype": c.archetype}
+            {"name": c.name, "role": c.role_type, "personality": c.personality}
             for c in characters[:10]  # 限制数量避免上下文过长
         ]
 
     # Add novel info
+    # 注意：Novel 模型没有 target_word_count 字段，使用 length_type 和 chapter_config 推断
+    # 根据小说长度类型估算目标字数
+    length_type_to_words = {
+        "short": 30000,  # 短篇：约3万字
+        "medium": 100000,  # 中篇：约10万字
+        "long": 300000,  # 长篇：约30万字
+    }
+    estimated_target_words = length_type_to_words.get(
+        novel.length_type, 100000
+    )
+    # 也可以从 chapter_config 获取总章节数来估算
+    chapter_config = novel.chapter_config or {}
+    total_chapters = chapter_config.get("total_chapters", 6)
+    # 按每章约3000字估算
+    chapter_based_estimate = total_chapters * 3000
+
     context["novel"] = {
         "title": novel.title,
         "genre": novel.genre,
-        "target_word_count": novel.target_word_count,
+        "length_type": novel.length_type,
+        "target_word_count": max(estimated_target_words, chapter_based_estimate),
+        "current_word_count": novel.word_count,
+        "total_chapters": total_chapters,
     }
 
     # Call outline service to generate suggestion
