@@ -344,7 +344,7 @@ def test_context_compressor_full_integration():
     assert isinstance(result, CompressedContext)
     assert result.core_memory != ""
     assert result.hot_memory != ""
-    assert result.previous_ending != ""
+    # previous_ending 已移除，热记忆包含完整内容
 
     # 验证增强记忆层（可选，因为当前实现基于标记）
     # 注：如果没有标记 foreshadowing 字段，结果为空是正常的

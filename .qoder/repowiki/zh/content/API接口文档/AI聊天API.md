@@ -14,6 +14,12 @@
 - [frontend/src/components/AIChatDrawer.tsx](file://frontend/src/components/AIChatDrawer.tsx)
 - [backend/services/memory_service.py](file://backend/services/memory_service.py)
 - [backend/services/context_manager.py](file://backend/services/context_manager.py)
+- [backend/services/revision_understanding_service.py](file://backend/services/revision_understanding_service.py)
+- [backend/services/revision_execution_service.py](file://backend/services/revision_execution_service.py)
+- [backend/services/revision_data_validator.py](file://backend/services/revision_data_validator.py)
+- [backend/api/v1/revision.py](file://backend/api/v1/revision.py)
+- [core/models/revision_plan.py](file://core/models/revision_plan.py)
+- [alembic/versions/add_revision_and_memory_tables.py](file://alembic/versions/add_revision_and_memory_tables.py)
 </cite>
 
 ## 更新摘要
@@ -24,6 +30,9 @@
 - 优化会话标题自动生成与动态显示，提升用户体验
 - 新增章节摘要查询与智能摘要生成功能
 - 新增自然语言修订解析与执行API，支持对话式修订流程
+- 新增修订理解服务，支持用户反馈的结构化解析与修订计划生成
+- 新增修订数据验证服务，确保修订指令的有效性与准确性
+- 新增修订执行服务，支持修订计划的确认执行与影响评估
 
 ## 目录
 1. [简介](#简介)
@@ -40,14 +49,17 @@
 ## 简介
 本文件面向"AI聊天API"的使用者与维护者，系统性阐述会话管理、消息处理、上下文与历史记录、实时流式传输、会话持久化等能力，并结合创作助手、内容审核、创意讨论等典型场景，提供端到端的使用说明与最佳实践。
 
-**更新** 本版本新增了完整的AI聊天数据库模式支持，包括会话与消息的持久化存储；实现了WebSocket流式对话功能，支持实时消息传输；引入了结构化修订建议提取与应用机制，为小说创作和修订提供智能化支持；新增智能章节分析功能，支持章节内容的深度分析与结构化摘要生成；新增自然语言修订解析与执行API，支持通过对话方式进行小说内容修订。
+**更新** 本版本新增了完整的AI聊天数据库模式支持，包括会话与消息的持久化存储；实现了WebSocket流式对话功能，支持实时消息传输；引入了结构化修订建议提取与应用机制，为小说创作和修订提供智能化支持；新增智能章节分析功能，支持章节内容的深度分析与结构化摘要生成；新增自然语言修订系统，支持通过对话解析用户修订指令并执行数据库更新；新增修订理解服务，支持用户反馈的结构化解析与修订计划生成。
 
 ## 项目结构
 - 后端采用FastAPI，路由集中在backend/api/v1/ai_chat.py，业务逻辑在backend/services/ai_chat_service.py，数据模型位于core/models/ai_chat_session.py，LLM客户端封装在llm/qwen_client.py。
 - 前端通过frontend/src/api/aiChat.ts封装HTTP与WebSocket调用，UI组件frontend/src/components/AIChatDrawer.tsx演示实时流式交互和动态标题显示。
 - 数据库迁移脚本定义了ai_chat_sessions与ai_chat_messages两张表，支持会话与消息的持久化，现已支持novel_id和title字段。
 - 新增智能章节分析功能，通过章节摘要生成和智能摘要功能提供深度分析能力。
-- 新增自然语言修订功能，支持通过对话解析用户修订指令并执行数据库更新。
+- 新增自然语言修订功能，支持通过对话解析用户修订指令，提供预览和确认机制。
+- 新增修订理解服务，支持用户反馈的结构化解析与修订计划生成。
+- 新增修订数据验证服务，确保修订指令的有效性与准确性。
+- 新增修订执行服务，支持修订计划的确认执行与影响评估。
 
 ```mermaid
 graph TB
@@ -58,7 +70,10 @@ MODEL["会话模型<br/>core/models/ai_chat_session.py"]
 LLM["LLM客户端<br/>llm/qwen_client.py"]
 MEM["记忆服务<br/>backend/services/memory_service.py"]
 CTX["上下文管理<br/>backend/services/context_manager.py"]
-REV["修订服务<br/>backend/services/revision_execution_service.py"]
+REV_U["修订理解服务<br/>backend/services/revision_understanding_service.py"]
+REV_D["修订数据验证<br/>backend/services/revision_data_validator.py"]
+REV_E["修订执行服务<br/>backend/services/revision_execution_service.py"]
+REV_API["修订API<br/>backend/api/v1/revision.py"]
 END
 subgraph "前端"
 FE_API["前端API封装<br/>frontend/src/api/aiChat.ts"]
@@ -67,6 +82,7 @@ END
 subgraph "数据库"
 MIG["迁移脚本<br/>alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py"]
 MIG2["迁移脚本<br/>alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py"]
+MIG3["修订表迁移<br/>alembic/versions/add_revision_and_memory_tables.py"]
 END
 FE_API --> API
 FE_UI --> FE_API
@@ -75,9 +91,17 @@ SVC --> MODEL
 SVC --> LLM
 SVC --> MEM
 SVC --> CTX
-SVC --> REV
+SVC --> REV_U
+SVC --> REV_D
+SVC --> REV_E
+REV_API --> REV_U
+REV_API --> REV_D
+REV_API --> REV_E
 MODEL --> MIG
 MODEL --> MIG2
+MIG3 --> REV_U
+MIG3 --> REV_D
+MIG3 --> REV_E
 ```
 
 **图表来源**
@@ -87,8 +111,14 @@ MODEL --> MIG2
 - [alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py:1-96](file://alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py#L1-L96)
 - [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:1-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L1-L53)
 - [llm/qwen_client.py:1-232](file://llm/qwen_client.py#L1-L232)
-- [frontend/src/api/aiChat.ts:1-268](file://frontend/src/api/aiChat.ts#L1-L268)
+- [frontend/src/api/aiChat.ts:1-354](file://frontend/src/api/aiChat.ts#L1-L354)
 - [frontend/src/components/AIChatDrawer.tsx:120-319](file://frontend/src/components/AIChatDrawer.tsx#L120-L319)
+- [backend/services/revision_understanding_service.py:1-511](file://backend/services/revision_understanding_service.py#L1-L511)
+- [backend/services/revision_execution_service.py:1-97](file://backend/services/revision_execution_service.py#L1-L97)
+- [backend/services/revision_data_validator.py:1-619](file://backend/services/revision_data_validator.py#L1-L619)
+- [backend/api/v1/revision.py:1-463](file://backend/api/v1/revision.py#L1-L463)
+- [core/models/revision_plan.py:1-116](file://core/models/revision_plan.py#L1-L116)
+- [alembic/versions/add_revision_and_memory_tables.py:1-157](file://alembic/versions/add_revision_and_memory_tables.py#L1-L157)
 
 ## 核心组件
 - API路由层：提供会话创建、列表查询、详情获取、消息发送、会话删除、WebSocket流式对话、意图解析与修订建议等接口，现支持按novel_id过滤。
@@ -100,6 +130,9 @@ MODEL --> MIG2
 - **新增** 智能章节分析：提供章节内容的深度分析、结构化摘要生成和智能摘要功能。
 - **新增** 结构化修订系统：支持从AI回复中提取结构化修订建议，自动应用到数据库并管理修订流程。
 - **新增** 自然语言修订：支持通过对话解析用户修订指令，提供预览和确认机制。
+- **新增** 修订理解服务：解析用户反馈，生成修订计划，支持置信度评估和影响范围分析。
+- **新增** 修订数据验证：验证用户修订指令中的实体有效性，提供相似名称建议。
+- **新增** 修订执行服务：支持修订计划的确认执行，评估影响并更新数据库。
 
 **章节来源**
 - [backend/api/v1/ai_chat.py:58-690](file://backend/api/v1/ai_chat.py#L58-L690)
@@ -342,10 +375,104 @@ Success --> End
 - [backend/api/v1/ai_chat.py:624-690](file://backend/api/v1/ai_chat.py#L624-L690)
 - [backend/services/ai_chat_service.py:3241-3589](file://backend/services/ai_chat_service.py#L3241-L3589)
 
-### 8) 数据模型与迁移
+### 8) 修订理解服务
+**新增** 修订理解服务，支持用户反馈的结构化解析与修订计划生成。
+
+- **反馈解析**：使用LLM分析用户反馈，理解修订意图并生成结构化分析结果。
+- **实体验证**：验证用户提到的角色、章节等实体的有效性，提供相似名称建议。
+- **目标定位**：补充目标ID信息，定位到具体的小说元素。
+- **影响评估**：评估修改对章节和角色的影响范围，提供严重程度评估。
+- **修订计划**：创建修订计划，包含理解意图、置信度、目标列表、修改建议和影响评估。
+
+```mermaid
+flowchart TD
+Start(["开始理解反馈"]) --> Validate["数据验证<br/>验证用户提到的实体"]
+Validate --> Context["加载上下文<br/>角色、章节、世界观"]
+Context --> LLM["LLM分析<br/>理解反馈意图"]
+LLM --> Enrich["补充目标ID<br/>定位具体实体"]
+Enrich --> Impact["影响评估<br/>评估修改影响范围"]
+Impact --> Plan["创建修订计划<br/>保存到数据库"]
+Plan --> End(["结束"])
+```
+
+**图表来源**
+- [backend/services/revision_understanding_service.py:63-119](file://backend/services/revision_understanding_service.py#L63-L119)
+- [backend/services/revision_understanding_service.py:195-231](file://backend/services/revision_understanding_service.py#L195-L231)
+- [backend/services/revision_understanding_service.py:391-425](file://backend/services/revision_understanding_service.py#L391-L425)
+- [backend/services/revision_understanding_service.py:427-468](file://backend/services/revision_understanding_service.py#L427-L468)
+
+**章节来源**
+- [backend/services/revision_understanding_service.py:17-511](file://backend/services/revision_understanding_service.py#L17-L511)
+
+### 9) 修订数据验证
+**新增** 修订数据验证服务，确保修订指令的有效性与准确性。
+
+- **实体提取**：从用户反馈中提取角色名、章节号、地点、世界元素等实体。
+- **角色验证**：验证角色是否存在，提供模糊匹配和相似名称建议。
+- **章节验证**：验证章节号是否存在，提供可用章节建议。
+- **地点验证**：验证地点和世界元素，基于世界观设定进行验证。
+- **验证报告**：生成详细的验证报告，包含统计数据和警告信息。
+
+```mermaid
+flowchart TD
+Start(["开始数据验证"]) --> Extract["提取实体<br/>角色/章节/地点/世界元素"]
+Extract --> Load["加载上下文<br/>小说相关信息"]
+Load --> ValidateChar["验证角色<br/>精确匹配/模糊匹配"]
+Load --> ValidateChapter["验证章节<br/>存在性检查"]
+Load --> ValidateWorld["验证世界元素<br/>基于设定验证"]
+ValidateChar --> Report["生成验证报告<br/>统计/警告/建议"]
+ValidateChapter --> Report
+ValidateWorld --> Report
+Report --> End(["结束"])
+```
+
+**图表来源**
+- [backend/services/revision_data_validator.py:58-132](file://backend/services/revision_data_validator.py#L58-L132)
+- [backend/services/revision_data_validator.py:134-202](file://backend/services/revision_data_validator.py#L134-L202)
+- [backend/services/revision_data_validator.py:282-345](file://backend/services/revision_data_validator.py#L282-L345)
+- [backend/services/revision_data_validator.py:347-391](file://backend/services/revision_data_validator.py#L347-L391)
+- [backend/services/revision_data_validator.py:454-502](file://backend/services/revision_data_validator.py#L454-L502)
+
+**章节来源**
+- [backend/services/revision_data_validator.py:43-619](file://backend/services/revision_data_validator.py#L43-L619)
+
+### 10) 修订执行服务
+**新增** 修订执行服务，支持修订计划的确认执行与影响评估。
+
+- **计划执行**：根据修订计划执行具体的数据库修改操作。
+- **用户确认**：支持用户对修订计划的确认或拒绝。
+- **修改合并**：合并用户对修改方案的调整。
+- **影响追踪**：提取受影响的章节，更新修订计划状态。
+- **事务管理**：支持事务回滚和错误处理。
+
+```mermaid
+flowchart TD
+Start(["开始执行修订"]) --> GetPlan["获取修订计划<br/>验证计划有效性"]
+GetPlan --> CheckConfirmed{"用户确认?"}
+CheckConfirmed --> |否| Reject["更新状态为拒绝<br/>提交事务"]
+CheckConfirmed --> |是| Merge["合并用户调整<br/>最终修改方案"]
+Merge --> Execute["执行修改<br/>逐条应用变更"]
+Execute --> Affected["提取受影响章节<br/>更新计划状态"]
+Affected --> Commit["提交事务<br/>完成执行"]
+Reject --> End(["结束"])
+Commit --> End
+```
+
+**图表来源**
+- [backend/services/revision_execution_service.py:53-97](file://backend/services/revision_execution_service.py#L53-L97)
+- [backend/services/revision_execution_service.py:1-52](file://backend/services/revision_execution_service.py#L1-L52)
+
+**章节来源**
+- [backend/services/revision_execution_service.py:1-97](file://backend/services/revision_execution_service.py#L1-L97)
+
+### 11) 数据模型与迁移
 - 表结构：ai_chat_sessions（会话主表）、ai_chat_messages（消息明细表），支持session_id唯一索引与外键约束。
 - 迁移：创建表、索引与外键，满足会话与消息的快速检索与一致性。
 - **更新** 新增字段：novel_id（UUID类型，用于按小说隔离会话）和title（字符串类型，用于会话标题显示）。
+- **新增** 修订计划表：revision_plans，支持修订流程的完整记录与管理。
+- **新增** 回顾经验表：hindsight_experiences，记录修订经验与策略效果。
+- **新增** 策略效果表：strategy_effectiveness，跟踪修订策略的有效性。
+- **新增** 用户偏好表：user_preferences，存储用户偏好信息。
 
 ```mermaid
 classDiagram
@@ -366,32 +493,51 @@ class AIChatMessage {
 +text content
 +datetime created_at
 }
+class RevisionPlan {
++UUID id
++UUID novel_id
++string feedback_text
++string understood_intent
++float confidence
++list targets
++list proposed_changes
++dict impact_assessment
++string status
++datetime confirmed_at
++datetime executed_at
++datetime created_at
+}
 AIChatSession --> AIChatMessage : "一对多关联"
 ```
 
 **图表来源**
 - [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
 - [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:22-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L22-L53)
+- [core/models/revision_plan.py:33-116](file://core/models/revision_plan.py#L33-L116)
+- [alembic/versions/add_revision_and_memory_tables.py:22-157](file://alembic/versions/add_revision_and_memory_tables.py#L22-L157)
 
 **章节来源**
 - [core/models/ai_chat_session.py:19-53](file://core/models/ai_chat_session.py#L19-L53)
 - [alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py:21-96](file://alembic/versions_archived/b5dd1dd83814_add_ai_chat_session_models.py#L21-L96)
 - [alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py:22-53](file://alembic/versions_archived/5c24a4e1ec52_add_novel_id_and_title_to_chat_session.py#L22-L53)
+- [core/models/revision_plan.py:14-116](file://core/models/revision_plan.py#L14-L116)
+- [alembic/versions/add_revision_and_memory_tables.py:22-157](file://alembic/versions/add_revision_and_memory_tables.py#L22-L157)
 
-### 9) 前端集成要点
+### 12) 前端集成要点
 - HTTP接口：封装会话创建、消息发送、会话列表、详情与删除，现支持novel_id参数过滤。
 - WebSocket：构建ws/wss地址，发送消息并接收chunk，结束时停止流式。
 - UI组件：演示实时渲染、错误处理与滚动行为，现支持动态会话标题显示。
 - **新增** 动态标题显示：优先显示会话标题，如不存在则显示场景对应的默认标题。
 - **新增** 智能摘要功能：提供章节范围选择和智能摘要生成功能。
 - **新增** 修订建议展示：在修订场景下展示提取的结构化建议，支持一键应用。
+- **新增** 自然语言修订：支持通过自然语言描述修订需求，提供预览和确认机制。
 
 **章节来源**
 - [frontend/src/api/aiChat.ts:150-175](file://frontend/src/api/aiChat.ts#L150-L175)
 - [frontend/src/api/aiChat.ts:113-117](file://frontend/src/api/aiChat.ts#L113-L117)
 - [frontend/src/components/AIChatDrawer.tsx:690-730](file://frontend/src/components/AIChatDrawer.tsx#L690-L730)
 
-### 10) 改进的日志记录与错误处理
+### 13) 改进的日志记录与错误处理
 **更新** 新增了详细的修订建议处理日志记录和错误处理机制。
 
 - **增强的日志记录**：详细的建议提取过程日志，包括建议类型、字段、目标ID等关键信息。
@@ -400,13 +546,14 @@ AIChatSession --> AIChatMessage : "一对多关联"
 - **应用跟踪**：记录每个建议的应用结果，包括成功、失败和跳过的情况。
 - **会话标题管理**：记录会话标题生成和更新的日志，便于调试和监控。
 - **修订流程日志**：详细记录修订指令解析、预览生成和执行过程。
+- **修订理解日志**：记录反馈解析、实体验证和计划生成的详细过程。
 
 **章节来源**
 - [backend/services/ai_chat_service.py:2183-2191](file://backend/services/ai_chat_service.py#L2183-L2191)
 - [backend/services/ai_chat_service.py:2151-2156](file://backend/services/ai_chat_service.py#L2151-L2156)
 - [backend/api/v1/ai_chat.py:364-365](file://backend/api/v1/ai_chat.py#L364-L365)
 
-### 11) 按小说ID过滤会话列表
+### 14) 按小说ID过滤会话列表
 **新增** 会话列表现在支持按novel_id参数过滤，实现会话按小说的隔离管理。
 
 - **API端点**：GET /ai-chat/sessions?novel_id={novel_id}
@@ -436,7 +583,7 @@ NoFilter --> Result
 - [backend/services/ai_chat_service.py:535-586](file://backend/services/ai_chat_service.py#L535-L586)
 - [frontend/src/api/aiChat.ts:169-175](file://frontend/src/api/aiChat.ts#L169-L175)
 
-### 12) 会话标题自动生成与显示
+### 15) 会话标题自动生成与显示
 **新增** 会话标题管理功能，提供智能的会话标题生成和动态显示。
 
 - **标题生成**：基于对话内容（前6条消息）生成简洁的会话标题
@@ -531,6 +678,9 @@ AiChatService --> AIChatMessage : "持久化"
 - **智能摘要缓存**：章节摘要支持缓存机制，避免重复计算。
 - **上下文管理**：多层缓存架构（内存缓存、记忆服务缓存、SQLite持久化）提升性能。
 - **自然语言修订缓存**：修订预览临时存储在内存中，支持快速确认执行。
+- **修订理解缓存**：LLM分析结果可缓存，减少重复计算。
+- **数据验证缓存**：验证结果可缓存，提高后续验证速度。
+- **修订执行并发**：支持多个修订计划的并发执行，提高系统吞吐量。
 - 可扩展点：可引入Redis缓存、分页加载历史、压缩消息内容、限流与鉴权中间件等。
 
 ## 故障排查指南
@@ -547,6 +697,9 @@ AiChatService --> AIChatMessage : "持久化"
 - **章节摘要查询失败**：验证章节范围参数，检查数据库中是否存在指定章节。
 - **自然语言修订解析失败**：检查用户指令格式，确认LLM响应可解析，查看日志中的错误信息。
 - **修订执行失败**：检查目标对象状态，确认字段权限，查看数据库事务回滚日志。
+- **修订理解失败**：检查LLM服务可用性，验证用户反馈格式，查看验证报告中的详细信息。
+- **数据验证失败**：检查实体提取逻辑，确认数据库连接正常，查看验证报告中的警告信息。
+- **修订执行服务异常**：检查修订计划状态，确认用户确认信息，查看事务执行日志。
 
 **章节来源**
 - [backend/api/v1/ai_chat.py:128-190](file://backend/api/v1/ai_chat.py#L128-L190)
@@ -555,9 +708,9 @@ AiChatService --> AIChatMessage : "持久化"
 - [backend/services/ai_chat_service.py:588-612](file://backend/services/ai_chat_service.py#L588-L612)
 
 ## 结论
-本AI聊天API围绕"会话生命周期管理 + 上下文与历史 + 实时流式 + 结构化建议 + 数据持久化 + 智能章节分析 + 自然语言修订"构建，既满足创作助手、内容审核、创意讨论等场景，又具备良好的扩展性与稳定性。通过前端与后端的协同，实现了从HTTP到WebSocket的无缝体验。最新的增强功能进一步提升了建议提取的准确性和应用的可靠性，为小说创作和修订提供了更强大的智能化支持。
+本AI聊天API围绕"会话生命周期管理 + 上下文与历史 + 实时流式 + 结构化建议 + 数据持久化 + 智能章节分析 + 自然语言修订 + 修订理解与执行"构建，既满足创作助手、内容审核、创意讨论等场景，又具备良好的扩展性与稳定性。通过前端与后端的协同，实现了从HTTP到WebSocket的无缝体验。最新的增强功能进一步提升了建议提取的准确性和应用的可靠性，为小说创作和修订提供了更强大的智能化支持。
 
-**更新** 新增的按小说ID过滤会话列表功能显著提升了系统的可扩展性，支持多小说场景下的会话隔离管理。会话标题自动生成和动态显示功能大幅改善了用户体验，使得会话管理更加直观和高效。智能章节分析功能为小说创作和修订工作流程提供了更强大的智能化支持，通过结构化摘要和深度分析帮助作者更好地理解和改进作品。自然语言修订系统通过对话式交互，让用户能够更直观地进行小说内容的修改和优化。
+**更新** 新增的按小说ID过滤会话列表功能显著提升了系统的可扩展性，支持多小说场景下的会话隔离管理。会话标题自动生成和动态显示功能大幅改善了用户体验，使得会话管理更加直观和高效。智能章节分析功能为小说创作和修订工作流程提供了更强大的智能化支持，通过结构化摘要和深度分析帮助作者更好地理解和改进作品。自然语言修订系统通过对话式交互，让用户能够更直观地进行小说内容的修改和优化。修订理解服务、数据验证服务和执行服务的完整链路，为复杂的修订需求提供了可靠的技术支撑。
 
 ## 附录：API使用示例
 
@@ -654,6 +807,27 @@ AiChatService --> AIChatMessage : "持久化"
   - 请求体字段：novel_id（必填）、preview_id（必填，修订预览ID）
   - 响应体字段：success（是否成功）、message（执行结果消息）、action（执行的操作类型）、field（修改的字段）、target_name（目标名称）、error（错误信息）
 
+### 修订理解与执行API
+**新增** 修订理解服务的完整API使用示例。
+
+- **新增** 理解用户反馈
+  - 方法与路径：POST /revision/understand
+  - 请求体字段：novel_id（必填）、feedback（必填，用户修订反馈）
+  - 响应体字段：plan_id（修订计划ID）、understood_intent（理解意图）、confidence（置信度）、targets（目标列表）、proposed_changes（建议修改）、impact_assessment（影响评估）、display_text（显示文本）
+
+- **新增** 执行修订计划
+  - 方法与路径：POST /revision/execute
+  - 请求体字段：plan_id（必填）、confirmed（可选，默认true）、modifications（可选，用户调整）
+  - 响应体字段：success（是否成功）、message（执行结果）、changes（修改详情）、affected_chapters（受影响章节）
+
+- **新增** 预览修订计划
+  - 方法与路径：GET /revision/preview/{plan_id}
+  - 响应体字段：修订计划的影响预览信息
+
+- **新增** 获取修订计划列表
+  - 方法与路径：GET /revision/plans/{novel_id}
+  - 响应体字段：plans（修订计划列表）
+
 ### 按小说ID过滤会话列表API
 **新增** 支持按小说ID过滤会话列表的API使用示例。
 
@@ -665,5 +839,9 @@ AiChatService --> AIChatMessage : "持久化"
 **章节来源**
 - [backend/api/v1/ai_chat.py:58-690](file://backend/api/v1/ai_chat.py#L58-L690)
 - [backend/schemas/ai_chat.py:9-294](file://backend/schemas/ai_chat.py#L9-L294)
-- [frontend/src/api/aiChat.ts:150-268](file://frontend/src/api/aiChat.ts#L150-L268)
-- [frontend/src/components/AIChatDrawer.tsx:690-889](file://frontend/src/components/AIChatDrawer.tsx#L690-L889)
+- [frontend/src/api/aiChat.ts:150-354](file://frontend/src/api/aiChat.ts#L150-L354)
+- [frontend/src/components/AIChatDrawer.tsx:690-931](file://frontend/src/components/AIChatDrawer.tsx#L690-L931)
+- [backend/api/v1/revision.py:1-463](file://backend/api/v1/revision.py#L1-L463)
+- [backend/services/revision_understanding_service.py:1-511](file://backend/services/revision_understanding_service.py#L1-L511)
+- [backend/services/revision_execution_service.py:1-97](file://backend/services/revision_execution_service.py#L1-L97)
+- [backend/services/revision_data_validator.py:1-619](file://backend/services/revision_data_validator.py#L1-L619)

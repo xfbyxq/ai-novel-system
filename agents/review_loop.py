@@ -1,6 +1,5 @@
 """审查反馈循环 - Writer 与 Editor 间的质量驱动迭代."""
 
-import json
 from typing import Any, Dict, List, Optional
 
 from agents.base import (
@@ -39,12 +38,17 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - pacing（节奏把控）：场景节奏是否有变化？是否过于相似？张弛是否有度？
 - fluency（语言流畅度）：表达是否流畅？衔接是否自然？用词是否准确？
 
-【跨章节一致性检查清单】（关键！影响setting_consistency评分）：
-1. 情节重复检测：本章的核心情节是否与前文重复？（如：破解暗号、发现线索的方式）
-2. 时间线检测：是否有明确的时间锚点？时间推进是否合理？是否与前文时间线矛盾？
-3. 人物设定演变：人物能力/性格/身份的转变是否有铺垫？转变是否突兀？
-4. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
-5. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
+【跨章节一致性检查清单】（关键！影响setting_consistency和pacing评分）：
+1. 【章节边界检查】（最高优先级）：
+   - 本章开篇是否自然承接上一章结尾的场景/状态？
+   - 是否存在"跳跃"（上章角色在A地，本章突然在B地且无说明）？
+   - 是否存在"重复"（本章重写了上章已写过的场景或对话）？
+   - 本章情节是否有实质性推进，还是停留在上章的状态？
+2. 情节重复检测：本章的核心情节是否与前文重复？（如：破解暗号、发现线索的方式）
+3. 时间线检测：是否有明确的时间锚点？时间推进是否合理？是否与前文时间线矛盾？
+4. 人物设定演变：人物能力/性格/身份的转变是否有铺垫？转变是否突兀？
+5. 事件后果追踪：前文事件（如违纪行为）是否在本章有后续反映？
+6. 设定一致性：角色外貌、能力、职业是否与前文描述一致？
 
 【聚合维度评分标准】（根据精确维度计算，以星级展示）：
 - 连贯性(coherence)：情节前后衔接是否自然、设定是否一致、角色行为逻辑是否流畅
@@ -257,61 +261,6 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             quality_threshold=self.quality_threshold,
         )
 
-    async def _validate_edited_content(
-        self,
-        original_content: str,
-        edited_content: str,
-        review_data: Dict[str, Any],
-    ) -> float:
-        """验证 Editor 润色后的内容质量.
-
-        Args:
-            original_content: 原始内容
-            edited_content: Editor 润色后的内容
-            review_data: Editor 审查数据（包含评分和建议）
-
-        Returns:
-            润色后内容的质量评分
-        """
-        # 使用 QualityEvaluator 对润色内容进行独立评估
-        from agents.quality_evaluator import QualityEvaluator
-
-        evaluator = QualityEvaluator(
-            client=self.client,
-            cost_tracker=self.cost_tracker,
-            default_threshold=self.quality_threshold,
-        )
-
-        # 提取章节计划
-        chapter_plan = ""
-        try:
-            plan_data = json.loads(self._chapter_plan_json)
-            chapter_plan = plan_data.get("content", str(plan_data))
-        except (json.JSONDecodeError, AttributeError):
-            chapter_plan = self._chapter_plan_json or ""
-
-        # 评估润色内容
-        edited_score = await evaluator.evaluate(
-            content=edited_content,
-            chapter_plan=chapter_plan,
-            threshold=self.quality_threshold,
-        )
-
-        # 计算改进幅度
-        original_score = float(review_data.get("overall_score", 0))
-        improvement = edited_score.overall_score - original_score
-
-        # 记录指标
-        self.metrics["editor_improvement"] = improvement
-        self.metrics["editor_edit_applied"] = 1 if improvement > 0.5 else 0
-
-        logger.info(
-            f"[ReviewLoop] Editor 润色验证：original={original_score:.2f}, "
-            f"edited={edited_score.overall_score:.2f}, improvement={improvement:.2f}"
-        )
-
-        return edited_score.overall_score
-
     def _get_reviewer_system_prompt(self) -> str:
         return EDITOR_REVIEW_SYSTEM
 
@@ -356,7 +305,12 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             previous_chapters_section = f"""## 前文关键信息（用于跨章节一致性检查）
 {previous_chapters_summary}
 
-**特别提醒**：请检查本章是否与前文存在：
+**【关键】章节边界检查**：
+- 本章开篇是否自然承接上一章结尾的场景/状态？
+- 是否存在"跳跃"或"重复"？
+- 本章情节是否有实质性推进？
+
+**其他检查要点**：
 1. 情节重复（如相同的解谜方式、相似的对抗模式）
 2. 时间线矛盾（如时间推进不合理、时间标记冲突）
 3. 角色设定不一致（如能力/身份/性格的突变无铺垫）
@@ -450,25 +404,13 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         Returns:
             Editor 统计信息字典
         """
-        total_edits = sum(1 for it in iterations if it.get("editor_edit_applied"))
-        rejected_edits = sum(1 for it in iterations if it.get("editor_edit_rejected"))
-
-        improvements = [
-            it.get("editor_improvement_delta", 0)
-            for it in iterations
-            if it.get("editor_edit_applied")
-        ]
-        avg_improvement = sum(improvements) / len(improvements) if improvements else 0.0
+        # 统计总迭代次数和最终收敛状态
+        total_iterations = len(iterations)
+        converged = any(it.get("passed", False) for it in iterations)
 
         return {
-            "total_edits": total_edits,
-            "rejected_edits": rejected_edits,
-            "avg_improvement": round(avg_improvement, 2),
-            "acceptance_rate": (
-                round(total_edits / (total_edits + rejected_edits), 2)
-                if (total_edits + rejected_edits) > 0
-                else 0.0
-            ),
+            "total_iterations": total_iterations,
+            "converged": converged,
         }
 
     def _get_empty_content(self) -> str:
@@ -788,30 +730,11 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             review_data.get("revision_suggestions", [])
             edited_content = review_data.get("edited_content", "")
 
-            # 如果 Editor 返回了润色后的内容，进行质量验证
+            # 直接信任 Editor 的润色结果，不进行独立验证
+            # Editor 的评分已经反映了内容质量，额外验证是冗余的 LLM 调用
             if edited_content:
-                # 验证润色内容质量
-                edited_score = await self._validate_edited_content(
-                    original_content=current_content,
-                    edited_content=edited_content,
-                    review_data=review_data,
-                )
-
-                # 只有润色后质量更高才使用（允许 0.5 分的误差）
-                if edited_score > score + 0.5:
-                    current_content = edited_content
-                    self.metrics["editor_edit_applied"] = 1
-                    self.metrics["editor_improvement_delta"] = edited_score - score
-                    logger.info(
-                        f"[ReviewLoop] 应用 Editor 润色：quality improved from {score:.2f} to {edited_score:.2f}"
-                    )
-                else:
-                    # 保留原始内容
-                    self.metrics["editor_edit_rejected"] = 1
-                    self.metrics["editor_reason"] = f"质量未提升：{edited_score:.2f} vs {score:.2f}"
-                    logger.info(
-                        f"[ReviewLoop] 拒绝 Editor 润色：edited={edited_score:.2f} <= original={score:.2f}"
-                    )
+                current_content = edited_content
+                logger.info(f"[ReviewLoop] Editor 润色内容已采纳（score={score:.2f}）")
 
             # 构造质量报告
             last_report = self._create_quality_report(review_data)

@@ -142,16 +142,22 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # 禁用所有现有 logger 的日志传播，避免重复
-    # 这样每个 logger 只通过自己的 handlers 输出
-    # 注意：这必须在添加新的 handlers 之前执行
-    for logger_name in logging.Logger.manager.loggerDict:
-        log = logging.getLogger(logger_name)
+    # 只禁用第三方库的日志传播，避免重复输出应用日志
+    # 第三方库logger列表
+    third_party_loggers = [
+        "sqlalchemy", "httpx", "asyncio", "urllib3", "celery",
+        "uvicorn", "uvicorn.error", "uvicorn.access",
+        "watchfiles", "fastapi", "starlette", "httpcore", "anyio",
+    ]
+    for name in third_party_loggers:
+        log = logging.getLogger(name)
         log.propagate = False
+        log.setLevel(logging.WARNING)
 
-    # 确保 novel_system logger 启用日志传播到根 logger
-    novel_logger = logging.getLogger("novel_system")
-    novel_logger.propagate = True
+    # 确保应用模块启用日志传播（llm, backend, agents 等子模块都会继承）
+    for prefix in ["novel_system", "llm", "backend", "agents", "core"]:
+        log = logging.getLogger(prefix)
+        log.propagate = True
 
     # 5. 控制台 Handler（只保留一个）
     console_handler = logging.StreamHandler(sys.stdout)
@@ -170,19 +176,6 @@ def setup_logging():
     file_handler.setLevel(log_level)
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
     root_logger.addHandler(file_handler)
-
-    # 7. 设置第三方库日志级别（减少噪音）
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("celery").setLevel(logging.WARNING)
-
-    # 禁用 uvicorn 的日志传播
-    for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
-        uvicorn_log = logging.getLogger(name)
-        uvicorn_log.propagate = False
-        uvicorn_log.setLevel(logging.WARNING)
 
     return root_logger
 
@@ -218,6 +211,12 @@ def setup_worker_logging():
     worker_logger.addHandler(console_handler)
 
     # 文件 Handler（Worker 专用日志文件）
+
+
+
+
+
+    
     worker_log_path = log_dir / settings.LOG_WORKER_FILE_NAME
     file_handler = RotatingFileHandler(
         worker_log_path,

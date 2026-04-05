@@ -81,7 +81,25 @@ class Settings(BaseSettings):
     MODEL_MIN_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MIN_OUTPUT_TOKENS", "1024"))
 
     # 上下文压缩器配置
-    CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "8000"))  # 压缩阈值，超过此值启动动态压缩
+    CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(
+        os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "8000")
+    )  # 压缩阈值，超过此值启动动态压缩
+
+    # 热记忆完整内容配置
+    HOT_MEMORY_FULL_CHAPTERS: int = int(
+        os.getenv("HOT_MEMORY_FULL_CHAPTERS", "3")
+    )  # 热记忆使用完整内容的章节数
+    HOT_MEMORY_ENABLE_FULL_CONTENT: bool = (
+        os.getenv("HOT_MEMORY_ENABLE_FULL_CONTENT", "true").lower() == "true"
+    )  # 是否启用完整内容热记忆
+
+    # 图库连续性检查配置
+    ENABLE_GRAPH_CONTINUITY_CHECK: bool = (
+        os.getenv("ENABLE_GRAPH_CONTINUITY_CHECK", "true").lower() == "true"
+    )  # 是否在连续性审查时启用图库冲突检测
+    GRAPH_CONTINUITY_CHECK_TIMEOUT: int = int(
+        os.getenv("GRAPH_CONTINUITY_CHECK_TIMEOUT", "5")
+    )  # 图库冲突检测超时时间（秒）
 
     # Database
     DB_USER: str = "novel_user"

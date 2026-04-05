@@ -89,6 +89,7 @@ class NovelCrewManager:
         # 如果没有传入配置，从 Settings 加载
         if config is None:
             from backend.config import settings
+
             config = CrewConfig(
                 quality_threshold=settings.CHAPTER_QUALITY_THRESHOLD,
                 max_review_iterations=settings.MAX_CHAPTER_REVIEW_ITERATIONS,
@@ -124,9 +125,9 @@ class NovelCrewManager:
 
         # 图数据库上下文注入开关（从配置读取）
         from backend.config import settings
-        self.enable_graph_context = (
-            settings.ENABLE_GRAPH_DATABASE
-            and getattr(settings, "ENABLE_GRAPH_CONTEXT_INJECTION", True)
+
+        self.enable_graph_context = settings.ENABLE_GRAPH_DATABASE and getattr(
+            settings, "ENABLE_GRAPH_CONTEXT_INJECTION", True
         )
 
         # 初始化协作组件
@@ -277,9 +278,7 @@ class NovelCrewManager:
                         max_retries=2,
                     )
             else:
-                logger.info(
-                    f"✅ [{agent_name}] 执行成功，返回文本内容（{len(content)} 字符）"
-                )
+                logger.info(f"✅ [{agent_name}] 执行成功，返回文本内容（{len(content)} 字符）")
                 return content
 
         except Exception as e:
@@ -330,8 +329,7 @@ class NovelCrewManager:
                 continue
 
         raise ValueError(
-            f"[{agent_name}] JSON提取在{max_retries}次重试后仍失败: "
-            f"{last_response[:200]}..."
+            f"[{agent_name}] JSON提取在{max_retries}次重试后仍失败: " f"{last_response[:200]}..."
         )
 
     # ============================================================
@@ -433,9 +431,7 @@ class NovelCrewManager:
 
             review_result = await self.world_review_handler.execute(
                 initial_world_setting=world_dict,
-                topic_analysis=(
-                    topic_analysis if isinstance(topic_analysis, dict) else {}
-                ),
+                topic_analysis=(topic_analysis if isinstance(topic_analysis, dict) else {}),
             )
 
             # 使用审查后的世界观
@@ -478,16 +474,12 @@ class NovelCrewManager:
         if self.enable_character_review:
             logger.info("🔍 启动角色设计审查循环...")
             # 确保 characters 是列表格式
-            characters_list = (
-                characters if isinstance(characters, list) else [characters]
-            )
+            characters_list = characters if isinstance(characters, list) else [characters]
 
             review_result = await self.character_review_handler.execute(
                 initial_characters=characters_list,
                 world_setting=world_setting if isinstance(world_setting, dict) else {},
-                topic_analysis=(
-                    topic_analysis if isinstance(topic_analysis, dict) else {}
-                ),
+                topic_analysis=(topic_analysis if isinstance(topic_analysis, dict) else {}),
             )
 
             # 使用审查后的角色
@@ -598,9 +590,7 @@ class NovelCrewManager:
                 plot_dict = {"volumes": plot_outline, "structure_type": "multi_volume"}
 
             # 确保 characters 是列表格式
-            characters_list = (
-                characters if isinstance(characters, list) else [characters]
-            )
+            characters_list = characters if isinstance(characters, list) else [characters]
 
             review_result = await self.plot_review_handler.execute(
                 initial_plot_outline=plot_dict,
@@ -777,9 +767,7 @@ class NovelCrewManager:
 
         # 记录到 TeamContext
         if team_context:
-            team_context.add_agent_output(
-                "章节策划师", chapter_plan, f"第{chapter_number}章策划"
-            )
+            team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
 
         # ── 1.5 章节大纲细化（可选步骤） ─────────────────────
         detailed_outline = {}
@@ -799,13 +787,9 @@ class NovelCrewManager:
             prev_summary = self._chapter_summaries.get(chapter_number - 1, {})
 
             if prev_detailed:
-                prev_outline_text = json.dumps(
-                    prev_detailed, ensure_ascii=False, indent=2
-                )
+                prev_outline_text = json.dumps(prev_detailed, ensure_ascii=False, indent=2)
             else:
-                prev_outline_text = (
-                    "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
-                )
+                prev_outline_text = "（无上一章细化大纲，本章为起始章或上一章未启用细化）"
 
             # 构建上一章实际内容摘要
             if prev_summary:
@@ -849,9 +833,7 @@ class NovelCrewManager:
 
             # 缓存细化大纲
             self._chapter_detailed_outlines[chapter_number] = detailed_outline
-            detailed_outline_text = json.dumps(
-                detailed_outline, ensure_ascii=False, indent=2
-            )
+            detailed_outline_text = json.dumps(detailed_outline, ensure_ascii=False, indent=2)
 
             logger.info(
                 f"📋 大纲细化：第 {chapter_number} 章细化完成，"
@@ -875,7 +857,9 @@ class NovelCrewManager:
         # 构建角色信息（仅包含本章出场角色）
         scenes = chapter_plan.get("scenes", [{}]) if isinstance(chapter_plan, dict) else [{}]
         first_scene = scenes[0] if scenes and isinstance(scenes[0], dict) else {}
-        chapter_characters = first_scene.get("characters", []) if isinstance(first_scene, dict) else []
+        chapter_characters = (
+            first_scene.get("characters", []) if isinstance(first_scene, dict) else []
+        )
         character_info = ""
         for char in characters:
             if isinstance(char, dict) and char.get("name") in chapter_characters:
@@ -900,8 +884,7 @@ class NovelCrewManager:
         # ── 动态生成卷级摘要（用于冷记忆）─────────────────────────
         # 优先使用动态生成的卷摘要（基于实际写作进度）
         volume_summaries = self._generate_volume_summaries_dynamically(
-            chapter_number=chapter_number,
-            plot_outline=plot_outline
+            chapter_number=chapter_number, plot_outline=plot_outline
         )
 
         # 如果动态生成失败，回退到静态大纲摘要
@@ -945,12 +928,6 @@ class NovelCrewManager:
             plot_outline=plot_outline,
             volume_summaries=volume_summaries,
         )
-        # 前章结尾优先使用压缩器提取的完整结尾
-        previous_ending = compressed.previous_ending or (
-            previous_chapters_summary
-            if previous_chapters_summary
-            else "（本章为开篇）"
-        )
 
         # 选择带查询能力的 Writer prompt 还是普通的
         if self.enable_query:
@@ -966,10 +943,10 @@ class NovelCrewManager:
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
                 graph_context=graph_context,
-                previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers="",
                 previous_key_events=previous_key_events,
+                compressed_context=compressed.to_prompt(),
             )
         else:
             writer_system = self.pm.format(self.pm.WRITER_SYSTEM, genre=genre)
@@ -981,9 +958,9 @@ class NovelCrewManager:
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
                 graph_context=graph_context,
-                previous_ending=previous_ending,
                 chapter_title=chapter_plan.get("title", ""),
                 previous_key_events=previous_key_events,
+                compressed_context=compressed.to_prompt(),
             )
 
         draft = await self._call_agent(
@@ -1010,6 +987,7 @@ class NovelCrewManager:
                 previous_chapters_summary=previous_chapters_summary,
                 detailed_outline_text=detailed_outline_text,
                 previous_key_events=previous_key_events,
+                compressed_context=compressed.to_prompt(),
             )
 
         # 记录到 TeamContext
@@ -1062,6 +1040,13 @@ class NovelCrewManager:
         final_content = edited_content
         continuity_report = None
 
+        # 查询图库中与本章角色相关的冲突
+        graph_conflicts_context = await self._query_graph_conflicts_for_continuity(
+            novel_id=str(novel_data.get("id", "")),
+            chapter_characters=chapter_characters,
+            chapter_number=chapter_number,
+        )
+
         for fix_round in range(1, self.max_fix_iterations + 1):
             continuity_task = self.pm.format(
                 self.pm.CONTINUITY_CHECKER_TASK,
@@ -1070,6 +1055,10 @@ class NovelCrewManager:
                 character_info=character_info or "（主要角色）",
                 previous_key_info=previous_chapters_summary or "（本章为第一章）",
             )
+
+            # 注入图库冲突检测结果
+            if graph_conflicts_context:
+                continuity_task += f"\n\n{graph_conflicts_context}"
 
             # 注入反思经验到连续性检查系统提示词
             continuity_system = self.pm.CONTINUITY_CHECKER_SYSTEM
@@ -1099,14 +1088,21 @@ class NovelCrewManager:
                 high_severity = [i for i in issues if i.get("severity") == "high"]
                 quality_score = "N/A"
             else:
-                issues = continuity_report.get("issues", []) if isinstance(continuity_report, dict) else []
+                issues = (
+                    continuity_report.get("issues", [])
+                    if isinstance(continuity_report, dict)
+                    else []
+                )
                 high_severity = [i for i in issues if i.get("severity") == "high"]
-                quality_score = continuity_report.get("quality_score", "N/A") if isinstance(continuity_report, dict) else "N/A"
+                quality_score = (
+                    continuity_report.get("quality_score", "N/A")
+                    if isinstance(continuity_report, dict)
+                    else "N/A"
+                )
 
             if not high_severity:
                 logger.info(
-                    f"[连续性检查] 第 {fix_round} 轮: 无严重问题 "
-                    f"(score={quality_score})"
+                    f"[连续性检查] 第 {fix_round} 轮: 无严重问题 " f"(score={quality_score})"
                 )
                 break
 
@@ -1141,13 +1137,10 @@ class NovelCrewManager:
             attempts = fix_result.get("attempts", 0)
 
             if verified:
-                logger.info(
-                    f"[连续性检查] 修复已验证通过，共 {attempts} 次尝试"
-                )
+                logger.info(f"[连续性检查] 修复已验证通过，共 {attempts} 次尝试")
             else:
                 logger.warning(
-                    f"[连续性检查] 修复未完全验证通过，"
-                    f"尝试 {attempts} 次后仍有残留问题"
+                    f"[连续性检查] 修复未完全验证通过，" f"尝试 {attempts} 次后仍有残留问题"
                 )
 
             # 更新内容（只要修复后有变化就接受，不管是否完全验证通过）
@@ -1172,9 +1165,7 @@ class NovelCrewManager:
                     characters=chapter_characters,
                 )
 
-        quality_score = (
-            continuity_report.get("quality_score", 0) if continuity_report else 0
-        )
+        quality_score = continuity_report.get("quality_score", 0) if continuity_report else 0
 
         # ── 5. 相似度检测 ─────────────────────────────────────
         similarity_report = None
@@ -1211,9 +1202,6 @@ class NovelCrewManager:
 
 章节计划：
 {json.dumps(chapter_plan, ensure_ascii=False, indent=2)}
-
-前一章结尾：
-{previous_ending}
 
 请直接输出完整的重写内容。"""
 
@@ -1272,9 +1260,7 @@ class NovelCrewManager:
             "continuity_report": continuity_report,
             "quality_score": quality_score,
             "review_loop_result": review_result.to_dict(),
-            "similarity_report": (
-                similarity_report.to_dict() if similarity_report else None
-            ),
+            "similarity_report": (similarity_report.to_dict() if similarity_report else None),
             "chapter_summary": chapter_summary,
         }
 
@@ -1311,7 +1297,7 @@ class NovelCrewManager:
                     "appearance_count": 0,
                     "chapters": [],
                     "role_type": char.role_type,
-                    "is_important": False
+                    "is_important": False,
                 }
 
             tracker = self._character_appearance_tracker[name]
@@ -1327,9 +1313,9 @@ class NovelCrewManager:
             # 规则2: 角色类型不是 minor (protagonist/supporting/antagonist)
             # 规则3: 在首章出场
             is_important = (
-                tracker["appearance_count"] >= 2 or
-                tracker["role_type"] in ["protagonist", "supporting", "antagonist"] or
-                tracker["first_appearance"] == 1
+                tracker["appearance_count"] >= 2
+                or tracker["role_type"] in ["protagonist", "supporting", "antagonist"]
+                or tracker["first_appearance"] == 1
             )
 
             tracker["is_important"] = is_important
@@ -1398,10 +1384,13 @@ class NovelCrewManager:
             extractor = EntityExtractorService()
 
             # 获取已知角色
-            known_characters = list(set(
-                name for rel_key in self._character_relationship_accumulator.keys()
-                for name in rel_key
-            ))
+            known_characters = list(
+                set(
+                    name
+                    for rel_key in self._character_relationship_accumulator.keys()
+                    for name in rel_key
+                )
+            )
 
             # 提取实体和关系
             extraction_result = await extractor.extract_from_chapter(
@@ -1412,8 +1401,7 @@ class NovelCrewManager:
 
             # 更新角色重要性统计
             important_chars = self._update_character_importance(
-                extraction_result.characters,
-                chapter_number
+                extraction_result.characters, chapter_number
             )
 
             logger.info(
@@ -1465,6 +1453,7 @@ class NovelCrewManager:
                 if acc["mentions"] >= 2:
                     # 使用多数投票确定关系类型
                     from collections import Counter
+
                     type_counts = Counter(acc["types"])
                     confirmed_type = type_counts.most_common(1)[0][0]
                     avg_strength = sum(acc["strengths"]) / len(acc["strengths"])
@@ -1509,10 +1498,7 @@ class NovelCrewManager:
                 "confirmed_relationships": [...]
             }
         """
-        result = {
-            "characters": {},
-            "confirmed_relationships": []
-        }
+        result = {"characters": {}, "confirmed_relationships": []}
 
         # 收集重要角色
         for name, tracker in self._character_appearance_tracker.items():
@@ -1521,13 +1507,14 @@ class NovelCrewManager:
                     "appearance_count": tracker["appearance_count"],
                     "chapters": tracker["chapters"],
                     "role_type": tracker["role_type"],
-                    "relationships": []
+                    "relationships": [],
                 }
 
         # 收集已确认的关系
         for (from_char, to_char), acc in self._character_relationship_accumulator.items():
             if acc["mentions"] >= 2:
                 from collections import Counter
+
                 confirmed_type = Counter(acc["types"]).most_common(1)[0][0]
                 avg_strength = sum(acc["strengths"]) / len(acc["strengths"])
 
@@ -1536,17 +1523,15 @@ class NovelCrewManager:
                     "to": to_char,
                     "type": confirmed_type,
                     "strength": round(avg_strength, 1),
-                    "mentions": acc["mentions"]
+                    "mentions": acc["mentions"],
                 }
                 result["confirmed_relationships"].append(rel_info)
 
                 # 添加到角色的关系列表
                 if from_char in result["characters"]:
-                    result["characters"][from_char]["relationships"].append({
-                        "to": to_char,
-                        "type": confirmed_type,
-                        "strength": round(avg_strength, 1)
-                    })
+                    result["characters"][from_char]["relationships"].append(
+                        {"to": to_char, "type": confirmed_type, "strength": round(avg_strength, 1)}
+                    )
 
         return result
 
@@ -1593,9 +1578,7 @@ class NovelCrewManager:
         if isinstance(plot_outline, dict):
             main_plot = plot_outline.get("main_plot", {})
             if main_plot:
-                parts.append(
-                    f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}"
-                )
+                parts.append(f"【主线剧情】核心冲突：{main_plot.get('core_conflict', '未知')}")
                 parts.append(f"  主题：{main_plot.get('theme', '未知')}")
         return parts
 
@@ -1638,14 +1621,10 @@ class NovelCrewManager:
                     if isinstance(tp, str):
                         parts.append(f"  - {tp}")
                     elif isinstance(tp, dict):
-                        parts.append(
-                            f"  - {tp.get('event', tp.get('description', str(tp)))}"
-                        )
+                        parts.append(f"  - {tp.get('event', tp.get('description', str(tp)))}")
         return parts
 
-    def _extract_volume_context(
-        self, plot_outline: dict | list, volume_number: int
-    ) -> list[str]:
+    def _extract_volume_context(self, plot_outline: dict | list, volume_number: int) -> list[str]:
         """提取分卷上下文.
 
         Args:
@@ -1660,9 +1639,7 @@ class NovelCrewManager:
             volumes = plot_outline.get("volumes", [])
             for vol in volumes:
                 if vol.get("volume_num") == volume_number:
-                    parts.append(
-                        f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}"
-                    )
+                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
                     parts.append(f"  概要：{vol.get('summary', '')}")
                     parts.extend(self._extract_tension_cycles(vol))
                     parts.extend(self._extract_upgrade_milestones(vol))
@@ -1671,9 +1648,7 @@ class NovelCrewManager:
             # 直接是卷列表格式
             for vol in plot_outline:
                 if vol.get("volume_num") == volume_number:
-                    parts.append(
-                        f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}"
-                    )
+                    parts.append(f"【当前卷】第{volume_number}卷 - {vol.get('title', '')}")
                     parts.append(f"  概要：{vol.get('summary', '')}")
                     break
         return parts
@@ -1740,9 +1715,7 @@ class NovelCrewManager:
         return "\n".join(events) if events else "（无前章记录）"
 
     def _generate_volume_summaries_dynamically(
-        self,
-        chapter_number: int,
-        plot_outline: Optional[dict] = None
+        self, chapter_number: int, plot_outline: Optional[dict] = None
     ) -> Optional[dict[int, dict[str, any]]]:
         """基于已生成章节摘要动态生成卷摘要.
 
@@ -1790,20 +1763,15 @@ class NovelCrewManager:
                 continue
 
             if vol_num not in volume_summaries:
-                volume_summaries[vol_num] = {
-                    "summaries": [],
-                    "chapters": []
-                }
+                volume_summaries[vol_num] = {"summaries": [], "chapters": []}
 
             # 提取章节关键信息
             plot_progress = summary.get("plot_progress", "") if isinstance(summary, dict) else ""
             key_events = summary.get("key_events", []) if isinstance(summary, dict) else []
 
-            volume_summaries[vol_num]["summaries"].append({
-                "chapter": ch_num,
-                "plot_progress": plot_progress,
-                "key_events": key_events
-            })
+            volume_summaries[vol_num]["summaries"].append(
+                {"chapter": ch_num, "plot_progress": plot_progress, "key_events": key_events}
+            )
             volume_summaries[vol_num]["chapters"].append(ch_num)
 
         # 生成卷级摘要
@@ -1823,7 +1791,7 @@ class NovelCrewManager:
 
             result[vol_num] = {
                 "summary": f"本卷包含第{chapter_range[0]}-{chapter_range[1]}章。{event_text}",
-                "chapters": chapter_range
+                "chapters": chapter_range,
             }
 
         return result if result else None
@@ -1843,6 +1811,7 @@ class NovelCrewManager:
         detailed_outline_text: str = "（未启用大纲细化）",
         previous_key_events: str = "（无前章记录）",
         max_query_rounds: int = 2,
+        compressed_context: str = "",
     ) -> str:
         """处理 Writer 输出中的 [QUERY] 标记.
 
@@ -1891,9 +1860,8 @@ class NovelCrewManager:
                 answers.append(f"关于「{q['question'][:30]}」的回答: {answer}")
 
             # 用查询答案重新调用 Writer
-            query_answers_text = (
-                "以下是你之前提出的设定疑问的回答，请据此完善内容：\n"
-                + "\n".join(answers)
+            query_answers_text = "以下是你之前提出的设定疑问的回答，请据此完善内容：\n" + "\n".join(
+                answers
             )
             AgentQueryService.remove_query_tags(draft)
 
@@ -1904,14 +1872,11 @@ class NovelCrewManager:
                 detailed_outline=detailed_outline_text,
                 world_setting_brief=world_brief,
                 character_info=character_info or "（主要角色）",
-                previous_ending=(
-                    previous_chapters_summary[-200:]
-                    if previous_chapters_summary
-                    else "（本章为开篇）"
-                ),
+                graph_context="",
                 chapter_title=chapter_plan.get("title", ""),
                 query_answers=query_answers_text,
                 previous_key_events=previous_key_events,
+                compressed_context=compressed_context,
             )
 
             draft = await self._call_agent(
@@ -1926,9 +1891,7 @@ class NovelCrewManager:
         # 最终确保没有残留的查询标记
         return AgentQueryService.remove_query_tags(draft)
 
-    async def _handle_graph_query(
-        self, query: dict, novel_id: Optional[str] = None
-    ) -> str:
+    async def _handle_graph_query(self, query: dict, novel_id: Optional[str] = None) -> str:
         """处理图数据库查询.
 
         支持以下查询类型：
@@ -1974,9 +1937,7 @@ class NovelCrewManager:
                 if "->" in question:
                     chars = question.split("->")
                     if len(chars) == 2:
-                        path = await mixin.query_character_path(
-                            chars[0].strip(), chars[1].strip()
-                        )
+                        path = await mixin.query_character_path(chars[0].strip(), chars[1].strip())
                         if path:
                             return mixin.format_path_context(path)
                         return f"（未找到 '{chars[0]}' 到 '{chars[1]}' 的关系路径）"
@@ -1986,9 +1947,7 @@ class NovelCrewManager:
                 # 查询章节相关伏笔
                 try:
                     chapter_num = int(question)
-                    foreshadowings = await mixin.query_pending_foreshadowings(
-                        chapter_num
-                    )
+                    foreshadowings = await mixin.query_pending_foreshadowings(chapter_num)
                     return mixin.format_foreshadowings_context(foreshadowings)
                 except ValueError:
                     return "（伏笔查询需要章节号，请提供数字）"
@@ -1996,9 +1955,7 @@ class NovelCrewManager:
             elif query_subtype == "conflict":
                 # 查询角色相关冲突
                 conflicts = await mixin.check_conflicts()
-                char_conflicts = [
-                    c for c in conflicts if question in c.characters
-                ]
+                char_conflicts = [c for c in conflicts if question in c.characters]
                 if char_conflicts:
                     return mixin.format_conflicts_context(char_conflicts)
                 return f"（未找到角色 '{question}' 相关的冲突）"
@@ -2109,9 +2066,14 @@ class NovelCrewManager:
 
         # 循环结束后，最终检查并补全缺失字段
         main_plot_fields = [
-            "core_conflict", "protagonist_goal", "antagonist",
-            "progression_path", "emotional_arc", "key_revelations",
-            "character_growth", "resolution"
+            "core_conflict",
+            "protagonist_goal",
+            "antagonist",
+            "progression_path",
+            "emotional_arc",
+            "key_revelations",
+            "character_growth",
+            "resolution",
         ]
         final_main_plot = current_outline.get("main_plot", {}) or {}
         final_missing = [f for f in main_plot_fields if not final_main_plot.get(f)]
@@ -2379,13 +2341,22 @@ class NovelCrewManager:
 
             # 定义main_plot应该包含的字段
             main_plot_fields = [
-                "core_conflict", "protagonist_goal", "antagonist",
-                "progression_path", "emotional_arc", "key_revelations",
-                "character_growth", "resolution"
+                "core_conflict",
+                "protagonist_goal",
+                "antagonist",
+                "progression_path",
+                "emotional_arc",
+                "key_revelations",
+                "character_growth",
+                "resolution",
             ]
 
             # 检查是否有缺失的字段
-            missing_fields = [f for f in main_plot_fields if f not in current_main_plot or not current_main_plot[f]]
+            missing_fields = [
+                f
+                for f in main_plot_fields
+                if f not in current_main_plot or not current_main_plot[f]
+            ]
 
             # 移除对 core_conflict 的前置条件检查，即使没有 core_conflict 也尝试补全
             if missing_fields:
@@ -2397,7 +2368,7 @@ class NovelCrewManager:
                         existing_fields=current_main_plot,
                         missing_fields=missing_fields,
                         world_setting=world_setting,
-                        characters=characters
+                        characters=characters,
                     )
                     # 合并生成的字段
                     for field, value in generated_fields.items():
@@ -2412,7 +2383,7 @@ class NovelCrewManager:
                             existing_fields=current_main_plot,
                             missing_fields=missing_fields,
                             world_setting=world_setting,
-                            characters=characters
+                            characters=characters,
                         )
                         for field, value in simplified_fields.items():
                             if field in missing_fields and value:
@@ -2423,7 +2394,9 @@ class NovelCrewManager:
 
             optimized_outline["main_plot"] = current_main_plot
 
-            logger.info(f"_apply_outline_optimizations后main_plot字段: {list(current_main_plot.keys())}")
+            logger.info(
+                f"_apply_outline_optimizations后main_plot字段: {list(current_main_plot.keys())}"
+            )
 
         return optimized_outline
 
@@ -2433,7 +2406,7 @@ class NovelCrewManager:
         existing_fields: dict,
         missing_fields: list,
         world_setting: dict,
-        characters: list
+        characters: list,
     ) -> dict:
         """基于核心冲突生成缺失的main_plot字段.
 
@@ -2455,7 +2428,7 @@ class NovelCrewManager:
             "emotional_arc": "主角在故事中的情感变化历程",
             "key_revelations": "故事中的重要揭示和转折点",
             "character_growth": "主角的性格和能力如何随着故事发展而改变",
-            "resolution": "故事的最终结局，如何解决了核心冲突"
+            "resolution": "故事的最终结局，如何解决了核心冲突",
         }
 
         # 构建需要生成的字段描述
@@ -2539,11 +2512,7 @@ class NovelCrewManager:
         return {}
 
     async def _generate_missing_main_plot_fields_simple(
-        self,
-        existing_fields: dict,
-        missing_fields: list,
-        world_setting: dict,
-        characters: list
+        self, existing_fields: dict, missing_fields: list, world_setting: dict, characters: list
     ) -> dict:
         """简化版字段生成方法，当主方法失败时使用.
 
@@ -2566,13 +2535,12 @@ class NovelCrewManager:
             "emotional_arc": "主角的情感变化历程",
             "key_revelations": "故事中的重要揭示",
             "character_growth": "主角的成长变化",
-            "resolution": "故事的最终结局"
+            "resolution": "故事的最终结局",
         }
 
         # 构建需要生成的字段描述
         fields_to_generate = {
-            f: field_descriptions.get(f, f) for f in missing_fields
-            if f in field_descriptions
+            f: field_descriptions.get(f, f) for f in missing_fields if f in field_descriptions
         }
 
         # 使用更简洁的提示词
@@ -2607,9 +2575,7 @@ class NovelCrewManager:
             logger.error(f"简化生成也失败: {e}")
             return {}
 
-    def _extract_improvements(
-        self, original: dict, optimized: dict, suggestions: list
-    ) -> list:
+    def _extract_improvements(self, original: dict, optimized: dict, suggestions: list) -> list:
         """提取本次优化的具体改进点."""
         improvements = []
 
@@ -2641,9 +2607,7 @@ class NovelCrewManager:
         structural_issues = len(analysis_result.get("structural_issues", []))
         character_issues = len(analysis_result.get("character_development_issues", []))
 
-        has_positive_words = any(
-            word in overall_assessment for word in positive_indicators
-        )
+        has_positive_words = any(word in overall_assessment for word in positive_indicators)
         few_issues = (structural_issues + character_issues) <= 2
 
         return has_positive_words or few_issues
@@ -2667,9 +2631,7 @@ class NovelCrewManager:
         )
         return self.reflection_agent
 
-    def _extract_improvements(
-        self, original: dict, optimized: dict, suggestions: list
-    ) -> list:
+    def _extract_improvements(self, original: dict, optimized: dict, suggestions: list) -> list:
         """提取本次优化的具体改进点."""
         improvements = []
 
@@ -2701,9 +2663,7 @@ class NovelCrewManager:
         structural_issues = len(analysis_result.get("structural_issues", []))
         character_issues = len(analysis_result.get("character_development_issues", []))
 
-        has_positive_words = any(
-            word in overall_assessment for word in positive_indicators
-        )
+        has_positive_words = any(word in overall_assessment for word in positive_indicators)
         few_issues = (structural_issues + character_issues) <= 2
 
         return has_positive_words or few_issues
@@ -2756,9 +2716,7 @@ class NovelCrewManager:
             for char_name in chapter_characters[:max_chars]:
                 try:
                     # 使用配置的查询深度（默认2层，可识别"朋友的朋友"）
-                    network = await mixin.query_character_network(
-                        char_name, depth=query_depth
-                    )
+                    network = await mixin.query_character_network(char_name, depth=query_depth)
                     if network:
                         network_contexts.append(mixin.format_network_context(network))
 
@@ -2768,11 +2726,13 @@ class NovelCrewManager:
                         ):
                             for node in network.nodes:
                                 if node.get("name") != char_name:
-                                    indirect_relations.append({
-                                        "from": char_name,
-                                        "to": node.get("name"),
-                                        "role_type": node.get("role_type", "unknown"),
-                                    })
+                                    indirect_relations.append(
+                                        {
+                                            "from": char_name,
+                                            "to": node.get("name"),
+                                            "role_type": node.get("role_type", "unknown"),
+                                        }
+                                    )
                 except Exception as e:
                     logger.debug(f"[GraphContext] 角色{char_name}网络查询失败: {e}")
 
@@ -2798,9 +2758,7 @@ class NovelCrewManager:
 
             # 2. 查询待回收伏笔（增强策略）
             try:
-                foreshadowings = await mixin.query_pending_foreshadowings(
-                    chapter_number
-                )
+                foreshadowings = await mixin.query_pending_foreshadowings(chapter_number)
 
                 # 额外查询与出场角色相关的伏笔
                 if getattr(settings, "GRAPH_QUERY_RELATED_FORESHADOWINGS", True):
@@ -2815,9 +2773,7 @@ class NovelCrewManager:
 
                 if foreshadowings:
                     max_f = getattr(settings, "GRAPH_CONTEXT_MAX_FORESHADOWINGS", 5)
-                    sections.append(
-                        mixin.format_foreshadowings_context(foreshadowings[:max_f])
-                    )
+                    sections.append(mixin.format_foreshadowings_context(foreshadowings[:max_f]))
             except Exception as e:
                 logger.debug(f"[GraphContext] 伏笔查询失败: {e}")
 
@@ -2827,9 +2783,7 @@ class NovelCrewManager:
                 if conflicts:
                     # 过滤出与本章角色相关的冲突
                     char_conflicts = [
-                        c
-                        for c in conflicts
-                        if any(ch in c.characters for ch in chapter_characters)
+                        c for c in conflicts if any(ch in c.characters for ch in chapter_characters)
                     ]
                     if char_conflicts:
                         sections.append(mixin.format_conflicts_context(char_conflicts))
@@ -2838,8 +2792,7 @@ class NovelCrewManager:
 
             if sections:
                 logger.info(
-                    f"[GraphContext] 第{chapter_number}章注入图上下文: "
-                    f"{len(sections)}个部分"
+                    f"[GraphContext] 第{chapter_number}章注入图上下文: " f"{len(sections)}个部分"
                 )
                 return "\n\n".join(sections)
 
@@ -2847,4 +2800,70 @@ class NovelCrewManager:
 
         except Exception as e:
             logger.warning(f"[GraphContext] 图查询失败: {e}")
+            return ""
+
+    async def _query_graph_conflicts_for_continuity(
+        self,
+        novel_id: str,
+        chapter_characters: list,
+        chapter_number: int,
+    ) -> str:
+        """查询图库中与本章角色相关的一致性冲突.
+
+        在连续性审查前调用，将图库检测到的关系冲突注入到审查提示词中。
+
+        Args:
+            novel_id: 小说ID
+            chapter_characters: 本章出场角色名称列表
+            chapter_number: 当前章节号
+
+        Returns:
+            格式化的冲突信息字符串，可插入到连续性审查 prompt 中
+            如果图数据库未启用或查询失败，返回空字符串
+        """
+        from backend.config import settings
+
+        # 检查是否启用图库连续性检查
+        if not getattr(settings, "ENABLE_GRAPH_CONTINUITY_CHECK", True):
+            return ""
+
+        if not self.enable_graph_context:
+            return ""
+
+        try:
+            from agents.graph_query_mixin import GraphQueryMixin
+
+            mixin = GraphQueryMixin()
+            mixin.set_graph_context(novel_id)
+
+            # 调用图库冲突检测
+            conflicts = await mixin.check_conflicts()
+
+            if not conflicts:
+                return ""
+
+            # 过滤与本章角色相关的冲突
+            relevant_conflicts = []
+            for conflict in conflicts[:10]:  # 最多处理10个
+                conflict_chars = conflict.characters if hasattr(conflict, "characters") else []
+                if conflict_chars and any(c in chapter_characters for c in conflict_chars):
+                    relevant_conflicts.append(conflict)
+
+            if not relevant_conflicts:
+                return ""
+
+            # 格式化为提示词
+            lines = ["【图库检测到以下潜在一致性问题】"]
+            for i, c in enumerate(relevant_conflicts, 1):
+                severity = c.severity if hasattr(c, "severity") else "medium"
+                description = c.description if hasattr(c, "description") else str(c)
+                lines.append(f"{i}. [{severity}] {description}")
+
+            logger.info(
+                f"[GraphContinuity] 第{chapter_number}章检测到 {len(relevant_conflicts)} 个图库冲突"
+            )
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"[GraphContinuity] 图库冲突查询失败: {e}")
             return ""
