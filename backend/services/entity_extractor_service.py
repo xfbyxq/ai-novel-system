@@ -228,7 +228,9 @@ ENTITY_EXTRACTION_PROMPT_TEMPLATE = """请分析以下章节内容
 1. **主要角色** (protagonist/supporting/antagonist): 对剧情有重要影响的角色
 2. **次要角色** (minor): 临时出场、对剧情影响小的角色
 3. 对于只在本章出现一次且无明显剧情作用的角色，标记为 minor
-4. 关系抽取优先级：
+4. **家庭关系识别**: 主角的直系亲属（父母/子女/兄弟姐妹/配偶）必须在 relationships 中明确标注关系类型，这类角色应至少标记为 supporting
+5. **已有角色保持一致**: 对于已有角色列表中的角色，其 role_type 应与已有记录保持一致，除非本章有明确的角色转变
+6. 关系抽取优先级：
    - 优先抽取主要角色之间的关系
    - 次要角色与主要角色的关系可选抽取
    - 两个次要角色之间的关系一般不抽取
@@ -255,18 +257,57 @@ class EntityExtractorService:
         """
         self.llm = llm_client or qwen_client
 
+    @staticmethod
+    def _format_known_characters(known_characters: Optional[List[Any]]) -> str:
+        """格式化已知角色列表为 Prompt 文本.
+
+        支持两种输入格式:
+        - list[str]: "楚风, 楚铁山"
+        - list[dict]: "- 楚风 [protagonist]\n- 楚铁山 [supporting] 关系: 楚风(parent)"
+
+        Args:
+            known_characters: 角色信息列表
+
+        Returns:
+            格式化后的角色列表文本
+        """
+        if not known_characters:
+            return "无已知角色信息"
+
+        # 检测是否为结构化格式（list[dict]）
+        if isinstance(known_characters[0], dict):
+            lines = []
+            for char in known_characters:
+                name = char.get("name", "")
+                if not name:
+                    continue
+                role_type = char.get("role_type", "unknown")
+                line = f"- {name} [{role_type}]"
+                # 添加关系信息
+                relationships = char.get("relationships", {})
+                if relationships and isinstance(relationships, dict):
+                    rel_parts = [f"{t}({r})" for t, r in relationships.items()]
+                    line += f" 关系: {', '.join(rel_parts)}"
+                lines.append(line)
+            return "\n".join(lines) if lines else "无已知角色信息"
+
+        # 兼容旧格式（list[str]）
+        return ", ".join(str(c) for c in known_characters)
+
     async def extract_from_chapter(
         self,
         chapter_number: int,
         chapter_content: str,
-        known_characters: Optional[List[str]] = None,
+        known_characters: Optional[List[Any]] = None,
     ) -> ExtractionResult:
         """从章节内容中抽取实体.
 
         Args:
             chapter_number: 章节号
             chapter_content: 章节内容
-            known_characters: 已有角色名称列表，用于判断新角色
+            known_characters: 已有角色信息列表。支持两种格式:
+                - list[str]: 纯角色名称列表（兼容旧调用）
+                - list[dict]: 结构化角色信息，包含 name/role_type/relationships
 
         Returns:
             ExtractionResult: 抽取结果
@@ -275,10 +316,8 @@ class EntityExtractorService:
 
         start_time = time.time()
 
-        # 准备角色列表文本
-        chars_text = "无已知角色信息"
-        if known_characters:
-            chars_text = ", ".join(known_characters)
+        # 准备角色列表文本（支持结构化和纯字符串两种格式）
+        chars_text = self._format_known_characters(known_characters)
 
         # 构造提示词
         prompt = ENTITY_EXTRACTION_PROMPT_TEMPLATE.format(
@@ -326,13 +365,13 @@ class EntityExtractorService:
     async def extract_entities_batch(
         self,
         chapters: List[Dict[str, Any]],
-        known_characters: Optional[List[str]] = None,
+        known_characters: Optional[List[Any]] = None,
     ) -> List[ExtractionResult]:
         """批量抽取多章节的实体.
 
         Args:
             chapters: 章节列表，每项包含 chapter_number 和 content
-            known_characters: 已有角色名称列表
+            known_characters: 已有角色信息列表（支持 list[str] 或 list[dict]）
 
         Returns:
             所有章节的抽取结果列表
@@ -463,7 +502,7 @@ class EntityExtractorService:
                         break
             if json_end > json_start:
                 try:
-                    json_str = content[json_start:json_end + 1]
+                    json_str = content[json_start : json_end + 1]
                     return json.loads(json_str)
                 except json.JSONDecodeError:
                     pass
@@ -479,10 +518,7 @@ class EntityExtractorService:
             except json.JSONDecodeError:
                 pass
 
-        logger.warning(
-            f"无法解析JSON响应, 响应长度: {len(content)}, "
-            f"内容: {content[:300]}..."
-        )
+        logger.warning(f"无法解析JSON响应, 响应长度: {len(content)}, " f"内容: {content[:300]}...")
         return {}
 
     def _parse_json_array(self, content: str) -> List[str]:
@@ -546,9 +582,7 @@ class EntityExtractorService:
         if missing_braces <= 0 and missing_brackets <= 0:
             return None
 
-        logger.debug(
-            f"检测到 JSON 截断: 缺失 {missing_braces} 个 }} 和 {missing_brackets} 个 ]"
-        )
+        logger.debug(f"检测到 JSON 截断: 缺失 {missing_braces} 个 }} 和 {missing_brackets} 个 ]")
 
         # 尝试修复
         repaired = json_part
@@ -587,11 +621,11 @@ class EntityExtractorService:
         while i < len(text):
             if text[i] == '"':
                 # 检查是否是转义引号
-                if i > 0 and text[i - 1] == '\\':
+                if i > 0 and text[i - 1] == "\\":
                     # 检查是否是双重转义 \\\\"（此时引号有效）
                     backslash_count = 0
                     j = i - 1
-                    while j >= 0 and text[j] == '\\':
+                    while j >= 0 and text[j] == "\\":
                         backslash_count += 1
                         j -= 1
                     if backslash_count % 2 == 0:
@@ -690,7 +724,7 @@ class EntityExtractorService:
 async def extract_chapter_entities(
     chapter_number: int,
     chapter_content: str,
-    known_characters: Optional[List[str]] = None,
+    known_characters: Optional[List[Any]] = None,
 ) -> ExtractionResult:
     """抽取章节实体的便捷函数."""
     if not settings.ENABLE_ENTITY_EXTRACTION:
@@ -700,6 +734,4 @@ async def extract_chapter_entities(
         )
 
     service = EntityExtractorService()
-    return await service.extract_from_chapter(
-        chapter_number, chapter_content, known_characters
-    )
+    return await service.extract_from_chapter(chapter_number, chapter_content, known_characters)

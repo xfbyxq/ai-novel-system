@@ -80,6 +80,9 @@ markers = [
     "edge_case: edge case tests",
     "creation: novel creation flow tests",
     "graph: tests requiring Neo4j graph database",
+    "ai_e2e: AI-driven E2E test using LLM + MCP chrome-devtools",
+    "ai_smoke: AI smoke test (P0 critical path only)",
+    "ai_regression: AI regression test (P1 business flow)",
 ]
 
 [tool.coverage.run]

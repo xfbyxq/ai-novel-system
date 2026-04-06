@@ -16,7 +16,10 @@ ContinuityIntegrationModule - 连贯性保障集成模块.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from agents.character_relationship_tracker import CharacterRelationshipTracker
+from agents.character_relationship_tracker import (
+    CharacterRelationshipTracker,
+    map_detailed_to_simplified,
+)
 from agents.coherence_scorecard import CoherenceScorecard, CoherenceScorecardBuilder
 from agents.continuity_models import IntentionalInconsistency
 from agents.foreshadowing_auto_detector import ForeshadowingAutoDetector
@@ -51,9 +54,7 @@ class ContinuityIntegrationResult:
     theme_report: Optional[ThemeConsistencyReport] = None
     outline_task: Optional[ChapterOutlineTask] = None
     outline_validation: Optional[OutlineValidationReport] = None
-    character_validations: Dict[str, ConsistencyValidation] = field(
-        default_factory=dict
-    )
+    character_validations: Dict[str, ConsistencyValidation] = field(default_factory=dict)
     foreshadowing_report: Optional[ForeshadowingReport] = None
     prevention_report: Optional[PreventionReport] = None
 
@@ -86,18 +87,10 @@ class ContinuityIntegrationResult:
             "overall_score": round(self.overall_score, 2),
             "components": {
                 "theme": self.theme_report.to_dict() if self.theme_report else None,
-                "outline": (
-                    self.outline_validation.to_dict()
-                    if self.outline_validation
-                    else None
-                ),
-                "characters": {
-                    k: v.to_dict() for k, v in self.character_validations.items()
-                },
+                "outline": (self.outline_validation.to_dict() if self.outline_validation else None),
+                "characters": {k: v.to_dict() for k, v in self.character_validations.items()},
                 "foreshadowing": (
-                    self.foreshadowing_report.to_dict()
-                    if self.foreshadowing_report
-                    else None
+                    self.foreshadowing_report.to_dict() if self.foreshadowing_report else None
                 ),
                 "prevention": (
                     self.prevention_report.to_dict() if self.prevention_report else None
@@ -180,9 +173,7 @@ class ContinuityIntegrationModule:
         # 有意不一致列表
         self.intentional_inconsistencies: List[IntentionalInconsistency] = []
 
-        logger.info(
-            "连贯性增强组件初始化完成: 世界观追踪、空间追踪、关系追踪、伏笔检测、评分体系"
-        )
+        logger.info("连贯性增强组件初始化完成: 世界观追踪、空间追踪、关系追踪、伏笔检测、评分体系")
 
     def _load_volume_outlines(self, novel_data: Dict[str, Any]):
         """加载卷大纲."""
@@ -216,6 +207,30 @@ class ContinuityIntegrationModule:
             self.character_trackers[name] = tracker
 
             logger.info(f"Initialized character tracker for: {name}")
+
+        # 将角色关系注册到 CharacterRelationshipTracker，
+        # 解决追踪器初始化为空导致连贯性检查失效的问题
+        for char_data in characters:
+            name = char_data.get("name", "")
+            relationships = char_data.get("relationships", {})
+            if not name or not relationships or not isinstance(relationships, dict):
+                continue
+            for target_name, rel_type_str in relationships.items():
+                mapped_type = map_detailed_to_simplified(str(rel_type_str))
+                # 家庭/浪漫关系设置较高的初始信任度和亲密度
+                is_close = mapped_type.value in ("family", "romantic")
+                self.relationship_tracker.register_relationship(
+                    char_a=name,
+                    char_b=target_name,
+                    rel_type=mapped_type,
+                    chapter=1,
+                    trust=0.8 if is_close else 0.5,
+                    intimacy=0.7 if is_close else 0.0,
+                )
+                logger.debug(
+                    f"已注册角色关系: {name} --{rel_type_str}({mapped_type.value})--> "
+                    f"{target_name}"
+                )
 
     def _initialize_foreshadowings(self, novel_data: Dict[str, Any]):
         """初始化伏笔."""
@@ -311,9 +326,7 @@ class ContinuityIntegrationModule:
 
         # 获取已知角色列表（从 character_trackers 中获取）
         known_characters = (
-            list(self.character_trackers.keys())
-            if hasattr(self, "character_trackers")
-            else []
+            list(self.character_trackers.keys()) if hasattr(self, "character_trackers") else []
         )
         result["relationship_context"] = self.relationship_tracker.build_relationship_context(
             characters=known_characters
@@ -380,11 +393,9 @@ class ContinuityIntegrationModule:
                 )
 
         # 4. 伏笔任务验证
-        foreshadowing_report = (
-            self.foreshadowing_injector.get_chapter_foreshadowing_tasks(
-                current_chapter=chapter_number,
-                plot_outline=self.novel_data.get("plot_outline", {}),
-            )
+        foreshadowing_report = self.foreshadowing_injector.get_chapter_foreshadowing_tasks(
+            current_chapter=chapter_number,
+            plot_outline=self.novel_data.get("plot_outline", {}),
         )
         result.foreshadowing_report = foreshadowing_report
 
@@ -494,9 +505,7 @@ class ContinuityIntegrationModule:
         if outline_validation:
             scores.append(outline_validation.quality_score)
         if result.character_validations:
-            char_scores = [
-                v.overall_score for v in result.character_validations.values()
-            ]
+            char_scores = [v.overall_score for v in result.character_validations.values()]
             scores.extend(char_scores)
         if prevention_report:
             scores.append(prevention_report.overall_score)
@@ -514,9 +523,7 @@ class ContinuityIntegrationModule:
 
         return result
 
-    def _extract_constraints_from_previous(
-        self, previous_chapter: Dict[str, Any]
-    ) -> List:
+    def _extract_constraints_from_previous(self, previous_chapter: Dict[str, Any]) -> List:
         """从上一章提取约束."""
         from .prevention_continuity_checker import ContinuityConstraint
 
@@ -627,8 +634,7 @@ class ContinuityIntegrationModule:
             "theme_guardian": self.theme_guardian.get_statistics(),
             "outline_mapper": {},  # 大纲映射器无统计方法
             "character_trackers": {
-                name: tracker.get_statistics()
-                for name, tracker in self.character_trackers.items()
+                name: tracker.get_statistics() for name, tracker in self.character_trackers.items()
             },
             "foreshadowing_injector": self.foreshadowing_injector.get_statistics(),
             "prevention_checker": self.prevention_checker.get_statistics(),
@@ -649,6 +655,4 @@ async def prepare_for_chapter_generation(
 ) -> Dict[str, Any]:
     """便捷函数：准备章节生成."""
     module = await create_continuity_module(novel_id, novel_data)
-    return await module.prepare_chapter_generation(
-        chapter_number=chapter_number, **kwargs
-    )
+    return await module.prepare_chapter_generation(chapter_number=chapter_number, **kwargs)

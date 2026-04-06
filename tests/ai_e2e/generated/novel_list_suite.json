@@ -1,0 +1,357 @@
+{
+  "suite_name": "novel_list_page",
+  "generated_at": "2026-04-06T00:00:00Z",
+  "generator_model": "qwen-plus",
+  "page_target": "novel_list",
+  "test_cases": [
+    {
+      "id": "AI-E2E-NL-001",
+      "name": "小说列表页加载验证",
+      "description": "导航到小说列表页，验证页面关键元素正确渲染",
+      "page": "novel_list",
+      "category": "smoke",
+      "priority": "P0",
+      "preconditions": ["前端服务已启动", "后端 API 可访问"],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "{base_url}/novels",
+          "description": "导航到小说列表页",
+          "timeout_ms": 15000
+        },
+        {
+          "action": "wait_for",
+          "value": "创建小说",
+          "description": "等待页面加载完成，出现创建小说按钮",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "snapshot",
+          "description": "获取页面快照用于断言验证"
+        }
+      ],
+      "assertions": [
+        {
+          "type": "rule_based",
+          "rule_assertion": {
+            "check": "element_visible",
+            "element": {
+              "role": "button",
+              "name": "创建小说",
+              "fallback_name": "新建小说"
+            }
+          },
+          "severity": "critical"
+        },
+        {
+          "type": "rule_based",
+          "rule_assertion": {
+            "check": "text_contains",
+            "expected": "小说"
+          },
+          "severity": "major"
+        }
+      ],
+      "tags": ["ai_smoke", "ai_e2e"]
+    },
+    {
+      "id": "AI-E2E-NL-002",
+      "name": "创建小说弹窗打开与关闭",
+      "description": "点击创建小说按钮，验证弹窗打开，再关闭弹窗",
+      "page": "novel_list",
+      "category": "smoke",
+      "priority": "P0",
+      "preconditions": ["前端服务已启动", "后端 API 可访问"],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "{base_url}/novels",
+          "description": "导航到小说列表页",
+          "timeout_ms": 15000
+        },
+        {
+          "action": "wait_for",
+          "value": "创建小说",
+          "description": "等待页面加载完成",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "button",
+            "name": "创建小说",
+            "fallback_name": "新建小说"
+          },
+          "description": "点击创建小说按钮"
+        },
+        {
+          "action": "wait_for",
+          "value": "创建新小说",
+          "description": "等待创建小说弹窗出现",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "assert_visible",
+          "element": {
+            "role": "dialog",
+            "name": "创建新小说"
+          },
+          "description": "验证创建小说弹窗已打开"
+        },
+        {
+          "action": "assert_visible",
+          "element": {
+            "role": "textbox",
+            "name": "标题",
+            "fallback_name": "* 标题"
+          },
+          "description": "验证标题输入框存在"
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "button",
+            "name": "取消"
+          },
+          "description": "点击取消按钮关闭弹窗"
+        }
+      ],
+      "assertions": [
+        {
+          "type": "rule_based",
+          "rule_assertion": {
+            "check": "element_hidden",
+            "element": {
+              "role": "dialog",
+              "name": "创建新小说"
+            }
+          },
+          "severity": "critical"
+        }
+      ],
+      "tags": ["ai_smoke", "ai_e2e"]
+    },
+    {
+      "id": "AI-E2E-NL-003",
+      "name": "创建小说完整流程",
+      "description": "通过弹窗完整填写创建小说表单并提交",
+      "page": "novel_list",
+      "category": "regression",
+      "priority": "P1",
+      "preconditions": ["前端服务已启动", "后端 API 可访问", "数据库连接正常"],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "{base_url}/novels",
+          "description": "导航到小说列表页",
+          "timeout_ms": 15000
+        },
+        {
+          "action": "wait_for",
+          "value": "创建小说",
+          "description": "等待页面加载完成",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "button",
+            "name": "创建小说",
+            "fallback_name": "新建小说"
+          },
+          "description": "点击创建小说按钮"
+        },
+        {
+          "action": "wait_for",
+          "value": "创建新小说",
+          "description": "等待创建小说弹窗出现",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "element": {
+            "role": "textbox",
+            "name": "标题",
+            "fallback_name": "* 标题"
+          },
+          "value": "AI自动化测试小说",
+          "description": "填写小说标题"
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "combobox",
+            "name": "类型",
+            "fallback_name": "* 类型"
+          },
+          "description": "点击类型下拉框"
+        },
+        {
+          "action": "click",
+          "element": {
+            "name": "玄幻",
+            "fallback_name": "科幻"
+          },
+          "description": "选择小说类型"
+        },
+        {
+          "action": "fill",
+          "element": {
+            "role": "textbox",
+            "name": "简介",
+            "fallback_name": "简要描述"
+          },
+          "value": "这是一部由AI自动化测试创建的测试小说",
+          "description": "填写小说简介"
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "button",
+            "name": "确定",
+            "fallback_name": "提交"
+          },
+          "description": "点击确定按钮提交表单"
+        },
+        {
+          "action": "wait_for",
+          "value": "AI自动化测试小说",
+          "description": "等待创建成功，新小说出现在列表中",
+          "timeout_ms": 15000
+        }
+      ],
+      "assertions": [
+        {
+          "type": "rule_based",
+          "rule_assertion": {
+            "check": "text_contains",
+            "expected": "AI自动化测试小说"
+          },
+          "severity": "critical"
+        },
+        {
+          "type": "rule_based",
+          "rule_assertion": {
+            "check": "element_hidden",
+            "element": {
+              "role": "dialog",
+              "name": "创建新小说"
+            }
+          },
+          "severity": "major"
+        }
+      ],
+      "tags": ["ai_regression", "ai_e2e"]
+    },
+    {
+      "id": "AI-E2E-NL-004",
+      "name": "小说列表状态筛选",
+      "description": "使用状态筛选功能过滤小说列表",
+      "page": "novel_list",
+      "category": "regression",
+      "priority": "P1",
+      "preconditions": ["前端服务已启动", "后端 API 可访问", "列表中有多种状态的小说"],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "{base_url}/novels",
+          "description": "导航到小说列表页",
+          "timeout_ms": 15000
+        },
+        {
+          "action": "wait_for",
+          "value": "创建小说",
+          "description": "等待页面加载完成",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "snapshot",
+          "description": "获取筛选前的页面快照"
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "combobox",
+            "name": "状态",
+            "fallback_name": "全部状态"
+          },
+          "description": "点击状态筛选下拉框"
+        },
+        {
+          "action": "click",
+          "element": {
+            "name": "已完成",
+            "fallback_name": "completed"
+          },
+          "description": "选择已完成状态"
+        },
+        {
+          "action": "snapshot",
+          "description": "获取筛选后的页面快照"
+        }
+      ],
+      "assertions": [
+        {
+          "type": "llm_judged",
+          "llm_assertion": "页面中展示的小说列表已被状态筛选过滤，或显示空状态提示",
+          "severity": "major"
+        }
+      ],
+      "tags": ["ai_regression", "ai_e2e"]
+    },
+    {
+      "id": "AI-E2E-NL-005",
+      "name": "点击小说进入详情页",
+      "description": "从列表中点击某个小说标题，验证跳转到详情页",
+      "page": "novel_list",
+      "category": "smoke",
+      "priority": "P0",
+      "preconditions": ["前端服务已启动", "列表中至少有一部小说"],
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "{base_url}/novels",
+          "description": "导航到小说列表页",
+          "timeout_ms": 15000
+        },
+        {
+          "action": "wait_for",
+          "value": "创建小说",
+          "description": "等待页面加载完成",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "snapshot",
+          "description": "获取页面快照，确认列表中有小说"
+        },
+        {
+          "action": "click",
+          "element": {
+            "role": "link",
+            "name": "《",
+            "fallback_name": "剑神归来"
+          },
+          "description": "点击第一个小说标题链接"
+        },
+        {
+          "action": "wait_for",
+          "value": "章节",
+          "description": "等待详情页加载，出现章节相关内容",
+          "timeout_ms": 10000
+        }
+      ],
+      "assertions": [
+        {
+          "type": "hybrid",
+          "rule_assertion": {
+            "check": "url_matches",
+            "expected": "/novels/"
+          },
+          "llm_assertion": "当前页面已跳转到小说详情页，URL中包含小说ID，页面展示了小说的详细信息",
+          "severity": "critical"
+        }
+      ],
+      "tags": ["ai_smoke", "ai_e2e"]
+    }
+  ]
+}

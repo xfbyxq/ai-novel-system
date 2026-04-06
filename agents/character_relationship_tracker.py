@@ -883,3 +883,55 @@ class CharacterRelationshipTracker:
                 tracker._pair_index[(chars[0], chars[1])] = rel_id
 
         return tracker
+
+
+# ── 关系类型映射工具 ──────────────────────────────────────────────────
+
+# 详细关系类型（core/models/character.py）→ 简化关系类型（tracker）映射表
+_DETAILED_TO_SIMPLIFIED_MAP: dict[str, RelationshipType] = {
+    # 家庭关系
+    "parent": RelationshipType.FAMILY,
+    "child": RelationshipType.FAMILY,
+    "sibling": RelationshipType.FAMILY,
+    "grandparent": RelationshipType.FAMILY,
+    "grandchild": RelationshipType.FAMILY,
+    # 情感关系
+    "lover": RelationshipType.ROMANTIC,
+    "spouse": RelationshipType.ROMANTIC,
+    "crush": RelationshipType.ROMANTIC,
+    "ex_lover": RelationshipType.ROMANTIC,
+    # 社会关系-友好
+    "friend": RelationshipType.ALLY,
+    "best_friend": RelationshipType.ALLY,
+    "ally": RelationshipType.ALLY,
+    "colleague": RelationshipType.ALLY,
+    "classmate": RelationshipType.ALLY,
+    "member": RelationshipType.ALLY,
+    # 社会关系-敌对
+    "enemy": RelationshipType.ENEMY,
+    "rival": RelationshipType.RIVAL,
+    # 师徒/上下级
+    "master": RelationshipType.MENTOR,
+    "apprentice": RelationshipType.MENTOR,
+    "leader": RelationshipType.SUBORDINATE,
+    "subordinate": RelationshipType.SUBORDINATE,
+    # 中性
+    "neutral": RelationshipType.NEUTRAL,
+    "unknown": RelationshipType.STRANGER,
+}
+
+
+def map_detailed_to_simplified(detailed_type: str) -> RelationshipType:
+    """将详细关系类型(core/models)映射为简化关系类型(tracker).
+
+    用于在 CharacterRelationshipTracker 初始化时，将数据库中存储的
+    详细关系类型（如 parent/child/sibling）转换为追踪器使用的
+    简化类型（如 FAMILY/ROMANTIC/ALLY）。
+
+    Args:
+        detailed_type: 详细关系类型字符串
+
+    Returns:
+        对应的简化 RelationshipType 枚举值
+    """
+    return _DETAILED_TO_SIMPLIFIED_MAP.get(detailed_type, RelationshipType.NEUTRAL)

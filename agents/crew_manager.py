@@ -775,7 +775,9 @@ class NovelCrewManager:
         detailed_outline_text = json.dumps(chapter_plan, ensure_ascii=False, indent=2)
 
         # 根据章节复杂度动态决定是否需要细化
-        if self.enable_outline_refinement and self._should_refine_outline(chapter_plan, chapter_number):
+        if self.enable_outline_refinement and self._should_refine_outline(
+            chapter_plan, chapter_number
+        ):
             logger.info(f"📋 大纲细化：开始细化第 {chapter_number} 章大纲...")
 
             # 构建全局大纲上下文
@@ -865,7 +867,16 @@ class NovelCrewManager:
         character_info = ""
         for char in characters:
             if isinstance(char, dict) and char.get("name") in chapter_characters:
-                character_info += f"\n- {char.get('name')}：{char.get('personality', '')}，{char.get('background', '')[:50]}..."
+                char_line = (
+                    f"\n- {char.get('name')}：{char.get('personality', '')}，"
+                    f"{char.get('background', '')[:50]}..."
+                )
+                # 注入角色关系信息，帮助 Writer 准确刻画人物互动
+                rel = char.get("relationships", {})
+                if rel and isinstance(rel, dict):
+                    rel_str = "、".join(f"{t}({r})" for t, r in rel.items())
+                    char_line += f"\n  关系: {rel_str}"
+                character_info += char_line
 
         # ── [新增] 图数据库上下文查询 ────────────────────────
         # 为 Writer Agent 注入图数据库查询结果，包括：
@@ -1439,9 +1450,7 @@ class NovelCrewManager:
 
         return result
 
-    def _should_refine_outline(
-        self, chapter_plan: dict, chapter_number: int
-    ) -> bool:
+    def _should_refine_outline(self, chapter_plan: dict, chapter_number: int) -> bool:
         """评估章节是否需要细化步骤.
 
         根据章节复杂度动态决定是否需要调用大纲细化师。

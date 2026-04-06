@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from core.graph.graph_models import (
     CharacterNode,
@@ -27,7 +28,20 @@ from core.graph.graph_models import (
 from core.graph.neo4j_client import Neo4jClient
 from core.graph.relationship_mapper import RelationshipMapper
 from core.logging_config import logger
-from core.models.character import Character
+from core.models.character import RELATIONSHIP_REVERSE_MAP, Character, RelationshipType
+
+# 角色类型 → 图数据库重要性等级映射
+_ROLE_TYPE_IMPORTANCE_MAP: dict[str, int] = {
+    "protagonist": 10,
+    "antagonist": 8,
+    "supporting": 6,
+    "minor": 3,
+}
+
+
+def _role_type_to_importance(role_type: str) -> int:
+    """根据角色类型映射图数据库重要性等级(1-10)."""
+    return _ROLE_TYPE_IMPORTANCE_MAP.get(role_type, 5)
 
 
 @dataclass
@@ -127,9 +141,7 @@ class GraphSyncService:
 
         return result
 
-    async def sync_characters(
-        self, novel_id: UUID, characters: List[Character]
-    ) -> SyncResult:
+    async def sync_characters(self, novel_id: UUID, characters: List[Character]) -> SyncResult:
         """同步角色节点和关系.
 
         Args:
@@ -160,11 +172,10 @@ class GraphSyncService:
                     age=char.age,
                     status=char.status or "alive",
                     first_appearance_chapter=char.first_appearance_chapter,
+                    importance_level=_role_type_to_importance(char.role_type or "minor"),
                 )
 
-                created = await self.client.create_node(
-                    node.label, node.to_neo4j_properties()
-                )
+                created = await self.client.create_node(node.label, node.to_neo4j_properties())
                 if created:
                     result.entities_created += 1
                 else:
@@ -243,10 +254,9 @@ class GraphSyncService:
                         role_type=char.role_type,
                         gender=char.gender or "unknown",
                         first_appearance_chapter=chapter_number,
+                        importance_level=_role_type_to_importance(char.role_type),
                     )
-                    await self.client.create_node(
-                        char_node.label, char_node.to_neo4j_properties()
-                    )
+                    await self.client.create_node(char_node.label, char_node.to_neo4j_properties())
                     result.entities_created += 1
                 except Exception as e:
                     logger.warning(f"创建角色节点失败 {char.name}: {e}")
@@ -261,9 +271,7 @@ class GraphSyncService:
                         location_type=loc.location_type,
                         description=loc.description or "",
                     )
-                    await self.client.create_node(
-                        loc_node.label, loc_node.to_neo4j_properties()
-                    )
+                    await self.client.create_node(loc_node.label, loc_node.to_neo4j_properties())
                     result.entities_created += 1
                 except Exception as e:
                     logger.warning(f"创建地点节点失败 {loc.name}: {e}")
@@ -292,11 +300,11 @@ class GraphSyncService:
                 try:
                     # 查找角色节点ID
                     from_result = await self.client.execute_query(
-                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) RETURN c.id",
+                        "MATCH (c:Character {novel_id: $novel_id, name: $name}) RETURN c.id",
                         {"novel_id": str(novel_id), "name": rel.from_character},
                     )
                     to_result = await self.client.execute_query(
-                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) RETURN c.id",
+                        "MATCH (c:Character {novel_id: $novel_id, name: $name}) RETURN c.id",
                         {"novel_id": str(novel_id), "name": rel.to_character},
                     )
 
@@ -306,8 +314,10 @@ class GraphSyncService:
 
                         if from_id and to_id:
                             await self.client.create_relationship(
-                                "Character", from_id,
-                                "Character", to_id,
+                                "Character",
+                                from_id,
+                                "Character",
+                                to_id,
                                 rel.relation_type.upper(),
                                 {"strength": rel.strength},
                             )
@@ -365,10 +375,9 @@ class GraphSyncService:
                         role_type=char.role_type,
                         gender=char.gender or "unknown",
                         first_appearance_chapter=chapter_number,
+                        importance_level=_role_type_to_importance(char.role_type),
                     )
-                    await self.client.create_node(
-                        char_node.label, char_node.to_neo4j_properties()
-                    )
+                    await self.client.create_node(char_node.label, char_node.to_neo4j_properties())
                     result.entities_created += 1
                 except Exception as e:
                     logger.warning(f"创建角色节点失败 {char.name}: {e}")
@@ -383,9 +392,7 @@ class GraphSyncService:
                         location_type=loc.location_type,
                         description=loc.description or "",
                     )
-                    await self.client.create_node(
-                        loc_node.label, loc_node.to_neo4j_properties()
-                    )
+                    await self.client.create_node(loc_node.label, loc_node.to_neo4j_properties())
                     result.entities_created += 1
                 except Exception as e:
                     logger.warning(f"创建地点节点失败 {loc.name}: {e}")
@@ -422,9 +429,7 @@ class GraphSyncService:
                         resolved=foreshadow.resolved,
                         resolved_chapter=foreshadow.resolved_chapter,
                     )
-                    await self.client.create_node(
-                        fs_node.label, fs_node.to_neo4j_properties()
-                    )
+                    await self.client.create_node(fs_node.label, fs_node.to_neo4j_properties())
                     result.entities_created += 1
                 except Exception as e:
                     logger.warning(f"创建伏笔节点失败 {foreshadow.name}: {e}")
@@ -433,13 +438,11 @@ class GraphSyncService:
             for rel in extraction_result.relationships:
                 try:
                     from_result = await self.client.execute_query(
-                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) "
-                        f"RETURN c.id",
+                        "MATCH (c:Character {novel_id: $novel_id, name: $name}) " "RETURN c.id",
                         {"novel_id": str(novel_id), "name": rel.from_character},
                     )
                     to_result = await self.client.execute_query(
-                        f"MATCH (c:Character {{novel_id: $novel_id, name: $name}}) "
-                        f"RETURN c.id",
+                        "MATCH (c:Character {novel_id: $novel_id, name: $name}) " "RETURN c.id",
                         {"novel_id": str(novel_id), "name": rel.to_character},
                     )
 
@@ -458,8 +461,17 @@ class GraphSyncService:
                             )
                             result.relationships_created += 1
                 except Exception as e:
-                    logger.debug(
-                        f"创建关系失败 {rel.from_character}->{rel.to_character}: {e}"
+                    logger.debug(f"创建关系失败 {rel.from_character}->{rel.to_character}: {e}")
+
+            # 6. 将提取的关系持久化到 PostgreSQL（解决关系数据只存 Neo4j 不存 PG 的问题）
+            if extraction_result.relationships:
+                pg_persisted = await self._persist_relationships_to_pg(
+                    novel_id, extraction_result.relationships
+                )
+                if pg_persisted > 0:
+                    logger.info(
+                        f"[GraphSync] 第{chapter_number}章: "
+                        f"{pg_persisted}条关系已持久化到PostgreSQL"
                     )
 
             logger.info(
@@ -476,6 +488,71 @@ class GraphSyncService:
             result.completed_at = datetime.now()
 
         return result
+
+    async def _persist_relationships_to_pg(
+        self,
+        novel_id: UUID,
+        relationships: list,
+    ) -> int:
+        """将抽取的关系持久化到 PostgreSQL Character.relationships 字段.
+
+        遍历抽取结果中的关系，更新对应 Character 的 JSONB 字段，
+        并利用 RELATIONSHIP_REVERSE_MAP 自动建立反向关系。
+
+        Args:
+            novel_id: 小说ID
+            relationships: ExtractedRelationship 列表
+
+        Returns:
+            成功持久化的关系数量
+        """
+        # 批量查询该小说的所有角色，建立名称→角色映射
+        query = select(Character).where(Character.novel_id == novel_id)
+        result = await self.db.execute(query)
+        all_characters = result.scalars().all()
+        name_to_char: dict[str, Character] = {char.name: char for char in all_characters}
+
+        persisted_count = 0
+        for rel in relationships:
+            from_char = name_to_char.get(rel.from_character)
+            to_char = name_to_char.get(rel.to_character)
+            if not from_char or not to_char:
+                continue
+
+            rel_type_str = rel.relation_type
+
+            # 正向关系: from_character → to_character
+            if from_char.relationships is None:
+                from_char.relationships = {}
+            from_char.relationships[rel.to_character] = rel_type_str
+            flag_modified(from_char, "relationships")
+
+            # 反向关系: to_character → from_character（利用 RELATIONSHIP_REVERSE_MAP）
+            if to_char.relationships is None:
+                to_char.relationships = {}
+            try:
+                rel_enum = RelationshipType(rel_type_str)
+                reverse_rel = RELATIONSHIP_REVERSE_MAP.get(rel_enum, RelationshipType.unknown)
+                to_char.relationships[rel.from_character] = reverse_rel.value
+            except ValueError:
+                # 关系类型不在枚举中，直接使用原始字符串
+                to_char.relationships[rel.from_character] = rel_type_str
+            flag_modified(to_char, "relationships")
+
+            persisted_count += 1
+            logger.debug(
+                f"[GraphSync] 关系持久化: {rel.from_character} --{rel_type_str}--> "
+                f"{rel.to_character}"
+            )
+
+        if persisted_count > 0:
+            try:
+                await self.db.flush()
+            except Exception as e:
+                logger.warning(f"[GraphSync] 关系持久化flush失败: {e}")
+                persisted_count = 0
+
+        return persisted_count
 
     async def sync_character_relationships(
         self, novel_id: UUID, character: Character
@@ -611,11 +688,10 @@ class GraphSyncService:
                 age=char.age,
                 status=char.status or "alive",
                 first_appearance_chapter=char.first_appearance_chapter,
+                importance_level=_role_type_to_importance(char.role_type or "minor"),
             )
 
-            created = await self.client.create_node(
-                node.label, node.to_neo4j_properties()
-            )
+            created = await self.client.create_node(node.label, node.to_neo4j_properties())
             if created:
                 result["created"] += 1
             else:
@@ -669,9 +745,7 @@ class GraphSyncService:
                     description=region.get("description", ""),
                     significance=region.get("importance_level", 5),
                 )
-                await self.client.create_node(
-                    node.label, node.to_neo4j_properties()
-                )
+                await self.client.create_node(node.label, node.to_neo4j_properties())
                 result["created"] += 1
 
         # 同步势力
@@ -686,9 +760,7 @@ class GraphSyncService:
                     description=faction.get("description", ""),
                     leader_name=faction.get("leader"),
                 )
-                await self.client.create_node(
-                    node.label, node.to_neo4j_properties()
-                )
+                await self.client.create_node(node.label, node.to_neo4j_properties())
                 result["created"] += 1
 
         return result
@@ -719,9 +791,7 @@ class GraphSyncService:
                     event_type="plot",
                     description=chapter.get("summary", ""),
                 )
-                await self.client.create_node(
-                    node.label, node.to_neo4j_properties()
-                )
+                await self.client.create_node(node.label, node.to_neo4j_properties())
                 result["created"] += 1
 
         return result

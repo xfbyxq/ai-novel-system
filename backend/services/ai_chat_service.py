@@ -726,7 +726,9 @@ class AiChatService:
                 "title": chapter.title or f"第{chapter.chapter_number}章",
                 "content": chapter.content or "",
                 "word_count": len(chapter.content) if chapter.content else 0,
-                "status": chapter.status.value if hasattr(chapter.status, "value") else chapter.status,
+                "status": chapter.status.value
+                if hasattr(chapter.status, "value")
+                else chapter.status,
             }
         except Exception as e:
             logger.error(f"获取章节内容失败: {e}")
@@ -1243,7 +1245,9 @@ class AiChatService:
                     chapter_info = await self._get_chapter_by_number(novel_id, chapter_number)
                     if chapter_info and "error" not in chapter_info:
                         session.context["current_chapter"] = chapter_info
-                        logger.info(f"章节助手场景预加载章节内容成功: 第{chapter_number}章 - {chapter_info.get('title', '无标题')}")
+                        logger.info(
+                            f"章节助手场景预加载章节内容成功: 第{chapter_number}章 - {chapter_info.get('title', '无标题')}"
+                        )
 
                         # 构建增强上下文
                         from .chapter_context_builder import ChapterContextBuilder
@@ -1253,7 +1257,9 @@ class AiChatService:
                             novel_id, chapter_number, chapter_info
                         )
                         session.context["assistant_context"] = assistant_context.to_dict()
-                        logger.info(f"章节助手场景构建增强上下文成功: 角色{len(assistant_context.chapter_characters)}个")
+                        logger.info(
+                            f"章节助手场景构建增强上下文成功: 角色{len(assistant_context.chapter_characters)}个"
+                        )
                     else:
                         logger.warning(f"章节助手场景预加载章节内容失败: {chapter_info}")
                 except Exception as e:
@@ -1266,9 +1272,15 @@ class AiChatService:
         if scene == SCENE_CHAPTER_ASSISTANT:
             novel_title = session.context.get("novel_info", {}).get("title", "未知小说")
             chapter_info = session.context.get("current_chapter", {})
-            chapter_num = chapter_info.get("chapter_number", context.get("chapter_number", "?")) if context else "?"
+            chapter_num = (
+                chapter_info.get("chapter_number", context.get("chapter_number", "?"))
+                if context
+                else "?"
+            )
             chapter_title = chapter_info.get("title", f"第{chapter_num}章")
-            logger.info(f"生成章节助手欢迎消息: novel_title={novel_title}, chapter_num={chapter_num}, chapter_title={chapter_title}")
+            logger.info(
+                f"生成章节助手欢迎消息: novel_title={novel_title}, chapter_num={chapter_num}, chapter_title={chapter_title}"
+            )
             welcome_message = f"""你好！我是章节编辑AI助手。
 
 当前正在编辑：**《{novel_title}》** - **第{chapter_num}章：{chapter_title}**
@@ -2442,24 +2454,30 @@ class AiChatService:
 
                     logger.info(f"执行工具: {tool_name}, 参数: {list(arguments.keys())}")
                     result = await executor.execute(tool_name, arguments)
-                    tool_results.append({
-                        "tool_call_id": tool_call["id"],
-                        "name": tool_name,
-                        "content": json.dumps(result, ensure_ascii=False),
-                    })
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "name": tool_name,
+                            "content": json.dumps(result, ensure_ascii=False),
+                        }
+                    )
 
                 # 添加工具结果到消息
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": response["tool_calls"],
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": response["tool_calls"],
+                    }
+                )
                 for tr in tool_results:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tr["tool_call_id"],
-                        "content": tr["content"],
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tr["tool_call_id"],
+                            "content": tr["content"],
+                        }
+                    )
 
                 continue
 
@@ -2572,7 +2590,9 @@ class AiChatService:
         # 保留最近 4 轮对话（8条消息）
         keep_recent_count = min(8, len(other_messages))
         recent_messages = other_messages[-keep_recent_count:] if keep_recent_count > 0 else []
-        old_messages = other_messages[:-keep_recent_count] if keep_recent_count < len(other_messages) else []
+        old_messages = (
+            other_messages[:-keep_recent_count] if keep_recent_count < len(other_messages) else []
+        )
 
         if not old_messages:
             # 没有旧消息需要压缩，直接返回
@@ -3006,7 +3026,9 @@ class AiChatService:
         # 如果是章节助手场景，添加章节内容到系统提示词
         if session.scene == SCENE_CHAPTER_ASSISTANT:
             current_chapter = session.context.get("current_chapter", {})
-            logger.info(f"章节助手场景检查: current_chapter存在={bool(current_chapter)}, keys={list(current_chapter.keys()) if current_chapter else 'empty'}")
+            logger.info(
+                f"章节助手场景检查: current_chapter存在={bool(current_chapter)}, keys={list(current_chapter.keys()) if current_chapter else 'empty'}"
+            )
             if current_chapter and "error" not in current_chapter:
                 chapter_num = current_chapter.get("chapter_number", "?")
                 chapter_title = current_chapter.get("title", f"第{chapter_num}章")
@@ -3018,9 +3040,13 @@ class AiChatService:
 
 {chapter_content}
 ---"""
-                logger.info(f"章节助手流式消息: 已将第{chapter_num}章内容添加到系统提示词, 内容长度={len(chapter_content)}")
+                logger.info(
+                    f"章节助手流式消息: 已将第{chapter_num}章内容添加到系统提示词, 内容长度={len(chapter_content)}"
+                )
             else:
-                logger.warning(f"章节助手场景: current_chapter为空或包含错误, current_chapter={type(current_chapter)}, error={'error' in current_chapter if current_chapter else 'N/A'}")
+                logger.warning(
+                    f"章节助手场景: current_chapter为空或包含错误, current_chapter={type(current_chapter)}, error={'error' in current_chapter if current_chapter else 'N/A'}"
+                )
 
         # 如果是小说相关场景，添加小说信息到提示词
         prompt = user_message
@@ -4165,9 +4191,14 @@ AI修订建议内容：
                 target_name = parsed.get("target_name", "")
                 # 忽略「主角」「男主」「女主」等通用称呼，改为查找第一个主角/男主/女主
                 if target_name in ["主角", "男主", "女主"]:
-                    # 查找对应类型的角色
+                    # 查找对应类型的角色（数据库存储英文枚举值 protagonist）
                     for char in novel.characters:
-                        if char.role_type in ["主角", "男主", "女主"]:
+                        if char.role_type == "protagonist":
+                            # "男主"要求性别为male，"女主"要求female，"主角"匹配任意性别
+                            if target_name == "男主" and char.gender != "male":
+                                continue
+                            if target_name == "女主" and char.gender != "female":
+                                continue
                             parsed["target_id"] = str(char.id)
                             parsed["target_name"] = char.name
                             break

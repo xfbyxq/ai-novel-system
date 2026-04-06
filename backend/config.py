@@ -394,6 +394,28 @@ class Settings(BaseSettings):
     GRAPH_ENABLE_INDIRECT_RELATIONS: bool = True  # 是否查询间接关系
     GRAPH_QUERY_RELATED_FORESHADOWINGS: bool = True  # 查询与出场角色相关的伏笔
 
+    # ============================================================
+    # AI E2E 测试配置（LLM + MCP chrome-devtools 自动化测试）
+    # ============================================================
+    # 基于 a11y 快照 UID 定位元素，通过 MCP chrome-devtools 驱动浏览器。
+    # LLM 仅在自愈（SnapshotResolver 失败时）和语义断言时使用。
+    # ============================================================
+
+    # --- AI E2E 测试开关 ---
+    AI_E2E_ENABLED: bool = False  # 总开关，CI 中默认关闭
+    AI_E2E_SELF_HEAL_ENABLED: bool = True  # 自愈功能开关
+    AI_E2E_LLM_EVAL_ENABLED: bool = True  # LLM 语义断言开关
+
+    # --- AI E2E 超时与重试 ---
+    AI_E2E_CASE_TIMEOUT: int = 120  # 单个用例超时（秒）
+    AI_E2E_STEP_TIMEOUT_MS: int = 10000  # 单步超时（毫秒）
+    AI_E2E_RETRY_COUNT: int = 2  # 元素操作失败重试次数
+
+    # --- AI E2E LLM 参数 ---
+    AI_E2E_LLM_TEMPERATURE: float = 0.1  # 自愈和断言的 LLM 温度
+    AI_E2E_LLM_MAX_TOKENS: int = 256  # 单次 LLM 调用最大 token
+    AI_E2E_CONFIDENCE_THRESHOLD: float = 0.7  # LLM 断言置信度阈值
+
     def __init__(self, **values):
         """初始化方法."""
         super().__init__(**values)
