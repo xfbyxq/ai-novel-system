@@ -12,7 +12,6 @@ import {
   Tooltip,
   message,
   Divider,
-  Alert,
   Collapse,
   Tag,
   List,
@@ -28,11 +27,9 @@ import {
   BookOutlined,
   ProfileOutlined,
 } from '@ant-design/icons';
-import type { PlotOutline } from '@/api/types';
-import { getPlotOutline, updatePlotOutline, aiAssistOutline } from '@/api/outlines';
-import { createGenerationTask } from '@/api/generation';
-import { useGenerationStore } from '@/stores/useGenerationStore';
-import { useNavigate } from 'react-router-dom';
+import type { PlotOutline, BatchAIAssistResponse } from '@/api/types';
+import { getPlotOutline, updatePlotOutline, aiAssistOutline, batchAiAssistOutline } from '@/api/outlines';
+import SmartEnhanceModal from '@/components/SmartEnhanceModal';
 
 interface MainPlot {
   core_conflict?: string;
@@ -263,15 +260,11 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [completeness, setCompleteness] = useState(0);
-  
-  // 新增：大纲完善任务状态管理
-  const {
-    setCurrentEnhancementTask,
-    hasRunningEnhancementTask
-  } = useGenerationStore();
-  const navigate = useNavigate();
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [enhancementTaskId, setEnhancementTaskId] = useState<string | null>(null);
+
+  // 智能完善状态
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchResults, setBatchResults] = useState<BatchAIAssistResponse | null>(null);
+  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
 
 
 
@@ -414,77 +407,50 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
     calculateCompleteness(values as MainPlot);
   }, [form]);
 
-  // 智能完善相关处理函数
+  // 智能完善：批量生成所有空字段
   const handleSmartEnhance = useCallback(async () => {
-    // 防重复点击检查
-    if (hasRunningEnhancementTask() || isCreatingTask) {
-      message.info('已有完善任务正在执行中，请稍后再试');
+    if (batchLoading) {
+      message.info('智能完善正在进行中，请稍候');
       return;
     }
 
-    setIsCreatingTask(true);
-    
+    setBatchLoading(true);
+
     try {
-      // 收集当前大纲数据
       const values = form.getFieldsValue();
-      const mainPlot: MainPlot = {};
-      
+      const currentValues: Record<string, string> = {};
       PLOT_FIELDS.forEach((field) => {
-        if (values[field.name]) {
-          mainPlot[field.name] = values[field.name];
-        }
+        currentValues[field.name] = values[field.name] || '';
       });
 
-      // 创建离线任务
-      interface TaskPayload {
-        novel_id: string;
-        task_type: 'planning' | 'writing' | 'batch_writing' | 'outline_refinement';
-        input_data: Record<string, unknown>;
-      }
-
-      const taskPayload: TaskPayload = {
-        novel_id: novelId,
-        task_type: 'outline_refinement',
-        input_data: {
-          outline_data: {
-            structure_type: outline?.structure_type || 'three_act',
-            main_plot: mainPlot,
-            sub_plots: outline?.sub_plots || [],
-            key_turning_points: outline?.key_turning_points || [],
-          },
-          options: {
-            max_iterations: 3,
-            quality_threshold: 8.0,
-            preserve_user_edits: true
-          }
-        }
-      };
-
-      const task = await createGenerationTask(taskPayload);
-
-      // 更新全局状态
-      setCurrentEnhancementTask({
-        taskId: task.id,
-        status: task.status,
-        createdAt: new Date(task.created_at)
+      const result = await batchAiAssistOutline(novelId, {
+        current_values: currentValues,
+        preserve_user_edits: true,
       });
 
-      // 显示成功提示，提供跳转选项而非强制跳转
-      message.success({
-        content: '智能完善任务已创建',
-        duration: 5,
-      });
-
-      // 设置本地状态以便在当前页面显示进度指示器
-      setEnhancementTaskId(task.id);
-
+      setBatchResults(result);
+      setShowEnhanceModal(true);
     } catch (error) {
-      console.error('创建完善任务失败:', error);
-      message.error('创建任务失败，请稍后重试');
+      console.error('智能完善失败:', error);
+      message.error('智能完善失败，请稍后重试');
     } finally {
-      setIsCreatingTask(false);
+      setBatchLoading(false);
     }
-  }, [novelId, form, outline, hasRunningEnhancementTask, isCreatingTask, setCurrentEnhancementTask, setEnhancementTaskId]);
+  }, [novelId, form, batchLoading]);
+
+  // 应用智能完善结果中用户选中的字段
+  const handleApplyBatchResults = useCallback(
+    (acceptedFields: Record<string, string>) => {
+      const count = Object.keys(acceptedFields).length;
+      for (const [name, value] of Object.entries(acceptedFields)) {
+        form.setFieldValue(name, value);
+      }
+      calculateCompleteness(form.getFieldsValue() as MainPlot);
+      message.success(`已应用 ${count} 个字段的 AI 建议`);
+      setShowEnhanceModal(false);
+    },
+    [form, calculateCompleteness],
+  );
 
   const getProgressColor = (percent: number) => {
     if (percent < 30) return '#ff4d4f';
@@ -503,35 +469,6 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
 
   return (
     <div>
-      {/* 任务进度提示 */}
-      {enhancementTaskId && (
-        <Alert
-          message="智能完善任务已创建"
-          description={
-            <Space>
-              <span>任务正在进行中，您可以继续编辑大纲。</span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => navigate(`/novels/${novelId}?tab=generation-history`)}
-              >
-                查看进度
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => setEnhancementTaskId(null)}
-              >
-                关闭提示
-              </Button>
-            </Space>
-          }
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
       <Card style={{ marginBottom: 16 }}>
         <Row align="middle" gutter={16}>
           <Col flex="auto">
@@ -559,10 +496,10 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
                 type="primary"
                 icon={<ThunderboltOutlined />}
                 onClick={handleSmartEnhance}
-                disabled={hasRunningEnhancementTask() || isCreatingTask}
-                loading={isCreatingTask}
+                disabled={batchLoading}
+                loading={batchLoading}
               >
-                {isCreatingTask ? '创建中...' : '智能完善'}
+                {batchLoading ? '智能完善中...' : '智能完善'}
               </Button>
               <Button
                 type="primary"
@@ -674,6 +611,15 @@ export default function OutlineRefinementTab({ novelId, onOutlineUpdate }: Props
           </Typography.Text>
         </Typography.Paragraph>
       </Card>
+
+      <SmartEnhanceModal
+        open={showEnhanceModal}
+        onClose={() => setShowEnhanceModal(false)}
+        results={batchResults?.results ?? []}
+        fieldLabels={Object.fromEntries(PLOT_FIELDS.map((f) => [f.name, f.label]))}
+        processingTime={batchResults?.processing_time ?? 0}
+        onApply={handleApplyBatchResults}
+      />
     </div>
   );
 }

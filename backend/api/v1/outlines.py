@@ -18,6 +18,9 @@ from backend.dependencies import get_db
 from backend.schemas.outline import (
     AIAssistRequest,
     AIAssistResponse,
+    BatchAIAssistRequest,
+    BatchAIAssistResponse,
+    BatchFieldResult,
     ChapterOutlineTaskResponse,
     EnhancementOptions,
     EnhancementPreviewResponse,
@@ -586,6 +589,121 @@ async def ai_assist_outline_field(
         alternatives=suggestion_result.get("alternatives"),
         reasoning=suggestion_result.get("reasoning"),
         generated_at=datetime.now(),
+    )
+
+
+@router.post("/outline/batch-ai-assist", response_model=BatchAIAssistResponse)
+async def batch_ai_assist_outline(
+    novel_id: UUID,
+    request: BatchAIAssistRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    批量AI辅助生成大纲主线剧情字段.
+
+    按字段顺序逐个生成，每个字段可参考前面已生成的内容。
+    支持跳过用户已编辑的字段（preserve_user_edits=True）。
+    """
+    start_time = time.time()
+
+    logger.info(
+        f"批量AI辅助生成开始: novel_id={novel_id}, "
+        f"fields={request.fields}, preserve_user_edits={request.preserve_user_edits}"
+    )
+
+    # 验证小说存在
+    novel_result = await db.execute(select(Novel).where(Novel.id == novel_id))
+    novel = novel_result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+
+    # 一次性加载所有上下文数据
+    outline_result = await db.execute(
+        select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    )
+    plot_outline = outline_result.scalar_one_or_none()
+
+    world_result = await db.execute(
+        select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+    )
+    world_setting = world_result.scalar_one_or_none()
+
+    char_result = await db.execute(
+        select(Character).where(Character.novel_id == novel_id)
+    )
+    characters = char_result.scalars().all()
+
+    # 构建共享上下文（与 ai_assist_outline_field 一致）
+    context: dict = {}
+
+    if plot_outline:
+        context["outline"] = {
+            "structure_type": plot_outline.structure_type,
+            "volumes": plot_outline.volumes,
+            "main_plot": plot_outline.main_plot or {},
+            "sub_plots": plot_outline.sub_plots,
+            "climax_chapter": plot_outline.climax_chapter,
+        }
+
+    if world_setting:
+        context["world_setting"] = {
+            "world_name": world_setting.world_name,
+            "world_type": world_setting.world_type,
+            "power_system": world_setting.power_system,
+        }
+
+    if characters:
+        context["characters"] = [
+            {"name": c.name, "role": c.role_type, "personality": c.personality}
+            for c in characters[:10]
+        ]
+
+    # 构建小说元信息
+    length_type_to_words = {"short": 30000, "medium": 100000, "long": 300000}
+    estimated_target_words = length_type_to_words.get(novel.length_type, 100000)
+    chapter_config = novel.chapter_config or {}
+    total_chapters = chapter_config.get("total_chapters", 6)
+    chapter_based_estimate = total_chapters * 3000
+
+    context["novel"] = {
+        "title": novel.title,
+        "genre": novel.genre,
+        "length_type": novel.length_type,
+        "target_word_count": max(estimated_target_words, chapter_based_estimate),
+        "current_word_count": novel.word_count,
+        "total_chapters": total_chapters,
+    }
+
+    # 调用批量生成服务
+    outline_service = OutlineService(db)
+    field_results = await outline_service.batch_generate_field_suggestions(
+        fields=request.fields,
+        context=context,
+        current_values=request.current_values,
+        preserve_user_edits=request.preserve_user_edits,
+        hints=request.additional_hints,
+    )
+
+    processing_time = time.time() - start_time
+
+    # 统计结果
+    success_count = sum(1 for r in field_results if r["status"] == "success")
+    skipped_count = sum(1 for r in field_results if r["status"] == "skipped")
+    failed_count = sum(1 for r in field_results if r["status"] == "failed")
+
+    logger.info(
+        f"批量AI辅助生成完成: novel_id={novel_id}, "
+        f"成功={success_count}, 跳过={skipped_count}, 失败={failed_count}, "
+        f"耗时={round(processing_time, 1)}s"
+    )
+
+    return BatchAIAssistResponse(
+        results=[BatchFieldResult(**r) for r in field_results],
+        total_fields=len(field_results),
+        success_count=success_count,
+        skipped_count=skipped_count,
+        failed_count=failed_count,
+        processing_time=round(processing_time, 1),
     )
 
 

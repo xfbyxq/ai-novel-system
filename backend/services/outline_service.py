@@ -1067,6 +1067,137 @@ class OutlineService:
         }
         return fallbacks.get(field_name, "待补充")
 
+    async def batch_generate_field_suggestions(
+        self,
+        fields: list[str],
+        context: Dict[str, Any],
+        current_values: Dict[str, str],
+        preserve_user_edits: bool = True,
+        hints: Optional[str] = None,
+    ) -> list[Dict[str, Any]]:
+        """批量顺序生成主线剧情字段建议.
+
+        按字段依赖顺序逐个生成，每个新生成的字段会加入上下文供后续字段参考。
+        已有值的字段可选择跳过，但其值仍作为上下文参与后续生成。
+
+        Args:
+            fields: 要生成的字段列表（按顺序）
+            context: 共享上下文（包含novel、world_setting、characters、outline信息）
+            current_values: 各字段的当前值
+            preserve_user_edits: 是否跳过已有值的字段
+            hints: 额外提示信息
+
+        Returns:
+            每个字段的生成结果列表
+        """
+        results: list[Dict[str, Any]] = []
+        # 累积上下文：包含用户已填写的值和新生成的值，供后续字段的prompt参考
+        accumulated_main_plot: Dict[str, str] = {}
+
+        logger.info(
+            f"批量字段生成开始: 共{len(fields)}个字段, "
+            f"preserve_user_edits={preserve_user_edits}"
+        )
+
+        # 先将所有已有值加入累积上下文（无论是否跳过，都作为参考）
+        pre_filled = []
+        for field_name in fields:
+            value = current_values.get(field_name, "")
+            if value and value.strip():
+                accumulated_main_plot[field_name] = value.strip()
+                pre_filled.append(field_name)
+        if pre_filled:
+            logger.info(f"已有值的字段({len(pre_filled)}个): {pre_filled}")
+
+        # 构建用于 _generate_main_plot_field_with_llm 的 prompt_template（不影响实际逻辑）
+        prompt_template = "生成此字段的内容"
+
+        for field_name in fields:
+            original_value = current_values.get(field_name, "")
+            has_value = bool(original_value and original_value.strip())
+
+            # 跳过已有值的字段
+            if preserve_user_edits and has_value:
+                logger.info(f"跳过字段 [{field_name}]: 已有用户编辑内容")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": "",
+                    "original_value": original_value,
+                    "status": "skipped",
+                    "error_message": None,
+                })
+                continue
+
+            logger.info(
+                f"开始生成字段 [{field_name}], "
+                f"当前累积上下文字段: {list(accumulated_main_plot.keys())}"
+            )
+
+            # 将累积的上下文合并到context中，使prompt能参考前面的字段
+            field_context = self._build_field_context(context, accumulated_main_plot)
+
+            try:
+                suggestion = await self._generate_main_plot_field_with_llm(
+                    field_name=field_name,
+                    context=field_context,
+                    prompt_template=prompt_template,
+                )
+                # 将新生成的值加入累积上下文
+                if suggestion and suggestion.strip():
+                    accumulated_main_plot[field_name] = suggestion.strip()
+
+                logger.info(f"字段 [{field_name}] 生成成功, 内容长度={len(suggestion or '')}")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": suggestion,
+                    "original_value": original_value,
+                    "status": "success",
+                    "error_message": None,
+                })
+            except Exception as e:
+                logger.error(f"字段 [{field_name}] 生成失败: {e}")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": "",
+                    "original_value": original_value,
+                    "status": "failed",
+                    "error_message": str(e),
+                })
+
+        success = sum(1 for r in results if r["status"] == "success")
+        skipped = sum(1 for r in results if r["status"] == "skipped")
+        failed = sum(1 for r in results if r["status"] == "failed")
+        logger.info(f"批量字段生成完成: 成功={success}, 跳过={skipped}, 失败={failed}")
+
+        return results
+
+    @staticmethod
+    def _build_field_context(
+        base_context: Dict[str, Any],
+        accumulated_main_plot: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """构建包含累积生成结果的字段上下文.
+
+        将已生成/已有的字段值合并到outline.main_plot中，
+        使后续字段的prompt能参考前面的生成结果。
+
+        Args:
+            base_context: 基础上下文（包含novel、world_setting等）
+            accumulated_main_plot: 累积的main_plot字段值
+
+        Returns:
+            合并后的上下文字典
+        """
+        # 深拷贝outline部分以避免修改原始context
+        ctx = {**base_context}
+        outline = {**(ctx.get("outline") or {})}
+        existing_main_plot = {**(outline.get("main_plot") or {})}
+        # 用累积值覆盖/补充main_plot
+        existing_main_plot.update(accumulated_main_plot)
+        outline["main_plot"] = existing_main_plot
+        ctx["outline"] = outline
+        return ctx
+
     async def get_outline_versions(self, novel_id: UUID) -> List[Dict[str, Any]]:
         """
         获取大纲版本历史.

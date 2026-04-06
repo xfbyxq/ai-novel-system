@@ -30,15 +30,22 @@
 - [novel_tool_executor.py](file://backend/services/novel_tool_executor.py)
 - [specific_agents.py](file://agents/specific_agents.py)
 - [crew_manager.py](file://agents/crew_manager.py)
+- [enhanced_context_manager.py](file://agents/enhanced_context_manager.py)
+- [character.py](file://core/models/character.py)
+- [generation_service.py](file://backend/services/generation_service.py)
+- [entity_extractor_service.py](file://backend/services/entity_extractor_service.py)
+- [character_auto_detector.py](file://backend/services/character_auto_detector.py)
+- [character_consistency_tracker.py](file://agents/character_consistency_tracker.py)
+- [context_compression_enhancement.py](file://tests/agents/test_context_compression_enhancement.py)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增章节编辑助手系统，包括章节分析、修改提取和执行功能
-- 新增章节上下文构建器，提供丰富的章节编辑上下文信息
-- 新增工具执行框架，支持LLM按需调用小说数据查询和修改工具
-- 集成章节助手场景，支持章节内容的智能编辑和修改
-- 增强AI聊天服务的章节编辑能力，提供完整的章节分析和修改流程
+- 新增增强型上下文管理器，提供四层记忆架构和智能上下文构建
+- 增强章节上下文处理能力，支持核心层、关键层、近期层和历史层
+- 新增角色类型解析功能，支持角色类型枚举和自动检测
+- 优化章节编辑助手的上下文构建和角色信息处理
+- 增强角色一致性跟踪和演进历史记录功能
 
 ## 目录
 1. [简介](#简介)
@@ -46,22 +53,25 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [章节编辑助手系统](#章节编辑助手系统)
-7. [章节上下文构建器](#章节上下文构建器)
-8. [工具执行框架](#工具执行框架)
-9. [修订系统集成](#修订系统集成)
-10. [智能章节分析功能](#智能章节分析功能)
-11. [持久化记忆系统](#持久化记忆系统)
-12. [依赖关系分析](#依赖关系分析)
-13. [性能考虑](#性能考虑)
-14. [故障排除指南](#故障排除指南)
-15. [结论](#结论)
+6. [增强型上下文管理器](#增强型上下文管理器)
+7. [章节上下文处理能力](#章节上下文处理能力)
+8. [角色类型解析功能](#角色类型解析功能)
+9. [章节编辑助手系统](#章节编辑助手系统)
+10. [章节上下文构建器](#章节上下文构建器)
+11. [工具执行框架](#工具执行框架)
+12. [修订系统集成](#修订系统集成)
+13. [智能章节分析功能](#智能章节分析功能)
+14. [持久化记忆系统](#持久化记忆系统)
+15. [依赖关系分析](#依赖关系分析)
+16. [性能考虑](#性能考虑)
+17. [故障排除指南](#故障排除指南)
+18. [结论](#结论)
 
 ## 简介
 
 AI聊天服务是一个基于FastAPI构建的智能对话系统，专门为网络小说创作提供AI辅助功能。该系统集成了通义千问大模型，支持多种创作场景，包括小说创作、爬虫任务规划、小说修订和内容分析。系统采用内存缓存机制和数据库持久化相结合的方式，提供了高效的会话管理和内容存储能力。
 
-**更新** 系统现已显著增强了分析能力和稳定性，新增了章节编辑助手系统、章节上下文构建器和工具执行框架，以及修订建议提取、应用和智能章节分析功能。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析、关系网络查询和结构化修订建议方面。
+**更新** 系统现已显著增强了分析能力和稳定性，新增了增强型上下文管理器、章节编辑助手系统、章节上下文构建器和工具执行框架，以及修订建议提取、应用和智能章节分析功能。这些改进大幅提升了系统的智能化水平和用户体验，特别是在处理复杂的章节内容分析、关系网络查询和结构化修订建议方面。
 
 ## 项目结构
 
@@ -85,6 +95,8 @@ Cost[成本追踪<br/>CostTracker]
 Revision[修订服务<br/>RevisionServices]
 ChapterAssistant[章节编辑助手<br/>ChapterAssistant]
 ToolExecutor[工具执行器<br/>NovelToolExecutor]
+EnhancedContext[增强上下文管理器<br/>EnhancedContextManager]
+CharacterAutoDetect[角色自动检测<br/>CharacterAutoDetector]
 end
 subgraph "图数据库层"
 GraphAPI[图数据库API<br/>/api/v1/graph]
@@ -109,12 +121,20 @@ subgraph "章节编辑系统"
 ContextBuilder[章节上下文构建器<br/>ChapterContextBuilder]
 ToolFramework[工具执行框架<br/>Function Calling]
 Agents[专用Agent<br/>编辑Agent]
+CharacterConsistency[角色一致性跟踪<br/>CharacterConsistencyTracker]
+end
+subgraph "角色管理系统"
+CharacterModel[角色模型<br/>Character/RoleType]
+EntityExtractor[实体提取服务<br/>EntityExtractorService]
+CharacterAutoDetect[角色自动检测器<br/>CharacterAutoDetector]
 end
 FE --> API
 API --> Router
 Router --> Service
 Service --> Memory
 Service --> Context
+Service --> EnhancedContext
+Service --> CharacterAutoDetect
 Service --> Qwen
 Service --> Models
 Service --> GraphAPI
@@ -132,6 +152,8 @@ ChapterAssistant --> ContextBuilder
 ChapterAssistant --> ToolExecutor
 ToolExecutor --> ToolFramework
 Service --> Agents
+Agents --> CharacterConsistency
+CharacterConsistency --> CharacterModel
 ```
 
 **图表来源**
@@ -142,6 +164,9 @@ Service --> Agents
 - [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
 - [chapter_context_builder.py:58-121](file://backend/services/chapter_context_builder.py#L58-L121)
 - [novel_tool_executor.py:286-356](file://backend/services/novel_tool_executor.py#L286-L356)
+- [enhanced_context_manager.py:209-293](file://agents/enhanced_context_manager.py#L209-L293)
+- [character.py:14-21](file://core/models/character.py#L14-L21)
+- [character_auto_detector.py:24-113](file://backend/services/character_auto_detector.py#L24-L113)
 
 **章节来源**
 - [ai_chat.py:1-50](file://backend/api/v1/ai_chat.py#L1-L50)
@@ -162,6 +187,8 @@ class AiChatService {
 +dict sessions
 +NovelMemoryService memory_service
 +ContextManager context_manager
++EnhancedContextManager enhanced_context_manager
++CharacterAutoDetector character_auto_detector
 +create_session(scene, context) ChatSession
 +send_message(session_id, message) str
 +send_message_stream(session_id, message) AsyncIterator~str~
@@ -183,6 +210,7 @@ class AiChatService {
 +get_novel_chapters(novel_id) Dict[]
 +execute_chapter_editing_tasks(tasks) str
 +_build_chapter_assistant_prompt(base_prompt, chapter_info, context) str
++_build_enhanced_context_prompt(base_prompt, chapter_info, context) str
 }
 class ChatSession {
 +str session_id
@@ -215,9 +243,27 @@ class ContextManager {
 +get_chapter_context() Dict
 +save_chapter_context() void
 }
+class EnhancedContextManager {
++str novel_id
++Dict[int, EnhancedContext] context_cache
++build_context_for_chapter() EnhancedContext
++get_context() EnhancedContext
++clear_cache() void
+}
+class CharacterAutoDetector {
++AsyncSession db
++QwenClient client
++CostTracker cost_tracker
++detect_and_register_new_characters() List[Character]
++_extract_characters_from_content() List[Dict]
++_filter_new_characters() List[Dict]
++_register_characters() List[Character]
+}
 AiChatService --> ChatSession : creates
 AiChatService --> QwenClient : uses
 AiChatService --> ContextManager : uses
+AiChatService --> EnhancedContextManager : uses
+AiChatService --> CharacterAutoDetector : uses
 ChatSession --> ChatMessage : contains
 ```
 
@@ -226,6 +272,8 @@ ChatSession --> ChatMessage : contains
 - [ai_chat_service.py:128-187](file://backend/services/ai_chat_service.py#L128-L187)
 - [qwen_client.py:16-45](file://llm/qwen_client.py#L16-L45)
 - [context_manager.py:110-149](file://backend/services/context_manager.py#L110-L149)
+- [enhanced_context_manager.py:209-293](file://agents/enhanced_context_manager.py#L209-L293)
+- [character_auto_detector.py:24-113](file://backend/services/character_auto_detector.py#L24-L113)
 
 ### 数据模型
 
@@ -269,6 +317,8 @@ sequenceDiagram
 participant Client as 客户端
 participant API as FastAPI接口
 participant Service as AI聊天服务
+participant EnhancedContext as 增强上下文管理器
+participant CharacterAutoDetect as 角色自动检测器
 participant Context as 上下文管理
 participant Memory as 内存服务
 participant Graph as 图数据库
@@ -279,6 +329,9 @@ participant LLM as 通义千问
 participant DB as 数据库
 Client->>API : POST /ai-chat/sessions
 API->>Service : create_session()
+Service->>EnhancedContext : 构建增强上下文
+EnhancedContext->>EnhancedContext : 四层记忆架构处理
+EnhancedContext-->>Service : 返回增强上下文
 Service->>Context : 获取章节上下文
 Context->>Memory : 读取章节摘要
 Memory-->>Context : 返回摘要数据
@@ -301,10 +354,13 @@ Service-->>API : 应用结果
 API-->>Client : 应用成功
 Client->>API : POST /ai-chat/sessions/{id}/messages
 API->>Service : send_message()
-Service->>Context : 构建图数据库上下文
-Context->>Graph : 查询角色网络/关系
-Graph-->>Context : 返回图数据
-Service->>LLM : 生成回复(含图上下文)
+Service->>EnhancedContext : 构建增强上下文
+EnhancedContext->>EnhancedContext : 智能提取关键信息
+EnhancedContext->>CharacterAutoDetect : 检测新角色
+CharacterAutoDetect->>DB : 注册新角色
+DB-->>CharacterAutoDetect : 确认注册
+CharacterAutoDetect-->>EnhancedContext : 返回新角色信息
+EnhancedContext->>LLM : 生成回复(含增强上下文)
 LLM-->>Service : AI回复
 Service->>DB : 保存消息
 Service-->>API : 回复内容
@@ -329,6 +385,8 @@ API-->>Client : 编辑结果
 - [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
 - [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
 - [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+- [enhanced_context_manager.py:225-293](file://agents/enhanced_context_manager.py#L225-L293)
+- [character_auto_detector.py:45-113](file://backend/services/character_auto_detector.py#L45-L113)
 
 ## 详细组件分析
 
@@ -364,8 +422,9 @@ stateDiagram-v2
 获取章节摘要 --> 生成标题 : AI智能生成
 生成标题 --> 等待消息 : 生成欢迎消息
 等待消息 --> 处理消息 : 用户发送消息
-处理消息 --> 构建图上下文 : 查询图数据库
-构建图上下文 --> 生成回复 : AI生成回复
+处理消息 --> 构建增强上下文 : 增强型上下文管理器
+构建增强上下文 --> 检测新角色 : 角色自动检测器
+检测新角色 --> 生成回复 : AI生成回复
 生成回复 --> 保存会话 : 异步保存到数据库含novel_id和title
 保存会话 --> 等待消息 : 继续对话
 处理消息 --> 需要澄清 : 意图不明确
@@ -378,6 +437,8 @@ stateDiagram-v2
 **图表来源**
 - [ai_chat_service.py:526-570](file://backend/services/ai_chat_service.py#L526-L570)
 - [ai_chat_service.py:572-574](file://backend/services/ai_chat_service.py#L572-L574)
+- [enhanced_context_manager.py:225-293](file://agents/enhanced_context_manager.py#L225-L293)
+- [character_auto_detector.py:45-113](file://backend/services/character_auto_detector.py#L45-L113)
 
 **章节来源**
 - [ai_chat_service.py:53-115](file://backend/services/ai_chat_service.py#L53-L115)
@@ -534,6 +595,8 @@ graph TB
 subgraph "内存缓存层"
 Cache[MemoryCache]
 Version[版本映射<br/>novel_id -> version]
+EnhancedContextCache[增强上下文缓存<br/>chapter_number -> EnhancedContext]
+CharacterCache[角色缓存<br/>角色名 -> 角色信息]
 end
 subgraph "结构化数据"
 Base[基础信息<br/>title, genre, status]
@@ -541,13 +604,16 @@ Details[详细信息<br/>world_setting, characters, plot_outline]
 Chapters[章节数据<br/>chapter_list]
 Analysis[分析结果<br/>strengths, weaknesses, suggestions]
 ChapterSummaries[章节摘要<br/>key_events, character_changes, plot_progress]
+EnhancedContext[增强上下文<br/>四层记忆架构]
+CharacterProfiles[角色档案<br/>演进历史]
 end
 Cache --> Base
 Cache --> Details
 Cache --> Chapters
 Cache --> Analysis
 Cache --> ChapterSummaries
-Version --> Cache
+EnhancedContextCache --> EnhancedContext
+CharacterCache --> CharacterProfiles
 ```
 
 **图表来源**
@@ -594,6 +660,7 @@ Version --> Cache
 |------|------|------|----------|
 | /ai-chat/sessions/{session_id}/messages | POST | 章节助手消息处理 | 编辑结果 |
 | /ai-chat/chapter-context | POST | 获取章节上下文 | 章节上下文信息 |
+| /ai-chat/enhanced-context | POST | 获取增强上下文 | 增强上下文信息 |
 
 #### WebSocket通信协议
 
@@ -796,51 +863,501 @@ InvalidateCache --> Success[返回成功结果]
 - [ai_chat_service.py:2618-3100](file://backend/services/ai_chat_service.py#L2618-L3100)
 - [ai_chat.py:311-431](file://backend/api/v1/ai_chat.py#L311-L431)
 
+## 增强型上下文管理器
+
+### 系统概述
+
+**更新** 系统新增了增强型上下文管理器（EnhancedContextManager），这是一个采用四层记忆架构的智能上下文管理组件，专门用于为AI聊天服务提供增强的上下文信息：
+
+```mermaid
+graph TB
+subgraph "增强型上下文管理器"
+EnhancedContextManager[EnhancedContextManager]
+EnhancedContext[EnhancedContext]
+CoreLayer[核心层]
+CriticalLayer[关键层]
+RecentLayer[近期层]
+HistoricalLayer[历史层]
+end
+subgraph "四层记忆架构"
+CoreLayer --> CoreLayer
+CriticalLayer --> CriticalLayer
+RecentLayer --> RecentLayer
+HistoricalLayer --> HistoricalLayer
+end
+subgraph "核心功能"
+IntelligentExtraction[智能提取关键信息]
+DynamicAdjustment[动态调整上下文]
+PriorityScoring[优先级评分]
+TokenEstimation[Token估算]
+end
+EnhancedContextManager --> EnhancedContext
+EnhancedContext --> CoreLayer
+EnhancedContext --> CriticalLayer
+EnhancedContext --> RecentLayer
+EnhancedContext --> HistoricalLayer
+EnhancedContextManager --> IntelligentExtraction
+EnhancedContextManager --> DynamicAdjustment
+EnhancedContextManager --> PriorityScoring
+EnhancedContextManager --> TokenEstimation
+```
+
+**图表来源**
+- [enhanced_context_manager.py:209-293](file://agents/enhanced_context_manager.py#L209-L293)
+- [enhanced_context_manager.py:158-207](file://agents/enhanced_context_manager.py#L158-L207)
+
+### 四层记忆架构
+
+增强型上下文管理器采用独特的四层记忆架构，确保关键信息不会丢失：
+
+#### 核心层（CoreLayer）
+- **功能**：始终携带的核心信息
+- **包含**：核心主题、核心问题、主线冲突、主角终极目标、类型
+- **特点**：永不移除，始终在最前面
+
+#### 关键层（CriticalLayer）
+- **功能**：动态保留的关键信息
+- **包含**：伏笔、未解决冲突、角色重大决策
+- **特点**：基于重要性和紧急程度动态调整
+
+#### 近期层（RecentLayer）
+- **功能**：最近3章的详细摘要
+- **包含**：剧情、关键事件、角色变化、伏笔、结尾状态
+- **特点**：保留完整摘要，由统一压缩处理
+
+#### 历史层（HistoricalLayer）
+- **功能**：早期章节的索引式回顾
+- **包含**：卷概要、关键事件、里程碑
+- **特点**：按卷聚合，保留完整事件列表
+
+**章节来源**
+- [enhanced_context_manager.py:20-207](file://agents/enhanced_context_manager.py#L20-L207)
+
+### 智能上下文构建流程
+
+```mermaid
+flowchart TD
+Start([开始构建增强上下文]) --> ValidateInputs[验证输入参数]
+ValidateInputs --> BuildCoreLayer[构建核心层]
+BuildCoreLayer --> BuildCriticalLayer[构建关键层]
+BuildCriticalLayer --> BuildRecentLayer[构建近期层]
+BuildRecentLayer --> BuildHistoricalLayer[构建历史层]
+BuildHistoricalLayer --> CacheContext[缓存上下文]
+CacheContext --> EstimateTokens[估算Token数量]
+EstimateTokens --> LogStats[记录统计信息]
+LogStats --> ReturnContext[返回EnhancedContext]
+```
+
+#### 关键层构建算法
+
+关键层是增强上下文的核心，采用智能算法动态识别重要信息：
+
+```mermaid
+flowchart TD
+BuildCriticalLayer([构建关键层]) --> ProcessForeshadowings[处理伏笔]
+ProcessForeshadowings --> CheckImportance[检查重要性>=7]
+CheckImportance --> CheckUrgency[检查超期>=3章]
+CheckUrgency --> AddCritical[添加到关键层]
+CheckImportance --> |<7| CheckMedium[检查重要性>=5]
+CheckMedium --> CheckMediumUrgency[检查超期>=5章]
+CheckMediumUrgency --> AddRecommended[添加到推荐层]
+CheckMediumUrgency --> ProcessConflicts[处理未解决冲突]
+ProcessConflicts --> CheckResolved[检查是否已解决]
+CheckResolved --> |已解决| Skip[跳过]
+CheckResolved --> |未解决| CheckConflictUrgency[检查超期>=2章]
+CheckConflictUrgency --> AddConflict[添加冲突到关键层]
+CheckConflictUrgency --> ProcessDecisions[处理角色重大决策]
+ProcessDecisions --> CheckRecentChapters[检查最近5章]
+CheckRecentChapters --> ExtractDecisions[提取重大变化/决策]
+ExtractDecisions --> SortByPriority[按优先级排序]
+SortByPriority --> ReturnCritical[返回关键层]
+```
+
+**图表来源**
+- [enhanced_context_manager.py:314-424](file://agents/enhanced_context_manager.py#L314-L424)
+
+**章节来源**
+- [enhanced_context_manager.py:225-554](file://agents/enhanced_context_manager.py#L225-L554)
+
+### Token估算与优化
+
+增强上下文管理器内置了智能的Token估算功能：
+
+#### Token估算算法
+
+```mermaid
+flowchart TD
+EstimateTokens([估算Token数量]) --> GetPrompt[获取完整提示词]
+GetPrompt --> CountCharacters[计算字符数]
+CountCharacters --> DivideByFactor[除以1.5中文约1.5字符/token]
+DivideByFactor --> ReturnEstimate[返回估算值]
+```
+
+#### 优化策略
+
+1. **中文字符优化**：使用1.5字符/Token的估算因子
+2. **动态调整**：根据上下文复杂度自动调整
+3. **缓存机制**：避免重复计算
+
+**章节来源**
+- [enhanced_context_manager.py:203-207](file://agents/enhanced_context_manager.py#L203-L207)
+
+## 章节上下文处理能力
+
+### 统一上下文管理器
+
+**更新** 系统新增了统一上下文管理器（UnifiedContextManager），解决了原有的三层存储碎片化问题：
+
+```mermaid
+graph TB
+subgraph "统一上下文管理器"
+UnifiedContextManager[UnifiedContextManager]
+LRUCache[LRU缓存 + TTL]
+MemoryServiceCache[MemoryService缓存]
+PersistentMemory[SQLite持久化]
+end
+subgraph "三层存储统一"
+MemoryCache[内存缓存]
+MemoryService[MemoryService]
+SQLite[SQLite持久化]
+end
+subgraph "自动同步机制"
+SyncMechanism[自动同步]
+CleanupMechanism[清理机制]
+end
+UnifiedContextManager --> LRUCache
+UnifiedContextManager --> MemoryServiceCache
+UnifiedContextManager --> PersistentMemory
+LRUCache --> MemoryCache
+MemoryServiceCache --> MemoryService
+PersistentMemory --> SQLite
+UnifiedContextManager --> SyncMechanism
+UnifiedContextManager --> CleanupMechanism
+```
+
+**图表来源**
+- [context_manager.py:99-250](file://backend/services/context_manager.py#L99-L250)
+
+### 上下文构建优化
+
+统一上下文管理器提供了优化的上下文构建接口：
+
+#### 上下文获取流程
+
+```mermaid
+flowchart TD
+GetChapterContext([获取章节上下文]) --> CheckMemoryCache[检查内存缓存]
+CheckMemoryCache --> CacheHit{缓存命中?}
+CacheHit --> |是| ReturnCached[返回缓存数据]
+CacheHit --> |否| CheckMemoryService[检查MemoryService缓存]
+CheckMemoryService --> MSHit{MemoryService命中?}
+MSHit --> |是| SyncToAll[同步到所有层]
+SyncToAll --> ReturnMS[返回MemoryService数据]
+MSHit --> |否| CheckPersistent[检查SQLite持久化]
+CheckPersistent --> PSHit{持久化命中?}
+PSHit --> |是| SyncToAll --> ReturnPS[返回持久化数据]
+PSHit --> |否| LoadFromDB[从数据库加载]
+LoadFromDB --> SyncToAll --> ReturnDB[返回数据库数据]
+```
+
+#### 缓存清理策略
+
+统一上下文管理器实现了智能的缓存清理机制：
+
+```mermaid
+classDiagram
+class LRUCache {
++int max_size
++int ttl_minutes
++OrderedDict cache
++Dict timestamps
++get(key) Any
++set(key, value) void
++delete(key) void
++clear() void
++cleanup_expired() int
+}
+class UnifiedContextManager {
++AsyncSession db
++UUID novel_id
++LRUCache memory_cache
++get_chapter_context() Dict
++update_chapter_context() void
++build_previous_context() str
++get_novel_memory() Dict
++cleanup() Dict
+}
+UnifiedContextManager --> LRUCache : uses
+```
+
+**图表来源**
+- [context_manager.py:33-97](file://backend/services/context_manager.py#L33-L97)
+- [context_manager.py:157-282](file://backend/services/context_manager.py#L157-L282)
+
+**章节来源**
+- [context_manager.py:1-390](file://backend/services/context_manager.py#L1-L390)
+
+### 上下文压缩优化
+
+**更新** 系统新增了上下文压缩优化功能，支持增强版的压缩上下文结构：
+
+#### 增强版压缩上下文
+
+```mermaid
+classDiagram
+class CompressedContext {
++List foreshadowing
++List character_arcs
++List key_events
++List unresolved_conflicts
++Dict plot_points
++Dict character_profiles
++Dict relationship_maps
++Dict timeline_overview
++to_prompt() str
++add_foreshadowing() void
++add_character_arc() void
++add_key_event() void
++add_unresolved_conflict() void
+}
+class EnhancedContext {
++CoreLayer core_layer
++List critical_layer
++List recent_layer
++List historical_layer
++to_prompt() str
++estimate_tokens() int
+}
+CompressedContext --> EnhancedContext : supports
+```
+
+**图表来源**
+- [context_compression_enhancement.py:6-39](file://tests/agents/test_context_compression_enhancement.py#L6-L39)
+
+**章节来源**
+- [context_compression_enhancement.py:1-39](file://tests/agents/test_context_compression_enhancement.py#L1-L39)
+
+## 角色类型解析功能
+
+### 角色类型枚举系统
+
+**更新** 系统新增了完整的角色类型解析功能，支持标准的角色类型枚举和自动检测：
+
+```mermaid
+graph TB
+subgraph "角色类型系统"
+RoleType[RoleType枚举]
+Gender[Gender枚举]
+CharacterStatus[CharacterStatus枚举]
+RelationshipType[RelationshipType枚举]
+end
+subgraph "角色模型"
+Character[Character模型]
+CharacterProfile[CharacterProfile]
+CharacterEvolution[CharacterEvolution]
+end
+subgraph "角色解析功能"
+RoleParser[角色类型解析器]
+GenderParser[性别解析器]
+StatusParser[状态解析器]
+RelationshipParser[关系解析器]
+end
+RoleType --> Character
+Gender --> Character
+CharacterStatus --> Character
+RelationshipType --> Character
+Character --> CharacterProfile
+CharacterProfile --> CharacterEvolution
+RoleParser --> RoleType
+GenderParser --> Gender
+StatusParser --> CharacterStatus
+RelationshipParser --> RelationshipType
+```
+
+**图表来源**
+- [character.py:14-136](file://core/models/character.py#L14-L136)
+
+### 角色自动检测器
+
+**更新** 系统新增了角色自动检测器（CharacterAutoDetector），能够从章节内容中自动识别并注册新角色：
+
+```mermaid
+classDiagram
+class CharacterAutoDetector {
++AsyncSession db
++QwenClient client
++CostTracker cost_tracker
++detect_and_register_new_characters(novel_id, chapter_number, content) List[Character]
++_extract_characters_from_content(content, chapter_number, existing_names) List[Dict]
++_filter_new_characters(extracted, existing) List[Dict]
++_register_characters(novel_id, chapter_number, new_chars) List[Character]
++_normalize_name(name) str
+}
+class Character {
++UUID id
++UUID novel_id
++String name
++String role_type
++String gender
++Integer age
++Text personality
++Text background
++Dict relationships
++Dict growth_arc
++String status
+}
+CharacterAutoDetector --> Character : creates
+```
+
+**图表来源**
+- [character_auto_detector.py:24-113](file://backend/services/character_auto_detector.py#L24-L113)
+- [character.py:104-136](file://core/models/character.py#L104-L136)
+
+### 角色一致性跟踪
+
+**更新** 系统新增了角色一致性跟踪功能，能够监控角色在小说中的演进和变化：
+
+```mermaid
+classDiagram
+class CharacterConsistencyTracker {
++AsyncSession db
++track_character_evolution(novel_id, character_name, chapter_number) CharacterEvolution
++detect_inconsistencies(novel_id, character_name) List[CharacterInconsistency]
++generate_character_profile(character_name) CharacterProfile
++update_character_status(novel_id, character_name, status) bool
+}
+class CharacterProfile {
++String name
++String core_motivation
++String personal_code
++List personality_traits
++String background
++List goals
++List fears
++Dict relationships
++List skills
++List evolution_history
++String current_ability_level
++String current_identity
++int first_appearance_chapter
++int importance_level
++to_prompt() str
+}
+class CharacterEvolution {
++int chapter_number
++String attribute_name
++String before_value
++String after_value
++bool gradual_change
++String status
++to_prompt() str
+}
+CharacterConsistencyTracker --> CharacterProfile : generates
+CharacterConsistencyTracker --> CharacterEvolution : tracks
+```
+
+**图表来源**
+- [character_consistency_tracker.py:118-153](file://agents/character_consistency_tracker.py#L118-L153)
+
+### 实体提取服务集成
+
+**更新** 系统集成了实体提取服务，支持角色信息的格式化和解析：
+
+```mermaid
+classDiagram
+class EntityExtractorService {
++QwenClient llm
++extract_characters_from_text(text, known_characters) List[Dict]
++_format_known_characters(known_characters) str
++_extract_json_array(text) List[Dict]
++format_character_display(character) str
+}
+class CharacterDisplayFormatter {
++format_characters_display(characters) str
++format_character_details(character) str
+}
+EntityExtractorService --> CharacterDisplayFormatter : uses
+```
+
+**图表来源**
+- [entity_extractor_service.py:255-275](file://backend/services/entity_extractor_service.py#L255-L275)
+
+**章节来源**
+- [character.py:14-136](file://core/models/character.py#L14-L136)
+- [character_auto_detector.py:1-200](file://backend/services/character_auto_detector.py#L1-L200)
+- [character_consistency_tracker.py:110-153](file://agents/character_consistency_tracker.py#L110-L153)
+- [entity_extractor_service.py:255-275](file://backend/services/entity_extractor_service.py#L255-L275)
+
+### 角色类型解析流程
+
+```mermaid
+flowchart TD
+Start([开始角色类型解析]) --> ExtractFromContent[从章节内容提取角色信息]
+ExtractFromContent --> NormalizeName[标准化角色名称]
+NormalizeName --> CheckExisting[检查是否已存在]
+CheckExisting --> |存在| Skip[跳过注册]
+CheckExisting --> |不存在| ValidateType[验证角色类型]
+ValidateType --> CheckTypeValid{类型有效?}
+CheckTypeValid --> |否| UseDefault[使用默认类型minor]
+CheckTypeValid --> |是| UseProvided[使用提供的类型]
+UseDefault --> RegisterCharacter[注册角色到数据库]
+UseProvided --> RegisterCharacter
+RegisterCharacter --> UpdateCache[更新缓存]
+UpdateCache --> ReturnResult[返回结果]
+```
+
+**章节来源**
+- [character_auto_detector.py:168-231](file://backend/services/character_auto_detector.py#L168-L231)
+- [generation_service.py:217-247](file://backend/services/generation_service.py#L217-L247)
+
 ## 章节编辑助手系统
 
 ### 系统概述
 
-**更新** 系统新增了完整的章节编辑助手系统，这是一个专门用于章节内容编辑和修改的智能助手。该系统集成了章节上下文构建器、工具执行框架和专用编辑Agent，为用户提供全方位的章节编辑支持。
+**更新** 系统新增了完整的章节编辑助手系统，这是一个专门用于章节内容编辑和修改的智能助手。该系统集成了增强型上下文管理器、章节上下文构建器、工具执行框架和专用编辑Agent，为用户提供全方位的章节编辑支持。
 
 ```mermaid
 graph TB
 subgraph "章节编辑助手系统"
 ChapterAssistant[章节编辑助手]
-ContextBuilder[章节上下文构建器]
+EnhancedContextManager[增强上下文管理器]
+ChapterContextBuilder[章节上下文构建器]
 ToolExecutor[工具执行器]
 EditAgent[编辑Agent]
+CharacterAutoDetect[角色自动检测器]
 end
 subgraph "核心功能"
 Analysis[章节分析]
 Editing[内容修改]
 Consistency[一致性检查]
 Improvement[质量提升]
+CharacterDetection[角色检测]
 end
 subgraph "工具集"
 QueryTools[查询工具]
 ModifyTools[修改工具]
 FunctionCalling[Function Calling]
+EnhancedContext[增强上下文]
 end
 subgraph "上下文信息"
-NovelInfo[小说基本信息]
-PrevChapters[前序章节摘要]
-Characters[涉及角色]
-PlotContext[情节背景]
-ChapterContent[当前章节内容]
+EnhancedContext --> CoreLayer[核心层]
+EnhancedContext --> CriticalLayer[关键层]
+EnhancedContext --> RecentLayer[近期层]
+EnhancedContext --> HistoricalLayer[历史层]
 end
-ChapterAssistant --> ContextBuilder
+ChapterAssistant --> EnhancedContextManager
+ChapterAssistant --> ChapterContextBuilder
 ChapterAssistant --> ToolExecutor
 ChapterAssistant --> EditAgent
-ContextBuilder --> NovelInfo
-ContextBuilder --> PrevChapters
-ContextBuilder --> Characters
-ContextBuilder --> PlotContext
-ContextBuilder --> ChapterContent
+ChapterAssistant --> CharacterAutoDetect
+EnhancedContextManager --> EnhancedContext
+ChapterContextBuilder --> EnhancedContext
 ToolExecutor --> QueryTools
 ToolExecutor --> ModifyTools
 ToolExecutor --> FunctionCalling
 Analysis --> Consistency
 Analysis --> Improvement
+Analysis --> CharacterDetection
 Editing --> FunctionCalling
 ```
 
@@ -848,6 +1365,8 @@ Editing --> FunctionCalling
 - [ai_chat_service.py:218-3023](file://backend/services/ai_chat_service.py#L218-L3023)
 - [chapter_context_builder.py:58-121](file://backend/services/chapter_context_builder.py#L58-L121)
 - [novel_tool_executor.py:286-356](file://backend/services/novel_tool_executor.py#L286-L356)
+- [enhanced_context_manager.py:209-293](file://agents/enhanced_context_manager.py#L209-L293)
+- [character_auto_detector.py:24-113](file://backend/services/character_auto_detector.py#L24-L113)
 
 ### 章节编辑场景支持
 
@@ -857,7 +1376,7 @@ Editing --> FunctionCalling
 
 | 场景类型 | 系统提示词 | 功能特性 |
 |---------|----------|----------|
-| chapter_assistant | 章节编辑助手，专门帮助作者编辑和改进章节内容 | - 支持章节分析<br/>- 支持内容修改<br/>- 支持一致性检查<br/>- 支持质量提升 |
+| chapter_assistant | 章节编辑助手，专门帮助作者编辑和改进章节内容 | - 支持章节分析<br/>- 支持内容修改<br/>- 支持一致性检查<br/>- 支持质量提升<br/>- 支持角色检测 |
 
 #### 章节编辑能力
 
@@ -885,19 +1404,28 @@ Editing --> FunctionCalling
 sequenceDiagram
 participant User as 用户
 participant Assistant as 章节编辑助手
-participant ContextBuilder as 上下文构建器
+participant EnhancedContextManager as 增强上下文管理器
+participant ChapterContextBuilder as 章节上下文构建器
 participant ToolExecutor as 工具执行器
+participant CharacterAutoDetect as 角色自动检测器
 participant LLM as 通义千问
 participant DB as 数据库
 User->>Assistant : 发送章节编辑请求
-Assistant->>ContextBuilder : 构建章节上下文
-ContextBuilder->>DB : 查询小说信息
-DB-->>ContextBuilder : 返回小说数据
-ContextBuilder->>DB : 查询前序章节摘要
-DB-->>ContextBuilder : 返回摘要数据
-ContextBuilder->>DB : 查询角色信息
-DB-->>ContextBuilder : 返回角色数据
-ContextBuilder-->>Assistant : 返回完整上下文
+Assistant->>EnhancedContextManager : 构建增强上下文
+EnhancedContextManager->>EnhancedContextManager : 四层记忆架构处理
+EnhancedContextManager-->>Assistant : 返回增强上下文
+Assistant->>ChapterContextBuilder : 构建章节上下文
+ChapterContextBuilder->>DB : 查询小说信息
+DB-->>ChapterContextBuilder : 返回小说数据
+ChapterContextBuilder->>DB : 查询前序章节摘要
+DB-->>ChapterContextBuilder : 返回摘要数据
+ChapterContextBuilder->>DB : 查询角色信息
+DB-->>ChapterContextBuilder : 返回角色数据
+ChapterContextBuilder-->>Assistant : 返回完整上下文
+Assistant->>CharacterAutoDetect : 检测新角色
+CharacterAutoDetect->>DB : 注册新角色
+DB-->>CharacterAutoDetect : 确认注册
+CharacterAutoDetect-->>Assistant : 返回新角色信息
 Assistant->>LLM : 分析章节内容
 LLM-->>Assistant : 分析结果
 User->>Assistant : 提出修改需求
@@ -914,6 +1442,8 @@ Assistant-->>User : 返回修改结果
 - [ai_chat_service.py:1237-1290](file://backend/services/ai_chat_service.py#L1237-L1290)
 - [chapter_context_builder.py:78-121](file://backend/services/chapter_context_builder.py#L78-L121)
 - [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+- [enhanced_context_manager.py:225-293](file://agents/enhanced_context_manager.py#L225-L293)
+- [character_auto_detector.py:45-113](file://backend/services/character_auto_detector.py#L45-L113)
 
 **章节来源**
 - [ai_chat_service.py:1237-1290](file://backend/services/ai_chat_service.py#L1237-L1290)
@@ -1178,6 +1708,8 @@ SuggestionExtraction[建议提取]
 SuggestionApplication[建议应用]
 ChapterAssistant[章节编辑助手]
 ToolExecutor[工具执行器]
+EnhancedContextManager[增强上下文管理器]
+CharacterAutoDetect[角色自动检测器]
 end
 subgraph "数据库层"
 DB[(PostgreSQL数据库)]
@@ -1190,6 +1722,8 @@ AiChat --> SuggestionExtraction
 AiChat --> SuggestionApplication
 AiChat --> ChapterAssistant
 ChapterAssistant --> ToolExecutor
+ChapterAssistant --> EnhancedContextManager
+ChapterAssistant --> CharacterAutoDetect
 ToolExecutor --> DB
 Plan --> DB
 ```
@@ -1633,11 +2167,14 @@ Validator[backend/services/revision_data_validator.py]
 Cost[llm/cost_tracker.py]
 ChapterContextBuilder[backend/services/chapter_context_builder.py]
 NovelToolExecutor[backend/services/novel_tool_executor.py]
+EnhancedContextManager[agents/enhanced_context_manager.py]
+CharacterAutoDetector[backend/services/character_auto_detector.py]
 end
 subgraph "模型层"
 Models[core/models/ai_chat_session.py]
 Neo4jClient[core/graph/neo4j_client.py]
 RevisionPlan[core/models/revision_plan.py]
+CharacterModel[core/models/character.py]
 end
 subgraph "LLM层"
 Qwen[llm/qwen_client.py]
@@ -1652,6 +2189,8 @@ RevisionAPI --> RevisionExecution
 RevisionAPI --> Validator
 Service --> Memory
 Service --> Context
+Service --> EnhancedContextManager
+Service --> CharacterAutoDetector
 Service --> Qwen
 Service --> Models
 Service --> Config
@@ -1659,6 +2198,7 @@ Service --> ChapterContextBuilder
 Service --> NovelToolExecutor
 GraphService --> Neo4jClient
 RevisionUnderstanding --> RevisionPlan
+CharacterAutoDetector --> CharacterModel
 Qwen --> Cost
 ```
 
@@ -1666,6 +2206,8 @@ Qwen --> Cost
 - [ai_chat.py:1-37](file://backend/api/v1/ai_chat.py#L1-L37)
 - [ai_chat_service.py:1-15](file://backend/services/ai_chat_service.py#L1-L15)
 - [revision.py:17-42](file://backend/api/v1/revision.py#L17-L42)
+- [enhanced_context_manager.py:1-17](file://agents/enhanced_context_manager.py#L1-L17)
+- [character.py:1-11](file://core/models/character.py#L1-L11)
 
 **章节来源**
 - [pyproject.toml:8-37](file://pyproject.toml#L8-L37)
@@ -1728,6 +2270,21 @@ Qwen --> Cost
 - **工具调用缓存**：缓存工具执行结果，避免重复查询
 - **异步处理**：所有工具调用都是异步执行
 - **内容长度限制**：防止过大的内容影响性能
+- **增强上下文缓存**：缓存增强上下文，避免重复计算
+
+### 增强上下文管理器优化
+
+**更新** 增强上下文管理器采用了多项性能优化措施：
+
+- **四层记忆架构**：智能分配内存，避免冗余存储
+- **Token估算**：提前估算上下文大小，避免超限
+- **缓存机制**：缓存章节上下文，支持快速检索
+- **优先级排序**：动态调整关键信息的优先级
+- **智能压缩**：结合统一压缩处理，优化Token使用
+
+**章节来源**
+- [enhanced_context_manager.py:203-207](file://agents/enhanced_context_manager.py#L203-L207)
+- [context_manager.py:36-97](file://backend/services/context_manager.py#L36-L97)
 
 ## 故障排除指南
 
@@ -1904,6 +2461,23 @@ Qwen --> Cost
 4. 检查中文数字转换函数的逻辑
 5. 确认角色名列表的加载是否成功
 
+#### 增强上下文管理器异常
+
+**问题症状**：增强上下文管理器无法正常工作
+
+**可能原因**：
+1. 小说ID格式无效
+2. 缓存服务异常
+3. 数据库连接问题
+4. 上下文构建逻辑异常
+
+**解决步骤**：
+1. 验证小说ID格式（字符串格式）
+2. 检查缓存服务状态和配置
+3. 确认数据库连接正常
+4. 查看上下文构建过程的日志
+5. 验证四层记忆架构的各层数据完整性
+
 #### 章节编辑助手异常
 
 **问题症状**：章节编辑助手无法正常工作
@@ -1913,6 +2487,7 @@ Qwen --> Cost
 2. 工具执行器调用失败
 3. LLM调用失败
 4. 数据库连接问题
+5. 角色自动检测器异常
 
 **解决步骤**：
 1. 检查章节上下文构建器的日志
@@ -1920,6 +2495,7 @@ Qwen --> Cost
 3. 确认LLM服务状态和API密钥
 4. 检查数据库连接和权限
 5. 查看章节助手的完整错误堆栈
+6. 验证角色自动检测器的状态
 
 #### 工具执行器调用失败
 
@@ -1938,6 +2514,23 @@ Qwen --> Cost
 4. 确认缓存清理是否成功
 5. 检查工具执行器的完整错误信息
 
+#### 角色自动检测器失败
+
+**问题症状**：角色自动检测器无法检测新角色
+
+**可能原因**：
+1. LLM调用失败
+2. 章节内容为空或过短
+3. 数据库查询异常
+4. 去重逻辑异常
+
+**解决步骤**：
+1. 检查LLM服务状态和API密钥
+2. 验证章节内容长度是否足够
+3. 确认数据库连接和查询权限
+4. 查看去重逻辑的日志
+5. 检查角色类型解析的准确性
+
 **章节来源**
 - [ai_chat.py:98-104](file://backend/api/v1/ai_chat.py#L98-L104)
 - [qwen_client.py:97-106](file://llm/qwen_client.py#L97-L106)
@@ -1947,6 +2540,8 @@ Qwen --> Cost
 - [revision_execution_service.py:34-458](file://backend/services/revision_execution_service.py#L34-L458)
 - [chapter_context_builder.py:123-172](file://backend/services/chapter_context_builder.py#L123-L172)
 - [novel_tool_executor.py:314-356](file://backend/services/novel_tool_executor.py#L314-L356)
+- [enhanced_context_manager.py:556-564](file://agents/enhanced_context_manager.py#L556-L564)
+- [character_auto_detector.py:110-113](file://backend/services/character_auto_detector.py#L110-L113)
 
 ## 结论
 
@@ -1964,8 +2559,11 @@ AI聊天服务是一个功能完整、架构清晰的智能对话系统。通过
 10. **章节编辑助手**：全新的章节编辑系统，支持智能分析和修改
 11. **工具执行框架**：基于Function Calling的工具调用系统
 12. **上下文构建器**：专门的章节上下文构建系统
+13. **增强上下文管理器**：四层记忆架构的智能上下文管理系统
+14. **角色类型解析**：完整的角色类型枚举和自动检测功能
+15. **角色一致性跟踪**：监控角色演进和变化的智能系统
 
-**更新** 系统现已显著增强了分析能力和稳定性，通过新增的章节编辑助手系统、章节上下文构建器和工具执行框架，以及与新修订系统的完整集成，大幅提升了系统的智能化水平和用户体验。特别是章节编辑助手系统的集成，使得系统能够为用户提供全方位的章节编辑支持，包括智能分析、内容修改、一致性检查和质量提升等功能。
+**更新** 系统现已显著增强了分析能力和稳定性，通过新增的增强型上下文管理器、章节编辑助手系统、章节上下文构建器、工具执行框架、角色类型解析功能以及与新修订系统的完整集成，大幅提升了系统的智能化水平和用户体验。特别是章节编辑助手系统的集成，使得系统能够为用户提供全方位的章节编辑支持，包括智能分析、内容修改、一致性检查、质量提升和角色检测等功能。
 
 这些改进使得系统能够更好地处理复杂的创作场景，提供更加精准和个性化的AI辅助服务，特别是在处理章节内容分析、角色关系理解和情节发展预测等方面表现出色。系统现在不仅能够理解文本内容，还能够利用图数据库的强大查询能力和修订系统的智能分析，为用户提供深层次的创作洞察和建议。
 
