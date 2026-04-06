@@ -59,6 +59,9 @@ class CrewConfig:
     max_world_review_iterations: int = 2
     max_plot_review_iterations: int = 2
     context_compressor_max_tokens: int = 8000  # 上下文压缩器token阈值
+    # 连贯性检查配置
+    enable_continuity_check: bool = True
+    continuity_quality_threshold: float = 7.0
 
 
 class NovelCrewManager:
@@ -107,6 +110,8 @@ class NovelCrewManager:
                 max_world_review_iterations=settings.MAX_WORLD_REVIEW_ITERATIONS,
                 max_plot_review_iterations=settings.MAX_PLOT_REVIEW_ITERATIONS,
                 context_compressor_max_tokens=settings.CONTEXT_COMPRESSOR_MAX_TOKENS,
+                enable_continuity_check=getattr(settings, "ENABLE_CONTINUITY_CHECK", True),
+                continuity_quality_threshold=getattr(settings, "CONTINUITY_QUALITY_THRESHOLD", 7.0),
             )
         self.client = qwen_client
         self.cost_tracker = cost_tracker
@@ -122,6 +127,8 @@ class NovelCrewManager:
         self.enable_world_review = config.enable_world_review
         self.enable_plot_review = config.enable_plot_review
         self.enable_outline_refinement = config.enable_outline_refinement
+        self.enable_continuity_check = config.enable_continuity_check
+        self.continuity_quality_threshold = config.continuity_quality_threshold
 
         # 图数据库上下文注入开关（从配置读取）
         from backend.config import settings
@@ -206,6 +213,28 @@ class NovelCrewManager:
 
         # 反思代理（初始化为None，需要时通过setup_reflection设置）
         self.reflection_agent = None
+
+        # 连贯性模块缓存（按小说ID缓存）
+        self._continuity_modules: dict[str, Any] = {}
+
+    def _get_continuity_module(self, novel_id: str, novel_data: dict) -> Any:
+        """获取或创建连贯性模块.
+
+        Args:
+            novel_id: 小说ID
+            novel_data: 小说数据（包含世界观、角色、大纲等）
+
+        Returns:
+            ContinuityIntegrationModule 实例
+        """
+        if novel_id not in self._continuity_modules:
+            from agents.continuity_integration_module import ContinuityIntegrationModule
+
+            self._continuity_modules[novel_id] = ContinuityIntegrationModule(
+                novel_id, novel_data, qwen_client=self.client
+            )
+            logger.info(f"创建连贯性模块: novel_id={novel_id}")
+        return self._continuity_modules[novel_id]
 
     # ============================================================
     # Agent 调用基础方法
@@ -740,6 +769,21 @@ class NovelCrewManager:
         if team_context and not character_states:
             character_states = team_context.format_character_states()
 
+        # ── 0.5 构建连贯性约束（从上一章提取） ──────────────────────
+        continuity_constraints = ""
+        if chapter_number > 1 and self.enable_continuity_check:
+            from agents.context_propagator import ContextPropagator
+
+            propagator = ContextPropagator()
+            prev_summary = self._chapter_summaries.get(chapter_number - 1, {})
+            if prev_summary:
+                constraints = self._extract_constraints_from_summary(prev_summary)
+                if constraints:
+                    continuity_constraints = propagator.create_minimal_guidance(constraints)
+                    logger.info(
+                        f"[连贯性] 从第 {chapter_number - 1} 章提取 {len(constraints)} 个约束"
+                    )
+
         # ── 1. 章节策划 ──────────────────────────────────────
         planner_task = self.pm.format(
             self.pm.CHAPTER_PLANNER_TASK,
@@ -750,6 +794,7 @@ class NovelCrewManager:
             plot_context=plot_context,
             previous_summary=previous_chapters_summary or "（本章为第一章）",
             character_states=character_states or "（初始状态）",
+            continuity_constraints=continuity_constraints,
         )
 
         chapter_plan = await self._call_agent(
@@ -768,6 +813,49 @@ class NovelCrewManager:
         # 记录到 TeamContext
         if team_context:
             team_context.add_agent_output("章节策划师", chapter_plan, f"第{chapter_number}章策划")
+
+        # ── 1.2 预防式连贯性检查 ──────────────────────────────────────
+        continuity_result = None
+        if self.enable_continuity_check:
+            try:
+                continuity_module = self._get_continuity_module(
+                    str(novel_data.get("id", "")), novel_data
+                )
+
+                # 构建上一章信息
+                prev_chapter = self._build_previous_chapter_info(chapter_number)
+
+                # 审查章节策划
+                continuity_result = await continuity_module.review_chapter_plan(
+                    chapter_plan=chapter_plan,
+                    chapter_number=chapter_number,
+                    previous_chapter=prev_chapter,
+                )
+
+                # 如果未通过，记录问题并预警
+                if not continuity_result.passed:
+                    logger.warning(
+                        f"⚠️ 第 {chapter_number} 章策划连贯性检查未通过 "
+                        f"(score={continuity_result.overall_score:.1f}): "
+                        f"{len(continuity_result.issues)} 个问题"
+                    )
+                    # 将问题注入 TeamContext 供后续参考
+                    if team_context:
+                        team_context.add_agent_output(
+                            "连贯性检查",
+                            {
+                                "issues": continuity_result.issues,
+                                "suggestions": continuity_result.suggestions,
+                            },
+                            f"第{chapter_number}章策划审查",
+                        )
+                else:
+                    logger.info(
+                        f"✅ 第 {chapter_number} 章策划连贯性检查通过 "
+                        f"(score={continuity_result.overall_score:.1f})"
+                    )
+            except Exception as e:
+                logger.warning(f"连贯性检查失败: {e}")
 
         # ── 1.5 章节大纲细化（动态决定是否需要） ─────────────────────
         detailed_outline = {}
@@ -1668,6 +1756,76 @@ class NovelCrewManager:
                 elif isinstance(event, dict):
                     events.append(f"第{ch}章: {event.get('event', str(event))}")
         return "\n".join(events) if events else "（无前章记录）"
+
+    def _build_previous_chapter_info(
+        self, chapter_number: int
+    ) -> Optional[dict[str, Any]]:
+        """构建上一章信息用于连贯性检查.
+
+        Args:
+            chapter_number: 当前章节号
+
+        Returns:
+            上一章信息字典，如果是第一章则返回 None
+        """
+        if chapter_number <= 1:
+            return None
+
+        prev_summary = self._chapter_summaries.get(chapter_number - 1, {})
+        prev_content = self._chapter_contents.get(chapter_number - 1, "")
+
+        if not prev_summary and not prev_content:
+            return None
+
+        return {
+            "chapter_number": chapter_number - 1,
+            "ending_state": prev_summary.get("ending_state", ""),
+            "key_events": prev_summary.get("key_events", []),
+            "unresolved_conflicts": [],  # 可从 TeamContext 获取
+        }
+
+    def _extract_constraints_from_summary(
+        self, summary: dict[str, Any]
+    ) -> Optional[list[Any]]:
+        """从章节摘要提取连贯性约束.
+
+        Args:
+            summary: 章节摘要字典
+
+        Returns:
+            约束列表，如果没有约束则返回 None
+        """
+        from agents.continuity_models import ContinuityConstraint
+
+        constraints: list[Any] = []
+
+        # 从结尾状态提取
+        ending_state = summary.get("ending_state", "")
+        if ending_state:
+            constraints.append(
+                ContinuityConstraint(
+                    constraint_type="expectation",
+                    description=f"读者期待回应：{ending_state[:100]}",
+                    priority=8,
+                    source_text=f"第{summary.get('chapter_number', 0)}章结尾",
+                    validation_hint="检查本章是否回应了上一章的结尾悬念",
+                )
+            )
+
+        # 从关键事件提取
+        for event in summary.get("key_events", [])[:3]:
+            event_text = event if isinstance(event, str) else str(event)
+            constraints.append(
+                ContinuityConstraint(
+                    constraint_type="logical",
+                    description=f"前章事件：{event_text[:50]}",
+                    priority=6,
+                    source_text=f"第{summary.get('chapter_number', 0)}章",
+                    validation_hint="检查本章是否与前章事件保持一致",
+                )
+            )
+
+        return constraints if constraints else None
 
     def _generate_volume_summaries_dynamically(
         self, chapter_number: int, plot_outline: Optional[dict] = None

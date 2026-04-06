@@ -329,7 +329,7 @@ class PromptManager:
 
 角色状态：
 {character_states}
-
+{continuity_constraints}
 【重要】情节连续性要求：
 - 你必须明确指出上一章的结束状态（角色位置、情绪、正在发生的事件）
 - 你必须明确本章从哪里开始（紧接上章的哪个场景/事件）

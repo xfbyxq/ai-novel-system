@@ -35,15 +35,15 @@
 - [enhanced_context_manager.py](file://agents/enhanced_context_manager.py)
 - [test_graph_sync_service.py](file://tests/unit/test_graph_sync_service.py)
 - [token_usage.py](file://core/models/token_usage.py)
+- [test_generation_service_novel_data.py](file://tests/unit/test_generation_service_novel_data.py)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 全面增强了上下文预加载功能：新增自动加载前一章摘要和内容到crew_manager缓存
-- 实现了双源加载机制：同时从持久化内存和内存服务加载数据
-- 优化了数据结构：统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存
-- 增强了诊断日志：详细的预加载过程日志和性能监控
-- 新增了统一上下文管理器：替代分散的上下文管理，实现三层存储统一
+- 新增了完整的novel_data测试套件，解决novel ID字段缺失导致的图查询跳过问题
+- 测试套件包含147行代码，验证所有novel_data字典构造都正确包含必需的ID字段
+- 确保ID在crew管理器到图查询上下文的完整数据流中正确传递
+- 增强了图数据库查询的稳定性和可靠性
 
 ## 目录
 1. [简介](#简介)
@@ -55,7 +55,8 @@
 7. [依赖关系分析](#依赖关系分析)
 8. [性能考虑](#性能考虑)
 9. [故障排除指南](#故障排除指南)
-10. [结论](#结论)
+10. [测试套件增强](#测试套件增强)
+11. [结论](#结论)
 
 ## 简介
 
@@ -67,7 +68,7 @@
 - **批量写作**：并行生成多个章节内容
 - **编辑任务**：对生成内容进行润色和质量提升
 
-**更新** 新增了全面的成本跟踪功能，包括令牌使用监控和成本计算机制，支持实时跟踪计算资源使用并提供详细的成本分解。系统现在能够按章节、按类别追踪成本，支持base（基础）、iteration（迭代）、query（查询）、vote（投票）等成本分类，并提供详细的成本汇总统计和预算控制功能。**新增** 统一上下文管理器替代了分散的上下文管理，实现三层存储统一；**新增** 双源加载机制支持从持久化内存和内存服务同时加载数据；**新增** 优化的数据结构统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存；**新增** 详细的诊断日志记录预加载过程和性能监控。
+**更新** 新增了全面的成本跟踪功能，包括令牌使用监控和成本计算机制，支持实时跟踪计算资源使用并提供详细的成本分解。系统现在能够按章节、按类别追踪成本，支持base（基础）、iteration（迭代）、query（查询）、vote（投票）等成本分类，并提供详细的成本汇总统计和预算控制功能。**新增** 统一上下文管理器替代了分散的上下文管理，实现三层存储统一；**新增** 双源加载机制支持从持久化内存和内存服务同时加载数据；**新增** 优化的数据结构统一使用chapter_summaries、chapter_contents、chapter_detailed_outlines缓存；**新增** 详细的诊断日志记录预加载过程和性能监控；**新增** 完整的novel_data测试套件，确保ID字段在图查询链路中的正确传递。
 
 ## 项目结构
 
@@ -97,6 +98,7 @@ GQS[图查询服务<br/>GraphQueryService]
 FI[伏笔注入器<br/>ForeshadowingAutoInjector]
 CT[成本追踪器<br/>CostTracker]
 TU[Token使用记录<br/>TokenUsage]
+NDS[novel_data测试套件<br/>TestNovelDataConstruction]
 end
 subgraph "AI层"
 QC[Qwen客户端<br/>LLM接口]
@@ -151,9 +153,10 @@ GraphAPI --> GQS
 - [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 - [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
 - [token_usage.py:13-34](file://core/models/token_usage.py#L13-L34)
+- [test_generation_service_novel_data.py:1-148](file://tests/unit/test_generation_service_novel_data.py#L1-L148)
 
 **章节来源**
-- [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
+- [generation_service.py:1-1843](file://backend/services/generation_service.py#L1-L1843)
 - [generation.py:1-204](file://backend/api/v1/generation.py#L1-L204)
 
 ## 核心组件
@@ -177,6 +180,7 @@ GraphAPI --> GQS
 - **上下文预加载**：自动加载前一章摘要和内容到crew_manager缓存
 - **双源加载**：同时从持久化内存和内存服务加载数据
 - **诊断日志**：详细的预加载过程日志和性能监控
+- **novel_data验证**：确保ID字段在图查询链路中的正确传递
 
 ```mermaid
 classDiagram
@@ -301,6 +305,19 @@ class ForeshadowingAutoInjector {
 +build_foreshadowing_prompt(current_chapter, plot_outline) str
 +inject_to_prompt(existing_prompt, current_chapter, plot_outline) str
 }
+class TestNovelDataConstruction {
++test_novel_data_contains_id_field() void
++test_novel_data_id_used_by_graph_query() void
++test_novel_data_missing_id_causes_graph_query_skip() void
++test_all_novel_data_constructions_have_id(scene) void
+}
+class TestGraphQueryMixinRequiresNovelId {
++test_graph_query_skip_without_novel_id() void
++test_graph_query_enabled_with_novel_id() void
+}
+class TestIntegrationNovelDataToGraphQuery {
++test_novel_data_id_flows_to_graph_context() void
+}
 GenerationService --> CostTracker : "使用"
 GenerationService --> TokenUsage : "记录"
 GenerationService --> UnifiedContextManager : "使用"
@@ -311,6 +328,10 @@ GenerationService --> EntityExtractorService : "使用"
 GenerationService --> ForeshadowingAutoInjector : "使用"
 AgentDispatcher --> QwenClient : "使用"
 CostTracker --> TokenUsage : "生成记录"
+TestNovelDataConstruction --> GenerationService : "验证"
+TestNovelDataConstruction --> GraphQueryMixin : "验证"
+TestGraphQueryMixinRequiresNovelId --> GraphQueryMixin : "验证"
+TestIntegrationNovelDataToGraphQuery --> GraphQueryMixin : "验证"
 ```
 
 **图表来源**
@@ -326,6 +347,48 @@ CostTracker --> TokenUsage : "生成记录"
 - [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 - [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
 - [token_usage.py:13-34](file://core/models/token_usage.py#L13-L34)
+- [test_generation_service_novel_data.py:17-148](file://tests/unit/test_generation_service_novel_data.py#L17-L148)
+
+### novel_data测试套件
+
+**新增** novel_data测试套件专门验证novel_data字典构造的完整性，确保ID字段在图查询链路中的正确传递：
+
+```mermaid
+classDiagram
+class TestNovelDataConstruction {
++test_novel_data_contains_id_field() void
++test_novel_data_id_used_by_graph_query() void
++test_novel_data_missing_id_causes_graph_query_skip() void
++test_all_novel_data_constructions_have_id(scene) void
+}
+class TestGraphQueryMixinRequiresNovelId {
++test_graph_query_skip_without_novel_id() void
++test_graph_query_enabled_with_novel_id() void
+}
+class TestIntegrationNovelDataToGraphQuery {
++test_novel_data_id_flows_to_graph_context() void
+}
+class GraphQueryMixin {
++set_graph_context(novel_id) void
++_novel_id : str
++query_character_network() CharacterNetwork
++query_character_path() CharacterPath
++query_influence() InfluenceReport
++check_conflicts() List[ConflictReport]
++query_pending_foreshadowings() List[Dict]
++query_event_timeline() List[Dict]
+}
+TestNovelDataConstruction --> GraphQueryMixin : "验证"
+TestGraphQueryMixinRequiresNovelId --> GraphQueryMixin : "验证"
+TestIntegrationNovelDataToGraphQuery --> GraphQueryMixin : "验证"
+```
+
+**图表来源**
+- [test_generation_service_novel_data.py:17-148](file://tests/unit/test_generation_service_novel_data.py#L17-L148)
+- [graph_query_mixin.py:37-44](file://agents/graph_query_mixin.py#L37-L44)
+
+**章节来源**
+- [test_generation_service_novel_data.py:1-148](file://tests/unit/test_generation_service_novel_data.py#L1-L148)
 
 ### 统一上下文管理器 (UnifiedContextManager)
 
@@ -397,11 +460,11 @@ SkipPreload --> End
 ```
 
 **图表来源**
-- [generation_service.py:720-771](file://backend/services/generation_service.py#L720-L771)
+- [generation_service.py:1376-1427](file://backend/services/generation_service.py#L1376-L1427)
 - [generation_service.py:1304-1355](file://backend/services/generation_service.py#L1304-L1355)
 
 **章节来源**
-- [generation_service.py:720-771](file://backend/services/generation_service.py#L720-L771)
+- [generation_service.py:1376-1427](file://backend/services/generation_service.py#L1376-L1427)
 - [generation_service.py:1304-1355](file://backend/services/generation_service.py#L1304-L1355)
 
 ### 双源加载机制
@@ -627,6 +690,7 @@ Worker->>Service : 执行生成任务
 Service->>Service : 检查并发控制
 Service->>Service : 获取统一上下文
 Service->>Service : 上下文预加载
+Service->>Service : 构造novel_data并验证ID字段
 Service->>LLM : 调用AI模型
 LLM-->>Service : 返回生成结果
 Service->>Service : 记录Token使用
@@ -686,7 +750,8 @@ LoadData --> BuildContext["构建上下文<br/>- 统一上下文管理器<br/>- 
 BuildContext --> InitTask["初始化任务"]
 InitTask --> InitAgent["初始化代理"]
 InitAgent --> PreloadContext["上下文预加载<br/>- 自动加载前一章摘要<br/>- 双源加载机制<br/>- 优化数据结构<br/>- 诊断日志记录"]
-PreloadContext --> CallLLM["调用AI生成章节"]
+PreloadContext --> ConstructNovelData["构造novel_data并验证ID字段<br/>- 确保包含必需的ID字段<br/>- 验证所有构造场景<br/>- 测试ID在图查询中的传递"]
+ConstructNovelData --> CallLLM["调用AI生成章节"]
 CallLLM --> ParseResult["解析结果"]
 ParseResult --> SaveChapter["保存章节内容"]
 SaveChapter --> UpdateMemory["更新记忆系统<br/>- 章节摘要<br/>- 角色状态更新"]
@@ -893,7 +958,7 @@ classDiagram
 class GraphQueryService {
 +Neo4jClient client
 +get_character_network(novel_id, character_name, depth) Optional[CharacterNetwork]
-+find_shortest_path(novel_id, from_char, to_char) Optional[CharacterPath]
++find_shortest_path(novel_id, from_character, to_character) Optional[CharacterPath]
 +get_all_relationships(novel_id, relationship_type) List[Dict[str, Any]]
 +check_consistency_conflicts(novel_id) List[ConflictReport]
 +find_character_influence(novel_id, character_name) Optional[InfluenceReport]
@@ -1429,7 +1494,7 @@ TokenUsage --> CostSummary : "关联"
 
 ## 依赖关系分析
 
-生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能、编辑任务支持、图数据库集成和成本跟踪：
+生成服务的依赖关系呈现清晰的分层结构，现已增强记忆系统、活动记录功能、编辑任务支持、图数据库集成、成本跟踪和**novel_data测试套件**：
 
 ```mermaid
 graph TB
@@ -1476,6 +1541,11 @@ subgraph "工具函数"
 ModelToDict[model_to_dict序列化]
 Neo4jClient[Neo4j客户端]
 end
+subgraph "测试套件"
+TestNovelDataConstruction[novel_data测试套件]
+TestGraphQueryMixinRequiresNovelId[图查询ID测试]
+TestIntegrationNovelDataToGraphQuery[集成测试]
+end
 FastAPI --> GenerationService
 Celery --> GenerationService
 DashScope --> QwenClient
@@ -1501,6 +1571,10 @@ GenerationService --> ForeshadowingAutoInjector
 GraphQueryService --> Neo4jClient
 GraphQueryMixin --> Neo4jClient
 ModelToDict --> GenerationService
+TestNovelDataConstruction --> GenerationService
+TestNovelDataConstruction --> GraphQueryMixin
+TestGraphQueryMixinRequiresNovelId --> GraphQueryMixin
+TestIntegrationNovelDataToGraphQuery --> GraphQueryMixin
 ```
 
 **图表来源**
@@ -1519,9 +1593,10 @@ ModelToDict --> GenerationService
 - [enhanced_context_manager.py:316-329](file://agents/enhanced_context_manager.py#L316-L329)
 - [novel.py:58](file://core/models/novel.py#L58)
 - [token_usage.py:13-34](file://core/models/token_usage.py#L13-L34)
+- [test_generation_service_novel_data.py:1-148](file://tests/unit/test_generation_service_novel_data.py#L1-L148)
 
 **章节来源**
-- [generation_service.py:1-1303](file://backend/services/generation_service.py#L1-L1303)
+- [generation_service.py:1-1843](file://backend/services/generation_service.py#L1-L1843)
 - [agent_dispatcher.py:1-491](file://agents/agent_dispatcher.py#L1-L491)
 
 ## 性能考虑
@@ -1536,6 +1611,7 @@ ModelToDict --> GenerationService
 - **异步图数据库同步**：章节生成后异步执行，避免阻塞主流程
 - **异步成本记录**：成本追踪与任务执行并行，不影响主流程性能
 - **异步上下文预加载**：预加载过程异步执行，不阻塞主生成流程
+- **异步novel_data验证**：测试套件确保ID字段正确传递，不影响主流程
 
 ### 成本控制机制
 
@@ -1568,6 +1644,7 @@ Pause --> End
 - **图查询缓存**：支持图查询结果缓存，提高查询性能
 - **成本统计缓存**：成本汇总统计的缓存机制
 - **预加载缓存**：crew_manager的chapter_summaries、chapter_contents、chapter_detailed_outlines缓存
+- **novel_data缓存验证**：测试套件确保ID字段在缓存中的正确性
 
 ### 三层并发控制机制
 
@@ -1599,6 +1676,7 @@ Pause --> End
 - **白名单验证**：防止Cypher注入攻击，确保查询安全性
 - **事务管理**：支持批量操作的事务原子性保证
 - **错误处理增强**：改进的异常捕获和日志记录机制
+- **ID字段验证**：通过测试套件确保novel_data中的ID字段正确传递
 
 ### 团队协作优化
 
@@ -1610,6 +1688,7 @@ Pause --> End
 - **缓存策略**：统一上下文管理器减少重复计算
 - **图数据模型**：支持丰富的实体关系类型和属性
 - **预加载优化**：双源加载机制减少数据获取时间
+- **ID字段完整性**：测试套件确保所有novel_data构造都包含必需的ID字段
 
 ### 伏笔处理优化
 
@@ -1641,6 +1720,17 @@ Pause --> End
 - **缓存优化**：统一使用优化的数据结构，减少内存占用
 - **错误处理**：改进的异常处理，确保预加载失败不影响主流程
 
+### novel_data测试套件优化
+
+**新增** novel_data测试套件的性能优化：
+
+- **147行测试代码**：全面验证novel_data字典构造的完整性
+- **ID字段验证**：确保所有novel_data构造都包含必需的ID字段
+- **图查询链路测试**：验证ID字段在crew管理器到图查询上下文的正确传递
+- **集成测试**：模拟完整的数据流，从GenerationService到GraphQueryMixin
+- **参数化测试**：覆盖所有novel_data构造场景（run_chapter_writing、run_batch_chapter_writing、_write_single_chapter）
+- **异步测试**：使用pytest.mark.asyncio确保异步操作的正确性
+
 **章节来源**
 - [generation.py:48-64](file://backend/api/v1/generation.py#L48-L64)
 - [generation_worker.py:29-42](file://workers/generation_worker.py#L29-L42)
@@ -1651,6 +1741,7 @@ Pause --> End
 - [foreshadowing_auto_injector.py:194-218](file://agents/foreshadowing_auto_injector.py#L194-L218)
 - [cost_tracker.py:16-126](file://llm/cost_tracker.py#L16-L126)
 - [token_usage.py:13-34](file://core/models/token_usage.py#L13-L34)
+- [test_generation_service_novel_data.py:1-148](file://tests/unit/test_generation_service_novel_data.py#L1-L148)
 
 ## 故障排除指南
 
@@ -1683,6 +1774,9 @@ Pause --> End
 | 预加载性能问题 | 预加载过程缓慢 | 检查双源加载机制和缓存策略 |
 | 诊断日志缺失 | 预加载过程无日志 | 检查日志配置和权限设置 |
 | 缓存污染 | 预加载数据错误 | 检查缓存清理机制和版本控制 |
+| **novel_data ID缺失** | **图查询被跳过** | **检查novel_data构造，确保包含ID字段** |
+| **图查询ID验证失败** | **图数据库查询功能未启用** | **通过测试套件验证ID字段传递** |
+| **集成测试失败** | **novel_data到图查询链路中断** | **运行novel_data测试套件进行调试** |
 
 ### 日志监控
 
@@ -1703,11 +1797,80 @@ Pause --> End
 - **TokenUsage记录**：记录详细的令牌使用明细
 - **上下文预加载**：记录预加载过程和性能统计
 - **诊断日志**：记录详细的预加载诊断信息
+- **novel_data验证**：记录ID字段验证和测试结果
 
 **章节来源**
 - [generation_service.py:300-310](file://backend/services/generation_service.py#L300-L310)
 - [generation_service.py:568-574](file://backend/services/generation_service.py#L568-L574)
 - [agent_activity_recorder.py:105-108](file://backend/services/agent_activity_recorder.py#L105-L108)
+
+## 测试套件增强
+
+**新增** novel_data测试套件是本次更新的核心改进，专门解决novel ID字段缺失导致的图查询跳过问题：
+
+### 测试套件结构
+
+```mermaid
+classDiagram
+class TestNovelDataConstruction {
++test_novel_data_contains_id_field() void
++test_novel_data_id_used_by_graph_query() void
++test_novel_data_missing_id_causes_graph_query_skip() void
++test_all_novel_data_constructions_have_id(scene) void
+}
+class TestGraphQueryMixinRequiresNovelId {
++test_graph_query_skip_without_novel_id() void
++test_graph_query_enabled_with_novel_id() void
+}
+class TestIntegrationNovelDataToGraphQuery {
++test_novel_data_id_flows_to_graph_context() void
+}
+class TestNovelDataConstruction {
++test_novel_data_contains_id_field() void
++test_novel_data_id_used_by_graph_query() void
++test_novel_data_missing_id_causes_graph_query_skip() void
++test_all_novel_data_constructions_have_id(scene) void
+}
+TestNovelDataConstruction --> TestGraphQueryMixinRequiresNovelId : "依赖"
+TestGraphQueryMixinRequiresNovelId --> TestIntegrationNovelDataToGraphQuery : "依赖"
+```
+
+**图表来源**
+- [test_generation_service_novel_data.py:17-148](file://tests/unit/test_generation_service_novel_data.py#L17-L148)
+
+### 测试覆盖范围
+
+测试套件包含147行代码，覆盖以下关键场景：
+
+1. **ID字段存在性验证**：确保novel_data必须包含id字段
+2. **ID字段使用验证**：验证ID字段能被图查询正确使用
+3. **缺失ID的错误处理**：测试缺少ID字段时图查询被跳过
+4. **所有构造场景验证**：覆盖run_chapter_writing、run_batch_chapter_writing、_write_single_chapter三种场景
+5. **图查询混入依赖验证**：测试GraphQueryMixin对novel_id的依赖
+6. **集成链路验证**：验证novel_data.id到图查询上下文的完整数据流
+
+### 问题根因分析
+
+测试套件揭示了以下问题的根本原因：
+
+- **日志显示"跳过图查询: 小说ID未设置"**
+- **原因是novel_data字典缺少id字段**
+- **crew_manager.py调用novel_data.get("id", "")返回空字符串**
+- **导致GraphQueryMixin无法设置有效的_graph_context**
+
+### 解决方案验证
+
+通过测试套件验证了以下解决方案的有效性：
+
+- **确保所有novel_data构造都包含必需的ID字段**
+- **验证ID字段在crew_manager中的正确提取**
+- **确认GraphQueryMixin能够正确设置图查询上下文**
+- **保证图数据库查询功能的正常启用**
+
+**章节来源**
+- [test_generation_service_novel_data.py:1-148](file://tests/unit/test_generation_service_novel_data.py#L1-L148)
+- [crew_manager.py:1872-1873](file://agents/crew_manager.py#L1872-L1873)
+- [graph_query_mixin.py:37-44](file://agents/graph_query_mixin.py#L37-L44)
 
 ## 结论
 
@@ -1753,5 +1916,10 @@ Pause --> End
 38. **错误处理优化**：改进的异常处理和数据格式兼容性
 39. **性能监控增强**：详细的预加载统计数据和性能指标
 40. **稳定性保障**：异步上下文预加载、错误隔离和日志记录
+41. **novel_data测试套件**：147行代码确保ID字段在图查询链路中的正确传递
+42. **ID字段验证**：解决"跳过图查询: 小说ID未设置"的根本问题
+43. **集成测试覆盖**：验证从GenerationService到GraphQueryMixin的完整数据流
+44. **参数化测试场景**：覆盖所有novel_data构造场景
+45. **异步测试支持**：使用pytest.mark.asyncio确保异步操作正确性
 
-**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成、实体抽取功能、**统一上下文管理器**、**上下文预加载系统**、**双源加载机制**、**优化数据结构**和**诊断日志系统**。新增的UnifiedContextManager类提供了三层存储统一管理，包括LRUCache（内存缓存）、MemoryService（兼容层）和SQLite持久化存储。上下文预加载系统实现了自动加载前一章摘要和内容到crew_manager缓存，支持双源加载机制（持久化内存和内存服务），使用优化的数据结构（chapter_summaries、chapter_contents、chapter_detailed_outlines），并通过详细的诊断日志记录预加载过程和性能统计。这些增强为AI驱动的小说创作提供了更加稳健、智能化、可扩展且具备完整成本控制的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘、智能推荐和精细化成本管理奠定了坚实的技术基础。
+**更新** 该系统现已显著增强了并发控制能力、编辑任务支持、图数据库集成、实体抽取功能、**统一上下文管理器**、**上下文预加载系统**、**双源加载机制**、**优化数据结构**、**诊断日志系统**和**novel_data测试套件**。新增的147行测试代码专门解决novel ID字段缺失导致的图查询跳过问题，确保ID在crew管理器到图查询上下文的完整数据流中正确传递。这些增强为AI驱动的小说创作提供了更加稳健、智能化、可扩展且具备完整成本控制的技术基础，支持从简单的故事生成到复杂长篇小说的完整创作流程，同时为未来的内容分析、关系挖掘、智能推荐和精细化成本管理奠定了坚实的技术基础。

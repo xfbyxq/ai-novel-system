@@ -119,16 +119,23 @@ class ContinuityIntegrationModule:
     4. 在章节生成后调用 validate_chapter_content
     """
 
-    def __init__(self, novel_id: str, novel_data: Dict[str, Any]):
+    def __init__(
+        self,
+        novel_id: str,
+        novel_data: Dict[str, Any],
+        qwen_client: Optional[Any] = None,
+    ):
         """
         初始化集成模块.
 
         Args:
             novel_id: 小说 ID
             novel_data: 小说数据（包含主题、大纲、角色等）
+            qwen_client: LLM 客户端实例，用于需要 LLM 的组件
         """
         self.novel_id = novel_id
         self.novel_data = novel_data
+        self._qwen_client = qwen_client
 
         # 初始化各组件
         logger.info(f"Initializing ContinuityIntegrationModule for novel {novel_id}")
@@ -156,9 +163,10 @@ class ContinuityIntegrationModule:
         self.prevention_checker = PreventionContinuityChecker(novel_id)
 
         # === 新增连贯性组件 ===
-        # 世界观演变追踪器
+        # 世界观演变追踪器（需要 qwen_client 进行 LLM 验证）
         self.world_tracker = WorldEvolutionTracker(
             novel_data=novel_data,
+            qwen_client=qwen_client,
         )
         # 空间位置追踪器
         self.spatial_tracker = SpatialTracker(
@@ -166,8 +174,10 @@ class ContinuityIntegrationModule:
         )
         # 角色关系追踪器
         self.relationship_tracker = CharacterRelationshipTracker()
-        # 伏笔自动检测器
-        self.foreshadowing_detector = ForeshadowingAutoDetector()
+        # 伏笔自动检测器（需要 qwen_client 进行 LLM 检测）
+        self.foreshadowing_detector = ForeshadowingAutoDetector(
+            qwen_client=qwen_client
+        )
         # 连贯性评分卡构建器
         self.scorecard_builder = CoherenceScorecardBuilder()
         # 有意不一致列表
@@ -643,16 +653,22 @@ class ContinuityIntegrationModule:
 
 # 便捷函数
 async def create_continuity_module(
-    novel_id: str, novel_data: Dict[str, Any]
+    novel_id: str,
+    novel_data: Dict[str, Any],
+    qwen_client: Optional[Any] = None,
 ) -> ContinuityIntegrationModule:
     """便捷函数：创建连贯性模块."""
-    module = ContinuityIntegrationModule(novel_id, novel_data)
+    module = ContinuityIntegrationModule(novel_id, novel_data, qwen_client=qwen_client)
     return module
 
 
 async def prepare_for_chapter_generation(
-    novel_id: str, novel_data: Dict[str, Any], chapter_number: int, **kwargs
+    novel_id: str,
+    novel_data: Dict[str, Any],
+    chapter_number: int,
+    qwen_client: Optional[Any] = None,
+    **kwargs,
 ) -> Dict[str, Any]:
     """便捷函数：准备章节生成."""
-    module = await create_continuity_module(novel_id, novel_data)
+    module = await create_continuity_module(novel_id, novel_data, qwen_client=qwen_client)
     return await module.prepare_chapter_generation(chapter_number=chapter_number, **kwargs)

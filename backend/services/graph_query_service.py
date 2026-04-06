@@ -187,22 +187,42 @@ class GraphQueryService:
             # 构建节点列表
             node_list = []
             for n in nodes:
+                # Neo4j Node 对象需要转换为字典
+                if hasattr(n, "_properties"):
+                    node_data = dict(n._properties)
+                elif hasattr(n, "items"):
+                    node_data = dict(n)
+                else:
+                    node_data = n if isinstance(n, dict) else {}
                 node_list.append({
-                    "id": n.get("id"),
-                    "name": n.get("name"),
-                    "role_type": n.get("role_type"),
+                    "id": node_data.get("id"),
+                    "name": node_data.get("name"),
+                    "role_type": node_data.get("role_type"),
                     "label": "Character",
                 })
 
             # 构建边列表
             edge_list = []
             for r in relationships:
+                # Neo4j Relationship 对象需要转换
+                if hasattr(r, "_properties"):
+                    rel_props = dict(r._properties)
+                elif hasattr(r, "items"):
+                    rel_props = dict(r)
+                else:
+                    rel_props = r if isinstance(r, dict) else {}
                 edge_list.append({
-                    "from_id": r.get("from_id") or r.get("source"),
-                    "to_id": r.get("to_id") or r.get("target"),
+                    "from_id": rel_props.get("from_id") or rel_props.get("source"),
+                    "to_id": rel_props.get("to_id") or rel_props.get("target"),
                     "relation_type": "CHARACTER_RELATION",
-                    "properties": r.get("properties", {}),
+                    "properties": rel_props.get("properties", {}),
                 })
+
+            # 确保 character 也是字典
+            if hasattr(character, "_properties"):
+                character = dict(character._properties)
+            elif not isinstance(character, dict):
+                character = {}
 
             return CharacterNetwork(
                 character_id=character.get("id", ""),
@@ -538,11 +558,14 @@ class GraphQueryService:
         Returns:
             相关伏笔列表
         """
-        status_filter = "" if include_resolved else "status: 'pending'"
-        status_match = f"{{{status_filter}}}" if status_filter else ""
+        # 正确构建 Cypher 查询
+        if include_resolved:
+            match_pattern = "{novel_id: $novel_id}"
+        else:
+            match_pattern = "{novel_id: $novel_id, status: 'pending'}"
 
         query = f"""
-        MATCH (f:Foreshadowing {{novel_id: $novel_id{status_match}}})
+        MATCH (f:Foreshadowing {match_pattern})
         WHERE any(name IN $character_names WHERE name IN f.related_characters)
         RETURN f.id as id, f.content as content, f.planted_chapter as planted_chapter,
                f.expected_resolve_chapter as expected_chapter, f.importance as importance,

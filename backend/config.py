@@ -267,6 +267,10 @@ class Settings(BaseSettings):
     # 独立连续性审查：已废弃，连续性检查已合并到编辑的 cross_chapter_coherence 维度
     # 保留此配置作为降级开关，设为 False 时使用新流程
     ENABLE_STANDALONE_CONTINUITY_CHECK: bool = False
+    # 预防式连贯性检查：章节策划后检查潜在连贯性问题，在生成前预警
+    ENABLE_CONTINUITY_CHECK: bool = True
+    # 连贯性质量阈值：预防式检查的通过阈值
+    CONTINUITY_QUALITY_THRESHOLD: float = 7.0
 
     # --- 详细评估报告配置 ---
     # 启用详细问题报告：输出包含位置定位、具体表现、优先级分类的问题列表
