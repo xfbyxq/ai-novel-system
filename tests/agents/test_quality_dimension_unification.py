@@ -1,6 +1,7 @@
 """测试质量评估维度统一改进."""
 
 import asyncio
+
 from agents.base.quality_report import ChapterQualityReport
 from agents.quality_evaluator import QualityEvaluator
 
@@ -13,36 +14,39 @@ def test_chapter_quality_report():
     report = ChapterQualityReport(
         overall_score=8.0,
         dimension_scores={
-            "excitement": 8.5,
-            "plot_logic": 7.5,
-            "character_quality": 9.0,
+            "accuracy": 8.5,
+            "vividness": 7.5,
+            "pacing": 9.0,
             "setting_consistency": 7.0,
-            "fluency": 8.5
+            "immersion": 8.5,
         },
         passed=True,
-        summary="测试报告"
+        summary="测试报告",
     )
 
     # 验证维度数量
     assert len(report.dimension_scores) == 5, "应该有 5 个维度"
 
-    # 验证爽点设计分数
-    assert "excitement" in report.dimension_scores, "应该包含爽点设计维度"
-    assert report.dimension_scores["excitement"] == 8.5, "爽点设计分数应该为 8.5"
+    # 验证准确度分数
+    assert "accuracy" in report.dimension_scores, "应该包含准确度维度"
+    assert report.dimension_scores["accuracy"] == 8.5, "准确度分数应该为 8.5"
 
     # 验证权重配置存在
-    assert "excitement" in report._weights, "应该包含爽点设计权重"
+    assert "accuracy" in report._weights, "应该包含准确度权重"
 
-    # 验证加权分数计算（基于新权重：excitement=0.25, plot_logic=0.20, character_quality=0.20, setting_consistency=0.20, fluency=0.15）
+    # 验证加权分数计算（基于新权重：accuracy=0.25, vividness=0.20, pacing=0.20,
+    # setting_consistency=0.20, immersion=0.15）
     expected_weighted = (
-        8.5 * 0.25 +  # excitement
-        7.5 * 0.20 +  # plot_logic
-        9.0 * 0.20 +  # character_quality
-        7.0 * 0.20 +  # setting_consistency
-        8.5 * 0.15    # fluency
+        8.5 * 0.25  # accuracy
+        + 7.5 * 0.20  # vividness
+        + 9.0 * 0.20  # pacing
+        + 7.0 * 0.20  # setting_consistency
+        + 8.5 * 0.15  # immersion
     )
 
-    assert abs(report.weighted_score - expected_weighted) < 0.01, f"加权分数应该为 {expected_weighted}"
+    assert (
+        abs(report.weighted_score - expected_weighted) < 0.01
+    ), f"加权分数应该为 {expected_weighted}"
 
     # 验证 to_dict 输出
     data = report.to_dict()
@@ -52,8 +56,8 @@ def test_chapter_quality_report():
 
     print("✓ ChapterQualityReport 测试通过")
     print(f"  - 维度数量：{len(report.dimension_scores)}")
-    print(f"  - 爽点设计分数：{report.dimension_scores['excitement']}")
-    print(f"  - 爽点设计权重：{report._weights['excitement']}")
+    print(f"  - 准确度分数：{report.dimension_scores['accuracy']}")
+    print(f"  - 准确度权重：{report._weights['accuracy']}")
     print(f"  - 加权总分：{report.weighted_score:.2f}")
 
 
@@ -62,7 +66,7 @@ def test_quality_evaluator_criteria():
     print("\n测试 QualityEvaluator 评分标准...")
 
     # 测试各维度评分标准（使用新的 5 维度）
-    dimensions = ["excitement", "plot_logic", "character_quality", "setting_consistency", "fluency"]
+    dimensions = ["accuracy", "vividness", "pacing", "setting_consistency", "immersion"]
 
     for dim in dimensions:
         criteria = QualityEvaluator._get_detailed_criteria(dim)
@@ -70,9 +74,9 @@ def test_quality_evaluator_criteria():
         assert "9-10 分" in criteria or "分数" in criteria, f"{dim} 应该包含分数标准"
         print(f"  ✓ {dim}: 评分标准完整 ({len(criteria)} 字符)")
 
-    # 特别测试爽点设计评分标准
-    excitement_criteria = QualityEvaluator._get_detailed_criteria("excitement")
-    # 允许新维度暂无详细标准
+    # 特别测试准确度评分标准
+    accuracy_criteria = QualityEvaluator._get_detailed_criteria("accuracy")
+    assert accuracy_criteria, "准确度应该有详细评分标准"
     print("✓ 评分标准测试通过")
 
 
@@ -82,8 +86,7 @@ def test_quality_evaluator_task():
 
     from agents.quality_evaluator import QUALITY_EVALUATOR_TASK
 
-    # 验证输出格式包含新的 5 维度（兼容旧维度名）
-    # 注意：QualityEvaluator 可能仍使用旧维度名，这里主要检查结构完整性
+    # 验证输出格式包含新的 5 维度
     assert "dimension_scores" in QUALITY_EVALUATOR_TASK, "应该包含 dimension_scores"
 
     print("✓ QUALITY_EVALUATOR_TASK 测试通过")
@@ -101,23 +104,21 @@ async def test_full_evaluation():
                 "content": """{
                     "overall_score": 8.2,
                     "dimension_scores": {
-                        "excitement": 9.0,
-                        "plot_logic": 7.8,
-                        "character_quality": 8.0,
+                        "accuracy": 9.0,
+                        "vividness": 7.8,
+                        "pacing": 8.0,
                         "setting_consistency": 7.5,
-                        "fluency": 8.5
+                        "immersion": 8.5
                     },
                     "revision_suggestions": [],
                     "summary": "测试评估"
                 }""",
-                "usage": {
-                    "prompt_tokens": 100,
-                    "completion_tokens": 50
-                }
+                "usage": {"prompt_tokens": 100, "completion_tokens": 50},
             }
 
-    from llm.cost_tracker import CostTracker
     from unittest.mock import Mock
+
+    from llm.cost_tracker import CostTracker
 
     # 创建 mock cost tracker
     cost_tracker = Mock(spec=CostTracker)
@@ -127,25 +128,22 @@ async def test_full_evaluation():
     evaluator = QualityEvaluator(
         client=MockQwenClient(),
         cost_tracker=cost_tracker,
-        default_threshold=7.5
+        default_threshold=7.5,
     )
 
     # 执行评估
     sample_content = "这是一个测试章节内容"
-    report = await evaluator.evaluate(
-        content=sample_content,
-        chapter_plan="测试计划"
-    )
+    report = await evaluator.evaluate(content=sample_content, chapter_plan="测试计划")
 
     # 验证结果
     assert report.overall_score == 8.2, "整体分数应该为 8.2"
     assert len(report.dimension_scores) == 5, "应该有 5 个维度分数"
-    assert report.dimension_scores["excitement"] == 9.0, "爽点设计分数应该为 9.0"
+    assert report.dimension_scores["accuracy"] == 9.0, "准确度分数应该为 9.0"
 
     print("✓ 完整评估流程测试通过")
     print(f"  - 整体分数：{report.overall_score}")
     print(f"  - 维度数量：{len(report.dimension_scores)}")
-    print(f"  - 爽点设计：{report.dimension_scores['excitement']}")
+    print(f"  - 准确度：{report.dimension_scores['accuracy']}")
 
 
 async def main():
@@ -168,8 +166,8 @@ async def main():
         print("=" * 60)
         print("\n改进总结:")
         print("1. ✓ QualityEvaluator 支持 5 维度评估")
-        print("2. ✓ 爽感设计评分标准明确可量化")
-        print("3. ✓ ChapterQualityReport 权重配置合理（爽感设计 30%）")
+        print("2. ✓ 准确度评分标准明确可量化")
+        print("3. ✓ ChapterQualityReport 权重配置合理（准确度 25%）")
         print("4. ✓ 加权总分计算正确")
         print("5. ✓ 所有数据结构兼容新维度")
 

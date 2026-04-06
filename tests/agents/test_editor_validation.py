@@ -3,6 +3,7 @@
 import asyncio
 import json
 from unittest.mock import Mock
+
 from agents.base.review_result import ReviewLoopResult
 from agents.review_loop import ReviewLoopHandler
 from llm.cost_tracker import CostTracker
@@ -14,14 +15,11 @@ def test_editor_stats_structure():
 
     # 创建 ReviewLoopResult 实例
     result = ReviewLoopResult(
-        final_content="测试内容",
-        final_score=8.5,
-        total_iterations=3,
-        converged=True
+        final_content="测试内容", final_score=8.5, total_iterations=3, converged=True
     )
 
     # 验证 editor_stats 字段存在
-    assert hasattr(result, 'editor_stats'), "应该有 editor_stats 字段"
+    assert hasattr(result, "editor_stats"), "应该有 editor_stats 字段"
     assert isinstance(result.editor_stats, dict), "editor_stats 应该是字典"
 
     # 测试 to_dict 包含 editor_stats
@@ -33,7 +31,7 @@ def test_editor_stats_structure():
         "total_edits": 2,
         "rejected_edits": 1,
         "avg_improvement": 0.8,
-        "acceptance_rate": 0.67
+        "acceptance_rate": 0.67,
     }
 
     data = result.to_dict()
@@ -57,21 +55,9 @@ def test_get_editor_stats():
 
     # 模拟迭代历史
     iterations = [
-        {
-            "iteration": 1,
-            "score": 7.0,
-            "passed": False
-        },
-        {
-            "iteration": 2,
-            "score": 7.8,
-            "passed": False
-        },
-        {
-            "iteration": 3,
-            "score": 8.2,
-            "passed": True
-        }
+        {"iteration": 1, "score": 7.0, "passed": False},
+        {"iteration": 2, "score": 7.8, "passed": False},
+        {"iteration": 3, "score": 8.2, "passed": True},
     ]
 
     # 调用统计方法
@@ -95,22 +81,21 @@ async def test_validate_edited_content():
         async def chat(self, prompt, system, temperature, max_tokens):
             # 返回评估结果
             return {
-                "content": json.dumps({
-                    "overall_score": 8.5,
-                    "dimension_scores": {
-                        "fluency": 8.5,
-                        "plot_logic": 8.0,
-                        "character_consistency": 9.0,
-                        "pacing": 8.5,
-                        "satisfaction_design": 8.5
-                    },
-                    "revision_suggestions": [],
-                    "summary": "润色后质量良好"
-                }),
-                "usage": {
-                    "prompt_tokens": 100,
-                    "completion_tokens": 50
-                }
+                "content": json.dumps(
+                    {
+                        "overall_score": 8.5,
+                        "dimension_scores": {
+                            "accuracy": 8.5,
+                            "vividness": 8.0,
+                            "pacing": 9.0,
+                            "setting_consistency": 8.5,
+                            "immersion": 8.5,
+                        },
+                        "revision_suggestions": [],
+                        "summary": "润色后质量良好",
+                    }
+                ),
+                "usage": {"prompt_tokens": 100, "completion_tokens": 50},
             }
 
     # 创建 mock cost tracker
@@ -165,9 +150,7 @@ async def test_validate_edited_content():
     review_data = {"overall_score": 7.5}
 
     edited_score = await handler._validate_edited_content(
-        original_content=original_content,
-        edited_content=edited_content,
-        review_data=review_data
+        original_content=original_content, edited_content=edited_content, review_data=review_data
     )
 
     # 验证结果

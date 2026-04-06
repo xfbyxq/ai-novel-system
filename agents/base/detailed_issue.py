@@ -3,7 +3,7 @@
 用于支持生成用户期望的详细评估报告，包含：
 - 问题位置定位（段落/场景/角色/整体）
 - 具体表现描述
-- 优先级分类（影响阅读体验/提升精彩度/细节打磨）
+- 优先级分类（影响阅读体验/提升表现力/细节打磨）
 """
 
 from dataclasses import dataclass, field
@@ -16,19 +16,19 @@ class PriorityCategory(Enum):
 
     用于指导 Writer 修订的优先级：
     - READING_EXPERIENCE: 影响阅读体验，必须修改
-    - EXCITEMENT: 提升精彩度，建议增强
+    - CRAFT_QUALITY: 提升表现力，建议增强
     - POLISH: 细节打磨，可考虑优化
     """
 
     READING_EXPERIENCE = "reading_experience"  # 影响阅读体验
-    EXCITEMENT = "excitement"  # 提升精彩度
+    CRAFT_QUALITY = "craft_quality"  # 提升表现力
     POLISH = "polish"  # 细节打磨
 
     def get_revision_directive(self) -> str:
         """获取修订指令语气."""
         directives = {
             PriorityCategory.READING_EXPERIENCE: "必须修改",
-            PriorityCategory.EXCITEMENT: "建议增强",
+            PriorityCategory.CRAFT_QUALITY: "建议增强",
             PriorityCategory.POLISH: "可考虑优化",
         }
         return directives[self]
@@ -37,7 +37,7 @@ class PriorityCategory(Enum):
         """获取中文显示名称."""
         names = {
             PriorityCategory.READING_EXPERIENCE: "影响阅读体验",
-            PriorityCategory.EXCITEMENT: "提升精彩度",
+            PriorityCategory.CRAFT_QUALITY: "提升表现力",
             PriorityCategory.POLISH: "细节打磨",
         }
         return names[self]
@@ -149,12 +149,17 @@ class DetailedIssue:
         location_data = data.get("location", {})
         location = IssueLocation.from_dict(location_data)
 
+        # 向后兼容：旧值 "excitement" 映射为 "craft_quality"
+        raw_priority = data.get("priority_category", "polish")
+        if raw_priority == "excitement":
+            raw_priority = "craft_quality"
+
         return cls(
             location=location,
             description=data.get("description", ""),
             manifestation=data.get("manifestation", []),
             severity=data.get("severity", "medium"),
-            priority_category=data.get("priority_category", "polish"),
+            priority_category=raw_priority,
             suggestion=data.get("suggestion", ""),
             related_dimensions=data.get("related_dimensions", []),
         )
@@ -199,7 +204,7 @@ def group_issues_by_priority(issues: List[DetailedIssue]) -> Dict[str, List[Deta
     """
     grouped = {
         "reading_experience": [],
-        "excitement": [],
+        "craft_quality": [],
         "polish": [],
     }
 

@@ -23,7 +23,7 @@ class TestJsonExtractorBasic:
 
     def test_extract_pure_json_array(self):
         """测试纯 JSON 数组."""
-        text = '[1, 2, 3]'
+        text = "[1, 2, 3]"
         result = JsonExtractor.extract_json(text)
         assert result == [1, 2, 3]
 
@@ -79,45 +79,45 @@ class TestJsonExtractorQualityReport:
 
     def test_extract_quality_report_unclosed(self):
         """测试未闭合代码块中的质量评估报告."""
-        text = '''```json
+        text = """```json
 {
     "overall_score": 7.5,
     "dimension_scores": {
-        "satisfaction_design": 7.5,
-        "foreshadowing": 7,
-        "character_distinctiveness": 8,
-        "plot_logic": 7,
-        "pacing": 8
+        "accuracy": 7.5,
+        "vividness": 7,
+        "pacing": 8,
+        "setting_consistency": 7,
+        "immersion": 8
     },
     "revision_suggestions": [
         {"issue": "节奏稍慢", "suggestion": "加快情节推进", "severity": "medium"}
     ],
     "summary": "整体质量良好"
-}'''
+}"""
         result = JsonExtractor.extract_json(text)
         assert result["overall_score"] == 7.5
-        assert result["dimension_scores"]["plot_logic"] == 7
+        assert result["dimension_scores"]["setting_consistency"] == 7
         assert len(result["revision_suggestions"]) == 1
 
     def test_extract_quality_report_closed(self):
         """测试闭合代码块中的质量评估报告."""
-        text = '''```json
+        text = """```json
 {
     "overall_score": 8.0,
     "dimension_scores": {
-        "fluency": 8,
-        "plot_logic": 8
+        "accuracy": 8,
+        "vividness": 8
     },
     "summary": "优秀"
 }
-```'''
+```"""
         result = JsonExtractor.extract_json(text)
         assert result["overall_score"] == 8.0
-        assert result["dimension_scores"]["fluency"] == 8
+        assert result["dimension_scores"]["accuracy"] == 8
 
     def test_extract_quality_report_pure_json(self):
         """测试纯 JSON 格式的质量评估报告."""
-        text = '{"overall_score": 6.5, "dimension_scores": {"fluency": 7}, "summary": "一般"}'
+        text = '{"overall_score": 6.5, "dimension_scores": {"accuracy": 7}, "summary": "一般"}'
         result = JsonExtractor.extract_json(text)
         assert result["overall_score"] == 6.5
 
@@ -175,10 +175,10 @@ class TestJsonExtractorEdgeCases:
 
     def test_json_with_comments(self):
         """测试包含注释的 JSON."""
-        text = '''{
+        text = """{
     "key": "value", // 这是一个注释
     "number": 42
-}'''
+}"""
         result = JsonExtractor.extract_json(text)
         assert result["key"] == "value"
         assert result["number"] == 42
@@ -203,7 +203,7 @@ class TestJsonExtractorMethods:
 
     def test_extract_array_returns_list(self):
         """测试 extract_array 返回列表."""
-        text = '[1, 2, 3]'
+        text = "[1, 2, 3]"
         result = JsonExtractor.extract_array(text)
         assert isinstance(result, list)
         assert result == [1, 2, 3]

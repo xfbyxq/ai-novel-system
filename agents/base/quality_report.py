@@ -276,11 +276,11 @@ class ChapterQualityReport(BaseQualityReport):
 
     在基类基础上添加修订建议和加权总分计算。
     精简维度设计（5维度）：
-    - 爽点设计 25%（最高权重，核心吸引力）
-    - 情节逻辑 20%（因果关系合理性）
-    - 角色塑造 20%（角色一致性和辨识度）
+    - 准确度 25%（最高权重，因果关系与逻辑严密性）
+    - 画面感 20%（场景描写生动性与感官细节）
+    - 节奏感 20%（叙事张弛与详略控制）
     - 设定一致性 20%（世界观和时间线一致性）
-    - 语言流畅度 15%（阅读体验）
+    - 代入感 15%（情感共鸣与角色内心深度）
     """
 
     # 修订建议列表（旧格式，保留向后兼容）
@@ -289,26 +289,25 @@ class ChapterQualityReport(BaseQualityReport):
     # 精简维度权重配置（5维度）
     _weights: Dict[str, float] = field(
         default_factory=lambda: {
-            "excitement": 0.25,  # 爽点设计
-            "plot_logic": 0.20,  # 情节逻辑
-            "character_quality": 0.20,  # 角色塑造
+            "accuracy": 0.25,  # 准确度
+            "vividness": 0.20,  # 画面感
+            "pacing": 0.20,  # 节奏感
             "setting_consistency": 0.20,  # 设定一致性
-            "fluency": 0.15,  # 语言流畅度
+            "immersion": 0.15,  # 代入感
         }
     )
 
     # 聚合维度权重配置（简化为2个聚合维度）
     _aggregate_weights: Dict[str, Dict[str, float]] = field(
         default_factory=lambda: {
-            "coherence": {
-                "plot_logic": 0.40,
-                "character_quality": 0.35,
-                "setting_consistency": 0.25,
+            "integrity": {  # 内容严谨性
+                "accuracy": 0.55,
+                "setting_consistency": 0.45,
             },
-            "engagement": {
-                "excitement": 0.60,
-                "fluency": 0.25,
-                "character_quality": 0.15,
+            "craft": {  # 叙事技艺
+                "vividness": 0.40,
+                "pacing": 0.40,
+                "immersion": 0.20,
             },
         }
     )
@@ -338,13 +337,13 @@ class ChapterQualityReport(BaseQualityReport):
 
     @property
     def aggregate_scores(self) -> Dict[str, float]:
-        """计算聚合维度评分（连贯性、趣味性）.
+        """计算聚合维度评分（内容严谨性、叙事技艺）.
 
         Returns:
             聚合维度评分字典
         """
         if not self.dimension_scores:
-            return {"coherence": 0.0, "engagement": 0.0}
+            return {"integrity": 0.0, "craft": 0.0}
 
         aggregate = {}
         for agg_name, weights in self._aggregate_weights.items():
@@ -391,7 +390,7 @@ class ChapterQualityReport(BaseQualityReport):
         """按优先级获取问题列表.
 
         Args:
-            priority: 优先级分类（reading_experience/excitement/polish）
+            priority: 优先级分类（reading_experience/craft_quality/polish）
 
         Returns:
             对应优先级的问题列表

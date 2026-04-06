@@ -28,18 +28,18 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 2. 润色并输出修改后的完整内容
 
 【精确评分维度】（1-10分）：
-- excitement（爽点设计）：章节是否有明确的爽点？铺垫是否充分？悬念是否有效？
-- plot_logic（情节逻辑）：因果关系是否清晰？动机是否充分？事件发展是否合理？
-- character_quality（角色塑造）：主角是否有鲜明特征？行为是否一致？性格是否矛盾？
-- setting_consistency（设定一致性）：世界观是否前后一致？时间线是否清晰？
-- fluency（语言流畅度）：表达是否流畅？场景节奏是否有变化？用词是否准确？
+- accuracy（准确度）：情节因果关系是否清晰严密？角色行为动机是否合理？事件发展是否符合已建立规则？有无逻辑漏洞？
+- vividness（画面感）：场景描写是否生动具体？是否运用了多感官细节（视觉/听觉/触觉/嗅觉）？环境氛围与情绪是否融合？读者能否"看到"画面？
+- pacing（节奏感）：叙事张弛是否有度？紧张与舒缓是否交替得当？详略安排是否合理？场景切换是否流畅？情绪曲线是否有起伏？
+- setting_consistency（设定一致性）：世界观是否前后一致？时间线是否清晰？力量体系是否遵循规则？
+- immersion（代入感）：角色内心活动是否真实可信？情感铺垫是否到位？读者是否能产生共鸣？对话是否推动情感发展？
 
 【评分锚点示例】：
-- 6.0分：基本合格，无明显硬伤，但缺乏亮点
-- 7.0分：合格，情节流畅，有爽点铺垫，无逻辑漏洞
-- 7.5分：良好，情节紧凑，爽点设计合理，角色行为符合人设
-- 8.0分：优秀，情节精彩，爽点有铺垫有释放，设定一致
-- 8.5分：出色，情节跌宕起伏，爽感强烈，角色鲜明
+- 6.0分：基本合格，逻辑无硬伤，但描写平淡、节奏平板、情感苍白
+- 7.0分：合格，逻辑通顺，有一定画面感，节奏基本流畅，情感有铺垫
+- 7.5分：良好，因果关系清晰，场景描写具体生动，详略安排合理，角色情感真实
+- 8.0分：优秀，逻辑严密，画面跃然纸上，节奏张弛有度，读者有强烈代入感
+- 8.5分：出色，情节因果精巧，感官描写丰富立体，情绪曲线起伏有力，读者完全沉浸
 
 【问题定位要求】：
 描述问题时要明确位置（如：第3段、开篇场景、结尾转折），便于定位修改。
@@ -69,11 +69,11 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 {{
     "overall_score": 综合评分(1-10浮点数)，参考评分锚点,
     "dimension_scores": {{
-        "excitement": 分数,
-        "plot_logic": 分数,
-        "character_quality": 分数,
+        "accuracy": 分数,
+        "vividness": 分数,
+        "pacing": 分数,
         "setting_consistency": 分数,
-        "fluency": 分数
+        "immersion": 分数
     }},
     "overall_assessment": "整体评价（1-2句话概括章节质量）",
     "issues": [
@@ -230,11 +230,11 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
 
     def _get_dimension_names(self) -> Dict[str, str]:
         return {
-            "excitement": "爽点设计",
-            "plot_logic": "情节逻辑",
-            "character_quality": "角色塑造",
+            "accuracy": "准确度",
+            "vividness": "画面感",
+            "pacing": "节奏感",
             "setting_consistency": "设定一致性",
-            "fluency": "语言流畅度",
+            "immersion": "代入感",
         }
 
     def _build_reviewer_task_prompt(
@@ -305,8 +305,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
         # 追加图数据库冲突信息
         if graph_conflicts_section:
             task_prompt = task_prompt.replace(
-                "请以JSON格式输出",
-                f"{graph_conflicts_section}\n\n请以JSON格式输出"
+                "请以JSON格式输出", f"{graph_conflicts_section}\n\n请以JSON格式输出"
             )
 
         return task_prompt
@@ -744,8 +743,7 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             has_high_severity = any(i.get("severity") == "high" for i in issues)
             if score >= 7.5 and not has_high_severity:
                 logger.info(
-                    f"[ReviewLoop] 快速通过：score={score:.1f}>=7.5 且无high问题，"
-                    "跳过Writer修订"
+                    f"[ReviewLoop] 快速通过：score={score:.1f}>=7.5 且无high问题，" "跳过Writer修订"
                 )
                 break
 

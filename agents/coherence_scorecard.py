@@ -453,13 +453,13 @@ class CoherenceScorecardBuilder:
             # 从维度评分中提取情节相关分数
             dim_scores = review_result.get("dimension_scores", {})
             if dim_scores:
-                # 情节逻辑分数
-                plot_logic = dim_scores.get("plot_logic", 0.0)
+                # 准确度分数（原情节逻辑）
+                accuracy = dim_scores.get("accuracy", 0.0)
                 # 伏笔分数也可作为参考
                 foreshadow = dim_scores.get("foreshadowing", 0.0)
-                if plot_logic > 0:
-                    score = plot_logic
-                    evidence.append(f"情节逻辑评分: {plot_logic:.1f}")
+                if accuracy > 0:
+                    score = accuracy
+                    evidence.append(f"准确度评分: {accuracy:.1f}")
                 if foreshadow > 0:
                     evidence.append(f"伏笔设计评分: {foreshadow:.1f}")
 
