@@ -104,11 +104,31 @@ services:
     command: >
       bash -c "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
 
+  # 前端开发服务
+  frontend_dev:
+    image: m.daocloud.io/docker.io/node:20-alpine
+    container_name: novel_frontend_dev
+    working_dir: /app
+    environment:
+      - API_PROXY_TARGET=http://backend_dev:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app:cached
+      - frontend_node_modules_dev:/app/node_modules
+    depends_on:
+      - backend_dev
+    networks:
+      - dev-network
+    command: >
+      sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+
 volumes:
   postgres_data_dev:
   redis_data_dev:
   neo4j_data_dev:
   neo4j_logs_dev:
+  frontend_node_modules_dev:
 
 networks:
   dev-network:
