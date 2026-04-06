@@ -318,8 +318,8 @@ class GraphSyncService:
                                 from_id,
                                 "Character",
                                 to_id,
-                                rel.relation_type.upper(),
-                                {"strength": rel.strength},
+                                "CHARACTER_RELATION",
+                                {"type": rel.relation_type, "strength": rel.strength},
                             )
                             result.relationships_created += 1
                 except Exception as e:
@@ -456,8 +456,8 @@ class GraphSyncService:
                                 from_id,
                                 "Character",
                                 to_id,
-                                rel.relation_type.upper(),
-                                {"strength": rel.strength},
+                                "CHARACTER_RELATION",
+                                {"type": rel.relation_type, "strength": rel.strength},
                             )
                             result.relationships_created += 1
                 except Exception as e:

@@ -747,6 +747,7 @@ class GenerationService:
                 character_states = self.memory_service.get_character_states(str(novel_id))
 
             novel_data = {
+                "id": str(novel_id),
                 "title": novel.title,
                 "genre": novel.genre,
                 "world_setting": world_setting_dict,
@@ -1156,6 +1157,7 @@ class GenerationService:
                 }
 
             novel_data = {
+                "id": str(novel_id),
                 "title": novel.title,
                 "genre": novel.genre,
                 "world_setting": world_setting_dict,
@@ -1360,6 +1362,7 @@ class GenerationService:
         character_states = self.memory_service.get_character_states(str(novel_id))
 
         novel_data = {
+            "id": str(novel_id),
             "title": novel.title,
             "genre": novel.genre,
             "world_setting": world_setting_dict,
