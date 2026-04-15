@@ -466,7 +466,7 @@ class ReflectionAgent:
             avg_improvement += e.get("final_score", 0) - e.get("initial_score", 0)
         avg_improvement = avg_improvement / total if total > 0 else 0
 
-        lines.append(f"\n## 汇总统计")
+        lines.append("\n## 汇总统计")
         lines.append(f"- 总章节数: {total}")
         lines.append(f"- 收敛率: {converged_count}/{total}")
         lines.append(f"- 停滞率: {stagnation_count}/{total}")
@@ -489,7 +489,7 @@ class ReflectionAgent:
             sorted_cats = sorted(
                 category_freq.items(), key=lambda x: x[1], reverse=True
             )
-            lines.append(f"\n## 高频问题类别")
+            lines.append("\n## 高频问题类别")
             for cat, freq in sorted_cats[:8]:
                 lines.append(f"- {cat}: 出现 {freq} 次 ({freq}/{total})")
 
@@ -508,14 +508,14 @@ class ReflectionAgent:
             pattern_descs = [
                 p.get("description", "")[:50] for p in existing_patterns[:5]
             ]
-            existing_patterns_text = f"\n已有模式（避免重复）：\n" + "\n".join(
+            existing_patterns_text = "\n已有模式（避免重复）：\n" + "\n".join(
                 f"- {d}" for d in pattern_descs
             )
 
         existing_lessons_text = ""
         if existing_lessons:
-            lesson_descs = [l.get("rule_text", "")[:50] for l in existing_lessons[:5]]
-            existing_lessons_text = f"\n已有规则（避免重复）：\n" + "\n".join(
+            lesson_descs = [item.get("rule_text", "")[:50] for item in existing_lessons[:5]]
+            existing_lessons_text = "\n已有规则（避免重复）：\n" + "\n".join(
                 f"- {d}" for d in lesson_descs
             )
 
@@ -794,9 +794,9 @@ class ReflectionAgent:
                 self.novel_id, lesson_type=None
             )
             target = None
-            for l in lessons:
-                if l.get("id") == lesson_id:
-                    target = l
+            for lesson in lessons:
+                if lesson.get("id") == lesson_id:
+                    target = lesson
                     break
 
             if not target:

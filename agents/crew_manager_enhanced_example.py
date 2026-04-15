@@ -374,7 +374,7 @@ async def example_usage():
     )
 
     # 输出结果
-    print(f"章节生成完成:")
+    print("章节生成完成:")
     print(f"字数：{result['word_count']}")
     print(f"连贯性评分：{result['continuity_review']['overall_score']}")
     print(f"是否通过：{result['continuity_review']['passed']}")

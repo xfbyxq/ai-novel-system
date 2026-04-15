@@ -69,7 +69,7 @@ class ChapterSummaryGenerator:
 
             # 检查是否返回了空摘要（解析失败的标志）
             if not summary.get("key_events") and not summary.get("plot_progress"):
-                logger.warning(f"[SummaryGenerator] JSON 解析返回空摘要，使用回退方案...")
+                logger.warning("[SummaryGenerator] JSON 解析返回空摘要，使用回退方案...")
                 return self._fallback_summary(chapter_content, chapter_plan)
 
             # 确保必要字段

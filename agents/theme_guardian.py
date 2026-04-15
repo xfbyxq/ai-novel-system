@@ -9,7 +9,6 @@ ThemeGuardian - 主题守护者.
 解决根本原因 2：主题一致性校验缺失
 """
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -485,9 +484,6 @@ class ThemeGuardian:
                     }
                 )
                 score -= 1.0
-
-        # 检查是否有明显偏离的内容
-        content_text = json.dumps(chapter_plan, ensure_ascii=False)
 
         # 简单检查：是否包含大量与主题无关的元素
         # （实际应该用 LLM 进行语义分析）
