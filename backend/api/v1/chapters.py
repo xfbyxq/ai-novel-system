@@ -22,7 +22,6 @@ from backend.utils.concurrency import (
     ConcurrentOperationError,
     DistributedLock,
     acquire_chapter_lock,
-    database_transaction,
     get_redis_client,
 )
 from core.models.chapter import Chapter

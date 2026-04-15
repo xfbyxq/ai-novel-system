@@ -22,7 +22,6 @@ from backend.utils.concurrency import (
     ConcurrentOperationError,
     DistributedLock,
     acquire_novel_lock,
-    database_transaction,
     get_redis_client,
 )
 from core.models.novel import Novel
@@ -35,6 +34,7 @@ async def list_novels(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     status: Optional[str] = Query(None, description="小说状态筛选"),
+    keyword: Optional[str] = Query(None, description="搜索关键词（标题模糊匹配）"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -47,6 +47,9 @@ async def list_novels(
     - `writing`: 写作中
     - `completed`: 已完成
     - `published`: 已发布
+
+    **搜索 (keyword)**:
+    - 支持按标题进行模糊搜索
     """
     offset = (page - 1) * page_size
 
@@ -54,11 +57,15 @@ async def list_novels(
     query = select(Novel)
     if status:
         query = query.where(Novel.status == status)
+    if keyword:
+        query = query.where(Novel.title.ilike(f"%{keyword}%"))
 
     # Get total count
     count_query = select(func.count()).select_from(Novel)
     if status:
         count_query = count_query.where(Novel.status == status)
+    if keyword:
+        count_query = count_query.where(Novel.title.ilike(f"%{keyword}%"))
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 

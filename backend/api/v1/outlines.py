@@ -12,8 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from backend.dependencies import get_db
 from backend.schemas.outline import (
     AIAssistRequest,
@@ -34,17 +32,16 @@ from backend.schemas.outline import (
     WorldSettingResponse,
     WorldSettingUpdate,
 )
-from core.models.plot_outline import PlotOutline
-import logging
-
-core_logger = logging.getLogger(__name__)
+from backend.services.outline_service import OutlineService
+from core.models.character import Character
+from core.models.chapter import Chapter
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.plot_outline_version import PlotOutlineVersion
 from core.models.world_setting import WorldSetting
-from core.models.character import Character
-from core.models.chapter import Chapter
-from backend.services.outline_service import OutlineService
+
+logger = logging.getLogger(__name__)
+core_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
