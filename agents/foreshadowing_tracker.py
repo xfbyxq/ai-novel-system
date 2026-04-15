@@ -1,11 +1,12 @@
-"""
-ForeshadowingTracker - 伏笔追踪系统.
+"""伏笔追踪器 - 管理伏笔的生命周期.
 
-用于追踪小说中的伏笔埋设和回收，确保情节连贯性。
+追踪伏笔从计划、埋下、回收到解决的全过程，
+确保伏笔不被遗忘，并在 Writer prompt 中强制提醒。
 """
 
-import json
+import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -14,421 +15,299 @@ from core.logging_config import logger
 
 
 class ForeshadowingStatus(str, Enum):
-    """伏笔状态."""
+    """伏笔状态枚举."""
 
-    PENDING = "pending"  # 待回收
-    RESOLVED = "resolved"  # 已回收
-    ABANDONED = "abandoned"  # 已放弃（不再回收）
-    PARTIAL = "partial"  # 部分回收
-
-
-class ForeshadowingType(str, Enum):
-    """伏笔类型."""
-
-    PLOT = "plot"  # 情节伏笔
-    CHARACTER = "character"  # 角色伏笔
-    ITEM = "item"  # 物品伏笔
-    MYSTERY = "mystery"  # 悬念伏笔
-    HINT = "hint"  # 暗示伏笔
-    OTHER = "other"  # 其他
+    PLANNED = "planned"  # 在章节计划中提出
+    PLANTED = "planted"  # 已在章节内容中埋下
+    RECALLED = "recalled"  # 已被提及/呼应
+    RESOLVED = "resolved"  # 已回收/解决
+    ABANDONED = "abandoned"  # 超过阈值未回收，标记放弃
 
 
-class Foreshadowing:
-    """伏笔实体."""
+@dataclass
+class ForeshadowingItem:
+    """伏笔条目."""
 
-    def __init__(
-        self,
-        content: str,
-        planted_chapter: int,
-        ftype: ForeshadowingType = ForeshadowingType.PLOT,
-        importance: int = 5,  # 1-10, 10最重要
-        expected_resolve_chapter: int = None,
-        related_characters: List[str] = None,
-        notes: str = "",
-    ):
-        """初始化方法."""
-        self.id = str(uuid.uuid4())[:8]
-        self.content = content
-        self.planted_chapter = planted_chapter
-        self.ftype = ftype
-        self.importance = importance
-        self.expected_resolve_chapter = expected_resolve_chapter
-        self.related_characters = related_characters or []
-        self.notes = notes
-
-        self.status = ForeshadowingStatus.PENDING
-        self.resolved_chapter: Optional[int] = None
-        self.resolution_content: str = ""
-
-        self.created_at = datetime.now().isoformat()
-        self.updated_at = datetime.now().isoformat()
-
-    def resolve(self, chapter_number: int, resolution_content: str = ""):
-        """回收伏笔."""
-        self.status = ForeshadowingStatus.RESOLVED
-        self.resolved_chapter = chapter_number
-        self.resolution_content = resolution_content
-        self.updated_at = datetime.now().isoformat()
-
-    def partial_resolve(self, chapter_number: int, resolution_content: str = ""):
-        """部分回收伏笔."""
-        self.status = ForeshadowingStatus.PARTIAL
-        self.resolved_chapter = chapter_number
-        self.resolution_content = resolution_content
-        self.updated_at = datetime.now().isoformat()
-
-    def abandon(self, reason: str = ""):
-        """放弃伏笔."""
-        self.status = ForeshadowingStatus.ABANDONED
-        self.notes = reason if reason else self.notes
-        self.updated_at = datetime.now().isoformat()
+    id: str
+    content: str  # 伏笔内容描述
+    type: str = "plot"  # 伏笔类型：plot/character/world
+    status: ForeshadowingStatus = ForeshadowingStatus.PLANNED
+    planted_chapter: Optional[int] = None  # 埋下伏笔的章节
+    recalled_chapters: List[int] = field(default_factory=list)  # 被呼应的章节
+    resolved_chapter: Optional[int] = None  # 回收的章节
+    related_characters: List[str] = field(default_factory=list)
+    importance: int = 3  # 重要性 1-5
+    created_at: datetime = field(default_factory=datetime.now)
+    last_checked_chapter: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式."""
         return {
             "id": self.id,
             "content": self.content,
+            "type": self.type,
+            "status": self.status.value,
             "planted_chapter": self.planted_chapter,
-            "ftype": (
-                self.ftype.value if hasattr(self.ftype, "value") else str(self.ftype)
-            ),
-            "importance": self.importance,
-            "expected_resolve_chapter": self.expected_resolve_chapter,
-            "related_characters": self.related_characters,
-            "notes": self.notes,
-            "status": (
-                self.status.value if hasattr(self.status, "value") else str(self.status)
-            ),
+            "recalled_chapters": self.recalled_chapters,
             "resolved_chapter": self.resolved_chapter,
-            "resolution_content": self.resolution_content,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
+            "related_characters": self.related_characters,
+            "importance": self.importance,
+            "age_days": (datetime.now() - self.created_at).days,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Foreshadowing":
-        """从字典创建伏笔."""
-        f = cls(
-            content=data.get("content", ""),
-            planted_chapter=data.get("planted_chapter", 0),
-            ftype=ForeshadowingType(data.get("ftype", "plot")),
-            importance=data.get("importance", 5),
-            expected_resolve_chapter=data.get("expected_resolve_chapter"),
+    def from_dict(cls, data: Dict[str, Any]) -> "ForeshadowingItem":
+        """从字典加载伏笔."""
+        item = cls(
+            id=data["id"],
+            content=data["content"],
+            type=data.get("type", "plot"),
+            status=ForeshadowingStatus(data.get("status", "planned")),
+            planted_chapter=data.get("planted_chapter"),
+            recalled_chapters=data.get("recalled_chapters", []),
+            resolved_chapter=data.get("resolved_chapter"),
             related_characters=data.get("related_characters", []),
-            notes=data.get("notes", ""),
+            importance=data.get("importance", 3),
         )
-        f.id = data.get("id", f.id)
-        f.status = ForeshadowingStatus(data.get("status", "pending"))
-        f.resolved_chapter = data.get("resolved_chapter")
-        f.resolution_content = data.get("resolution_content", "")
-        f.created_at = data.get("created_at", f.created_at)
-        f.updated_at = data.get("updated_at", f.updated_at)
-        return f
+        return item
 
 
 class ForeshadowingTracker:
-    """
-    伏笔追踪器.
+    """伏笔生命周期追踪器.
 
-    功能：
-    1. 埋设伏笔并记录
-    2. 追踪伏笔状态
-    3. 提醒待回收的伏笔
-    4. 验证伏笔前后一致性
+    核心功能：
+    1. 从章节计划中注册伏笔
+    2. 检测章节内容中是否埋下伏笔
+    3. 检查后续章节是否回收伏笔
+    4. 老化评估：超期未回收则警告或标记放弃
+    5. 格式化为 Writer prompt 中的提醒
     """
 
-    def __init__(self, novel_id: str):
+    MAX_UNRECALLED_CHAPTERS = 5  # 超过 5 章未回收则标记警告
+    MAX_TOTAL_CHAPTERS = 10  # 超过 10 章未回收则标记放弃
+
+    def __init__(self):
         """初始化方法."""
-        self.novel_id = novel_id
-        self.foreshadowings: Dict[str, Foreshadowing] = {}
-        logger.info(f"ForeshadowingTracker initialized for novel: {novel_id}")
+        self.foreshadowings: Dict[str, ForeshadowingItem] = {}
 
-    def plant(
+    def register_from_plan(
         self,
-        content: str,
         chapter_number: int,
-        ftype: ForeshadowingType = ForeshadowingType.PLOT,
-        importance: int = 5,
-        expected_resolve_chapter: int = None,
-        related_characters: List[str] = None,
-        notes: str = "",
-    ) -> str:
-        """
-        埋下伏笔.
-
-        Returns:
-            伏笔ID
-        """
-        foreshadowing = Foreshadowing(
-            content=content,
-            planted_chapter=chapter_number,
-            ftype=ftype,
-            importance=importance,
-            expected_resolve_chapter=expected_resolve_chapter,
-            related_characters=related_characters,
-            notes=notes,
-        )
-        self.foreshadowings[foreshadowing.id] = foreshadowing
-        logger.info(
-            f"Foreshadowing planted: {foreshadowing.id} at chapter {chapter_number}"
-        )
-        return foreshadowing.id
-
-    def resolve(
-        self, fid: str, chapter_number: int, resolution_content: str = ""
-    ) -> bool:
-        """
-        回收伏笔.
+        foreshadowing_list: List[str],
+        related_characters: Optional[List[str]] = None,
+    ) -> List[str]:
+        """从章节计划中注册伏笔.
 
         Args:
-            fid: 伏笔ID
-            chapter_number: 回收章节号
-            resolution_content: 回收内容描述
+            chapter_number: 当前章节号
+            foreshadowing_list: 伏笔列表（从 chapter_plan.foreshadowing 获取）
+            related_characters: 相关角色列表
 
         Returns:
-            是否成功回收
+            已注册的伏笔 ID 列表
         """
-        if fid not in self.foreshadowings:
-            logger.warning(f"Foreshadowing not found: {fid}")
-            return False
-
-        self.foreshadowings[fid].resolve(chapter_number, resolution_content)
-        logger.info(f"Foreshadowing resolved: {fid} at chapter {chapter_number}")
-        return True
-
-    def partial_resolve(
-        self, fid: str, chapter_number: int, resolution_content: str = ""
-    ) -> bool:
-        """部分回收伏笔."""
-        if fid not in self.foreshadowings:
-            return False
-
-        self.foreshadowings[fid].partial_resolve(chapter_number, resolution_content)
-        logger.info(
-            f"Foreshadowing partially resolved: {fid} at chapter {chapter_number}"
-        )
-        return True
-
-    def abandon(self, fid: str, reason: str = "") -> bool:
-        """放弃伏笔."""
-        if fid not in self.foreshadowings:
-            return False
-
-        self.foreshadowings[fid].abandon(reason)
-        logger.info(f"Foreshadowing abandoned: {fid}")
-        return True
-
-    def get_foreshadowing(self, fid: str) -> Optional[Foreshadowing]:
-        """获取伏笔."""
-        return self.foreshadowings.get(fid)
-
-    def get_pending_foreshadowings(self) -> List[Dict[str, Any]]:
-        """获取所有待回收的伏笔."""
-        pending = [
-            f.to_dict()
-            for f in self.foreshadowings.values()
-            if f.status == ForeshadowingStatus.PENDING
-        ]
-        # 按重要性和章节排序
-        pending.sort(key=lambda x: (-x["importance"], x["planted_chapter"]))
-        return pending
-
-    def get_overdue_foreshadowings(self, current_chapter: int) -> List[Dict[str, Any]]:
-        """获取超期未回收的伏笔."""
-        overdue = []
-        for f in self.foreshadowings.values():
-            if f.status == ForeshadowingStatus.PENDING:
-                if (
-                    f.expected_resolve_chapter
-                    and current_chapter > f.expected_resolve_chapter
-                ):
-                    overdue.append(f.to_dict())
-        return overdue
-
-    def get_foreshadowings_for_chapter(
-        self, chapter_number: int
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取与某章节相关的伏笔.
-
-        Returns:
-            {
-                "planted": 本章埋下的伏笔,
-                "expected_resolve": 预期本章回收的伏笔,
-                "resolved": 本章已回收的伏笔
-            }
-        """
-        result = {"planted": [], "expected_resolve": [], "resolved": []}
-
-        for f in self.foreshadowings.values():
-            if f.planted_chapter == chapter_number:
-                result["planted"].append(f.to_dict())
-            if (
-                f.expected_resolve_chapter == chapter_number
-                and f.status == ForeshadowingStatus.PENDING
-            ):
-                result["expected_resolve"].append(f.to_dict())
-            if f.resolved_chapter == chapter_number:
-                result["resolved"].append(f.to_dict())
-
-        return result
-
-    def suggest_resolutions(
-        self, current_chapter: int, look_ahead: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        建议近期需要回收的伏笔.
-
-        Args:
-            current_chapter: 当前章节
-            look_ahead: 向前看多少章
-
-        Returns:
-            建议回收的伏笔列表
-        """
-        suggestions = []
-        for f in self.foreshadowings.values():
-            if f.status != ForeshadowingStatus.PENDING:
+        registered_ids = []
+        for f in foreshadowing_list:
+            if not f or not f.strip():
                 continue
 
-            # 高重要性伏笔超过20章未回收
-            if f.importance >= 7 and current_chapter - f.planted_chapter > 20:
-                suggestions.append(
-                    {**f.to_dict(), "reason": "高重要性伏笔已超过20章未回收"}
-                )
-            # 预期回收时间即将到来
-            elif (
-                f.expected_resolve_chapter
-                and f.expected_resolve_chapter <= current_chapter + look_ahead
-            ):
-                suggestions.append(
-                    {
-                        **f.to_dict(),
-                        "reason": f"预期在第{f.expected_resolve_chapter}章回收",
-                    }
-                )
-            # 普通伏笔超过50章未回收
-            elif current_chapter - f.planted_chapter > 50:
-                suggestions.append(
-                    {**f.to_dict(), "reason": "伏笔已超过50章未回收，建议处理"}
-                )
+            # 检查是否已存在相同内容的伏笔
+            existing = self._find_by_content(f)
+            if existing:
+                logger.debug(f"伏笔已存在，跳过: {f[:30]}")
+                continue
 
-        suggestions.sort(key=lambda x: -x["importance"])
-        return suggestions
+            item_id = str(uuid.uuid4())[:8]
+            item = ForeshadowingItem(
+                id=item_id,
+                content=f.strip(),
+                type="plot",
+                status=ForeshadowingStatus.PLANNED,
+                related_characters=related_characters or [],
+            )
+            self.foreshadowings[item_id] = item
+            registered_ids.append(item_id)
+            logger.info(f"[Foreshadowing] 注册伏笔 (ch{chapter_number}): {f[:50]}")
 
-    def format_for_prompt(self, current_chapter: int, max_items: int = 10) -> str:
-        """
-        格式化伏笔信息用于提示词.
+        return registered_ids
+
+    def mark_planted(
+        self,
+        chapter_number: int,
+        content_snippets: List[str],
+    ) -> None:
+        """标记伏笔已在章节内容中埋下.
 
         Args:
-            current_chapter: 当前章节
-            max_items: 最大显示数量
+            chapter_number: 当前章节号
+            content_snippets: 内容片段列表
+        """
+        for snippet in content_snippets:
+            matching = self._find_by_content(snippet)
+            if matching:
+                matching.status = ForeshadowingStatus.PLANTED
+                matching.planted_chapter = chapter_number
+                matching.last_checked_chapter = chapter_number
+
+    def check_recalls(
+        self,
+        chapter_number: int,
+        chapter_content: str,
+    ) -> List[str]:
+        """检查当前章节是否回收了旧伏笔.
+
+        Args:
+            chapter_number: 当前章节号
+            chapter_content: 章节内容
 
         Returns:
-            格式化的伏笔信息字符串
+            被回收的伏笔 ID 列表
         """
-        pending = self.get_pending_foreshadowings()[:max_items]
-        overdue = self.get_overdue_foreshadowings(current_chapter)
-        suggestions = self.suggest_resolutions(current_chapter)[:5]
+        recalled_ids = []
+        for f_id, item in self.foreshadowings.items():
+            if item.status in (ForeshadowingStatus.RESOLVED, ForeshadowingStatus.ABANDONED):
+                continue
+            if item.planted_chapter and chapter_number <= item.planted_chapter:
+                continue  # 跳过还没埋下的伏笔
 
-        parts = []
+            # 检查伏笔关键词是否出现在内容中
+            keywords = self._extract_keywords(item.content)
+            match_count = sum(1 for kw in keywords if kw in chapter_content)
 
-        if overdue:
-            overdue_list = "\n".join(
-                [
-                    f"  - [第{f['planted_chapter']}章] {f['content']} (预期第{f['expected_resolve_chapter']}章回收)"
-                    for f in overdue[:5]
-                ]
+            if match_count >= 2 or item.content[:20] in chapter_content:
+                if item.status != ForeshadowingStatus.RECALLED:
+                    item.status = ForeshadowingStatus.RECALLED
+                    item.recalled_chapters.append(chapter_number)
+                    item.last_checked_chapter = chapter_number
+                    recalled_ids.append(f_id)
+                    logger.info(
+                        f"[Foreshadowing] 伏笔被回收 (ch{chapter_number}): {item.content[:50]}"
+                    )
+
+        return recalled_ids
+
+    def get_pending_foreshadowings(
+        self,
+        current_chapter: int,
+        max_count: int = 5,
+    ) -> List[ForeshadowingItem]:
+        """获取待回收的伏笔（用于注入 Writer prompt）.
+
+        Args:
+            current_chapter: 当前章节号
+            max_count: 最大返回数量
+
+        Returns:
+            待回收的伏笔列表
+        """
+        pending = []
+        for item in self.foreshadowings.values():
+            if item.status in (ForeshadowingStatus.RESOLVED, ForeshadowingStatus.ABANDONED):
+                continue
+            if item.status == ForeshadowingStatus.PLANNED and not item.planted_chapter:
+                continue  # 还没埋下的不提醒
+
+            # 计算未回收的章节数
+            chapters_unrecalled = current_chapter - (item.planted_chapter or 0)
+
+            # 老化评估
+            if chapters_unrecalled > self.MAX_TOTAL_CHAPTERS:
+                if item.status != ForeshadowingStatus.ABANDONED:
+                    item.status = ForeshadowingStatus.ABANDONED
+                    logger.warning(
+                        f"[Foreshadowing] 伏笔超{self.MAX_TOTAL_CHAPTERS}章未回收，标记放弃: "
+                        f"{item.content[:50]}"
+                    )
+                continue
+
+            pending.append(item)
+
+        # 按重要性排序，取前 N 个
+        pending.sort(key=lambda x: (-x.importance, x.planted_chapter or 0))
+        return pending[:max_count]
+
+    def format_for_prompt(self, current_chapter: int) -> str:
+        """格式化为 Writer prompt 中的伏笔提醒.
+
+        Args:
+            current_chapter: 当前章节号
+
+        Returns:
+            格式化的伏笔提醒文本
+        """
+        pending = self.get_pending_foreshadowings(current_chapter)
+        if not pending:
+            return "（当前无待回收的伏笔）"
+
+        lines = ["【待回收伏笔提醒】（请在写作时注意呼应以下内容）："]
+        for item in pending:
+            chapters_wait = current_chapter - (item.planted_chapter or 0)
+            urgency = (
+                "🔴 紧急"
+                if chapters_wait > 3
+                else "🟡 注意"
+                if chapters_wait > 1
+                else "⚪ 普通"
             )
-            parts.append(f"**超期伏笔（急需处理）**:\n{overdue_list}")
-
-        if suggestions:
-            suggest_list = "\n".join(
-                [
-                    f"  - [第{f['planted_chapter']}章] {f['content']} ({f['reason']})"
-                    for f in suggestions[:5]
-                ]
+            chars = ", ".join(item.related_characters[:2]) or "无"
+            lines.append(
+                f"- {urgency} {item.content} "
+                f"(埋于第{item.planted_chapter}章, 已等待{chapters_wait}章, 关联角色: {chars})"
             )
-            parts.append(f"**建议回收的伏笔**:\n{suggest_list}")
+        return "\n".join(lines)
 
-        if pending and not suggestions:
-            pending_list = "\n".join(
-                [
-                    f"  - [第{f['planted_chapter']}章] {f['content']} (重要性: {f['importance']})"
-                    for f in pending[:5]
-                ]
-            )
-            parts.append(f"**待回收的伏笔**:\n{pending_list}")
+    def _find_by_content(self, content: str) -> Optional[ForeshadowingItem]:
+        """根据内容查找伏笔."""
+        target = content.strip()[:50]  # 取前 50 字比较
+        for item in self.foreshadowings.values():
+            if (
+                item.content == target
+                or target[:30] in item.content
+                or item.content[:30] in target
+            ):
+                return item
+        return None
 
-        if not parts:
-            return "（当前无需特别关注的伏笔）"
-
-        return "\n\n".join(parts)
-
-    def get_statistics(self) -> Dict[str, Any]:
-        """获取伏笔统计信息."""
-        total = len(self.foreshadowings)
-        pending = len(
-            [
-                f
-                for f in self.foreshadowings.values()
-                if f.status == ForeshadowingStatus.PENDING
-            ]
-        )
-        resolved = len(
-            [
-                f
-                for f in self.foreshadowings.values()
-                if f.status == ForeshadowingStatus.RESOLVED
-            ]
-        )
-        partial = len(
-            [
-                f
-                for f in self.foreshadowings.values()
-                if f.status == ForeshadowingStatus.PARTIAL
-            ]
-        )
-        abandoned = len(
-            [
-                f
-                for f in self.foreshadowings.values()
-                if f.status == ForeshadowingStatus.ABANDONED
-            ]
-        )
-
-        return {
-            "total": total,
-            "pending": pending,
-            "resolved": resolved,
-            "partial": partial,
-            "abandoned": abandoned,
-            "resolution_rate": resolved / total if total > 0 else 0,
+    def _extract_keywords(self, content: str) -> List[str]:
+        """从伏笔内容中提取关键词（简单实现）."""
+        # 匹配中文词汇（2-4字词）
+        words = re.findall(r"[\u4e00-\u9fff]{2,4}", content)
+        # 过滤常见停用词
+        stop_words = {
+            "一个",
+            "这个",
+            "那个",
+            "自己",
+            "我们",
+            "他们",
+            "什么",
+            "怎么",
+            "如何",
+            "可以",
+            "已经",
         }
+        return [w for w in words if w not in stop_words]
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为字典."""
-        return {
-            "novel_id": self.novel_id,
-            "foreshadowings": {
-                fid: f.to_dict() for fid, f in self.foreshadowings.items()
-            },
-            "statistics": self.get_statistics(),
+        """序列化所有伏笔."""
+        return {f_id: item.to_dict() for f_id, item in self.foreshadowings.items()}
+
+    def load_from_dict(self, data: Dict[str, Any]) -> None:
+        """从字典加载伏笔."""
+        for f_id, item_data in data.items():
+            item = ForeshadowingItem.from_dict(item_data)
+            self.foreshadowings[f_id] = item
+
+    def get_stats(self) -> Dict[str, int]:
+        """获取伏笔统计信息."""
+        stats = {
+            "total": len(self.foreshadowings),
+            "planned": 0,
+            "planted": 0,
+            "recalled": 0,
+            "resolved": 0,
+            "abandoned": 0,
         }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ForeshadowingTracker":
-        """从字典反序列化."""
-        tracker = cls(data.get("novel_id", ""))
-        for fid, fdata in data.get("foreshadowings", {}).items():
-            tracker.foreshadowings[fid] = Foreshadowing.from_dict(fdata)
-        return tracker
-
-    def export_to_json(self) -> str:
-        """导出为JSON字符串."""
-        return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
-
-    @classmethod
-    def import_from_json(cls, json_str: str) -> "ForeshadowingTracker":
-        """从JSON字符串导入."""
-        data = json.loads(json_str)
-        return cls.from_dict(data)
+        for item in self.foreshadowings.values():
+            stats[item.status.value] += 1
+        return stats
