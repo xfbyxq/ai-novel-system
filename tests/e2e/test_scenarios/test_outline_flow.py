@@ -19,9 +19,20 @@ class TestOutlineFlow:
     @pytest.fixture(autouse=True)
     def setup(self, page):
         """测试前置条件."""
+        self.page = page
         self.novel_list_page = NovelListPage(page)
         self.novel_detail_page = NovelDetailPage(page)
         self.novel_list_page.navigate()
+
+    def _create_novel_and_navigate(self, title: str, genre: str) -> str:
+        """创建小说并导航到详情页."""
+        self.novel_list_page.create_novel(title=title, genre=genre)
+        assert self.novel_list_page.is_success_message_visible()
+        self.novel_list_page.wait_for_novels_loaded()
+        self.novel_list_page.click_novel_by_title(title)
+        self.page.wait_for_url("**/novels/*")
+        url = self.page.url
+        return url.split("/novels/")[-1].split("?")[0].split("#")[0]
 
     @pytest.mark.outline
     @pytest.mark.regression
@@ -31,14 +42,10 @@ class TestOutlineFlow:
         """
         # 先创建一个小说用于测试
         novel_data = generate_novel_data()
-        self.novel_list_page.create_novel(
+        self._create_novel_and_navigate(
             title=novel_data["title"],
-            genre=novel_data["genre"],
-            tags=novel_data["tags"]
+            genre=novel_data["genre"]
         )
-
-        # 确认跳转到详情页
-        assert "/novels/" in page.url
 
         # 切换到大纲梳理标签页
         self.novel_detail_page.switch_to_outline_refinement()
@@ -56,18 +63,17 @@ class TestOutlineFlow:
         # 这里可以根据实际UI反馈调整验证方式
 
     @pytest.mark.outline
+    @pytest.mark.skip(reason="需要AI服务，在CI/测试环境中不可用")
     def test_outline_enhancement_flow(self, page):
         """
         测试大纲智能完善流程
         """
         # 创建测试小说
         novel_data = generate_novel_data()
-        self.novel_list_page.create_novel(
+        self._create_novel_and_navigate(
             title=novel_data["title"],
             genre=novel_data["genre"]
         )
-
-        assert "/novels/" in page.url
 
         # 切换到大纲梳理
         self.novel_detail_page.switch_to_outline_refinement()
@@ -101,12 +107,10 @@ class TestOutlineFlow:
         """
         # 创建小说
         novel_data = generate_novel_data()
-        self.novel_list_page.create_novel(
+        self._create_novel_and_navigate(
             title=novel_data["title"],
             genre=novel_data["genre"]
         )
-
-        assert "/novels/" in page.url
 
         # 切换到大纲梳理
         self.novel_detail_page.switch_to_outline_refinement()
@@ -130,12 +134,11 @@ class TestOutlineFlow:
         """
         # 创建小说
         novel_data = generate_novel_data()
-        self.novel_list_page.create_novel(
+        self._create_novel_and_navigate(
             title=novel_data["title"],
             genre=novel_data["genre"]
         )
 
-        assert "/novels/" in page.url
         self.novel_detail_page.switch_to_outline_refinement()
 
         # 测试超长文本输入
@@ -158,12 +161,11 @@ class TestOutlineFlow:
         """
         # 创建小说
         novel_data = generate_novel_data()
-        self.novel_list_page.create_novel(
+        self._create_novel_and_navigate(
             title=novel_data["title"],
             genre=novel_data["genre"]
         )
 
-        assert "/novels/" in page.url
         self.novel_detail_page.switch_to_outline_refinement()
 
         # 填写完整的大纲

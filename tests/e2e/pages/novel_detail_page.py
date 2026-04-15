@@ -38,10 +38,20 @@ class NovelDetailPage(BasePage):
 
     # 大纲梳理标签页元素
     OUTLINE_SELECTORS = {
-        "save_outline_btn": "button:has-text('保存大纲')",
+        "save_outline_btn": "button:has-text('保存草稿')",
         "enhance_outline_btn": "button:has-text('智能完善')",
+        "confirm_outline_btn": "button:has-text('确认大纲')",
         # 质量评估
         "quality_score": ".ant-progress-text",
+        # 大纲字段输入框（与实际前端placeholder匹配）
+        "core_conflict_input": "textarea[placeholder*='主要矛盾']",
+        "protagonist_goal_input": "textarea[placeholder*='主角想要']",
+        "antagonist_input": "textarea[placeholder*='反派角色']",
+        "progression_path_input": "textarea[placeholder*='力量体系']",
+        "emotional_arc_input": "textarea[placeholder*='情感变化']",
+        "key_revelations_input": "textarea[placeholder*='重要揭示']",
+        "character_growth_input": "textarea[placeholder*='成长和变化']",
+        "ending_description_input": "textarea[placeholder*='故事的结局']",
     }
 
     # 章节标签页元素
@@ -238,28 +248,41 @@ class NovelDetailPage(BasePage):
         """点击智能完善大纲按钮."""
         self.click_element(self.OUTLINE_SELECTORS["enhance_outline_btn"])
 
-    def click_preview_enhancement(self):
-        """点击预览增强按钮."""
-        self.click_element(self.OUTLINE_SELECTORS["preview_enhancement_btn"])
-        self.wait_for_element_visible(self.OUTLINE_SELECTORS["enhancement_modal"])
+    def click_preview_enhancement(self, timeout: int = 60000):
+        """
+        等待智能完善模态框出现.
+
+        Args:
+            timeout: 超时时间(毫秒)，默认60秒（AI生成需要较长时间）
+        """
+        # 智能完善打开的是 SmartEnhanceModal，等待其出现
+        self.wait_for_element_visible(".ant-modal:has-text('智能完善')", timeout=timeout)
 
     def apply_enhancement(self):
         """应用大纲增强."""
-        self.click_element(self.OUTLINE_SELECTORS["apply_enhancement_btn"])
-        self.wait_for_element_hidden(self.OUTLINE_SELECTORS["enhancement_modal"])
+        # 在 SmartEnhanceModal 中点击确认/应用
+        self.click_element(".ant-modal button:has-text('应用')")
+        self.wait_for_element_hidden(".ant-modal:has-text('智能完善')")
 
     def get_outline_quality_score(self) -> float:
         """
         获取大纲质量评分.
 
         Returns:
-            float: 质量评分
+            float: 质量评分 (0-100 百分比)
         """
-        score_text = self.get_text(self.OUTLINE_SELECTORS["quality_score"])
+        # 大纲完成度显示为 "X% (N/M)" 格式
         try:
-            return float(score_text.replace("分", ""))
-        except ValueError:
-            return 0.0
+            score_text = self.page.locator(".ant-progress-text").first.text_content(timeout=5000)
+            if score_text:
+                # 提取百分比数字
+                import re
+                match = re.search(r"(\d+)%", score_text)
+                if match:
+                    return float(match.group(1))
+        except Exception:
+            pass
+        return 0.0
 
     # 章节标签页方法
     def switch_to_chapters(self):
@@ -268,12 +291,23 @@ class NovelDetailPage(BasePage):
 
     def get_chapter_count(self) -> int:
         """
-        获取章节数量.
+        获取章节总数（从分页组件读取）.
 
         Returns:
-            int: 章节列表数量
+            int: 章节总数
         """
         self.switch_to_chapters()
+        self.page.wait_for_timeout(500)  # 等待标签页内容加载
+        # 读取分页组件中的总数文本 "共 X 章"
+        pagination_elem = self.page.locator(".ant-pagination-total-text")
+        if pagination_elem.count() > 0:
+            pagination_text = pagination_elem.text_content()
+            if pagination_text:
+                import re
+                match = re.search(r"共\s*(\d+)", pagination_text)
+                if match:
+                    return int(match.group(1))
+        # 回退：如果找不到分页总数，返回可见行数
         return self.get_element_count(self.CHAPTERS_SELECTORS["chapter_row"])
 
     def get_chapter_titles(self) -> list:
@@ -322,7 +356,7 @@ class NovelDetailPage(BasePage):
         Returns:
             bool: 是否有运行中的任务
         """
-        # 检查是否存在运行中的任务指示器
+        # 检查生成历史中是否有运行中的任务
         running_indicators = self.page.locator("[data-testid*='running-task']").all()
         return len(running_indicators) > 0
 
@@ -333,13 +367,26 @@ class NovelDetailPage(BasePage):
         Args:
             timeout: 超时时间(毫秒)
         """
-        # 等待运行中的任务消失
+        # 生成任务通过 FastAPI BackgroundTasks 异步执行，需要等待一段时间
+        # 轮询检查章节数量变化
+        import time
+        start = time.time()
+        initial_count = self._get_visible_chapter_count()
+        while time.time() - start < timeout / 1000:
+            current_count = self._get_visible_chapter_count()
+            if current_count > initial_count:
+                # 章节数量增加，说明有章节已创建
+                self.page.wait_for_timeout(1000)  # 额外等待确保数据稳定
+                return
+            self.page.wait_for_timeout(2000)
+        # 超时后仍然返回，由测试断言处理
+
+    def _get_visible_chapter_count(self) -> int:
+        """获取当前可见的章节行数（内部方法，无超时）."""
         try:
-            self.page.wait_for_selector(
-                "[data-testid*='running-task']", state="detached", timeout=timeout
-            )
-        except:
-            pass  # 超时或元素不存在都是正常的
+            return self.get_element_count(self.CHAPTERS_SELECTORS["chapter_row"])
+        except Exception:
+            return 0
 
     def refresh_page(self):
         """刷新当前页面."""

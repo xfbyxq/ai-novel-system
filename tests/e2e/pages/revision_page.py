@@ -6,11 +6,12 @@ from tests.e2e.pages.base_page import BasePage
 class RevisionPage(BasePage):
     """修订功能测试页面对象."""
 
-    # AI对话标签页选择器
+    # AI对话选择器（实际是 Drawer 组件，不是 Tab）
     CHAT_TAB_SELECTORS = {
-        "chat_tab": ".ant-tabs-tab:has-text('AI对话')",
-        "chat_input": "textarea[id*='message'], .ant-input-textarea textarea",
-        "send_btn": "button:has-text('发送'), button[type='submit']",
+        "chat_tab": "button:has-text('AI 助手')",  # 实际是按钮，不是标签页
+        "chat_drawer": ".ant-drawer-content:has-text('AI 助手')",
+        "chat_input": "textarea[placeholder*='输入你的问题']",
+        "send_btn": "button:has-text('发送')",
         "chat_messages": ".ant-comment-content, .chat-message",
         "revision_plan_modal": ".ant-modal:has-text('修订计划')",
     }
@@ -35,17 +36,19 @@ class RevisionPage(BasePage):
 
     def navigate_to_chat(self, novel_id: str):
         """
-        导航到小说AI对话页面.
+        导航到小说详情页并打开AI对话Drawer.
 
         Args:
             novel_id: 小说ID
         """
-        url = f"/novels/{novel_id}"
+        url = f"{self.page.base_url}/novels/{novel_id}"
         self.page.goto(url)
         self.wait_for_load()
-        # 切换到AI对话标签
+        self.page.wait_for_timeout(500)
+        # 点击AI助手按钮打开Drawer
         self.click_element(self.CHAT_TAB_SELECTORS["chat_tab"])
-        self.page.wait_for_timeout(1000)
+        # 等待Drawer出现（使用更宽松的selector）
+        self.page.wait_for_timeout(2000)
 
     def send_revision_feedback(self, feedback: str):
         """
@@ -54,15 +57,19 @@ class RevisionPage(BasePage):
         Args:
             feedback: 反馈文本
         """
+        # 等待输入框可用（AI可能在streaming）
+        chat_input = self.page.locator(self.CHAT_TAB_SELECTORS["chat_input"])
+        chat_input.first.wait_for(state="attached", timeout=10000)
+        chat_input.first.wait_for(state="visible", timeout=10000)
+
         # 输入反馈
-        chat_input = self.get_element(self.CHAT_TAB_SELECTORS["chat_input"])
-        chat_input.fill(feedback)
+        chat_input.first.fill(feedback)
 
         # 点击发送
         self.click_element(self.CHAT_TAB_SELECTORS["send_btn"])
 
-        # 等待AI响应
-        self.page.wait_for_timeout(2000)
+        # 等待AI响应（等待streaming结束）
+        self.page.wait_for_timeout(3000)
 
     def wait_for_revision_plan(self, timeout: int = 30000):
         """
@@ -152,7 +159,7 @@ class RevisionPage(BasePage):
             novel_id: 小说ID
             chapter_id: 章节ID
         """
-        url = f"/novels/{novel_id}/chapters/{chapter_id}"
+        url = f"{self.page.base_url}/novels/{novel_id}/chapters/{chapter_id}"
         self.page.goto(url)
         self.wait_for_load()
 
