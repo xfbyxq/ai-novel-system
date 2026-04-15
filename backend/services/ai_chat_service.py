@@ -2564,7 +2564,7 @@ class AiChatService:
         self,
         messages: list[dict],
         system_prompt: str,
-        token_calc: "TokenCalculator",
+        token_calc: Any,
         max_tokens: int,
     ) -> list[dict]:
         """压缩对话历史，保留关键信息.
@@ -2798,7 +2798,15 @@ class AiChatService:
                         from .revision_execution_service import RevisionExecutionService
 
                         execution_service = RevisionExecutionService(db=self.db)
-                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        try:
+                            exec_result = await execution_service.execute_plan(pending_plan_id)
+                            if exec_result.success:
+                                prompt = f"修订计划已执行：{exec_result.message}"
+                            else:
+                                prompt = f"修订计划执行失败：{exec_result.message}"
+                        except Exception as e:
+                            logger.error(f"执行修订计划 {pending_plan_id} 失败: {e}")
+                            prompt = f"修订计划执行过程中出现错误：{str(e)}"
                         session.context["pending_revision_plan_id"] = None
                     elif is_rejecting_revision:
                         # 用户拒绝修订
@@ -3096,7 +3104,15 @@ class AiChatService:
                         from .revision_execution_service import RevisionExecutionService
 
                         execution_service = RevisionExecutionService(db=self.db)
-                        prompt = f"用户已确认执行修订计划 {pending_plan_id}"
+                        try:
+                            exec_result = await execution_service.execute_plan(pending_plan_id)
+                            if exec_result.success:
+                                prompt = f"修订计划已执行：{exec_result.message}"
+                            else:
+                                prompt = f"修订计划执行失败：{exec_result.message}"
+                        except Exception as e:
+                            logger.error(f"执行修订计划 {pending_plan_id} 失败: {e}")
+                            prompt = f"修订计划执行过程中出现错误：{str(e)}"
                         session.context["pending_revision_plan_id"] = None
                     elif is_rejecting_revision:
                         # 用户拒绝修订
@@ -3606,7 +3622,7 @@ AI修订建议内容：
                             if line.startswith("{") and line.endswith("}"):
                                 try:
                                     items.append(ast.literal_eval(line))
-                                except:
+                                except (ValueError, SyntaxError):
                                     continue
                         if items:
                             suggested_value = items
@@ -3630,7 +3646,7 @@ AI修订建议内容：
                         if line.startswith("{") and line.endswith("}"):
                             try:
                                 items.append(ast.literal_eval(line))
-                            except:
+                            except (ValueError, SyntaxError):
                                 continue
                     if items:
                         suggested_value = items

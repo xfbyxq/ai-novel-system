@@ -387,7 +387,6 @@ class OutlineService:
                 continue
 
             start_ch, end_ch = chapters_range
-            chapter_count = end_ch - start_ch + 1
 
             # 3. 解析张力循环（预处理优化）
             tension_cycles = volume.get("tension_cycles", [])
@@ -1013,7 +1012,7 @@ class OutlineService:
                 if value and key != field_name:
                     existing_parts.append(f"- {key}: {value}")
             if existing_parts:
-                existing_context = f"\n已有设定:\n" + "\n".join(existing_parts)
+                existing_context = "\n已有设定:\n" + "\n".join(existing_parts)
 
         prompt = f"""# 任务：为小说《{title}》生成 {field_name} 字段
 

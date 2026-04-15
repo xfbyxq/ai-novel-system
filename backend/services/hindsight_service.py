@@ -5,16 +5,15 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import (
     HindsightExperience,
     StrategyEffectiveness,
     UserPreference,
-    RevisionPlan,
 )
-from core.models.hindsight_memory import StrategyTrend, TaskType
+from core.models.hindsight_memory import StrategyTrend
 
 
 class HindsightService:

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agents.agent_dispatcher import AgentDispatcher
-from agents.crew_manager import CrewConfig, NovelCrewManager
+from agents.crew_manager import CrewConfig
 from agents.team_context import NovelTeamContext
 from backend.config import settings
 
@@ -1115,55 +1115,6 @@ class GenerationService:
             novel = novel_result.scalar_one_or_none()
             if not novel:
                 raise ValueError(f"小说 {novel_id} 不存在")
-
-            # 构建 novel_data
-            world_setting_dict = {}
-            if novel.world_setting:
-                ws = novel.world_setting
-                world_setting_dict = {
-                    "world_name": ws.world_name,
-                    "world_type": ws.world_type,
-                    "power_system": ws.power_system or {},
-                    "geography": ws.geography or {},
-                    "factions": ws.factions or {},
-                    "rules": ws.rules or [],
-                }
-
-            characters_list = []
-            for char in novel.characters:
-                characters_list.append(
-                    {
-                        "name": char.name,
-                        "role_type": (
-                            char.role_type.value
-                            if hasattr(char.role_type, "value")
-                            else str(char.role_type or "minor")
-                        ),
-                        "personality": char.personality or "",
-                        "background": char.background or "",
-                        "abilities": char.abilities or {},
-                    }
-                )
-
-            plot_outline_dict = {}
-            if novel.plot_outline:
-                po = novel.plot_outline
-                plot_outline_dict = {
-                    "structure_type": po.structure_type,
-                    "volumes": po.volumes or [],
-                    "main_plot": po.main_plot or {},
-                    "sub_plots": po.sub_plots or [],
-                    "key_turning_points": po.key_turning_points or [],
-                }
-
-            novel_data = {
-                "id": str(novel_id),
-                "title": novel.title,
-                "genre": novel.genre,
-                "world_setting": world_setting_dict,
-                "characters": characters_list,
-                "plot_outline": plot_outline_dict,
-            }
 
             # 执行批量写作（带连续失败检测和中断机制）
             all_results = []

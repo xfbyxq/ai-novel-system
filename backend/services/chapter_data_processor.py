@@ -1,6 +1,5 @@
 """章节数据处理器 - 处理章节数据提取和格式化."""
 
-from typing import Any
 
 
 class ChapterDataProcessor:
