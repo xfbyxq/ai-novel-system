@@ -5,9 +5,11 @@ export async function getNovels(
   page = 1,
   pageSize = 10,
   status?: string,
+  keyword?: string,
 ): Promise<PaginatedResponse<Novel>> {
   const params: Record<string, unknown> = { page, page_size: pageSize };
   if (status) params.status = status;
+  if (keyword) params.keyword = keyword;
   const { data } = await apiClient.get('/novels', { params });
   return data;
 }

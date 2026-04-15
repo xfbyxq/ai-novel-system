@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Tag, Button, Modal, message, Space, Typography, Tooltip } from 'antd';
-import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Modal, message, Space, Typography, Tooltip, Form, InputNumber } from 'antd';
+import { DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, RocketOutlined } from '@ant-design/icons';
 import type { Chapter } from '@/api/types';
 import { getChapters, deleteChapter, batchDeleteChapters } from '@/api/chapters';
+import { createGenerationTask } from '@/api/generation';
 import StatusBadge from '@/components/StatusBadge';
 import ChapterOutlineTaskModal, { type ChapterTask } from '@/components/ChapterOutlineTaskModal';
 import { formatWordCount, formatDate } from '@/utils/format';
@@ -24,6 +25,9 @@ export default function ChaptersTab({ novelId }: Props) {
   const [chapterTaskModalOpen, setChapterTaskModalOpen] = useState(false);
   const [currentChapterTask, setCurrentChapterTask] = useState<ChapterTask | null>(null);
   const [pendingChapterNumber, setPendingChapterNumber] = useState<number | null>(null);
+  const [batchModalVisible, setBatchModalVisible] = useState(false);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchForm] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +101,31 @@ export default function ChaptersTab({ novelId }: Props) {
     setDeleteChapterInfo(null);
   };
 
+  const handleBatchGenerate = async () => {
+    try {
+      const values = await batchForm.validateFields();
+      setBatchSubmitting(true);
+      const chapterCount = values.chapter_count || 1;
+      const startChapter = values.start_chapter || (chapters.length > 0 ? Math.max(...chapters.map(c => c.chapter_number)) + 1 : 1);
+      await createGenerationTask({
+        novel_id: novelId,
+        task_type: 'writing',
+        input_data: {
+          chapter_count: chapterCount,
+          start_chapter: startChapter,
+        },
+      });
+      message.success(`批量生成任务已创建，共 ${chapterCount} 章`);
+      setBatchModalVisible(false);
+      batchForm.resetFields();
+      await load();
+    } catch {
+      // validation error, do nothing
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
+
   const rowSelection = {
     selectedRowKeys,
     onChange: (keys: React.Key[]) => {
@@ -140,15 +169,24 @@ export default function ChaptersTab({ novelId }: Props) {
             </Space>
           </Tooltip>
         </Space>
-        {selectedRowKeys.length > 0 && (
-          <Button 
-            danger 
-            icon={<DeleteOutlined />} 
-            onClick={handleBatchDelete}
+        <Space>
+          <Button
+            type="primary"
+            icon={<RocketOutlined />}
+            onClick={() => setBatchModalVisible(true)}
           >
-            批量删除 ({selectedRowKeys.length})
+            批量生成
           </Button>
-        )}
+          {selectedRowKeys.length > 0 && (
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+            >
+              批量删除 ({selectedRowKeys.length})
+            </Button>
+          )}
+        </Space>
       </div>
       
       <Table
@@ -156,7 +194,7 @@ export default function ChaptersTab({ novelId }: Props) {
         rowKey="id"
         loading={loading}
         rowSelection={rowSelection}
-        pagination={{ current: page, pageSize: 20, total, onChange: setPage }}
+        pagination={{ current: page, pageSize: 20, total, onChange: setPage, showTotal: (t) => `共 ${t} 章` }}
         columns={[
           { 
             title: '大纲状态', 
@@ -226,6 +264,25 @@ export default function ChaptersTab({ novelId }: Props) {
         onConfirm={handleChapterTaskConfirm}
         onCancel={handleChapterTaskCancel}
       />
+
+      <Modal
+        title="批量生成章节"
+        open={batchModalVisible}
+        onOk={handleBatchGenerate}
+        onCancel={() => { setBatchModalVisible(false); batchForm.resetFields(); }}
+        confirmLoading={batchSubmitting}
+        okText="开始生成"
+        cancelText="取消"
+      >
+        <Form form={batchForm} layout="vertical" initialValues={{ chapter_count: 1, start_chapter: 1 }}>
+          <Form.Item name="start_chapter" label="起始章节号" rules={[{ required: true, message: '请输入起始章节号' }]}>
+            <InputNumber min={1} style={{ width: '100%' }} placeholder="从第几章开始" />
+          </Form.Item>
+          <Form.Item name="chapter_count" label="生成章节数量" rules={[{ required: true, message: '请输入生成章节数量' }]}>
+            <InputNumber min={1} max={10} style={{ width: '100%' }} placeholder="一次生成几章" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </>
   );
 }
