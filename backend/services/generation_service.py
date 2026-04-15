@@ -919,17 +919,23 @@ class GenerationService:
                 chapter_plan=chapter_plan,
                 chapter_number=chapter_number,
             )
-            self.memory_service.update_chapter_summary(
-                str(novel_id), chapter_number, chapter_summary
-            )
 
-            # 同时保存到持久化记忆系统
-            await self.persistent_memory.save_chapter_memory(
+            # 使用统一同步服务确保所有存储层一致
+            from backend.services.chapter_context_sync import ChapterContextSync
+
+            sync_service = ChapterContextSync(self.memory_service, self.persistent_memory)
+            sync_results = await sync_service.sync_chapter_summary(
                 novel_id=str(novel_id),
                 chapter_number=chapter_number,
-                content=final_content,
                 summary=chapter_summary,
             )
+
+            # 如果同步部分失败，记录警告
+            if not all(sync_results.values()):
+                failed = [k for k, v in sync_results.items() if not v]
+                logger.warning(
+                    f"[SyncWarning] 第{chapter_number}章摘要部分同步失败: {failed}"
+                )
 
             # 更新角色状态（如果 writing_result 中包含角色更新信息）
             character_updates = writing_result.get("character_updates", {})
@@ -942,6 +948,52 @@ class GenerationService:
                     chapter_number=chapter_number,
                     updates=state,
                 )
+
+            # ===== 新增：角色状态自动提取（补充 LLM 返回的 updates） =====
+            try:
+                from agents.character_state_extractor import CharacterStateExtractor
+
+                extractor = CharacterStateExtractor(self.client, self.cost_tracker)
+                known_char_names = [char.name for char in novel.characters]
+                current_states = self.memory_service.get_character_states(str(novel_id))
+
+                # 从章节内容中自动提取角色状态
+                auto_extracted_states = await extractor.extract_from_chapter(
+                    chapter_number=chapter_number,
+                    chapter_content=final_content,
+                    known_characters=known_char_names,
+                    existing_states=current_states,
+                )
+
+                # 合并 LLM 返回的状态和自动提取的状态（LLM 优先级更高）
+                merged_updates = dict(auto_extracted_states)  # 先填充自动提取的
+                for char_name, state in character_updates.items():
+                    if char_name in merged_updates:
+                        # LLM 返回的优先级更高，合并
+                        merged_updates[char_name].update(state)
+                    else:
+                        merged_updates[char_name] = state
+
+                # 保存合并后的状态（只保存有变化的）
+                for char_name, state in merged_updates.items():
+                    # 检查是否真的有变化
+                    existing = current_states.get(char_name, {})
+                    if state != existing:
+                        self.memory_service.update_character_state(str(novel_id), char_name, state)
+                        await self.persistent_memory.update_character_state(
+                            novel_id=str(novel_id),
+                            character_name=char_name,
+                            chapter_number=chapter_number,
+                            updates=state,
+                        )
+                        logger.info(
+                            f"[CharState] 第{chapter_number}章更新角色 '{char_name}' 状态: "
+                            f"{state.get('emotional_state', '未知')}"
+                        )
+
+            except Exception as e:
+                logger.warning(f"角色状态自动提取失败（不影响章节生成）: {e}")
+            # ===== 角色状态自动提取结束 =====
 
             # ===== 新增：角色自动检测 =====
             if settings.ENABLE_CHARACTER_AUTO_DETECTION:
@@ -1125,6 +1177,34 @@ class GenerationService:
 
             for chapter_num in range(from_chapter, to_chapter + 1):
                 try:
+                    # 【新增】在生成新章节前，刷新 novel 对象的 chapters 关系
+                    # 确保上一章生成的内容能被加载到内存
+                    await self.db.refresh(novel, attribute_names=["chapters"])
+
+                    # 【新增】确保上一章的摘要已同步到内存缓存
+                    # 避免 run_chapter_writing 获取不到最新的上下文
+                    if chapter_num > from_chapter:
+                        prev_ch = chapter_num - 1
+                        if not self.memory_service.get_chapter_summary(str(novel_id), prev_ch):
+                            logger.warning(
+                                f"[BatchWriting] 第{prev_ch}章摘要未在内存缓存中，"
+                                f"尝试从持久化存储加载"
+                            )
+                            persist_summary = self.persistent_memory.storage.get_chapter_summary(
+                                str(novel_id), prev_ch
+                            )
+                            if persist_summary:
+                                self.memory_service.update_chapter_summary(
+                                    str(novel_id), prev_ch, persist_summary
+                                )
+                                logger.info(
+                                    f"[BatchWriting] 已从持久化存储恢复第{prev_ch}章摘要"
+                                )
+                            else:
+                                logger.error(
+                                    f"[BatchWriting] 第{prev_ch}章摘要在所有存储层都缺失！"
+                                )
+
                     result = await self.run_chapter_writing(
                         novel_id=novel_id,
                         task_id=task_id,

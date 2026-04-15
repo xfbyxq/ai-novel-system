@@ -217,6 +217,9 @@ class NovelCrewManager:
         # 连贯性模块缓存（按小说ID缓存）
         self._continuity_modules: dict[str, Any] = {}
 
+        # 伏笔追踪器缓存（按小说ID缓存）
+        self._foreshadowing_trackers: dict[str, Any] = {}
+
     def _get_continuity_module(self, novel_id: str, novel_data: dict) -> Any:
         """获取或创建连贯性模块.
 
@@ -979,6 +982,32 @@ class NovelCrewManager:
                 chapter_characters=chapter_characters,
             )
 
+        # ── [新增] 伏笔追踪提醒 ────────────────────────
+        # 从章节计划中注册伏笔，检查是否回收了旧伏笔，并在 prompt 中提醒
+        foreshadowing_reminder = ""
+        if self.enable_continuity_check:
+            novel_id_str = novel_data.get("id", "")
+            if novel_id_str:
+                # 获取或创建伏笔追踪器
+                if novel_id_str not in self._foreshadowing_trackers:
+                    from agents.foreshadowing_tracker import ForeshadowingTracker
+
+                    self._foreshadowing_trackers[novel_id_str] = ForeshadowingTracker()
+
+                tracker = self._foreshadowing_trackers[novel_id_str]
+
+                # 从章节计划中注册新伏笔
+                chapter_foreshadowing = chapter_plan.get("foreshadowing", [])
+                if chapter_foreshadowing:
+                    tracker.register_from_plan(
+                        chapter_number=chapter_number,
+                        foreshadowing_list=chapter_foreshadowing,
+                        related_characters=chapter_characters,
+                    )
+
+                # 格式化伏笔提醒（注入 Writer prompt）
+                foreshadowing_reminder = tracker.format_for_prompt(chapter_number)
+
         # ── 构建前章关键事件列表（防止重复） ────────────────
         previous_key_events = self._build_previous_key_events(chapter_number)
 
@@ -1048,6 +1077,7 @@ class NovelCrewManager:
                 query_answers="",
                 previous_key_events=previous_key_events,
                 compressed_context=compressed.to_prompt(),
+                foreshadowing_reminder=foreshadowing_reminder,
             )
         else:
             writer_system = self.pm.format(self.pm.WRITER_SYSTEM, genre=genre)
@@ -1062,6 +1092,7 @@ class NovelCrewManager:
                 chapter_title=chapter_plan.get("title", ""),
                 previous_key_events=previous_key_events,
                 compressed_context=compressed.to_prompt(),
+                foreshadowing_reminder=foreshadowing_reminder,
             )
 
         draft = await self._call_agent(
@@ -1072,6 +1103,18 @@ class NovelCrewManager:
             max_tokens=4096,
             expect_json=False,  # 返回纯文本
         )
+
+        # ── [新增] 检查草稿是否回收了伏笔 ─────────────
+        if self.enable_continuity_check and novel_data.get("id"):
+            novel_id_str = novel_data.get("id", "")
+            if novel_id_str in self._foreshadowing_trackers:
+                tracker = self._foreshadowing_trackers[novel_id_str]
+                if isinstance(draft, str) and draft:
+                    recalled = tracker.check_recalls(chapter_number, draft)
+                    if recalled:
+                        logger.info(
+                            f"[Foreshadowing] 第{chapter_number}章回收了 {len(recalled)} 个伏笔"
+                        )
 
         # 处理 [QUERY] 标记（最多 2 轮查询）
         if self.enable_query:
