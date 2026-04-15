@@ -102,45 +102,77 @@ class ContextCompressor:
 
     采用动态压缩策略：先构建完整内容，总量超阈值时按优先级逐步压缩。
     优先级从高到低：core > hot > warm > cold
+
+    注意：所有配置参数均从 backend.config.settings 读取，支持环境变量覆盖。
     """
 
-    # 配置参数
-    HOT_CHAPTERS = 3  # 热记忆：最近 N 章完整内容
-    WARM_CHAPTERS = 7  # 温记忆：保留最近 N 章的关键事件（热记忆之后）
-    MAX_EVENTS_PER_CHAPTER = 3  # 每章最多保留 N 个关键事件
-    CHAPTERS_PER_VOLUME = 10  # 每卷章节数（用于冷记忆分组）
+    # 默认值（仅作为 fallback，实际值从配置读取）
+    DEFAULT_HOT_CHAPTERS = 5
+    DEFAULT_WARM_CHAPTERS = 10
+    DEFAULT_MAX_EVENTS_PER_CHAPTER = 3
+    DEFAULT_MAX_TOTAL_TOKENS = 12000
+    DEFAULT_PREVIOUS_ENDING_LENGTH = 500
 
     # 动态压缩配置
-    MAX_TOTAL_TOKENS = 8000  # 总上下文token阈值（超出时启动压缩）
     SAFETY_MARGIN = 0.95  # 安全系数，避免边界溢出
 
     # 优先级定义（数值越小优先级越高，压缩时优先保留）
     PRIORITY_LEVELS = {
         "core": 1,  # 世界观、角色卡、主线 - 最高优先，始终保留
-        "hot": 2,  # 最近3章完整内容 - 高优先，影响衔接连贯性
-        "warm": 3,  # 前4-10章关键事件 - 中优先
+        "hot": 2,  # 最近N章完整内容 - 高优先，影响衔接连贯性
+        "warm": 3,  # 前N章关键事件 - 中优先
         "cold": 4,  # 卷级摘要 - 低优先，最早被压缩
     }
 
     def __init__(
         self,
-        hot_chapters: int = 3,
-        warm_chapters: int = 7,
-        max_events_per_chapter: int = 3,
-        max_total_tokens: int = 8000,
+        hot_chapters: int | None = None,
+        warm_chapters: int | None = None,
+        max_events_per_chapter: int | None = None,
+        max_total_tokens: int | None = None,
     ):
         """初始化方法.
 
         Args:
-            hot_chapters: 热记忆章节数
-            warm_chapters: 温记忆章节数
+            hot_chapters: 热记忆章节数（默认从配置读取）
+            warm_chapters: 温记忆章节数（默认从配置读取）
             max_events_per_chapter: 每章最大事件数
-            max_total_tokens: 总token阈值
+            max_total_tokens: 总token阈值（默认从配置读取）
         """
-        self.HOT_CHAPTERS = hot_chapters
-        self.WARM_CHAPTERS = warm_chapters
-        self.MAX_EVENTS_PER_CHAPTER = max_events_per_chapter
-        self.MAX_TOTAL_TOKENS = max_total_tokens
+        from backend.config import settings
+
+        # 优先使用传入参数，否则从配置读取
+        self._hot_chapters = hot_chapters if hot_chapters is not None else settings.HOT_MEMORY_CHAPTERS
+        self._warm_chapters = warm_chapters if warm_chapters is not None else settings.WARM_MEMORY_CHAPTERS
+        self._max_events_per_chapter = max_events_per_chapter or self.DEFAULT_MAX_EVENTS_PER_CHAPTER
+        self._max_total_tokens = max_total_tokens if max_total_tokens is not None else settings.CONTEXT_COMPRESSOR_MAX_TOKENS
+        self._previous_ending_length = settings.PREVIOUS_ENDING_LENGTH
+
+    # Property 访问器（向后兼容）
+    @property
+    def HOT_CHAPTERS(self) -> int:
+        return self._hot_chapters
+
+    @property
+    def WARM_CHAPTERS(self) -> int:
+        return self._warm_chapters
+
+    @property
+    def MAX_EVENTS_PER_CHAPTER(self) -> int:
+        return self._max_events_per_chapter
+
+    @property
+    def MAX_TOTAL_TOKENS(self) -> int:
+        return self._max_total_tokens
+
+    @property
+    def CHAPTERS_PER_VOLUME(self) -> int:
+        """每卷章节数（用于冷记忆分组）."""
+        return 10
+
+    @property
+    def PREVIOUS_ENDING_LENGTH(self) -> int:
+        return self._previous_ending_length
 
     def compress(
         self,
@@ -192,6 +224,17 @@ class ContextCompressor:
             chapter_number, chapter_summaries, volume_summaries
         )
 
+        # 【新增】5. 始终保留上一章结尾段落（确保章节衔接自然）
+        previous_ending = self._ensure_previous_ending(
+            chapter_number, chapter_contents, chapter_summaries
+        )
+        if previous_ending:
+            ctx.hot_memory += previous_ending
+            logger.info(
+                f"[ContextCompressor] 保留第 {chapter_number - 1} 章结尾 "
+                f"({len(previous_ending)} 字)"
+            )
+
         # ===== 步骤2：计算总token估算 =====
         ctx.total_tokens_estimate = self._estimate_tokens(ctx.to_prompt())
 
@@ -221,12 +264,12 @@ class ContextCompressor:
         return int(len(text) / 1.3)
 
     def _adaptive_compress(self, ctx: CompressedContext, target_tokens: int) -> CompressedContext:
-        """按优先级逐步压缩，直到满足目标token数.
+        """按优先级逐步压缩，保护关键内容不被破坏.
 
-        压缩优先级（从低到高，优先压缩低优先级内容）：
+        压缩优先级（从低到高）：
         1. cold_memory - 卷级摘要，最早被压缩
         2. warm_memory - 关键事件列表
-        3. hot_memory - 前章完整内容（最后压缩）
+        3. hot_memory - 前章完整内容（压缩时保留开头和结尾）
         4. core_memory - 核心记忆（极端情况才压缩）
         """
         compression_round = 0
@@ -238,35 +281,33 @@ class ContextCompressor:
 
             # 按优先级从低到高压缩
             # 第1优先：压缩cold_memory
-            if ctx.cold_memory and len(ctx.cold_memory) > 100:
-                ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, 0.6)
-                logger.debug(f"压缩cold_memory: {len(ctx.cold_memory)}字")
+            if ctx.cold_memory and len(ctx.cold_memory) > 50:
+                ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, 0.5)
+                logger.debug(f"第{compression_round}轮: 压缩cold_memory -> {len(ctx.cold_memory)}字")
 
             # 第2优先：压缩warm_memory
-            elif ctx.warm_memory and len(ctx.warm_memory) > 200:
-                ctx.warm_memory = self._truncate_events(ctx.warm_memory, 0.7)
-                logger.debug(f"压缩warm_memory: {len(ctx.warm_memory)}字")
+            elif ctx.warm_memory and len(ctx.warm_memory) > 100:
+                ctx.warm_memory = self._truncate_events(ctx.warm_memory, 0.5)
+                logger.debug(f"第{compression_round}轮: 压缩warm_memory -> {len(ctx.warm_memory)}字")
 
-            # 第3优先：压缩hot_memory（转为增强摘要形式）
-            elif ctx.hot_memory and len(ctx.hot_memory) > 1000:
-                ctx.hot_memory = self._compress_hot_memory(ctx.hot_memory)
-                logger.debug(f"压缩hot_memory: {len(ctx.hot_memory)}字")
+            # 第3优先：压缩hot_memory（压缩时保留每章开头和结尾）
+            elif ctx.hot_memory and len(ctx.hot_memory) > 1500:
+                ctx.hot_memory = self._compress_hot_memory_preserve_ending(ctx.hot_memory)
+                logger.debug(f"第{compression_round}轮: 压缩hot_memory -> {len(ctx.hot_memory)}字")
 
             # 第4优先（最后）：压缩核心记忆（极端情况）
-            elif ctx.core_memory and len(ctx.core_memory) > 800:
-                ctx.core_memory = self._truncate_by_ratio(ctx.core_memory, 0.8)
-                logger.debug(f"压缩core_memory: {len(ctx.core_memory)}字")
+            elif ctx.core_memory and len(ctx.core_memory) > 500:
+                ctx.core_memory = self._compress_core_memory_smart(ctx.core_memory)
+                logger.debug(f"第{compression_round}轮: 压缩core_memory -> {len(ctx.core_memory)}字")
 
-            # 如果所有内容都很短但仍超限，强制整体压缩
+            # 强制压缩：按比例压缩 cold+warm，保护 hot 和 core
             else:
-                # 按比例同时压缩所有内容
+                ratio = target_tokens / max(ctx.total_tokens_estimate, 1) * 0.9
                 if ctx.cold_memory:
-                    ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, 0.5)
+                    ctx.cold_memory = self._truncate_by_ratio(ctx.cold_memory, ratio)
                 if ctx.warm_memory:
-                    ctx.warm_memory = self._truncate_by_ratio(ctx.warm_memory, 0.5)
-                if ctx.hot_memory:
-                    ctx.hot_memory = self._truncate_by_ratio(ctx.hot_memory, 0.5)
-                logger.debug("强制整体压缩")
+                    ctx.warm_memory = self._truncate_by_ratio(ctx.warm_memory, ratio)
+                logger.debug(f"第{compression_round}轮: 强制压缩 cold+warm (ratio={ratio:.2f})")
 
             # 更新token估算
             ctx.total_tokens_estimate = self._estimate_tokens(ctx.to_prompt())
@@ -730,6 +771,71 @@ class ContextCompressor:
 
         return "\n\n".join(compressed_parts)
 
+    def _compress_hot_memory_preserve_ending(self, hot_memory: str) -> str:
+        """压缩热记忆时保留每章的开头和结尾段落.
+
+        相比旧方法，更好地保留章节衔接所需的关键信息。
+        """
+        import re
+
+        chapter_pattern = r"【第(\d+)章完整内容】\n"
+        parts = re.split(chapter_pattern, hot_memory)
+
+        if len(parts) <= 1:
+            return self._truncate_by_ratio(hot_memory, 0.5)
+
+        compressed_parts = []
+        head_length = 300  # 保留每章开头 300 字
+        ending_length = 300  # 保留每章结尾 300 字
+
+        i = 1
+        while i < len(parts):
+            if i + 1 < len(parts):
+                chapter_num = parts[i]
+                content = parts[i + 1]
+
+                if len(content) > 800:
+                    # 保留开头 + 结尾
+                    head = content[:head_length]
+                    tail = content[-ending_length:]
+
+                    # 在句子边界截断
+                    last_period_in_head = head.rfind("。")
+                    if 0 < last_period_in_head < 250:
+                        head = head[:last_period_in_head + 1]
+
+                    first_period_in_tail = tail.find("。")
+                    if 0 < first_period_in_tail < 50:
+                        tail = tail[first_period_in_tail + 1 :]
+
+                    compressed = f"【第{chapter_num}章】\n{head}\n...[中间省略]...\n{tail}"
+                else:
+                    compressed = f"【第{chapter_num}章】\n{content}"
+                compressed_parts.append(compressed)
+            i += 2
+
+        return "\n\n".join(compressed_parts)
+
+    def _compress_core_memory_smart(self, core_memory: str) -> str:
+        """智能压缩核心记忆：保留关键名词，压缩描述文字."""
+        lines = core_memory.split("\n")
+        compressed_lines = []
+
+        for line in lines:
+            if line.startswith("世界观："):
+                # 保留世界观的前 200 字
+                compressed_lines.append(line[:210])
+            elif line.startswith("主要角色："):
+                # 保留所有角色名，压缩背景描述
+                compressed_lines.append(line[:300])
+            elif line.startswith("主线："):
+                # 保留主线的前 300 字
+                compressed_lines.append(line[:310])
+            else:
+                compressed_lines.append(line[:150])
+
+        return "\n".join(compressed_lines)
+
     def _build_hot_memory_full(
         self,
         chapter_number: int,
@@ -931,6 +1037,46 @@ class ContextCompressor:
     def _extract_ending(self, content: str) -> str:
         """提取章节结尾（兼容旧调用）."""
         return self._extract_ending_full(content)
+
+    def _ensure_previous_ending(
+        self,
+        chapter_number: int,
+        chapter_contents: Dict[int, str],
+        chapter_summaries: Dict[int, Dict[str, Any]],
+    ) -> str:
+        """确保始终有上一章的结尾段落，用于章节自然衔接.
+
+        无论上下文是否超限，始终保留上一章的结尾段落。
+
+        Args:
+            chapter_number: 当前要写的章节号
+            chapter_contents: 章节完整内容字典
+            chapter_summaries: 章节摘要字典
+
+        Returns:
+            上一章结尾段落文本
+        """
+        prev_ch = chapter_number - 1
+        if prev_ch < 1:
+            return ""
+
+        # 优先使用完整内容提取结尾
+        if prev_ch in chapter_contents and chapter_contents[prev_ch]:
+            content = chapter_contents[prev_ch]
+            ending = content[-self.PREVIOUS_ENDING_LENGTH :]
+            # 在句子边界截断
+            first_period = ending.find("。")
+            if 0 < first_period < 100:
+                ending = ending[first_period + 1 :]
+            return f"\n\n【第{prev_ch}章结尾】{ending.strip()}"
+
+        # 回退到摘要的 ending_state
+        if prev_ch in chapter_summaries:
+            ending_state = chapter_summaries[prev_ch].get("ending_state", "")
+            if ending_state:
+                return f"\n\n【第{prev_ch}章结尾】{ending_state[:self.PREVIOUS_ENDING_LENGTH]}"
+
+        return ""
 
     # 移除旧的固定截取压缩方法，保留为兼容别名
     def _compress_world_setting(self, world_setting: Dict[str, Any]) -> str:

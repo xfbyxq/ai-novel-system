@@ -82,13 +82,19 @@ class Settings(BaseSettings):
 
     # 上下文压缩器配置
     CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(
-        os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "8000")
-    )  # 压缩阈值，超过此值启动动态压缩
+        os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "40000")
+    )  # 压缩阈值，使用模型窗口约20%（从12000提高到40000）
 
-    # 热记忆完整内容配置
-    HOT_MEMORY_FULL_CHAPTERS: int = int(
-        os.getenv("HOT_MEMORY_FULL_CHAPTERS", "3")
-    )  # 热记忆使用完整内容的章节数
+    # 热记忆完整内容配置（优化连贯性）
+    HOT_MEMORY_CHAPTERS: int = int(
+        os.getenv("HOT_MEMORY_CHAPTERS", "5")
+    )  # 热记忆使用完整内容的章节数（从3增加到5）
+    WARM_MEMORY_CHAPTERS: int = int(
+        os.getenv("WARM_MEMORY_CHAPTERS", "10")
+    )  # 温记忆保留关键事件的章节数（从7增加到10）
+    PREVIOUS_ENDING_LENGTH: int = int(
+        os.getenv("PREVIOUS_ENDING_LENGTH", "500")
+    )  # 上一章结尾保留长度（确保章节衔接）
     HOT_MEMORY_ENABLE_FULL_CONTENT: bool = (
         os.getenv("HOT_MEMORY_ENABLE_FULL_CONTENT", "true").lower() == "true"
     )  # 是否启用完整内容热记忆
