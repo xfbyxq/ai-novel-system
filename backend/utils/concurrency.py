@@ -5,14 +5,13 @@
 """
 
 import asyncio
-import hashlib
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from redis.asyncio import Redis
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
