@@ -410,6 +410,7 @@ class ContinuityIntegrationModule:
         result.foreshadowing_report = foreshadowing_report
 
         # 5. 预防式连贯性检查
+        prevention_report = None
         if previous_chapter:
             # 从约束生成 ContinuityConstraint 对象
             constraints = self._extract_constraints_from_previous(previous_chapter)

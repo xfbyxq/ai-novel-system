@@ -43,7 +43,7 @@ class ChapterSummaryGenerator:
         content_for_summary = chapter_content[:8000]
 
         base_task_prompt = self.pm.format(
-            self.pm.CHAPTER_SUMARY_TASK,
+            self.pm.CHAPTER_SUMMARY_TASK,
             chapter_number=chapter_number,
             chapter_content=content_for_summary,
         )

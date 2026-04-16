@@ -146,6 +146,82 @@ class GraphQueryService:
         """
         self.client = neo4j_client
 
+    @staticmethod
+    def _safe_record(row: Any) -> Dict[str, Any]:
+        """安全地将 Neo4j 结果行转换为字典.
+
+        Neo4j 驱动在不同版本/配置下可能返回 dict、tuple 或其他格式，
+        此方法确保始终返回字典。
+
+        Args:
+            row: Neo4j 查询结果行
+
+        Returns:
+            转换后的字典
+        """
+        if isinstance(row, dict):
+            return row
+        elif isinstance(row, (list, tuple)):
+            # 某些驱动版本返回 (values, keys) 格式的 tuple
+            if len(row) >= 2 and isinstance(row[1], (list, tuple)):
+                # 假设格式为 (values, keys)
+                return dict(zip(row[1], row[0]))
+            elif len(row) == 1 and isinstance(row[0], dict):
+                return row[0]
+            # 纯值列表，无法恢复键名，返回空字典
+            logger.warning(f"Neo4j 返回 tuple 格式无法转换为字典: {row[:2]}")
+            return {}
+        elif hasattr(row, "data"):
+            # Record 对象
+            return row.data()
+        elif hasattr(row, "items"):
+            return dict(row)
+        else:
+            logger.warning(f"未知的 Neo4j 结果格式: {type(row)}")
+            return {}
+
+    @staticmethod
+    def _safe_node_props(n: Any) -> Dict[str, Any]:
+        """安全地提取 Neo4j 节点属性.
+
+        Args:
+            n: Neo4j Node 对象或字典
+
+        Returns:
+            节点属性字典
+        """
+        if hasattr(n, "_properties"):
+            return dict(n._properties)
+        elif hasattr(n, "get"):
+            return dict(n)
+        elif isinstance(n, dict):
+            return n
+        elif isinstance(n, (list, tuple)) and len(n) >= 3:
+            # Neo4j Node tuple 格式: (id, labels, properties)
+            return n[2] if isinstance(n[2], dict) else {}
+        return {}
+
+    @staticmethod
+    def _safe_rel_props(r: Any) -> Dict[str, Any]:
+        """安全地提取 Neo4j 关系属性.
+
+        Args:
+            r: Neo4j Relationship 对象或字典
+
+        Returns:
+            关系属性字典
+        """
+        if hasattr(r, "_properties"):
+            return dict(r._properties)
+        elif hasattr(r, "get"):
+            return dict(r)
+        elif isinstance(r, dict):
+            return r
+        elif isinstance(r, (list, tuple)) and len(r) >= 5:
+            # Neo4j Relationship tuple 格式: (id, type, start_node, end_node, properties)
+            return r[4] if isinstance(r[4], dict) else {}
+        return {}
+
     async def get_character_network(
         self, novel_id: str, character_name: str, depth: int = 2
     ) -> Optional[CharacterNetwork]:
@@ -179,21 +255,18 @@ class GraphQueryService:
             if not result:
                 return None
 
-            row = result[0]
+            row = self._safe_record(result[0])
             character = row.get("c", {})
             nodes = row.get("nodes", [])
             relationships = row.get("relationships", [])
 
+            # 确保 character 是字典
+            character = self._safe_node_props(character)
+
             # 构建节点列表
             node_list = []
             for n in nodes:
-                # Neo4j Node 对象需要转换为字典
-                if hasattr(n, "_properties"):
-                    node_data = dict(n._properties)
-                elif hasattr(n, "items"):
-                    node_data = dict(n)
-                else:
-                    node_data = n if isinstance(n, dict) else {}
+                node_data = self._safe_node_props(n)
                 node_list.append({
                     "id": node_data.get("id"),
                     "name": node_data.get("name"),
@@ -204,25 +277,13 @@ class GraphQueryService:
             # 构建边列表
             edge_list = []
             for r in relationships:
-                # Neo4j Relationship 对象需要转换
-                if hasattr(r, "_properties"):
-                    rel_props = dict(r._properties)
-                elif hasattr(r, "items"):
-                    rel_props = dict(r)
-                else:
-                    rel_props = r if isinstance(r, dict) else {}
+                rel_props = self._safe_rel_props(r)
                 edge_list.append({
                     "from_id": rel_props.get("from_id") or rel_props.get("source"),
                     "to_id": rel_props.get("to_id") or rel_props.get("target"),
                     "relation_type": "CHARACTER_RELATION",
                     "properties": rel_props.get("properties", {}),
                 })
-
-            # 确保 character 也是字典
-            if hasattr(character, "_properties"):
-                character = dict(character._properties)
-            elif not isinstance(character, dict):
-                character = {}
 
             return CharacterNetwork(
                 character_id=character.get("id", ""),
@@ -277,7 +338,8 @@ class GraphQueryService:
                 )
 
             # 解析路径（简化处理）
-            # path_data = result[0].get("p", {})
+            row = self._safe_record(result[0])
+            # path_data = row.get("p", {})
             # Neo4j返回的路径需要进一步解析，这里返回简化版本
             return CharacterPath(
                 from_character=from_char,
