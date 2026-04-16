@@ -66,7 +66,7 @@ class ChapterSummaryGenerator:
                     prompt=task_prompt,
                     system=self.pm.CHAPTER_SUMMARY_SYSTEM,
                     temperature=temperature,
-                    max_tokens=2048,  # 增加 max_tokens 避免 JSON 被截断
+                    max_tokens=8192,  # 复杂章节摘要可能包含大量事件/对话/伏笔，需充足输出空间
                 )
 
                 usage = response["usage"]
@@ -274,26 +274,9 @@ class ChapterSummaryGenerator:
                 return json.loads(json_str)
             except json.JSONDecodeError:
                 # 策略 4: 尝试修复不完整的 JSON
-                # 计算缺失的闭合括号数量
-                open_braces = json_str.count("{")
-                close_braces = json_str.count("}")
-                missing_braces = open_braces - close_braces
-
-                if missing_braces > 0:
-                    try:
-                        # 添加缺失的闭合括号
-                        fixed_json = json_str + "}" * missing_braces
-                        return json.loads(fixed_json)
-                    except json.JSONDecodeError:
-                        # 尝试更激进的修复：移除最后一个不完整的项目
-                        try:
-                            # 找到最后一个逗号并截断
-                            last_comma = json_str.rfind(",")
-                            if last_comma > start + 1:
-                                truncated = json_str[:last_comma] + "}"
-                                return json.loads(truncated)
-                        except json.JSONDecodeError:
-                            pass
+                repair_attempt = self._repair_truncated_json(json_str)
+                if repair_attempt is not None:
+                    return repair_attempt
 
                 # 策略 5: 记录警告并返回空字典
                 logger.warning(f"JSON 解析失败，返回空摘要。文本片段：{text[:100]}...")
@@ -309,3 +292,77 @@ class ChapterSummaryGenerator:
             "dialogue_highlights": [],
             "scene_transitions": [],
         }
+
+    @staticmethod
+    def _repair_truncated_json(json_str: str) -> Optional[Dict[str, Any]]:
+        """尝试修复被截断的 JSON.
+
+        处理场景：
+        1. 缺少闭合括号 }
+        2. 字符串未闭合（如 "未完成的内容 ）
+        3. 数组元素被截断
+        """
+        import re
+
+        # 修复 1: 闭合未完成的字符串
+        # 查找所有双引号，如果数量为奇数，说明最后一个字符串未闭合
+        quote_count = 0
+        in_string = False
+        escape_next = False
+        for i, ch in enumerate(json_str):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == "\\":
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                quote_count += 1
+
+        if in_string:
+            # 最后一个字符串未闭合，在最后一个非空白字符前截断
+            # 找到最后一个完整的 "key": "value 模式
+            last_quote = json_str.rfind('"')
+            if last_quote > 0:
+                # 去掉未闭合的字符串，从上一个 " 或 [ 或 { 之后开始修复
+                json_str = json_str[:last_quote].rstrip()
+                # 如果现在以冒号结尾，说明是 "key": 后面没有值
+                if json_str.endswith(":"):
+                    json_str = json_str[:-1].rstrip()
+
+        # 修复 2: 添加缺失的闭合括号
+        open_braces = json_str.count("{")
+        close_braces = json_str.count("}")
+        missing_braces = open_braces - close_braces
+
+        if missing_braces > 0:
+            try:
+                fixed = json_str + "}" * missing_braces
+                return json.loads(fixed)
+            except json.JSONDecodeError:
+                pass
+
+        # 修复 3: 移除最后不完整的项目（数组元素或对象键值对）
+        try:
+            last_comma = json_str.rfind(",")
+            if last_comma > json_str.find("{") + 1:
+                truncated = json_str[:last_comma] + "}"
+                return json.loads(truncated)
+        except json.JSONDecodeError:
+            pass
+
+        # 修复 4: 清理尾部垃圾字符后重试
+        try:
+            # 移除最后几个字符（可能是截断的乱码）
+            for trim_len in range(1, min(50, len(json_str))):
+                trimmed = json_str.rstrip()[:-trim_len].rstrip()
+                if trimmed.endswith("}"):
+                    try:
+                        return json.loads(trimmed)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            pass
+
+        return None

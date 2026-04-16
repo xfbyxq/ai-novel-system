@@ -95,6 +95,7 @@ class CharacterStateExtractor:
                 system="你是小说分析助手，擅长从文本中提取角色状态信息。请严格输出JSON格式。",
                 temperature=0.3,
                 max_tokens=2048,
+                retries=5,  # 增加重试次数应对网络波动
             )
 
             usage = response["usage"]

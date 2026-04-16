@@ -333,6 +333,7 @@ class EntityExtractorService:
                 system=ENTITY_EXTRACTION_SYSTEM_PROMPT,
                 temperature=0.3,  # 低温度以获得更稳定的抽取结果
                 max_tokens=4096,  # 增大限制，确保完整JSON不被截断
+                retries=5,  # 增加重试次数应对网络波动
             )
 
             content = response.get("content", "")
@@ -444,6 +445,7 @@ class EntityExtractorService:
                 system="你是一个伏笔分析专家，擅长识别小说中伏笔的回收情况。",
                 temperature=0.2,
                 max_tokens=2048,
+                retries=5,  # 增加重试次数应对网络波动
             )
 
             content = response.get("content", "")
