@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from core.logging_config import logger
-from core.models.character import Character
 from core.models.chapter import Chapter
+from core.models.character import Character
 from llm.cost_tracker import CostTracker
 from llm.prompt_manager import PromptManager
 from llm.qwen_client import QwenClient
@@ -82,9 +82,7 @@ class CharacterAutoDetector:
             )
 
             if not extracted:
-                logger.info(
-                    f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色"
-                )
+                logger.info(f"[CharacterAutoDetector] 第{chapter_number}章未检测到新角色")
                 return []
 
             # 2. 多层去重过滤（使用数据库最新数据）
@@ -110,9 +108,7 @@ class CharacterAutoDetector:
             return registered
 
         except Exception as e:
-            logger.warning(
-                f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}"
-            )
+            logger.warning(f"[CharacterAutoDetector] 角色自动检测异常（不影响章节生成）: {e}")
             return []
 
     async def _extract_characters_from_content(
@@ -136,9 +132,7 @@ class CharacterAutoDetector:
         content_truncated = chapter_content[:max_len]
 
         names_str = (
-            "、".join(existing_character_names)
-            if existing_character_names
-            else "（暂无已知角色）"
+            "、".join(existing_character_names) if existing_character_names else "（暂无已知角色）"
         )
 
         task_prompt = self.pm.format(
@@ -225,10 +219,7 @@ class CharacterAutoDetector:
                 if (
                     len(name_normalized) >= 2
                     and len(existing_norm) >= 2
-                    and (
-                        name_normalized in existing_norm
-                        or existing_norm in name_normalized
-                    )
+                    and (name_normalized in existing_norm or existing_norm in name_normalized)
                 ):
                     is_substring = True
                     logger.debug(
@@ -257,10 +248,7 @@ class CharacterAutoDetector:
                     if (
                         len(variant_norm) >= 2
                         and len(existing_norm) >= 2
-                        and (
-                            variant_norm in existing_norm
-                            or existing_norm in variant_norm
-                        )
+                        and (variant_norm in existing_norm or existing_norm in variant_norm)
                     ):
                         variant_match = True
                         break
@@ -308,14 +296,12 @@ class CharacterAutoDetector:
                 )
                 existing_result = await self.db.execute(existing_stmt)
                 if existing_result.scalar_one_or_none():
-                    logger.info(
-                        f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册"
-                    )
+                    logger.info(f"[CharacterAutoDetector] 角色「{name}」在数据库中已存在，跳过注册")
                     continue
 
-                # 确定 role_type
+                # 确定 role_type（允许 minor/supporting/antagonist，不允许自动标记为 protagonist）
                 role_type = char_data.get("role_type", "minor")
-                if role_type not in ("minor", "supporting"):
+                if role_type not in ("minor", "supporting", "antagonist"):
                     role_type = "minor"
 
                 # 确定 gender
@@ -356,9 +342,7 @@ class CharacterAutoDetector:
                     new_ids = [c.id for c in created]
                     chapter_obj.characters_appeared = existing_ids + new_ids
             except Exception as e:
-                logger.warning(
-                    f"[CharacterAutoDetector] 回填 characters_appeared 失败: {e}"
-                )
+                logger.warning(f"[CharacterAutoDetector] 回填 characters_appeared 失败: {e}")
 
         return created
 
@@ -464,7 +448,6 @@ class CharacterAutoDetector:
                         pass
 
         logger.warning(
-            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。"
-            f"文本片段：{text[:100]}..."
+            f"[CharacterAutoDetector] JSON 数组解析失败，返回空列表。" f"文本片段：{text[:100]}..."
         )
         return []

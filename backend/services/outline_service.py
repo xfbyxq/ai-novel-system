@@ -368,8 +368,15 @@ class OutlineService:
             logger.warning(f"No volumes found in outline for novel {novel_id}")
             return {"chapters": [], "volumes": []}
 
-        # 2. 为每卷生成章节配置
+        # 2. 为每卷生成章节配置（批量处理优化 - Issue #38）
         chapter_configs = []
+        total_chapters = sum(
+            v.get("chapters", [0, 0])[1] - v.get("chapters", [0, 0])[0] + 1
+            for v in volumes
+            if len(v.get("chapters", [])) == 2
+        )
+        
+        logger.info(f"Will decompose {total_chapters} chapters from {len(volumes)} volumes")
 
         for volume in volumes:
             volume_number = volume.get("number", 1)
@@ -380,31 +387,39 @@ class OutlineService:
                 continue
 
             start_ch, end_ch = chapters_range
-            end_ch - start_ch + 1
 
-            # 3. 解析张力循环
+            # 3. 解析张力循环（预处理优化）
             tension_cycles = volume.get("tension_cycles", [])
-
-            # 4. 提取关键事件
+            
+            # 4. 提取关键事件（预处理优化）
             key_events = volume.get("key_events", [])
+            key_events_map = {
+                event["chapter"]: event 
+                for event in key_events 
+                if "chapter" in event
+            }
 
-            # 5. 生成章节配置
+            # 5. 生成章节配置（批量处理）
             volume_chapter_configs = []
 
             # 获取全局高潮章节号
             global_climax_chapter = outline_data.get("climax_chapter")
+            volume_is_climax = volume.get("is_climax", False)
+            volume_summary = volume.get("summary", "")
 
+            # 批量生成章节配置（优化：减少函数调用开销）
             for ch_num in range(start_ch, end_ch + 1):
                 chapter_config = self._generate_chapter_config(
                     chapter_number=ch_num,
                     volume_number=volume_number,
                     tension_cycles=tension_cycles,
                     key_events=key_events,
-                    volume_summary=volume.get("summary", ""),
+                    key_events_map=key_events_map,  # 优化：使用预处理的映射
+                    volume_summary=volume_summary,
                     auto_split=auto_split,
                     end_ch=end_ch,
                     climax_chapter=global_climax_chapter,
-                    volume_is_climax=volume.get("is_climax", False),
+                    volume_is_climax=volume_is_climax,
                 )
                 # 添加大纲 ID 关联
                 if outline_id:
@@ -447,9 +462,24 @@ class OutlineService:
         end_ch: int = 0,
         climax_chapter: Optional[int] = None,
         volume_is_climax: bool = False,
+        key_events_map: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """生成单章配置."""
-        # 1. 找到当前章所属的张力循环
+        """
+        生成单章配置.
+        
+        Args:
+            chapter_number: 章节号
+            volume_number: 卷号
+            tension_cycles: 张力循环列表
+            key_events: 关键事件列表
+            volume_summary: 卷概要
+            auto_split: 是否自动拆分
+            end_ch: 卷末章节号
+            climax_chapter: 高潮章节号
+            volume_is_climax: 是否为高潮卷
+            key_events_map: 关键事件映射（优化用，key=chapter_number）
+        """
+        # 1. 找到当前章所属的张力循环（优化：提前终止查找）
         current_cycle = None
         cycle_position = None
 
@@ -458,16 +488,16 @@ class OutlineService:
             if len(chapters_range) != 2:
                 continue
 
-            start_ch, end_ch = chapters_range
+            start_ch, end_ch_cycle = chapters_range
 
-            if start_ch <= chapter_number <= end_ch:
+            if start_ch <= chapter_number <= end_ch_cycle:
                 current_cycle = cycle
                 # 判断在循环中的位置
                 cycle.get("suppress_events", [])
                 cycle.get("release_event", "")
 
                 # 简化：前 70% 为压制期，最后为释放期
-                cycle_length = end_ch - start_ch + 1
+                cycle_length = end_ch_cycle - start_ch + 1
                 suppress_length = int(cycle_length * 0.7)
 
                 if chapter_number <= start_ch + suppress_length:
@@ -476,11 +506,15 @@ class OutlineService:
                     cycle_position = "release"
                 break
 
-        # 2. 检查是否有关键事件
+        # 2. 检查是否有关键事件（优化：使用映射快速查找）
         chapter_events = []
-        for event in key_events:
-            if event.get("chapter") == chapter_number:
-                chapter_events.append(event)
+        if key_events_map and chapter_number in key_events_map:
+            chapter_events = [key_events_map[chapter_number]]
+        else:
+            # 回退到线性查找（向后兼容）
+            for event in key_events:
+                if event.get("chapter") == chapter_number:
+                    chapter_events.append(event)
 
         # 3. 生成配置
         config = {
@@ -727,6 +761,15 @@ class OutlineService:
             "sub_plots": "根据主线剧情和角色关系，设计支线剧情",
             "key_turning_points": "根据剧情发展，设计关键转折点",
             "climax_chapter": "根据故事结构，推荐高潮章节位置",
+            # main_plot 子字段
+            "core_conflict": "根据世界观和主角设定，构思故事的核心冲突",
+            "protagonist_goal": "根据主角性格和背景，设定主角的核心目标",
+            "antagonist": "根据故事冲突，设计主要反派角色",
+            "progression_path": "根据核心冲突，设计剧情发展路径",
+            "emotional_arc": "根据故事主题，设计情感起伏曲线",
+            "key_revelations": "根据剧情发展，设计关键揭示时刻",
+            "character_growth": "根据主角弧光，设计角色成长轨迹",
+            "resolution": "根据核心冲突，设计故事结局走向",
         }
 
         prompt_template = field_prompts.get(
@@ -889,8 +932,270 @@ class OutlineService:
                 ensure_ascii=False,
             )
 
+        # main_plot 子字段：使用 LLM 生成
+        main_plot_fields = [
+            "core_conflict",
+            "protagonist_goal",
+            "antagonist",
+            "progression_path",
+            "emotional_arc",
+            "key_revelations",
+            "character_growth",
+            "resolution",
+        ]
+
+        if field_name in main_plot_fields:
+            return await self._generate_main_plot_field_with_llm(
+                field_name, context, prompt_template
+            )
+
         else:
             return f"请根据{prompt_template}填写此字段"
+
+    async def _generate_main_plot_field_with_llm(
+        self,
+        field_name: str,
+        context: Dict[str, Any],
+        prompt_template: str,
+    ) -> str:
+        """使用 LLM 为 main_plot 子字段生成内容.
+
+        Args:
+            field_name: 字段名
+            context: 上下文信息
+            prompt_template: 提示词模板
+
+        Returns:
+            生成的字段内容
+        """
+        novel = context.get("novel", {})
+        world = context.get("world_setting", {})
+        characters = context.get("characters", [])
+        outline = context.get("outline", {})
+        main_plot = outline.get("main_plot", {})
+
+        # 构建上下文
+        title = novel.get("title", "未命名小说")
+        genre = novel.get("genre", "玄幻")
+        world_name = world.get("world_name", "未知世界")
+        world_type = world.get("world_type", "奇幻")
+
+        # 获取主角信息
+        protagonist = None
+        for char in characters:
+            if char.get("role") == "protagonist" or char.get("is_protagonist"):
+                protagonist = char
+                break
+
+        protagonist_name = protagonist.get("name", "主角") if protagonist else "主角"
+        protagonist_trait = (
+            protagonist.get("personality", "坚韧不拔") if protagonist else "坚韧不拔"
+        )
+
+        # 字段特定的生成指导
+        field_guidance = {
+            "core_conflict": f"为《{title}》构思一个引人入胜的核心冲突，结合{world_type}世界观特色",
+            "protagonist_goal": f"为{protagonist_name}设定一个明确、有动力的核心目标",
+            "antagonist": f"设计与{protagonist_name}形成鲜明对立的反派角色",
+            "progression_path": "设计从冲突爆发到高潮的剧情发展路径",
+            "emotional_arc": "设计读者在故事中的情感起伏体验",
+            "key_revelations": "设计3-5个震撼读者的关键揭示时刻",
+            "character_growth": f"设计{protagonist_name}从起点到终点的成长蜕变",
+            "resolution": "设计一个令人满意的结局走向",
+        }
+
+        # 已有字段作为上下文
+        existing_context = ""
+        if main_plot:
+            existing_parts = []
+            for key, value in main_plot.items():
+                if value and key != field_name:
+                    existing_parts.append(f"- {key}: {value}")
+            if existing_parts:
+                existing_context = "\n已有设定:\n" + "\n".join(existing_parts)
+
+        prompt = f"""# 任务：为小说《{title}》生成 {field_name} 字段
+
+## 小说信息
+- 书名：{title}
+- 类型：{genre}
+- 世界观：{world_name}（{world_type}）
+- 主角：{protagonist_name}，性格：{protagonist_trait}
+{existing_context}
+
+## 任务说明
+{field_guidance.get(field_name, prompt_template)}
+
+## 输出要求
+- 直接输出字段内容，不要解释
+- 内容要具体、有画面感
+- 字数控制在50-150字
+- 不要输出 JSON 格式，只输出纯文本内容
+"""
+
+        try:
+            response = await self.client.chat(
+                prompt=prompt,
+                system="你是一位专业的小说剧情策划师，擅长设计引人入胜的故事元素。",
+                temperature=0.8,
+                max_tokens=500,
+            )
+            content = response["content"].strip()
+            # 移除可能的引号包裹
+            if content.startswith('"') and content.endswith('"'):
+                content = content[1:-1]
+            return content
+        except Exception as e:
+            logger.error(f"LLM generation failed for {field_name}: {e}")
+            # 降级到默认值
+            return self._get_fallback_value(field_name, protagonist_name, world_name)
+
+    def _get_fallback_value(
+        self, field_name: str, protagonist: str, world_name: str
+    ) -> str:
+        """为字段提供降级默认值."""
+        fallbacks = {
+            "core_conflict": f"{protagonist}在{world_name}中面临生存与成长的重大挑战",
+            "protagonist_goal": f"{protagonist}追求力量与真相，最终实现自我超越",
+            "antagonist": "神秘的强大敌人，与主角形成理念与利益的冲突",
+            "progression_path": "从初入世界到逐渐成长，经历挫折后突破自我，最终面对终极挑战",
+            "emotional_arc": "从好奇探索到危机焦虑，再到突破喜悦，最终达到平静满足",
+            "key_revelations": "身份真相的揭露、敌我关系的反转、世界本质的发现",
+            "character_growth": f"{protagonist}从懵懂少年成长为担当大任的英雄",
+            "resolution": "核心冲突得到解决，主角达成目标，开启新的篇章",
+        }
+        return fallbacks.get(field_name, "待补充")
+
+    async def batch_generate_field_suggestions(
+        self,
+        fields: list[str],
+        context: Dict[str, Any],
+        current_values: Dict[str, str],
+        preserve_user_edits: bool = True,
+        hints: Optional[str] = None,
+    ) -> list[Dict[str, Any]]:
+        """批量顺序生成主线剧情字段建议.
+
+        按字段依赖顺序逐个生成，每个新生成的字段会加入上下文供后续字段参考。
+        已有值的字段可选择跳过，但其值仍作为上下文参与后续生成。
+
+        Args:
+            fields: 要生成的字段列表（按顺序）
+            context: 共享上下文（包含novel、world_setting、characters、outline信息）
+            current_values: 各字段的当前值
+            preserve_user_edits: 是否跳过已有值的字段
+            hints: 额外提示信息
+
+        Returns:
+            每个字段的生成结果列表
+        """
+        results: list[Dict[str, Any]] = []
+        # 累积上下文：包含用户已填写的值和新生成的值，供后续字段的prompt参考
+        accumulated_main_plot: Dict[str, str] = {}
+
+        logger.info(
+            f"批量字段生成开始: 共{len(fields)}个字段, "
+            f"preserve_user_edits={preserve_user_edits}"
+        )
+
+        # 先将所有已有值加入累积上下文（无论是否跳过，都作为参考）
+        pre_filled = []
+        for field_name in fields:
+            value = current_values.get(field_name, "")
+            if value and value.strip():
+                accumulated_main_plot[field_name] = value.strip()
+                pre_filled.append(field_name)
+        if pre_filled:
+            logger.info(f"已有值的字段({len(pre_filled)}个): {pre_filled}")
+
+        # 构建用于 _generate_main_plot_field_with_llm 的 prompt_template（不影响实际逻辑）
+        prompt_template = "生成此字段的内容"
+
+        for field_name in fields:
+            original_value = current_values.get(field_name, "")
+            has_value = bool(original_value and original_value.strip())
+
+            # 跳过已有值的字段
+            if preserve_user_edits and has_value:
+                logger.info(f"跳过字段 [{field_name}]: 已有用户编辑内容")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": "",
+                    "original_value": original_value,
+                    "status": "skipped",
+                    "error_message": None,
+                })
+                continue
+
+            logger.info(
+                f"开始生成字段 [{field_name}], "
+                f"当前累积上下文字段: {list(accumulated_main_plot.keys())}"
+            )
+
+            # 将累积的上下文合并到context中，使prompt能参考前面的字段
+            field_context = self._build_field_context(context, accumulated_main_plot)
+
+            try:
+                suggestion = await self._generate_main_plot_field_with_llm(
+                    field_name=field_name,
+                    context=field_context,
+                    prompt_template=prompt_template,
+                )
+                # 将新生成的值加入累积上下文
+                if suggestion and suggestion.strip():
+                    accumulated_main_plot[field_name] = suggestion.strip()
+
+                logger.info(f"字段 [{field_name}] 生成成功, 内容长度={len(suggestion or '')}")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": suggestion,
+                    "original_value": original_value,
+                    "status": "success",
+                    "error_message": None,
+                })
+            except Exception as e:
+                logger.error(f"字段 [{field_name}] 生成失败: {e}")
+                results.append({
+                    "field_name": field_name,
+                    "suggestion": "",
+                    "original_value": original_value,
+                    "status": "failed",
+                    "error_message": str(e),
+                })
+
+        success = sum(1 for r in results if r["status"] == "success")
+        skipped = sum(1 for r in results if r["status"] == "skipped")
+        failed = sum(1 for r in results if r["status"] == "failed")
+        logger.info(f"批量字段生成完成: 成功={success}, 跳过={skipped}, 失败={failed}")
+
+        return results
+
+    @staticmethod
+    def _build_field_context(
+        base_context: Dict[str, Any],
+        accumulated_main_plot: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """构建包含累积生成结果的字段上下文.
+
+        将已生成/已有的字段值合并到outline.main_plot中，
+        使后续字段的prompt能参考前面的生成结果。
+
+        Args:
+            base_context: 基础上下文（包含novel、world_setting等）
+            accumulated_main_plot: 累积的main_plot字段值
+
+        Returns:
+            合并后的上下文字典
+        """
+        # 深拷贝outline部分以避免修改原始context
+        ctx = {**base_context}
+        outline = {**(ctx.get("outline") or {})}
+        existing_main_plot = {**(outline.get("main_plot") or {})}
+        # 用累积值覆盖/补充main_plot
+        existing_main_plot.update(accumulated_main_plot)
+        outline["main_plot"] = existing_main_plot
+        ctx["outline"] = outline
+        return ctx
 
     async def get_outline_versions(self, novel_id: UUID) -> List[Dict[str, Any]]:
         """

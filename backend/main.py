@@ -156,3 +156,66 @@ async def health_check():
         health["dependencies"]["redis"] = f"error: {str(e)}"
 
     return health
+
+
+# ============================================================
+# Test-only endpoints (only registered in debug/test mode)
+# ============================================================
+from pydantic import BaseModel
+
+
+class CreateChaptersRequest(BaseModel):
+    """创建章节请求（测试用）."""
+    novel_id: str
+    count: int
+
+
+@app.post("/api/v1/test/create-chapters", status_code=201, tags=["test"])
+async def test_create_chapters(req: CreateChaptersRequest):
+    """
+    测试专用：直接创建章节记录（绕过AI生成）.
+    仅在开发/测试环境中使用。
+    """
+    from uuid import UUID
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+    from core.database import async_session_factory
+    from core.models.novel import Novel
+    from core.models.chapter import Chapter
+
+    novel_uuid = UUID(req.novel_id)
+    async with async_session_factory() as session:
+        # 验证小说存在
+        novel = await session.execute(select(Novel).where(Novel.id == novel_uuid))
+        novel_obj = novel.scalar_one_or_none()
+        if not novel_obj:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="小说不存在")
+
+        # 获取当前最大章节号
+        max_result = await session.execute(
+            select(Chapter).where(Chapter.novel_id == novel_uuid)
+            .order_by(Chapter.chapter_number.desc()).limit(1)
+        )
+        max_chapter = max_result.scalar_one_or_none()
+        start_chapter = (max_chapter.chapter_number if max_chapter else 0) + 1
+
+        # 创建章节
+        for i in range(req.count):
+            ch_num = start_chapter + i
+            chapter = Chapter(
+                novel_id=novel_uuid,
+                chapter_number=ch_num,
+                volume_number=1,
+                title=f"第{ch_num}章",
+                content=f"这是第{ch_num}章的测试内容",
+                word_count=1000,
+                status="draft",
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            session.add(chapter)
+        await session.commit()
+
+    return {"message": f"成功创建 {req.count} 章", "start_chapter": start_chapter}

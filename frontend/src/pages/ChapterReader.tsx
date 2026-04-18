@@ -4,30 +4,36 @@ import {
   Spin, Typography, Breadcrumb, Card, Space, Button, Tag, Divider,
   Modal, Form, Input, Select, message,
 } from 'antd';
-import { HomeOutlined, LeftOutlined, RightOutlined, EditOutlined } from '@ant-design/icons';
-import type { Chapter } from '@/api/types';
+import { HomeOutlined, LeftOutlined, RightOutlined, EditOutlined, RobotOutlined } from '@ant-design/icons';
+import type { Chapter, Novel } from '@/api/types';
 import { getChapter, getChapters, updateChapter } from '@/api/chapters';
+import { getNovel } from '@/api/novels';
 import { formatWordCount, formatDate } from '@/utils/format';
+import AIChatDrawer from '@/components/AIChatDrawer';
 
 export default function ChapterReader() {
   const { id: novelId, number } = useParams<{ id: string; number: string }>();
   const navigate = useNavigate();
   const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [novel, setNovel] = useState<Novel | null>(null); // 小说信息
   const [totalChapters, setTotalChapters] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [form] = Form.useForm();
+  const [aiChatOpen, setAiChatOpen] = useState(false); // AI助手抽屉状态
 
   const fetchChapter = useCallback(async (nid: string, num: string) => {
     setLoading(true);
     try {
-      const [data, listRes] = await Promise.all([
+      const [data, listRes, novelData] = await Promise.all([
         getChapter(nid, parseInt(num)),
         getChapters(nid, 1, 1),
+        getNovel(nid), // 获取小说信息
       ]);
       setChapter(data);
       setTotalChapters(listRes.total);
+      setNovel(novelData); // 存储小说信息
     } catch {
       /* handled by interceptor */
     } finally {
@@ -85,7 +91,16 @@ export default function ChapterReader() {
           <Typography.Title level={3} style={{ margin: 0 }}>
             {chapter.title || `第 ${chapter.chapter_number} 章`}
           </Typography.Title>
-          <Button icon={<EditOutlined />} onClick={handleEdit}>编辑</Button>
+          <Space>
+            <Button 
+              type="primary" 
+              icon={<RobotOutlined />} 
+              onClick={() => setAiChatOpen(true)}
+            >
+              AI 助手
+            </Button>
+            <Button icon={<EditOutlined />} onClick={handleEdit}>编辑</Button>
+          </Space>
         </Space>
 
         <Space style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
@@ -155,6 +170,23 @@ export default function ChapterReader() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* AI助手抽屉 */}
+      <AIChatDrawer
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        scene="chapter_assistant"
+        novelId={novelId ? novelId : undefined}
+        novelTitle={novel?.title ?? undefined}
+        chapterNumber={chapter?.chapter_number}
+        chapterTitle={chapter?.title ?? undefined}
+        chapterContent={chapter?.content ?? undefined}
+        onChapterModified={() => {
+          if (novelId && number) {
+            fetchChapter(novelId, number);
+          }
+        }}
+      />
     </div>
   );
 }

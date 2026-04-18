@@ -92,24 +92,29 @@ class RecentChapter:
         parts = [f"## 第{self.chapter_number}章 {self.title}"]
 
         if self.summary:
-            parts.append(f"**剧情**: {self.summary[:300]}")
+            # 保留完整摘要，由统一压缩处理
+            parts.append(f"**剧情**: {self.summary}")
 
         if self.key_events:
-            events = "、".join(self.key_events[:5])
+            # 保留完整事件列表
+            events = "、".join(self.key_events)
             parts.append(f"**关键事件**: {events}")
 
         if self.character_changes:
+            # 保留完整角色变化
             changes = "; ".join(
-                f"{k}: {v}" for k, v in list(self.character_changes.items())[:3]
+                f"{k}: {v}" for k, v in self.character_changes.items()
             )
             parts.append(f"**角色变化**: {changes}")
 
         if self.foreshadowings:
-            foreshadows = "、".join(self.foreshadowings[:3])
+            # 保留完整伏笔列表
+            foreshadows = "、".join(self.foreshadowings)
             parts.append(f"**伏笔**: {foreshadows}")
 
         if self.ending_state:
-            parts.append(f"**结尾状态**: {self.ending_state[:200]}")
+            # 保留完整结尾状态
+            parts.append(f"**结尾状态**: {self.ending_state}")
 
         return "\n".join(parts)
 
@@ -131,16 +136,19 @@ class HistoricalIndex:
         parts.append(f"章节范围：第{self.chapter_range[0]}-{self.chapter_range[1]}章")
 
         if self.summary:
-            parts.append(f"**卷概要**: {self.summary[:200]}")
+            # 保留完整卷概要
+            parts.append(f"**卷概要**: {self.summary}")
 
         if self.key_events:
             parts.append("**关键事件**:")
-            for event in self.key_events[:5]:
+            # 保留完整事件列表
+            for event in self.key_events:
                 parts.append(f"  - 第{event['chapter']}章：{event['event']}")
 
         if self.milestones:
             parts.append("**里程碑**:")
-            for milestone in self.milestones[:3]:
+            # 保留完整里程碑列表
+            for milestone in self.milestones:
                 parts.append(f"  - {milestone}")
 
         return "\n".join(parts)
@@ -469,8 +477,13 @@ class EnhancedContextManager:
         # 如果有预计算的卷摘要，直接使用
         if volume_summaries:
             for vol_num, vol_data in sorted(volume_summaries.items()):
-                vol_start = (vol_num - 1) * 10 + 1
-                vol_end = vol_num * 10
+                # 使用实际定义的章节范围，fallback 到硬编码
+                vol_chapters = vol_data.get("chapters", [])
+                if vol_chapters and len(vol_chapters) >= 2:
+                    vol_start, vol_end = vol_chapters[0], vol_chapters[1]
+                else:
+                    vol_start = (vol_num - 1) * 10 + 1
+                    vol_end = vol_num * 10
 
                 if vol_end < cold_end:
                     historical_indices.append(
@@ -508,15 +521,15 @@ class EnhancedContextManager:
                 vol_start = (vol_num - 1) * 10 + 1
                 vol_end = vol_num * 10
 
-                # 合并章节摘要
+                # 合并章节摘要（保留完整内容）
                 combined_summary = "；".join(
-                    ch["summary"][:50] for ch in vol_data["chapters"][:5]
+                    ch["summary"] for ch in vol_data["chapters"][:5]
                 )
 
-                # 提取关键事件
+                # 提取关键事件（保留完整列表）
                 key_events = []
                 for ch in vol_data["chapters"]:
-                    for event in ch.get("key_events", [])[:2]:
+                    for event in ch.get("key_events", []):
                         key_events.append(
                             {
                                 "chapter": ch["chapter"],
@@ -533,7 +546,7 @@ class EnhancedContextManager:
                         volume_title=f"第{vol_num}卷",
                         chapter_range=(vol_start, min(vol_end, cold_end - 1)),
                         summary=combined_summary,
-                        key_events=key_events[:10],
+                        key_events=key_events,  # 保留完整事件列表
                         milestones=[],
                     )
                 )

@@ -138,7 +138,7 @@ class CharacterNameVersionService:
         current_version = await self.db.execute(
             select(CharacterNameVersion)
             .where(CharacterNameVersion.character_id == character_id)
-            .where(CharacterNameVersion.is_active == True)
+            .where(CharacterNameVersion.is_active)
             .order_by(CharacterNameVersion.changed_at.desc())
             .limit(1)
         )
@@ -167,7 +167,7 @@ class CharacterNameVersionService:
         result = await self.db.execute(
             select(CharacterNameVersion)
             .where(CharacterNameVersion.character_id == character_id)
-            .where(CharacterNameVersion.is_active == True)
+            .where(CharacterNameVersion.is_active)
             .order_by(CharacterNameVersion.changed_at.desc())
             .limit(1)
         )
@@ -193,7 +193,7 @@ class CharacterNameVersionService:
 
         similar_names = [v for v in history if v.new_name.lower() == new_name.lower()]
         if similar_names:
-            warnings.append(f"发现相似名字的历史版本")
+            warnings.append("发现相似名字的历史版本")
 
         return {
             "valid": len(warnings) == 0,

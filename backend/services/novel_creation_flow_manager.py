@@ -164,7 +164,7 @@ class NovelCreationFlowManager:
                 )
             else:
                 return self._get_scene_selection_message()
-        except:
+        except (json.JSONDecodeError, KeyError, ValueError):
             return self._get_scene_selection_message()
 
     def _get_scene_selection_message(self) -> FlowResponse:
@@ -219,7 +219,7 @@ class NovelCreationFlowManager:
             else:
                 response_message = self._get_genre_selection_message()
                 context.current_step = CreationFlowStep.GENRE_CONFIRMATION.value
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             response_message = self._get_genre_selection_message()
             context.current_step = CreationFlowStep.GENRE_CONFIRMATION.value
 
@@ -302,7 +302,7 @@ class NovelCreationFlowManager:
         try:
             world_setting_data = json.loads(ai_response)
             context.world_setting = WorldSettingDetails(**world_setting_data)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             context.world_setting = WorldSettingDetails(
                 era_background="待定", geographical_environment=user_input[:100]
             )
@@ -373,7 +373,7 @@ class NovelCreationFlowManager:
         try:
             synopsis_data = json.loads(ai_response)
             context.synopsis = NovelSynopsis(**synopsis_data)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             context.synopsis = NovelSynopsis(
                 main_plot=user_input[:200],
                 core_conflict="待完善",
@@ -396,7 +396,7 @@ class NovelCreationFlowManager:
         try:
             title_suggestions = json.loads(title_response)
             titles_text = "、".join(title_suggestions)
-        except:
+        except (json.JSONDecodeError, ValueError):
             titles_text = f"《{context.genre}传奇》"
 
         response_message = f"""太棒了！我已经为您提炼了小说的核心简介：.
@@ -940,7 +940,7 @@ class NovelCreationFlowManager:
                 context=context,
                 next_step=CreationFlowStep.REVISION_DETAIL_COLLECTION,
             )
-        except:
+        except (json.JSONDecodeError, ValueError, KeyError):
             return FlowResponse(
                 message="抱歉，我没有理解您的修改意图。请明确说明想修改什么内容？",
                 context=context,

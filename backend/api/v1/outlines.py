@@ -12,12 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from backend.dependencies import get_db
 from backend.schemas.outline import (
     AIAssistRequest,
     AIAssistResponse,
+    BatchAIAssistRequest,
+    BatchAIAssistResponse,
+    BatchFieldResult,
     ChapterOutlineTaskResponse,
     EnhancementOptions,
     EnhancementPreviewResponse,
@@ -31,17 +32,16 @@ from backend.schemas.outline import (
     WorldSettingResponse,
     WorldSettingUpdate,
 )
-from core.models.plot_outline import PlotOutline
-import logging
-
-core_logger = logging.getLogger(__name__)
+from backend.services.outline_service import OutlineService
+from core.models.character import Character
+from core.models.chapter import Chapter
 from core.models.novel import Novel
 from core.models.plot_outline import PlotOutline
 from core.models.plot_outline_version import PlotOutlineVersion
 from core.models.world_setting import WorldSetting
-from core.models.character import Character
-from core.models.chapter import Chapter
-from backend.services.outline_service import OutlineService
+
+logger = logging.getLogger(__name__)
+core_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/novels/{novel_id}", tags=["outlines"])
 
@@ -72,7 +72,8 @@ async def get_world_setting(
     if not world_setting:
         return None
 
-    return world_setting
+    # 将 ORM 对象转换为字典返回
+    return model_to_dict(world_setting)
 
 
 @router.patch("/world-setting", response_model=WorldSettingResponse)
@@ -142,11 +143,24 @@ async def get_plot_outline(
     if not plot_outline:
         return None
 
-    # 修复数据格式：确保volumes中的每个卷都有number字段
-    plot_outline = fix_plot_outline_volumes(plot_outline)
 
-    return plot_outline
-
+    # 手动转换为字典，避免 SQLAlchemy 内部状态导致的序列化错误
+    return {
+        "id": str(plot_outline.id),
+        "novel_id": str(plot_outline.novel_id),
+        "structure_type": plot_outline.structure_type,
+        "volumes": plot_outline.volumes or [],
+        "main_plot": plot_outline.main_plot or {},
+        "main_plot_detailed": plot_outline.main_plot_detailed or {},
+        "sub_plots": plot_outline.sub_plots or [],
+        "key_turning_points": plot_outline.key_turning_points or [],
+        "climax_chapter": plot_outline.climax_chapter,
+        "raw_content": plot_outline.raw_content,
+        "update_history": plot_outline.update_history or [],
+        "version": plot_outline.version,
+        "created_at": plot_outline.created_at.isoformat() if plot_outline.created_at else None,
+        "updated_at": plot_outline.updated_at.isoformat() if plot_outline.updated_at else None,
+    }
 
 @router.patch("/outline", response_model=PlotOutlineResponse)
 async def update_plot_outline(
@@ -525,15 +539,34 @@ async def ai_assist_outline_field(
 
     if characters:
         context["characters"] = [
-            {"name": c.name, "role": c.role, "archetype": c.archetype}
+            {"name": c.name, "role": c.role_type, "personality": c.personality}
             for c in characters[:10]  # 限制数量避免上下文过长
         ]
 
     # Add novel info
+    # 注意：Novel 模型没有 target_word_count 字段，使用 length_type 和 chapter_config 推断
+    # 根据小说长度类型估算目标字数
+    length_type_to_words = {
+        "short": 30000,  # 短篇：约3万字
+        "medium": 100000,  # 中篇：约10万字
+        "long": 300000,  # 长篇：约30万字
+    }
+    estimated_target_words = length_type_to_words.get(
+        novel.length_type, 100000
+    )
+    # 也可以从 chapter_config 获取总章节数来估算
+    chapter_config = novel.chapter_config or {}
+    total_chapters = chapter_config.get("total_chapters", 6)
+    # 按每章约3000字估算
+    chapter_based_estimate = total_chapters * 3000
+
     context["novel"] = {
         "title": novel.title,
         "genre": novel.genre,
-        "target_word_count": novel.target_word_count,
+        "length_type": novel.length_type,
+        "target_word_count": max(estimated_target_words, chapter_based_estimate),
+        "current_word_count": novel.word_count,
+        "total_chapters": total_chapters,
     }
 
     # Call outline service to generate suggestion
@@ -553,6 +586,121 @@ async def ai_assist_outline_field(
         alternatives=suggestion_result.get("alternatives"),
         reasoning=suggestion_result.get("reasoning"),
         generated_at=datetime.now(),
+    )
+
+
+@router.post("/outline/batch-ai-assist", response_model=BatchAIAssistResponse)
+async def batch_ai_assist_outline(
+    novel_id: UUID,
+    request: BatchAIAssistRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    批量AI辅助生成大纲主线剧情字段.
+
+    按字段顺序逐个生成，每个字段可参考前面已生成的内容。
+    支持跳过用户已编辑的字段（preserve_user_edits=True）。
+    """
+    start_time = time.time()
+
+    logger.info(
+        f"批量AI辅助生成开始: novel_id={novel_id}, "
+        f"fields={request.fields}, preserve_user_edits={request.preserve_user_edits}"
+    )
+
+    # 验证小说存在
+    novel_result = await db.execute(select(Novel).where(Novel.id == novel_id))
+    novel = novel_result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail=f"小说 {novel_id} 未找到")
+
+    # 一次性加载所有上下文数据
+    outline_result = await db.execute(
+        select(PlotOutline).where(PlotOutline.novel_id == novel_id)
+    )
+    plot_outline = outline_result.scalar_one_or_none()
+
+    world_result = await db.execute(
+        select(WorldSetting).where(WorldSetting.novel_id == novel_id)
+    )
+    world_setting = world_result.scalar_one_or_none()
+
+    char_result = await db.execute(
+        select(Character).where(Character.novel_id == novel_id)
+    )
+    characters = char_result.scalars().all()
+
+    # 构建共享上下文（与 ai_assist_outline_field 一致）
+    context: dict = {}
+
+    if plot_outline:
+        context["outline"] = {
+            "structure_type": plot_outline.structure_type,
+            "volumes": plot_outline.volumes,
+            "main_plot": plot_outline.main_plot or {},
+            "sub_plots": plot_outline.sub_plots,
+            "climax_chapter": plot_outline.climax_chapter,
+        }
+
+    if world_setting:
+        context["world_setting"] = {
+            "world_name": world_setting.world_name,
+            "world_type": world_setting.world_type,
+            "power_system": world_setting.power_system,
+        }
+
+    if characters:
+        context["characters"] = [
+            {"name": c.name, "role": c.role_type, "personality": c.personality}
+            for c in characters[:10]
+        ]
+
+    # 构建小说元信息
+    length_type_to_words = {"short": 30000, "medium": 100000, "long": 300000}
+    estimated_target_words = length_type_to_words.get(novel.length_type, 100000)
+    chapter_config = novel.chapter_config or {}
+    total_chapters = chapter_config.get("total_chapters", 6)
+    chapter_based_estimate = total_chapters * 3000
+
+    context["novel"] = {
+        "title": novel.title,
+        "genre": novel.genre,
+        "length_type": novel.length_type,
+        "target_word_count": max(estimated_target_words, chapter_based_estimate),
+        "current_word_count": novel.word_count,
+        "total_chapters": total_chapters,
+    }
+
+    # 调用批量生成服务
+    outline_service = OutlineService(db)
+    field_results = await outline_service.batch_generate_field_suggestions(
+        fields=request.fields,
+        context=context,
+        current_values=request.current_values,
+        preserve_user_edits=request.preserve_user_edits,
+        hints=request.additional_hints,
+    )
+
+    processing_time = time.time() - start_time
+
+    # 统计结果
+    success_count = sum(1 for r in field_results if r["status"] == "success")
+    skipped_count = sum(1 for r in field_results if r["status"] == "skipped")
+    failed_count = sum(1 for r in field_results if r["status"] == "failed")
+
+    logger.info(
+        f"批量AI辅助生成完成: novel_id={novel_id}, "
+        f"成功={success_count}, 跳过={skipped_count}, 失败={failed_count}, "
+        f"耗时={round(processing_time, 1)}s"
+    )
+
+    return BatchAIAssistResponse(
+        results=[BatchFieldResult(**r) for r in field_results],
+        total_fields=len(field_results),
+        success_count=success_count,
+        skipped_count=skipped_count,
+        failed_count=failed_count,
+        processing_time=round(processing_time, 1),
     )
 
 

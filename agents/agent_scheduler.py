@@ -1,8 +1,8 @@
 """Agent调度系统."""
 
 import asyncio
-from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from agents.agent_communicator import AgentCommunicator, Message
@@ -127,6 +127,7 @@ class BaseAgent:
         self.current_task = None
         self._running = True
         self._task_queue = asyncio.Queue()
+        self._background_tasks: list[asyncio.Task] = []
 
     async def start(self):
         """启动Agent."""
@@ -135,14 +136,18 @@ class BaseAgent:
         logger.info(f"🤖 Agent '{self.name}' 已启动")
 
         # 启动消息处理循环
-        asyncio.create_task(self._message_loop())
+        self._background_tasks.append(asyncio.create_task(self._message_loop()))
         # 启动任务处理循环
-        asyncio.create_task(self._task_loop())
+        self._background_tasks.append(asyncio.create_task(self._task_loop()))
 
     async def stop(self):
         """停止Agent."""
         self._running = False
         self.status = AgentStatus.OFFLINE
+        # 取消所有后台任务
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
         logger.info(f"🤖 Agent '{self.name}' 已停止")
 
     async def _message_loop(self):
@@ -154,6 +159,10 @@ class BaseAgent:
                 )
                 if message:
                     await self._handle_message(message)
+            except RuntimeError as e:
+                if "no running event loop" in str(e) or "Event loop is closed" in str(e):
+                    return  # 事件循环已关闭，退出
+                logger.error(f"❌ Agent '{self.name}' 消息处理错误: {e}")
             except Exception as e:
                 logger.error(f"❌ Agent '{self.name}' 消息处理错误: {e}")
 
@@ -208,8 +217,13 @@ class BaseAgent:
                 await self._process_task(task_data)
             except asyncio.TimeoutError:
                 continue
+            except RuntimeError as e:
+                if "no running event loop" in str(e) or "Event loop is closed" in str(e):
+                    return  # 事件循环已关闭，退出
+                logger.error(f"❌ Agent '{self.name}' 任务处理错误: {e}", exc_info=True)
+                self.status = AgentStatus.ERROR
             except Exception as e:
-                logger.error(f"❌ Agent '{self.name}' 任务处理错误: {e}")
+                logger.error(f"❌ Agent '{self.name}' 任务处理错误: {e}", exc_info=True)
                 self.status = AgentStatus.ERROR
 
     async def _process_task(self, task_data: Dict[str, Any]):
@@ -306,6 +320,10 @@ class AgentScheduler:
                 )
                 if message:
                     await self._handle_message(message)
+            except RuntimeError as e:
+                if "no running event loop" in str(e) or "Event loop is closed" in str(e):
+                    return  # 事件循环已关闭，退出
+                logger.error(f"❌ 调度器消息处理错误: {e}")
             except Exception as e:
                 logger.error(f"❌ 调度器消息处理错误: {e}")
 
@@ -515,7 +533,7 @@ class AgentScheduler:
 
             # 处理任务完成
             if status == TaskStatus.COMPLETED or status == TaskStatus.FAILED:
-                task.complete_time = asyncio.get_event_loop().time()
+                task.complete_time = asyncio.get_running_loop().time()
                 if task in self.running_tasks:
                     self.running_tasks.remove(task)
 

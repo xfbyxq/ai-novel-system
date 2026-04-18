@@ -441,3 +441,27 @@ export interface OutlineQualityReport {
     details: string[];
   }>;
 }
+
+export interface BatchAIAssistRequest {
+  fields?: string[];
+  current_values: Record<string, string>;
+  preserve_user_edits: boolean;
+  additional_hints?: string;
+}
+
+export interface BatchFieldResult {
+  field_name: string;
+  suggestion: string;
+  original_value: string;
+  status: 'success' | 'failed' | 'skipped';
+  error_message?: string;
+}
+
+export interface BatchAIAssistResponse {
+  results: BatchFieldResult[];
+  total_fields: number;
+  success_count: number;
+  skipped_count: number;
+  failed_count: number;
+  processing_time: number;
+}

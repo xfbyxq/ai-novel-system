@@ -54,22 +54,17 @@ class TestSettings:
         """测试数据库 URL 动态生成."""
         from backend.config import Settings
 
-        env_backup = os.environ.copy()
-        try:
-            os.environ["DB_PASSWORD"] = "test_pass"
-            os.environ["DOCKER_ENV"] = "false"
+        # 使用显式参数避免 .env 文件覆盖
+        settings = Settings(
+            _env_file=None,
+            DB_PASSWORD="test_pass",
+        )
 
-            settings = Settings()
-
-            # 本地环境
-            assert settings.DB_HOST == "localhost"
-            assert settings.DB_PORT == 5434
-            assert "localhost:5434" in settings.DATABASE_URL
-            assert "novel_user:test_pass" in settings.DATABASE_URL
-
-        finally:
-            os.environ.clear()
-            os.environ.update(env_backup)
+        # 本地环境（开发环境映射端口5436）
+        assert settings.DB_HOST == "localhost"
+        assert settings.DB_PORT == 5436
+        assert "localhost:5436" in settings.DATABASE_URL
+        assert "novel_user:test_pass" in settings.DATABASE_URL
 
     def test_settings_docker_environment(self):
         """测试 Docker 环境配置."""
@@ -95,20 +90,16 @@ class TestSettings:
         """测试 Redis URL 配置."""
         from backend.config import Settings
 
-        env_backup = os.environ.copy()
-        try:
-            os.environ["DB_PASSWORD"] = "test_pass"
-            os.environ["DOCKER_ENV"] = "false"
+        # 使用显式参数避免 .env 文件覆盖
+        settings = Settings(
+            _env_file=None,
+            DB_PASSWORD="test_pass",
+        )
 
-            settings = Settings()
-
-            assert settings.REDIS_URL == "redis://localhost:6379/0"
-            assert settings.CELERY_BROKER_URL == "redis://localhost:6379/1"
-            assert settings.CELERY_RESULT_BACKEND == "redis://localhost:6379/2"
-
-        finally:
-            os.environ.clear()
-            os.environ.update(env_backup)
+        # 本地开发环境（映射端口6382）
+        assert settings.REDIS_URL == "redis://localhost:6382/0"
+        assert settings.CELERY_BROKER_URL == "redis://localhost:6382/1"
+        assert settings.CELERY_RESULT_BACKEND == "redis://localhost:6382/2"
 
     def test_settings_docker_redis_url(self):
         """测试 Docker 环境 Redis URL."""
@@ -150,24 +141,20 @@ class TestSettings:
             os.environ.update(env_backup)
 
     def test_settings_review_iterations(self):
-        """测试审查迭代次数配置."""
+        """测试审查迭代次数配置的默认值."""
         from backend.config import Settings
 
-        env_backup = os.environ.copy()
-        try:
-            os.environ["DB_PASSWORD"] = "test_pass"
+        # 直接传入默认值测试，避免 .env 文件覆盖
+        settings = Settings(
+            _env_file=None,  # 跳过 .env 文件读取
+            DB_PASSWORD="test_pass",
+        )
 
-            settings = Settings()
-
-            # 验证默认迭代次数
-            assert settings.MAX_WORLD_REVIEW_ITERATIONS == 5
-            assert settings.MAX_CHARACTER_REVIEW_ITERATIONS == 5
-            assert settings.MAX_PLOT_REVIEW_ITERATIONS == 5
-            assert settings.MAX_CHAPTER_REVIEW_ITERATIONS == 5
-
-        finally:
-            os.environ.clear()
-            os.environ.update(env_backup)
+        # 验证默认迭代次数
+        assert settings.MAX_WORLD_REVIEW_ITERATIONS == 5
+        assert settings.MAX_CHARACTER_REVIEW_ITERATIONS == 5
+        assert settings.MAX_PLOT_REVIEW_ITERATIONS == 5
+        assert settings.MAX_CHAPTER_REVIEW_ITERATIONS == 5
 
     def test_settings_feature_flags(self):
         """测试功能开关配置."""

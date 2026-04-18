@@ -13,7 +13,7 @@ import asyncio
 import logging
 import random
 from functools import wraps
-from typing import Any, Callable, Optional, Set, Type, TypeVar
+from typing import Callable, Optional, Set, Type, TypeVar
 
 from backend.config import settings
 

@@ -1,16 +1,16 @@
 """具体的Agent实现."""
 
 import asyncio
-from typing import Dict, Any
+from typing import Any, Dict
 
 from agents.agent_communicator import AgentCommunicator
 from agents.agent_scheduler import BaseAgent
-from llm.qwen_client import QwenClient
-from llm.prompt_manager import PromptManager
-from llm.cost_tracker import CostTracker
 
 # Use the project-wide logger
 from core.logging_config import logger
+from llm.cost_tracker import CostTracker
+from llm.prompt_manager import PromptManager
+from llm.qwen_client import QwenClient
 
 
 class MarketAnalysisAgent(BaseAgent):
@@ -485,7 +485,7 @@ class PublishingAgent(BaseAgent):
                 "novel_title": novel_data.get("title", "未命名小说"),
                 "chapter_number": chapter_data.get("chapter_number", 1),
                 "publish_status": "success",
-                "publish_time": asyncio.get_event_loop().time(),
+                "publish_time": asyncio.get_running_loop().time(),
                 "platform_book_id": f"book_{platform}_{novel_data.get('id', '0')}",
                 "platform_chapter_id": f"chapter_{platform}_{chapter_data.get('chapter_number', '1')}",
             }

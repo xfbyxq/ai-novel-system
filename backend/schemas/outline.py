@@ -391,6 +391,57 @@ class AIAssistResponse(BaseModel):
     reasoning: Optional[str] = Field(default=None, description="生成理由说明")
 
 
+class BatchAIAssistRequest(BaseModel):
+    """批量AI辅助生成大纲字段请求模型."""
+
+    fields: list[str] = Field(
+        default_factory=lambda: [
+            "core_conflict",
+            "protagonist_goal",
+            "antagonist",
+            "progression_path",
+            "emotional_arc",
+            "key_revelations",
+            "character_growth",
+            "resolution",
+        ],
+        description="要生成的字段列表（按生成顺序排列）",
+    )
+    current_values: dict[str, str] = Field(
+        default_factory=dict,
+        description="各字段的当前值（用于跳过判断和上下文参考）",
+    )
+    preserve_user_edits: bool = Field(
+        default=True,
+        description="是否跳过已有值的字段",
+    )
+    additional_hints: Optional[str] = Field(
+        default=None,
+        description="额外提示信息",
+    )
+
+
+class BatchFieldResult(BaseModel):
+    """单个字段的批量生成结果."""
+
+    field_name: str = Field(..., description="字段名")
+    suggestion: str = Field(default="", description="AI生成的建议内容")
+    original_value: str = Field(default="", description="原始值")
+    status: str = Field(..., description="生成状态: success / failed / skipped")
+    error_message: Optional[str] = Field(default=None, description="失败时的错误信息")
+
+
+class BatchAIAssistResponse(BaseModel):
+    """批量AI辅助生成响应模型."""
+
+    results: list[BatchFieldResult] = Field(..., description="每个字段的生成结果")
+    total_fields: int = Field(..., description="请求的总字段数")
+    success_count: int = Field(..., description="成功生成的字段数")
+    skipped_count: int = Field(..., description="跳过的字段数")
+    failed_count: int = Field(..., description="失败的字段数")
+    processing_time: float = Field(..., description="总处理时间（秒）")
+
+
 class OutlineSyncResponse(BaseModel):
     """大纲同步响应模型."""
 

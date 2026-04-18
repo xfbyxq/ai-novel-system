@@ -224,7 +224,7 @@ class DataDeduplicationService:
                                     )
                                     if (datetime.now() - create_time).days > days:
                                         keys_to_delete.append(key)
-                                except:
+                                except (ValueError, TypeError):
                                     pass
 
                 if cursor == 0:

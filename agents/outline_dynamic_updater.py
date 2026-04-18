@@ -562,10 +562,8 @@ class OutlineDynamicUpdater:
                 if isinstance(foreshadowing, list) and foreshadowing:
                     parts.append(f"伏笔: {'; '.join(str(f) for f in foreshadowing)}")
             if "content" in ch:
-                # 如果传入的是原始内容（非摘要），取摘要
+                # 保留完整内容，由统一压缩处理
                 content = ch["content"]
-                if len(content) > 200:
-                    content = content[:200] + "..."
                 parts.append(f"内容片段: {content}")
 
             parts.append("")

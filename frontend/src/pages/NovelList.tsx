@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Typography, Table, Button, Space, Select, Modal, Form, Input, message,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, EyeOutlined, RobotOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EyeOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import type { Novel, NovelCreate } from '@/api/types';
 import { getNovels, createNovel, deleteNovel } from '@/api/novels';
 import StatusBadge from '@/components/StatusBadge';
@@ -17,34 +17,54 @@ export default function NovelList() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [keyword, setKeyword] = useState<string>('');
+  const [searchInput, setSearchInput] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [form] = Form.useForm<NovelCreate>();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getNovels(page, 10, statusFilter);
+      const res = await getNovels(page, 10, statusFilter, keyword);
       setNovels(res.items);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, keyword]);
 
   useEffect(() => { load(); }, [load]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, []);
+
+  // 搜索防抖：输入延迟300ms后触发实际搜索
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setKeyword(value);
+      setPage(1);
+    }, 300);
+  };
 
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
       setCreating(true);
-      const novel = await createNovel(values);
+      await createNovel(values);
       message.success('小说创建成功');
       setModalOpen(false);
       form.resetFields();
-      navigate(`/novels/${novel.id}`);
+      load();
     } catch {
       // validation error, do nothing
     } finally {
@@ -71,6 +91,15 @@ export default function NovelList() {
       <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
         <Typography.Title level={4} style={{ margin: 0 }}>小说管理</Typography.Title>
         <Space>
+          <Input.Search
+            placeholder="搜索小说标题"
+            allowClear
+            style={{ width: 200 }}
+            prefix={<SearchOutlined />}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onSearch={handleSearchChange}
+          />
           <Select
             allowClear
             placeholder="状态筛选"

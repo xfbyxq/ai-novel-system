@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "novel-system"
-version = "2.0.0"
+version = "2.5.0"
 description = "AI-powered novel generation system using CrewAI and Qwen"
 authors = ["Novel System"]
 package-mode = false
@@ -28,6 +28,8 @@ aiofiles = "^25.1.0"
 tenacity = "^9.1.4"
 cryptography = "^46.0.5"
 playwright = "^1.58.0"
+selenium = "^4.27.0"
+requests = "^2.32.0"
 typing-extensions = ">=4.0"
 mako = ">=1.0"
 pydantic-core = ">=2.0"
@@ -39,11 +41,14 @@ numpy = "^1.26.0"
 scikit-learn = "^1.5.0"
 joblib = "^1.4.0"
 psutil = "^7.2.2"
+# Neo4j 图数据库驱动
+neo4j = "^5.15.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 pytest-asyncio = "^0.24.0"
 ruff = "^0.8.0"
+faker = "^40.12.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -74,6 +79,10 @@ markers = [
     "ui: UI interaction tests",
     "edge_case: edge case tests",
     "creation: novel creation flow tests",
+    "graph: tests requiring Neo4j graph database",
+    "ai_e2e: AI-driven E2E test using LLM + MCP chrome-devtools",
+    "ai_smoke: AI smoke test (P0 critical path only)",
+    "ai_regression: AI regression test (P1 business flow)",
 ]
 
 [tool.coverage.run]

@@ -75,6 +75,38 @@ class Settings(BaseSettings):
     DASHSCOPE_MODEL: str = "qwen-plus"
     DASHSCOPE_BASE_URL: str = ""  # Coding Plan Pro 的 base URL
 
+    # 模型上下文窗口配置
+    MODEL_CONTEXT_WINDOW: int = int(os.getenv("MODEL_CONTEXT_WINDOW", "196608"))
+    MODEL_MAX_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MAX_OUTPUT_TOKENS", "16384"))
+    MODEL_MIN_OUTPUT_TOKENS: int = int(os.getenv("MODEL_MIN_OUTPUT_TOKENS", "1024"))
+
+    # 上下文压缩器配置
+    CONTEXT_COMPRESSOR_MAX_TOKENS: int = int(
+        os.getenv("CONTEXT_COMPRESSOR_MAX_TOKENS", "40000")
+    )  # 压缩阈值，使用模型窗口约20%（从12000提高到40000）
+
+    # 热记忆完整内容配置（优化连贯性）
+    HOT_MEMORY_CHAPTERS: int = int(
+        os.getenv("HOT_MEMORY_CHAPTERS", "5")
+    )  # 热记忆使用完整内容的章节数（从3增加到5）
+    WARM_MEMORY_CHAPTERS: int = int(
+        os.getenv("WARM_MEMORY_CHAPTERS", "10")
+    )  # 温记忆保留关键事件的章节数（从7增加到10）
+    PREVIOUS_ENDING_LENGTH: int = int(
+        os.getenv("PREVIOUS_ENDING_LENGTH", "500")
+    )  # 上一章结尾保留长度（确保章节衔接）
+    HOT_MEMORY_ENABLE_FULL_CONTENT: bool = (
+        os.getenv("HOT_MEMORY_ENABLE_FULL_CONTENT", "true").lower() == "true"
+    )  # 是否启用完整内容热记忆
+
+    # 图库连续性检查配置
+    ENABLE_GRAPH_CONTINUITY_CHECK: bool = (
+        os.getenv("ENABLE_GRAPH_CONTINUITY_CHECK", "true").lower() == "true"
+    )  # 是否在连续性审查时启用图库冲突检测
+    GRAPH_CONTINUITY_CHECK_TIMEOUT: int = int(
+        os.getenv("GRAPH_CONTINUITY_CHECK_TIMEOUT", "5")
+    )  # 图库冲突检测超时时间（秒）
+
     # Database
     DB_USER: str = "novel_user"
     DB_PASSWORD: str | None = None  # 必须通过环境变量设置，禁止硬编码
@@ -131,7 +163,7 @@ class Settings(BaseSettings):
             return 5432  # 开发 Docker 内部端口
         elif docker_env in ("true", "1"):
             return 5432  # 生产 Docker 内部端口
-        return 5434  # 本地开发映射端口
+        return 5436  # 本地开发映射端口（开发环境容器映射到5436）
 
     @property
     def DATABASE_URL(self) -> str:
@@ -152,7 +184,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/0"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/0"
-        return "redis://localhost:6379/0"
+        return "redis://localhost:6382/0"  # 本地开发映射端口（开发环境容器映射到6382）
 
     @property
     def CELERY_BROKER_URL(self) -> str:
@@ -162,7 +194,7 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/1"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/1"
-        return "redis://localhost:6379/1"
+        return "redis://localhost:6382/1"  # 本地开发映射端口
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
@@ -172,13 +204,21 @@ class Settings(BaseSettings):
             return "redis://redis_dev:6379/2"
         elif docker_env in ("true", "1"):
             return "redis://redis:6379/2"
-        return "redis://localhost:6379/2"
+        return "redis://localhost:6382/2"  # 本地开发映射端口
 
     # Application
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+
+    # 日志配置
+    LOG_DIR: str = "logs"  # 日志目录（相对于项目根目录）
+    LOG_FILE_MAX_BYTES: int = 10 * 1024 * 1024  # 单个日志文件大小（默认10MB）
+    LOG_FILE_BACKUP_COUNT: int = 5  # 轮转备份数量
+    LOG_RETENTION_DAYS: int = 7  # 日志保留天数
+    LOG_FILE_NAME: str = "app.log"  # 后端日志文件名
+    LOG_WORKER_FILE_NAME: str = "worker.log"  # Worker日志文件名
 
     # CORS 配置（安全加固）
     # 生产环境应设置为实际域名，如：https://api.example.com,https://app.example.com
@@ -221,13 +261,30 @@ class Settings(BaseSettings):
     # 大纲审查：检查结构完整性、节奏把控、冲突张力、伏笔设计
     ENABLE_PLOT_REVIEW: bool = True
     # 章节审查：Writer-Editor 循环，检查语言流畅度、情节逻辑、角色一致性
+    # 注意：跨章节连贯性检查已合并到编辑的 cross_chapter_coherence 维度
     ENABLE_CHAPTER_REVIEW: bool = True
     # 投票共识：企划阶段关键决策由多 Agent 投票决定
     ENABLE_VOTING: bool = True
     # 设定查询：写作过程中 Writer 可查询世界观/角色/大纲设定
     ENABLE_QUERY: bool = True
     # 章节大纲细化：在 ChapterPlanner 之后、Writer 之前，将章节计划展开为详细大纲
+    # 注意：现已改为按需调用，根据章节复杂度动态决定是否需要细化
     ENABLE_OUTLINE_REFINEMENT: bool = True
+    # 独立连续性审查：已废弃，连续性检查已合并到编辑的 cross_chapter_coherence 维度
+    # 保留此配置作为降级开关，设为 False 时使用新流程
+    ENABLE_STANDALONE_CONTINUITY_CHECK: bool = False
+    # 预防式连贯性检查：章节策划后检查潜在连贯性问题，在生成前预警
+    ENABLE_CONTINUITY_CHECK: bool = True
+    # 连贯性质量阈值：预防式检查的通过阈值
+    CONTINUITY_QUALITY_THRESHOLD: float = 7.0
+
+    # --- 详细评估报告配置 ---
+    # 启用详细问题报告：输出包含位置定位、具体表现、优先级分类的问题列表
+    ENABLE_DETAILED_ISSUE_REPORT: bool = True
+    # 启用优先级分类修订：按优先级（影响阅读体验/提升精彩度/细节打磨）分组输出修订建议
+    ENABLE_PRIORITY_REVISION: bool = True
+    # 启用聚合维度评分：输出连贯性、合理性、趣味性三个聚合维度的星级评分
+    ENABLE_AGGREGATE_RATINGS: bool = True
 
     # --- 质量阈值 (1-10分) ---
     # 评分达到阈值即停止迭代，分数越高要求越严格
@@ -245,6 +302,7 @@ class Settings(BaseSettings):
     MAX_PLOT_REVIEW_ITERATIONS: int = 5  # 大纲审查最大迭代（从3增加到5）
     MAX_CHAPTER_REVIEW_ITERATIONS: int = 5  # 章节审查最大迭代（从3增加到5）
     MAX_FIX_ITERATIONS: int = 3  # 连续性修复最大迭代（从2增加到3）
+    MAX_TOOL_CALL_ITERATIONS: int = 10  # AI Chat 工具调用最大迭代次数
 
     # --- 超时机制（熔断保护） ---
     # 单次审查迭代超时时间（秒），防止 LLM 调用卡死导致整个循环挂起
@@ -286,6 +344,88 @@ class Settings(BaseSettings):
     REFLECTION_MIN_CHAPTERS: int = 3  # 启动长期反思所需的最少章节数
     REFLECTION_LESSON_BUDGET: int = 600  # 注入 prompt 时的字符预算上限
 
+    # ============================================================
+    # Neo4j 图数据库配置
+    # ============================================================
+    # 图数据库用于存储小说中的实体关系网络，支持：
+    # - 多跳关系查询（如"A的师傅的徒弟"）
+    # - 角色影响力分析
+    # - 社区发现
+    # - 一致性冲突检测
+    # ============================================================
+
+    # --- 功能开关 ---
+    # 图数据库总开关，关闭时系统正常运行但缺少图分析能力
+    ENABLE_GRAPH_DATABASE: bool = True
+    # 实体自动抽取开关，章节生成后自动识别角色、地点、事件等
+    ENABLE_ENTITY_EXTRACTION: bool = True
+    # 章节生成后自动同步到图数据库
+    ENABLE_GRAPH_SYNC_ON_CHAPTER: bool = True
+
+    # --- Neo4j 连接配置 ---
+    NEO4J_URI: str = ""  # bolt://localhost:7687
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str | None = None  # 必须通过环境变量设置
+    NEO4J_DATABASE: str = "neo4j"  # 数据库名称
+    NEO4J_MAX_CONNECTION_POOL_SIZE: int = 50
+    NEO4J_CONNECTION_TIMEOUT: int = 30  # 秒
+
+    @property
+    def NEO4J_EFFECTIVE_URI(self) -> str:
+        """自动检测Neo4j URI，根据Docker环境动态调整."""
+        docker_env = os.environ.get("DOCKER_ENV", "")
+        if docker_env == "dev":
+            return "bolt://neo4j_dev:7687"
+        elif docker_env in ("true", "1"):
+            return "bolt://neo4j:7687"
+        # 本地开发：使用映射端口
+        return self.NEO4J_URI if self.NEO4J_URI else "bolt://localhost:7688"
+
+    # --- 实体抽取配置 ---
+    # 使用LLM从章节内容中抽取实体
+    ENTITY_EXTRACTION_MODEL: str = "qwen-plus"
+    ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.7  # 置信度阈值 0-1
+    ENTITY_EXTRACTION_MAX_CONTENT_LENGTH: int = 4000  # 传入LLM的内容最大字符数
+
+    # --- 图查询缓存配置 ---
+    GRAPH_QUERY_CACHE_TTL: int = 300  # 缓存过期时间（秒）
+    GRAPH_QUERY_CACHE_MAX_SIZE: int = 100  # 最大缓存条目数
+
+    # --- Agent图查询增强配置 ---
+    # 启用后，Writer Agent 的 prompt 中会注入图数据库查询结果
+    # 包括：角色关系网络、待回收伏笔、一致性冲突警告
+    ENABLE_GRAPH_CONTEXT_INJECTION: bool = True  # 注入图上下文到 Writer prompt
+    ENABLE_GRAPH_QUERY_FOR_WRITER: bool = True  # Writer支持动态图查询
+
+    # 图查询参数配置
+    GRAPH_QUERY_DEPTH: int = 2  # 角色网络查询深度（1-3，推荐2）
+    GRAPH_CONTEXT_MAX_CHARACTERS: int = 5  # 最大查询角色数（避免prompt过长）
+    GRAPH_CONTEXT_MAX_FORESHADOWINGS: int = 5  # 最大伏笔提醒数
+    GRAPH_ENABLE_INDIRECT_RELATIONS: bool = True  # 是否查询间接关系
+    GRAPH_QUERY_RELATED_FORESHADOWINGS: bool = True  # 查询与出场角色相关的伏笔
+
+    # ============================================================
+    # AI E2E 测试配置（LLM + MCP chrome-devtools 自动化测试）
+    # ============================================================
+    # 基于 a11y 快照 UID 定位元素，通过 MCP chrome-devtools 驱动浏览器。
+    # LLM 仅在自愈（SnapshotResolver 失败时）和语义断言时使用。
+    # ============================================================
+
+    # --- AI E2E 测试开关 ---
+    AI_E2E_ENABLED: bool = False  # 总开关，CI 中默认关闭
+    AI_E2E_SELF_HEAL_ENABLED: bool = True  # 自愈功能开关
+    AI_E2E_LLM_EVAL_ENABLED: bool = True  # LLM 语义断言开关
+
+    # --- AI E2E 超时与重试 ---
+    AI_E2E_CASE_TIMEOUT: int = 120  # 单个用例超时（秒）
+    AI_E2E_STEP_TIMEOUT_MS: int = 10000  # 单步超时（毫秒）
+    AI_E2E_RETRY_COUNT: int = 2  # 元素操作失败重试次数
+
+    # --- AI E2E LLM 参数 ---
+    AI_E2E_LLM_TEMPERATURE: float = 0.1  # 自愈和断言的 LLM 温度
+    AI_E2E_LLM_MAX_TOKENS: int = 256  # 单次 LLM 调用最大 token
+    AI_E2E_CONFIDENCE_THRESHOLD: float = 0.7  # LLM 断言置信度阈值
+
     def __init__(self, **values):
         """初始化方法."""
         super().__init__(**values)
@@ -325,6 +465,7 @@ class Settings(BaseSettings):
             "MAX_CHAPTER_REVIEW_ITERATIONS", self.MAX_CHAPTER_REVIEW_ITERATIONS
         )
         self._validate_positive_int("MAX_FIX_ITERATIONS", self.MAX_FIX_ITERATIONS)
+        self._validate_positive_int("MAX_TOOL_CALL_ITERATIONS", self.MAX_TOOL_CALL_ITERATIONS)
 
         # 验证超时时间 (>0)
         self._validate_positive_int("WORLD_REVIEW_TIMEOUT", self.WORLD_REVIEW_TIMEOUT)
@@ -364,8 +505,36 @@ class Settings(BaseSettings):
                 "请通过环境变量设置：export ENCRYPTION_KEY='your_32_char_key'"
             )
 
+        # 验证 Neo4j 图数据库配置
+        if self.ENABLE_GRAPH_DATABASE:
+            # 生产环境必须配置 Neo4j 密码
+            if self.APP_ENV == "production" and not self.NEO4J_PASSWORD:
+                raise ValueError(
+                    "生产环境启用图数据库时必须配置 NEO4J_PASSWORD！\n"
+                    "请通过环境变量设置：export NEO4J_PASSWORD='your_password'"
+                )
+            # 验证连接池和超时配置
+            self._validate_positive_int(
+                "NEO4J_MAX_CONNECTION_POOL_SIZE", self.NEO4J_MAX_CONNECTION_POOL_SIZE
+            )
+            self._validate_positive_int("NEO4J_CONNECTION_TIMEOUT", self.NEO4J_CONNECTION_TIMEOUT)
+
+        # 验证实体抽取配置
+        if self.ENABLE_ENTITY_EXTRACTION:
+            if not 0 <= self.ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD <= 1:
+                raise ValueError("ENTITY_EXTRACTION_CONFIDENCE_THRESHOLD 必须在 0-1 之间")
+            if self.ENTITY_EXTRACTION_MAX_CONTENT_LENGTH < 500:
+                raise ValueError("ENTITY_EXTRACTION_MAX_CONTENT_LENGTH 必须至少为 500")
+
+        # 验证图查询缓存配置
+        if self.GRAPH_QUERY_CACHE_TTL < 0:
+            raise ValueError("GRAPH_QUERY_CACHE_TTL 必须为非负整数")
+        if self.GRAPH_QUERY_CACHE_MAX_SIZE < 1:
+            raise ValueError("GRAPH_QUERY_CACHE_MAX_SIZE 必须至少为 1")
+
         # 验证配置依赖关系
         self._validate_config_dependencies()
+        self._validate_quality_config()
 
     def _validate_threshold(self, name: str, value: float):
         """验证质量阈值在有效范围内 (1-10)."""
@@ -381,6 +550,63 @@ class Settings(BaseSettings):
         """验证非负整数配置."""
         if value < 0:
             raise ValueError(f"{name} must be non-negative, got {value}")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 小说质量改进配置 (基于《剑神归来》前6章质量分析报告)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # --- 全局一致性检查 ---
+    ENABLE_GLOBAL_CONSISTENCY_CHECK: bool = True
+    CONSISTENCY_CHECK_STRICTNESS: str = "strict"  # strict/normal/relaxed
+
+    # --- 节奏规划 ---
+    ENABLE_RHYTHM_PLANNING: bool = True
+    MAX_CONSECUTIVE_BATTLE_CHAPTERS: int = 2  # 连续战斗章节上限
+    MIN_DAILY_CHAPTERS_PER_5: int = 1  # 每5章至少1章日常/情感
+
+    # --- 词汇多样性 ---
+    ENABLE_LEXICAL_CHECK: bool = True
+    LEXICAL_CHECK_WINDOW: int = 10  # 检查最近10章
+    PHRASE_REPEAT_THRESHOLD: int = 2  # 同一短语出现次数阈值
+
+    # --- 角色情感多样性 ---
+    ENABLE_EMOTION_DIVERSITY_CHECK: bool = True
+    EMOTION_DIVERSITY_WINDOW: int = 3  # 检查最近3章
+    MIN_EMOTION_VARIETY: int = 2  # 最少情感种类数
+
+    # --- 风格一致性 ---
+    ENABLE_STYLE_CONSISTENCY_CHECK: bool = True
+    STYLE_TARGET: str = "轻松幽默"  # 从小说设定中读取
+    HUMOR_MIN_FREQUENCY: int = 1  # 每章最少幽默元素数
+
+    # --- 支线追踪 ---
+    ENABLE_SUBPLOT_TRACKING: bool = True
+    MAX_CHAPTERS_WITHOUT_SUBPLOT: int = 4  # 支线最大未出现章数
+
+    # --- 战力校验 ---
+    ENABLE_POWER_LEVEL_CHECK: bool = True
+    MIN_CHAPTERS_PER_LEVEL_UP: int = 5  # 境界提升最小章节间隔
+
+    def _validate_quality_config(self):
+        """验证质量改进相关配置."""
+        if self.MAX_CONSECUTIVE_BATTLE_CHAPTERS < 1:
+            raise ValueError("MAX_CONSECUTIVE_BATTLE_CHAPTERS 必须至少为 1")
+        if self.MIN_DAILY_CHAPTERS_PER_5 < 0:
+            raise ValueError("MIN_DAILY_CHAPTERS_PER_5 不能为负数")
+        if self.LEXICAL_CHECK_WINDOW < 3:
+            raise ValueError("LEXICAL_CHECK_WINDOW 必须至少为 3")
+        if self.PHRASE_REPEAT_THRESHOLD < 1:
+            raise ValueError("PHRASE_REPEAT_THRESHOLD 必须至少为 1")
+        if self.EMOTION_DIVERSITY_WINDOW < 2:
+            raise ValueError("EMOTION_DIVERSITY_WINDOW 必须至少为 2")
+        if self.MIN_EMOTION_VARIETY < 1:
+            raise ValueError("MIN_EMOTION_VARIETY 必须至少为 1")
+        if self.HUMOR_MIN_FREQUENCY < 0:
+            raise ValueError("HUMOR_MIN_FREQUENCY 不能为负数")
+        if self.MAX_CHAPTERS_WITHOUT_SUBPLOT < 1:
+            raise ValueError("MAX_CHAPTERS_WITHOUT_SUBPLOT 必须至少为 1")
+        if self.MIN_CHAPTERS_PER_LEVEL_UP < 1:
+            raise ValueError("MIN_CHAPTERS_PER_LEVEL_UP 必须至少为 1")
 
     def _validate_config_dependencies(self):
         """验证配置项之间的依赖关系."""

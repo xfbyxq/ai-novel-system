@@ -20,7 +20,6 @@ Usage:
 
 import gc
 import logging
-import os
 import resource
 import tracemalloc
 from contextlib import contextmanager

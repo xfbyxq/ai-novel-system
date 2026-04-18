@@ -18,8 +18,10 @@ build/
 .DS_Store
 node_modules/
 *.log
+logs/
 
 # Playwright
+ai_test_reports/
 test-results/
 playwright-report/
 blob-report/
@@ -28,19 +30,23 @@ playwright/.auth/
 
 # IDE & Tools
 .trae/
-# .qoder/
+.qoder/
+.vite/
 # GitHub Actions 工作流需要保留
 !.github/workflows/
 # 其他 GitHub 相关目录
 .github/ISSUE_TEMPLATE/
 .github/CODEOWNERS
 
-# 临时测试文件
+# 临时测试文件 (只忽略根目录下的)
 check_*.py
-test_*.py
+/test_*.py
 create_test_*.py
 test_*.html
 final_check.py
+
+# 保留 tests 目录（排除上面的 /test_*.py 规则）
+!tests/
 # 明确排除特定日志文件
 novel_system.log*
 
@@ -49,3 +55,6 @@ novel_memory/
 *.db
 *.db-*
 *.db.*
+# SQLite WAL 文件（可能不带 .db 后缀）
+*-shm
+*-wal

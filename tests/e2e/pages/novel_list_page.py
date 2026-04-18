@@ -31,7 +31,7 @@ class NovelListPage(BasePage):
         # 消息提示
         "success_message": ".ant-message-success",
         "error_message": ".ant-message-error",
-        "loading_spinner": ".ant-spin",
+        "loading_spinner": ".ant-spin-spinning",
         # 筛选和排序
         "status_filter": "[data-testid='status-filter']",
         "sort_select": "[data-testid='sort-select']",
@@ -132,8 +132,12 @@ class NovelListPage(BasePage):
         # 确保所有下拉选项都已关闭
         self.page.wait_for_timeout(1000)
         self.click_element(self.SELECTORS["submit_button"])
-        # 等待加载状态消失
-        self.wait_for_element_hidden(self.SELECTORS["loading_spinner"], timeout=15000)
+        # 等待模态框关闭或成功消息出现
+        try:
+            self.wait_for_element_hidden(self.SELECTORS["create_modal"], timeout=15000)
+        except:
+            # 模态框可能已经关闭，检查成功消息
+            self.page.wait_for_timeout(2000)
 
     def cancel_create_form(self):
         """取消创建小说表单."""
@@ -164,11 +168,21 @@ class NovelListPage(BasePage):
 
     def get_novel_count(self) -> int:
         """
-        获取小说数量.
+        获取小说总数（从分页组件读取）.
 
         Returns:
-            int: 小说卡片数量
+            int: 小说总数
         """
+        # 读取分页组件中的总数文本 "共 X 部"
+        pagination_elem = self.page.locator(".ant-pagination-total-text")
+        if pagination_elem.count() > 0:
+            pagination_text = pagination_elem.text_content()
+            if pagination_text:
+                import re
+                match = re.search(r"共\s*(\d+)", pagination_text)
+                if match:
+                    return int(match.group(1))
+        # 回退：如果找不到分页总数，返回可见行数
         return self.get_element_count(self.SELECTORS["novel_cards"])
 
     def get_novel_titles(self) -> List[str]:
@@ -235,9 +249,20 @@ class NovelListPage(BasePage):
         Args:
             index: 小说卡片索引
         """
-        novel_cards = self.get_element(self.SELECTORS["novel_cards"]).all()
-        if index < len(novel_cards):
-            novel_cards[index].click()
+        # 点击小说标题链接而不是整行，因为前端只有标题是可点击的
+        title_links = self.get_element(self.SELECTORS["novel_card_title"]).all()
+        if index < len(title_links):
+            title_links[index].click()
+
+    def click_novel_by_title(self, title: str):
+        """
+        点击指定标题的小说.
+
+        Args:
+            title: 小说标题
+        """
+        title_link = self.page.locator(f"a:has-text('{title}')")
+        title_link.first.click()
 
     def filter_by_status(self, status: str):
         """
@@ -283,7 +308,8 @@ class NovelListPage(BasePage):
         Args:
             timeout: 超时时间(毫秒)
         """
-        self.wait_for_element_visible(self.SELECTORS["novel_cards"], timeout=timeout)
+        # 使用 first 避免 strict mode violation（多行匹配）
+        self.page.locator(self.SELECTORS["novel_cards"]).first.wait_for(state="visible", timeout=timeout)
 
     def refresh_novels(self):
         """刷新小说列表 - 通过页面重新加载实现."""

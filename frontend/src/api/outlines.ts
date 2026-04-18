@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { WorldSetting, PlotOutline } from './types';
+import type { WorldSetting, PlotOutline, BatchAIAssistRequest, BatchAIAssistResponse } from './types';
 
 export async function getWorldSetting(novelId: string): Promise<WorldSetting | null> {
   const { data } = await apiClient.get(`/novels/${novelId}/world-setting`);
@@ -163,5 +163,16 @@ export async function aiAssistOutline(
   reasoning?: string;
 }> {
   const { data } = await apiClient.post(`/novels/${novelId}/outline/ai-assist`, request);
+  return data;
+}
+
+export async function batchAiAssistOutline(
+  novelId: string,
+  request: BatchAIAssistRequest,
+): Promise<BatchAIAssistResponse> {
+  const { data } = await apiClient.post(
+    `/novels/${novelId}/outline/batch-ai-assist`,
+    request,
+  );
   return data;
 }
