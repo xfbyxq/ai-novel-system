@@ -1,16 +1,17 @@
 """
 统一连贯性评分体系.
 
-提供六维度连贯性评分卡，从各检查器结果中提取并汇聚分数，
+提供七维度连贯性评分卡，从各检查器结果中提取并汇聚分数，
 支持跨章节趋势分析和薄弱维度识别。
 
-六维度：
-- 情节连贯性 (plot_coherence): 权重 0.25
-- 角色一致性 (character_consistency): 权重 0.25
-- 世界观一致性 (world_consistency): 权重 0.20
+七维度：
+- 情节连贯性 (plot_coherence): 权重 0.22
+- 角色一致性 (character_consistency): 权重 0.22
+- 世界观一致性 (world_consistency): 权重 0.18
 - 时间线连贯性 (timeline_consistency): 权重 0.10
-- 空间连贯性 (spatial_consistency): 权重 0.10
+- 空间连贯性 (spatial_consistency): 权重 0.08
 - 伏笔完整性 (foreshadowing_integrity): 权重 0.10
+- 风格一致性 (style_consistency): 权重 0.10
 """
 
 from dataclasses import dataclass, field
@@ -136,18 +137,19 @@ class TrendReport:
 @dataclass
 class CoherenceScorecard:
     """
-    六维度统一连贯性评分卡.
+    七维度统一连贯性评分卡.
 
     汇聚各检查器的评估结果，提供统一的连贯性评分视图。
 
     Attributes:
         chapter_number: 章节号
-        plot_coherence: 情节连贯性分数 (权重 0.25)
-        character_consistency: 角色一致性分数 (权重 0.25)
-        world_consistency: 世界观一致性分数 (权重 0.20)
+        plot_coherence: 情节连贯性分数 (权重 0.22)
+        character_consistency: 角色一致性分数 (权重 0.22)
+        world_consistency: 世界观一致性分数 (权重 0.18)
         timeline_consistency: 时间线连贯性分数 (权重 0.10)
-        spatial_consistency: 空间连贯性分数 (权重 0.10)
+        spatial_consistency: 空间连贯性分数 (权重 0.08)
         foreshadowing_integrity: 伏笔完整性分数 (权重 0.10)
+        style_consistency: 风格一致性分数 (权重 0.10)
         dimension_details: 各维度详细信息字典
         created_at: 创建时间 ISO 格式字符串
     """
@@ -159,17 +161,19 @@ class CoherenceScorecard:
     timeline_consistency: float = 0.0
     spatial_consistency: float = 0.0
     foreshadowing_integrity: float = 0.0
+    style_consistency: float = 0.0
     dimension_details: Dict[str, DimensionDetail] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     # 维度权重常量
     WEIGHTS: ClassVar[Dict[str, float]] = {
-        "plot_coherence": 0.25,
-        "character_consistency": 0.25,
-        "world_consistency": 0.20,
+        "plot_coherence": 0.22,
+        "character_consistency": 0.22,
+        "world_consistency": 0.18,
         "timeline_consistency": 0.10,
-        "spatial_consistency": 0.10,
+        "spatial_consistency": 0.08,
         "foreshadowing_integrity": 0.10,
+        "style_consistency": 0.10,
     }
 
     # 维度中文名映射
@@ -180,6 +184,7 @@ class CoherenceScorecard:
         "timeline_consistency": "时间线连贯性",
         "spatial_consistency": "空间连贯性",
         "foreshadowing_integrity": "伏笔完整性",
+        "style_consistency": "风格一致性",
     }
 
     @property
@@ -196,6 +201,7 @@ class CoherenceScorecard:
             "timeline_consistency": self.timeline_consistency,
             "spatial_consistency": self.spatial_consistency,
             "foreshadowing_integrity": self.foreshadowing_integrity,
+            "style_consistency": self.style_consistency,
         }
 
         weighted_sum = 0.0
@@ -224,6 +230,7 @@ class CoherenceScorecard:
             "timeline_consistency": self.timeline_consistency,
             "spatial_consistency": self.spatial_consistency,
             "foreshadowing_integrity": self.foreshadowing_integrity,
+            "style_consistency": self.style_consistency,
         }
 
         return [dim for dim, score in scores.items() if score < threshold]
@@ -243,6 +250,7 @@ class CoherenceScorecard:
                 "timeline_consistency": self.timeline_consistency,
                 "spatial_consistency": self.spatial_consistency,
                 "foreshadowing_integrity": self.foreshadowing_integrity,
+                "style_consistency": self.style_consistency,
             },
             "overall_score": self.overall_score,
             "weights": self.WEIGHTS,
@@ -270,6 +278,7 @@ class CoherenceScorecard:
             "timeline_consistency": self.timeline_consistency,
             "spatial_consistency": self.spatial_consistency,
             "foreshadowing_integrity": self.foreshadowing_integrity,
+            "style_consistency": self.style_consistency,
         }
 
         for dim, score in scores.items():
@@ -329,6 +338,7 @@ class CoherenceScorecard:
             timeline_consistency=scores.get("timeline_consistency", 0.0),
             spatial_consistency=scores.get("spatial_consistency", 0.0),
             foreshadowing_integrity=scores.get("foreshadowing_integrity", 0.0),
+            style_consistency=scores.get("style_consistency", 0.0),
             dimension_details=dimension_details,
             created_at=data.get("created_at", datetime.now().isoformat()),
         )
@@ -375,6 +385,11 @@ class CoherenceScorecardBuilder:
         foreshadowing_report: Optional[Any] = None,
         world_review_result: Optional[Dict[str, Any]] = None,
         spatial_issues: Optional[List[Any]] = None,
+        # 【质量改进】新增：新检查器报告
+        global_consistency_report: Optional[Dict[str, Any]] = None,
+        lexical_diversity_report: Optional[Dict[str, Any]] = None,
+        emotion_diversity_reports: Optional[Dict[str, Any]] = None,
+        style_consistency_report: Optional[Dict[str, Any]] = None,
     ) -> CoherenceScorecard:
         """从各检查器结果构建评分卡.
 
@@ -387,6 +402,10 @@ class CoherenceScorecardBuilder:
             foreshadowing_report: ForeshadowingReport 对象或字典
             world_review_result: 世界观审查结果字典
             spatial_issues: 空间问题列表
+            global_consistency_report: GlobalConsistencyChecker 报告 (to_dict)
+            lexical_diversity_report: LexicalDiversityChecker 报告 (to_dict)
+            emotion_diversity_reports: {角色名: EmotionDiversityChecker.to_dict()}
+            style_consistency_report: StyleConsistencyChecker 报告 (to_dict)
 
         Returns:
             构建好的 CoherenceScorecard 实例
@@ -405,6 +424,68 @@ class CoherenceScorecardBuilder:
             foreshadowing_report
         )
 
+        # 【质量改进】从新检查器提取风格一致性分数
+        style_score, style_detail = self._extract_style_score(style_consistency_report)
+
+        # 【质量改进】用新检查器报告覆盖/补充原有分数
+        # GlobalConsistencyChecker → character_consistency (如果更严格)
+        if global_consistency_report:
+            gc_score = global_consistency_report.get("overall_score")
+            if gc_score is not None and gc_score < char_score:
+                # 一致性检查器发现的问题比角色验证更严重时，降低分数
+                self.logger.info(
+                    f"[Scorecard] 全局一致性分数 {gc_score:.1f} < 角色一致性 {char_score:.1f}，"
+                    f"采用较低值"
+                )
+                char_score = gc_score
+                char_detail.issues.extend(
+                    self._extract_issues_from_report(global_consistency_report)
+                )
+                char_detail.suggestions.extend(
+                    self._extract_suggestions_from_report(global_consistency_report)
+                )
+
+        # LexicalDiversityChecker → plot_coherence (文笔影响叙事质量)
+        if lexical_diversity_report:
+            lex_score = lexical_diversity_report.get("diversity_score")
+            if lex_score is not None:
+                # 词汇多样性评分取较低值作为 plot_coherence 的修正
+                if lex_score < plot_score:
+                    self.logger.info(
+                        f"[Scorecard] 词汇多样性 {lex_score:.1f} < 情节连贯性 {plot_score:.1f}，"
+                        f"采用较低值"
+                    )
+                    plot_score = lex_score
+                    plot_detail.issues.extend(
+                        self._extract_issues_from_report(lexical_diversity_report)
+                    )
+                    plot_detail.suggestions.extend(
+                        self._extract_suggestions_from_report(lexical_diversity_report)
+                    )
+
+        # EmotionDiversityChecker → character_consistency (取加权平均)
+        if emotion_diversity_reports:
+            emotion_scores = []
+            for char_name, em_report in emotion_diversity_reports.items():
+                em_score = em_report.get("diversity_score")
+                if em_score is not None:
+                    emotion_scores.append(em_score)
+                    # 将情感问题加入角色一致性详情
+                    if not em_report.get("passed", True):
+                        char_detail.issues.extend(
+                            em_report.get("issues", [])
+                        )
+                        char_detail.suggestions.extend(
+                            em_report.get("suggestions", [])
+                        )
+            if emotion_scores:
+                avg_emotion = sum(emotion_scores) / len(emotion_scores)
+                # 与原有的 char_score 取加权平均（情感占 40%）
+                char_score = char_score * 0.6 + avg_emotion * 0.4
+                char_detail.evidence.append(
+                    f"情感多样性平均={avg_emotion:.1f} ({len(emotion_scores)} 个角色)"
+                )
+
         # 构建评分卡
         scorecard = CoherenceScorecard(
             chapter_number=chapter_number,
@@ -414,6 +495,7 @@ class CoherenceScorecardBuilder:
             timeline_consistency=timeline_score,
             spatial_consistency=spatial_score,
             foreshadowing_integrity=foreshadow_score,
+            style_consistency=style_score,
             dimension_details={
                 "plot_coherence": plot_detail,
                 "character_consistency": char_detail,
@@ -421,6 +503,7 @@ class CoherenceScorecardBuilder:
                 "timeline_consistency": timeline_detail,
                 "spatial_consistency": spatial_detail,
                 "foreshadowing_integrity": foreshadow_detail,
+                "style_consistency": style_detail,
             },
         )
 
@@ -831,6 +914,114 @@ class CoherenceScorecardBuilder:
             score=score, issues=issues, suggestions=suggestions, evidence=evidence
         )
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # 质量改进：从新检查器提取分数
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _extract_style_score(
+        self,
+        style_consistency_report: Optional[Dict[str, Any]],
+    ) -> Tuple[float, DimensionDetail]:
+        """从风格一致性报告提取风格一致性分数.
+
+        Args:
+            style_consistency_report: StyleConsistencyChecker.to_dict()
+
+        Returns:
+            (分数, 维度详情) 元组
+        """
+        score = self.DEFAULT_SCORE
+        issues: List[Dict[str, Any]] = []
+        suggestions: List[str] = []
+        evidence: List[str] = []
+
+        if not style_consistency_report:
+            evidence.append("无风格一致性数据，使用默认分数")
+            return score, DimensionDetail(
+                score=score, issues=issues, suggestions=suggestions, evidence=evidence
+            )
+
+        # StyleConsistencyChecker 的 style_match_score 是 0-1，需映射到 0-10
+        style_match = style_consistency_report.get("style_match_score", 0.0)
+        if style_match > 0:
+            score = style_match * 10.0
+            evidence.append(f"风格匹配度: {style_match:.0%} → {score:.1f}/10")
+
+        # 幽默元素检测
+        humor_count = style_consistency_report.get("humor_count", 0)
+        if humor_count > 0:
+            evidence.append(f"检测到 {humor_count} 个幽默元素")
+        else:
+            evidence.append("未检测到幽默元素")
+
+        # 提取问题和建议
+        for issue in style_consistency_report.get("issues", []):
+            issues.append({
+                "description": issue,
+                "severity": "medium",
+            })
+        for suggestion in style_consistency_report.get("suggestions", []):
+            suggestions.append(suggestion)
+
+        # 如果检查未通过，降低分数
+        if not style_consistency_report.get("passed", True):
+            detected_style = style_consistency_report.get("detected_style", "未知")
+            evidence.append(f"风格检查未通过，检测到风格: {detected_style}")
+            score = min(score, 5.0)  # 未通过最多 5 分
+
+        return score, DimensionDetail(
+            score=score, issues=issues, suggestions=suggestions, evidence=evidence
+        )
+
+    def _extract_issues_from_report(self, report: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """从检查器报告中提取问题列表."""
+        issues = []
+        # GlobalConsistencyChecker 格式
+        for issue in report.get("issues", []):
+            if isinstance(issue, dict):
+                issues.append({
+                    "description": issue.get("description", str(issue)),
+                    "severity": issue.get("severity", "medium"),
+                })
+        # LexicalDiversityChecker 格式
+        for rep in report.get("repetition_issues", []):
+            if isinstance(rep, dict):
+                issues.append({
+                    "description": f"词汇重复: 「{rep.get('phrase', '')}」出现{rep.get('total_count', 0)}次",
+                    "severity": "medium",
+                })
+        for pat in report.get("pattern_issues", []):
+            if isinstance(pat, dict):
+                issues.append({
+                    "description": f"句式模板化: {pat.get('pattern_name', '')} 出现{pat.get('total_count', 0)}次",
+                    "severity": "medium",
+                })
+        return issues
+
+    def _extract_suggestions_from_report(self, report: Dict[str, Any]) -> List[str]:
+        """从检查器报告中提取建议列表."""
+        suggestions = []
+        # GlobalConsistencyChecker 格式
+        for issue in report.get("issues", []):
+            if isinstance(issue, dict):
+                suggestion = issue.get("suggestion", "")
+                if suggestion:
+                    suggestions.append(suggestion)
+        # LexicalDiversityChecker 格式
+        for rep in report.get("repetition_issues", []):
+            if isinstance(rep, dict):
+                alts = rep.get("alternatives", [])
+                if alts:
+                    suggestions.append(
+                        f"「{rep.get('phrase', '')}」建议替换为：{' / '.join(alts[:3])}"
+                    )
+        for pat in report.get("pattern_issues", []):
+            if isinstance(pat, dict):
+                suggestion = pat.get("suggestion", "")
+                if suggestion:
+                    suggestions.append(suggestion)
+        return suggestions
+
     def _to_dict(self, obj: Any) -> Dict[str, Any]:
         """将对象转换为字典.
 
@@ -890,6 +1081,7 @@ class CoherenceScorecardBuilder:
             dimension_trends["timeline_consistency"].append(card.timeline_consistency)
             dimension_trends["spatial_consistency"].append(card.spatial_consistency)
             dimension_trends["foreshadowing_integrity"].append(card.foreshadowing_integrity)
+            dimension_trends["style_consistency"].append(card.style_consistency)
             overall_trend.append(card.overall_score)
 
         # 分析趋势方向

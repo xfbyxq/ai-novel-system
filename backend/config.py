@@ -356,7 +356,7 @@ class Settings(BaseSettings):
 
     # --- 功能开关 ---
     # 图数据库总开关，关闭时系统正常运行但缺少图分析能力
-    ENABLE_GRAPH_DATABASE: bool = False
+    ENABLE_GRAPH_DATABASE: bool = True
     # 实体自动抽取开关，章节生成后自动识别角色、地点、事件等
     ENABLE_ENTITY_EXTRACTION: bool = True
     # 章节生成后自动同步到图数据库
@@ -534,6 +534,7 @@ class Settings(BaseSettings):
 
         # 验证配置依赖关系
         self._validate_config_dependencies()
+        self._validate_quality_config()
 
     def _validate_threshold(self, name: str, value: float):
         """验证质量阈值在有效范围内 (1-10)."""
@@ -549,6 +550,63 @@ class Settings(BaseSettings):
         """验证非负整数配置."""
         if value < 0:
             raise ValueError(f"{name} must be non-negative, got {value}")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 小说质量改进配置 (基于《剑神归来》前6章质量分析报告)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # --- 全局一致性检查 ---
+    ENABLE_GLOBAL_CONSISTENCY_CHECK: bool = True
+    CONSISTENCY_CHECK_STRICTNESS: str = "strict"  # strict/normal/relaxed
+
+    # --- 节奏规划 ---
+    ENABLE_RHYTHM_PLANNING: bool = True
+    MAX_CONSECUTIVE_BATTLE_CHAPTERS: int = 2  # 连续战斗章节上限
+    MIN_DAILY_CHAPTERS_PER_5: int = 1  # 每5章至少1章日常/情感
+
+    # --- 词汇多样性 ---
+    ENABLE_LEXICAL_CHECK: bool = True
+    LEXICAL_CHECK_WINDOW: int = 10  # 检查最近10章
+    PHRASE_REPEAT_THRESHOLD: int = 2  # 同一短语出现次数阈值
+
+    # --- 角色情感多样性 ---
+    ENABLE_EMOTION_DIVERSITY_CHECK: bool = True
+    EMOTION_DIVERSITY_WINDOW: int = 3  # 检查最近3章
+    MIN_EMOTION_VARIETY: int = 2  # 最少情感种类数
+
+    # --- 风格一致性 ---
+    ENABLE_STYLE_CONSISTENCY_CHECK: bool = True
+    STYLE_TARGET: str = "轻松幽默"  # 从小说设定中读取
+    HUMOR_MIN_FREQUENCY: int = 1  # 每章最少幽默元素数
+
+    # --- 支线追踪 ---
+    ENABLE_SUBPLOT_TRACKING: bool = True
+    MAX_CHAPTERS_WITHOUT_SUBPLOT: int = 4  # 支线最大未出现章数
+
+    # --- 战力校验 ---
+    ENABLE_POWER_LEVEL_CHECK: bool = True
+    MIN_CHAPTERS_PER_LEVEL_UP: int = 5  # 境界提升最小章节间隔
+
+    def _validate_quality_config(self):
+        """验证质量改进相关配置."""
+        if self.MAX_CONSECUTIVE_BATTLE_CHAPTERS < 1:
+            raise ValueError("MAX_CONSECUTIVE_BATTLE_CHAPTERS 必须至少为 1")
+        if self.MIN_DAILY_CHAPTERS_PER_5 < 0:
+            raise ValueError("MIN_DAILY_CHAPTERS_PER_5 不能为负数")
+        if self.LEXICAL_CHECK_WINDOW < 3:
+            raise ValueError("LEXICAL_CHECK_WINDOW 必须至少为 3")
+        if self.PHRASE_REPEAT_THRESHOLD < 1:
+            raise ValueError("PHRASE_REPEAT_THRESHOLD 必须至少为 1")
+        if self.EMOTION_DIVERSITY_WINDOW < 2:
+            raise ValueError("EMOTION_DIVERSITY_WINDOW 必须至少为 2")
+        if self.MIN_EMOTION_VARIETY < 1:
+            raise ValueError("MIN_EMOTION_VARIETY 必须至少为 1")
+        if self.HUMOR_MIN_FREQUENCY < 0:
+            raise ValueError("HUMOR_MIN_FREQUENCY 不能为负数")
+        if self.MAX_CHAPTERS_WITHOUT_SUBPLOT < 1:
+            raise ValueError("MAX_CHAPTERS_WITHOUT_SUBPLOT 必须至少为 1")
+        if self.MIN_CHAPTERS_PER_LEVEL_UP < 1:
+            raise ValueError("MIN_CHAPTERS_PER_LEVEL_UP 必须至少为 1")
 
     def _validate_config_dependencies(self):
         """验证配置项之间的依赖关系."""

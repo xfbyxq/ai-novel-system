@@ -82,10 +82,60 @@ class SimilarityDetector:
     """
 
     # 判定阈值
-    DUPLICATE_THRESHOLD = 0.30  # 总体相似度超过 30% 判定为重复
+    DUPLICATE_THRESHOLD = 0.25  # 总体相似度超过 25% 判定为重复（从 0.30 降低）
     PLOT_DUPLICATE_THRESHOLD = 0.60  # 情节相似度超过 60% 判定为情节重复
     NGRAM_SIZE = 4  # N-gram 的 N 值
     MIN_SENTENCE_LENGTH = 8  # 最短有效句子长度
+
+    # 情节模式定义 - 检测固定叙事模式重复
+    PLOT_PATTERNS = {
+        "battle_loop": {
+            "name": "战斗循环模式",
+            "steps": ["敌人来袭", "主角应对", "快速击败", "发现线索"],
+            "keywords": [
+                ["来袭", "闯入", "杀来", "逼近", "包围"],
+                ["应对", "出手", "迎上", "闪身", "抬眼"],
+                ["击败", "击杀", "击飞", "秒杀", "制服", "倒飞"],
+                ["线索", "令牌", "铁片", "玉简", "印记", "发现"],
+            ],
+        },
+        "training_upgrade": {
+            "name": "修炼升级模式",
+            "steps": ["开始修炼", "遇到困难", "突破瓶颈", "实力提升"],
+            "keywords": [
+                ["修炼", "打坐", "闭目", "运转", "功法"],
+                ["阻碍", "不通", "难以", "瓶颈", "停滞"],
+                ["突破", "松动", "涌入", "贯通", "顿悟"],
+                ["提升", "进阶", "突破", "淬炼", "蜕变"],
+            ],
+        },
+    }
+
+    # LLM 情节向量提取提示词模板
+    PLOT_VECTOR_LLM_PROMPT = """你是一个小说情节分析专家。请从以下章节内容中提取情节向量。
+
+【提取规则】
+1. 冲突类型：从"对抗/竞速/解谜/成长/探索/日常/悬疑"中选择最匹配的一个
+2. 解决方式：从"武力/智谋/妥协/逃避/意外/协商"中选择最匹配的一个
+3. 障碍等级：从"高/中/低"中选择一个
+4. 结果：从"成功/失败/逆转/部分/悬念"中选择一个
+5. 情感弧线：从"上扬/下抑/波折/平缓"中选择一个
+6. 关键场景：从"战斗/修炼/谈判/探险/情感/日常/会议/发现"中选择最多3个
+
+【章节内容】
+{content}
+
+请以JSON格式输出，不要输出其他内容：
+{{
+    "protagonist_goal": "主角在本章的核心目标（10字以内）",
+    "conflict_type": "冲突类型",
+    "obstacle_level": "障碍等级",
+    "resolution_method": "解决方式",
+    "outcome": "结果",
+    "emotional_arc": "情感弧线",
+    "key_scenes": ["场景1", "场景2"],
+    "confidence": 0.8
+}}"""
 
     # 权重配置
     WEIGHTS = {
@@ -100,17 +150,23 @@ class SimilarityDetector:
         duplicate_threshold: float = 0.30,
         compare_chapters: int = 3,
         enable_plot_detection: bool = True,
+        llm_client=None,
+        cost_tracker=None,
     ):
         """
         Args:
             duplicate_threshold: 重复判定阈值 (0-1)
             compare_chapters: 向前比较的章节数
             enable_plot_detection: 是否启用情节重复检测
+            llm_client: LLM 客户端（可选，用于 LLM 情节向量提取）
+            cost_tracker: 成本追踪器（可选）
         """
         self.duplicate_threshold = duplicate_threshold
         self.compare_chapters = compare_chapters
         self.enable_plot_detection = enable_plot_detection
-        
+        self.llm_client = llm_client
+        self.cost_tracker = cost_tracker
+
         # 缓存情节向量
         self._plot_vectors: Dict[int, PlotVector] = {}
 
@@ -372,9 +428,106 @@ class SimilarityDetector:
     ) -> PlotVector:
         """从章节内容提取情节向量.
 
-        使用关键词匹配提取情节特征。
-        注意：这是一个简化的实现，对于复杂的情节结构，
-        建议使用 LLM 进行更精确的提取。
+        优先使用 LLM 提取（如果可用），否则回退到关键词匹配。
+
+        Args:
+            content: 章节内容
+            chapter_number: 章节号
+
+        Returns:
+            情节向量
+        """
+        # 优先使用 LLM 提取
+        if self.llm_client:
+            try:
+                vector = self._extract_plot_vector_llm(content, chapter_number)
+                if vector and vector.confidence >= 0.6:
+                    # 缓存情节向量
+                    if chapter_number > 0:
+                        self._plot_vectors[chapter_number] = vector
+                    return vector
+            except Exception as e:
+                logger.warning(
+                    f"[SimilarityDetector] LLM 情节向量提取失败，回退到关键词匹配: {e}"
+                )
+
+        # 回退到关键词匹配
+        return self._extract_plot_vector_keywords(content, chapter_number)
+
+    async def _extract_plot_vector_llm(
+        self,
+        content: str,
+        chapter_number: int = 0,
+    ) -> PlotVector:
+        """使用 LLM 提取情节向量.
+
+        Args:
+            content: 章节内容
+            chapter_number: 章节号
+
+        Returns:
+            情节向量
+        """
+        import json
+
+        # 截断内容避免 token 超限（取前 4000 字）
+        truncated = content[:4000] if len(content) > 4000 else content
+
+        prompt = self.PLOT_VECTOR_LLM_PROMPT.format(content=truncated)
+
+        response = await self.llm_client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=512,
+        )
+
+        text = response.get("content", "") if isinstance(response, dict) else str(response)
+
+        # 解析 JSON 响应
+        try:
+            # 尝试直接解析
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # 尝试从 markdown 代码块中提取
+            import re
+            match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+            if match:
+                data = json.loads(match.group(1))
+            else:
+                # 尝试找到第一个 { 到最后一个 }
+                start = text.find("{")
+                end = text.rfind("}")
+                if start >= 0 and end > start:
+                    data = json.loads(text[start : end + 1])
+                else:
+                    raise ValueError(f"无法从 LLM 响应中提取 JSON: {text[:200]}")
+
+        vector = PlotVector(
+            chapter_number=chapter_number,
+            protagonist_goal=data.get("protagonist_goal", ""),
+            conflict_type=data.get("conflict_type", ""),
+            obstacle_level=data.get("obstacle_level", ""),
+            resolution_method=data.get("resolution_method", ""),
+            outcome=data.get("outcome", ""),
+            emotional_arc=data.get("emotional_arc", ""),
+            key_scenes=data.get("key_scenes", []),
+            confidence=data.get("confidence", 0.5),
+        )
+
+        self.logger.info(
+            f"[SimilarityDetector] LLM 情节向量提取: 第{chapter_number}章, "
+            f"冲突={vector.conflict_type}, 解决={vector.resolution_method}, "
+            f"情感={vector.emotional_arc}"
+        )
+
+        return vector
+
+    def _extract_plot_vector_keywords(
+        self,
+        content: str,
+        chapter_number: int = 0,
+    ) -> PlotVector:
+        """使用关键词匹配提取情节向量（回退方案）.
 
         Args:
             content: 章节内容
@@ -567,3 +720,111 @@ class SimilarityDetector:
     def get_plot_vector(self, chapter_number: int) -> Optional[PlotVector]:
         """获取缓存的情节向量."""
         return self._plot_vectors.get(chapter_number)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 情节模式重复检测
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def detect_plot_pattern_repetition(
+        self,
+        chapters: Dict[int, str],
+        min_consecutive: int = 3,
+    ) -> Dict[str, Any]:
+        """检测连续章节是否使用相同的情节模式.
+
+        针对"敌人来袭→主角应对→快速击败→发现线索"等固定模式，
+        检测是否在连续章节中反复出现。
+
+        Args:
+            chapters: {章节号: 内容}
+            min_consecutive: 最少连续命中次数才判定为重复
+
+        Returns:
+            {
+                "has_pattern_repetition": bool,
+                "pattern_name": str,
+                "affected_chapters": [int],
+                "consecutive_count": int,
+                "suggestion": str
+            }
+        """
+        # 对每章匹配情节模式
+        chapter_patterns: Dict[int, str] = {}
+
+        for ch_num, content in chapters.items():
+            matched_pattern = self._match_plot_pattern(content)
+            if matched_pattern:
+                chapter_patterns[ch_num] = matched_pattern
+
+        if not chapter_patterns:
+            return {"has_pattern_repetition": False}
+
+        # 查找连续相同模式
+        sorted_chapters = sorted(chapter_patterns.keys())
+        best_pattern = None
+        best_start = 0
+        best_count = 0
+
+        current_pattern = None
+        current_start = 0
+        current_count = 0
+
+        for ch in sorted_chapters:
+            pattern = chapter_patterns[ch]
+            if pattern == current_pattern:
+                current_count += 1
+            else:
+                if current_count >= min_consecutive and current_count > best_count:
+                    best_count = current_count
+                    best_pattern = current_pattern
+                    best_start = current_start
+
+                current_pattern = pattern
+                current_start = ch
+                current_count = 1
+
+        # 检查最后一段
+        if current_count >= min_consecutive and current_count > best_count:
+            best_count = current_count
+            best_pattern = current_pattern
+            best_start = current_start
+
+        if best_pattern and best_count >= min_consecutive:
+            affected = list(range(best_start, best_start + best_count))
+            pattern_info = self.PLOT_PATTERNS.get(best_pattern, {})
+            pattern_name = pattern_info.get("name", best_pattern)
+
+            return {
+                "has_pattern_repetition": True,
+                "pattern_name": pattern_name,
+                "affected_chapters": affected,
+                "consecutive_count": best_count,
+                "suggestion": (
+                    f"连续{best_count}章使用「{pattern_name}」模式，"
+                    f"建议改变叙事结构，如：增加智谋对决、利用环境因素、"
+                    f"引入第三方势力、设置反转等"
+                ),
+            }
+
+        return {"has_pattern_repetition": False}
+
+    def _match_plot_pattern(self, content: str) -> Optional[str]:
+        """匹配章节内容的情节模式.
+
+        Returns:
+            匹配的模式名，未匹配则返回 None
+        """
+        for pattern_name, pattern_config in self.PLOT_PATTERNS.items():
+            steps_matched = 0
+            keywords_list = pattern_config["keywords"]
+
+            for step_keywords in keywords_list:
+                if any(kw in content for kw in step_keywords):
+                    steps_matched += 1
+
+            # 如果匹配了 70% 以上的步骤，认为命中该模式
+            total_steps = len(keywords_list)
+            if total_steps > 0 and steps_matched / total_steps >= 0.7:
+                return pattern_name
+
+        return None

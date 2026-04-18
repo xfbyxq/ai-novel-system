@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.agent_communicator import AgentCommunicator
-from agents.agent_scheduler import AgentScheduler
+from agents.agent_scheduler import AgentScheduler, AgentTask
 from agents.specific_agents import (
     ContentPlanningAgent,
     EditingAgent,
@@ -76,10 +76,29 @@ class AutomationService:
         )
 
         # 启动所有代理
+        self._agent_tasks: list[asyncio.Task] = []
         for agent_name, agent in self.agents.items():
-            asyncio.create_task(agent.start())
+            task = asyncio.create_task(agent.start())
+            self._agent_tasks.append(task)
 
         logger.info("所有代理初始化完成")
+
+    async def shutdown_agents(self):
+        """停止所有代理并清理后台任务."""
+        for agent_name, agent in self.agents.items():
+            await agent.stop()
+
+        # 取消所有后台任务
+        for task in self._agent_tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        self.agents.clear()
+        self._agent_tasks.clear()
+        logger.info("所有代理已停止")
 
     async def run_automated_novel_creation(
         self,
@@ -180,22 +199,17 @@ class AutomationService:
     ) -> Dict[str, Any]:
         """运行内容策划."""
         # 创建内容策划任务
-        task_id = str(uuid4())
-        task_data = {
-            "task_id": task_id,
-            "task_name": "内容策划",
-            "input_data": {
+        task = AgentTask(
+            task_name="内容策划",
+            task_type="content_planning",
+            input_data={
                 "market_analysis": market_analysis,
                 "user_preferences": config.get("user_preferences", {}),
             },
-        }
+        )
 
         # 提交任务给代理
-        await self.scheduler.submit_task(
-            agent_name="content_planner",
-            task_name="内容策划",
-            input_data=task_data["input_data"],
-        )
+        await self.scheduler.submit_task(task)
 
         # 等待任务完成
         await asyncio.sleep(45)  # 给代理时间完成任务

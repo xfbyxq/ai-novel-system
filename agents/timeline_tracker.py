@@ -914,6 +914,130 @@ class TimelineTracker:
 
         return report
 
+    def enforce_monotonic_time(
+        self,
+        chapter_number: int,
+        proposed_anchor: TimeAnchor,
+    ) -> Tuple[bool, List[TimelineInconsistency]]:
+        """强制时间单调递增校验.
+
+        每章结束后记录时间标记，下一章的时间标记必须 >= 上一章。
+        如检测到时间回退，立即标记为 high severity 问题。
+
+        Args:
+            chapter_number: 当前章节号
+            proposed_anchor: 提议的时间锚点
+
+        Returns:
+            (是否通过, 不一致问题列表)
+        """
+        inconsistencies: List[TimelineInconsistency] = []
+        prev_chapter = chapter_number - 1
+
+        if prev_chapter not in self.anchors:
+            # 无前章，直接通过
+            return True, inconsistencies
+
+        prev_anchor = self.anchors[prev_chapter]
+
+        # 1. 检查故事天数是否回退
+        if proposed_anchor.story_day < prev_anchor.story_day:
+            inconsistencies.append(
+                TimelineInconsistency(
+                    chapter_number=chapter_number,
+                    issue_type="time_jump",
+                    description=f"时间回退：第{chapter_number}章故事第{proposed_anchor.story_day}天，"
+                    f"早于第{prev_chapter}章的故事第{prev_anchor.story_day}天",
+                    previous_anchor=prev_anchor,
+                    current_anchor=proposed_anchor,
+                    severity="high",
+                    suggestion=f"第{chapter_number}章的故事天数必须 >= 第{prev_chapter}章的"
+                    f"{prev_anchor.story_day}天，请修正时间描述",
+                )
+            )
+
+        # 2. 检查时段顺序（同一天内）
+        if proposed_anchor.story_day == prev_anchor.story_day:
+            time_order = [
+                "黎明", "清晨", "早晨", "上午", "中午", "正午",
+                "下午", "傍晚", "黄昏", "夜晚", "深夜", "午夜", "凌晨",
+            ]
+            prev_markers = prev_anchor.time_markers
+            curr_markers = proposed_anchor.time_markers
+
+            if prev_markers and curr_markers:
+                for pm in prev_markers:
+                    for cm in curr_markers:
+                        if pm in time_order and cm in time_order:
+                            prev_idx = time_order.index(pm)
+                            curr_idx = time_order.index(cm)
+                            if curr_idx < prev_idx and cm != "凌晨":
+                                inconsistencies.append(
+                                    TimelineInconsistency(
+                                        chapter_number=chapter_number,
+                                        issue_type="contradiction",
+                                        description=f"时段回退：第{prev_chapter}章已到'{pm}'，"
+                                        f"第{chapter_number}章仍在同一天但变为'{cm}'",
+                                        previous_anchor=prev_anchor,
+                                        current_anchor=proposed_anchor,
+                                        severity="high",
+                                        suggestion=f"建议将第{chapter_number}章时间标记为'次日{cm}'或之后",
+                                    )
+                                )
+
+        # 3. 检查相对时间是否回退
+        if prev_anchor.relative_time and proposed_anchor.relative_time:
+            prev_order = self._time_mark_to_order_value(prev_anchor.relative_time)
+            curr_order = self._time_mark_to_order_value(proposed_anchor.relative_time)
+            if 0 < curr_order < prev_order:
+                inconsistencies.append(
+                    TimelineInconsistency(
+                        chapter_number=chapter_number,
+                        issue_type="contradiction",
+                        description=f"相对时间回退：第{prev_chapter}章为「{prev_anchor.relative_time}」，"
+                        f"第{chapter_number}章变为「{proposed_anchor.relative_time}」",
+                        previous_anchor=prev_anchor,
+                        current_anchor=proposed_anchor,
+                        severity="high",
+                        suggestion="请确认时间推进是否合理，禁止无理由的时间回退",
+                    )
+                )
+
+        passed = len(inconsistencies) == 0
+        return passed, inconsistencies
+
+    def _time_mark_to_order_value(self, mark: str) -> int:
+        """将时间标记转换为可比较的顺序值.
+
+        Returns:
+            0=未知, 1+=可比较的顺序值
+        """
+        # 天数标记
+        day_patterns = [
+            (r"第(\d+)天", lambda m: int(m.group(1)) * 1000),
+            (r"故事第(\d+)天", lambda m: int(m.group(1)) * 1000),
+            (r"(\d+)天后", lambda m: int(m.group(1)) * 1000),
+            (r"(\d+)日后", lambda m: int(m.group(1)) * 1000),
+        ]
+        import re as re_mod
+        for pattern, extractor in day_patterns:
+            match = re_mod.search(pattern, mark)
+            if match:
+                return extractor(match)
+
+        # 相对时间
+        relative_markers = {
+            "次日": 1000, "翌日": 1000, "第二天": 1000,
+            "三天后": 3000, "一周后": 7000, "半月后": 15000,
+            "一个月后": 30000, "数日后": 5000, "数天后": 5000,
+        }
+        for marker, order in relative_markers.items():
+            if marker in mark:
+                return order
+
+        # 时段（不关联天数的情况下，时段本身不可比较）
+        return 0
+
     def format_for_prompt(self, current_chapter: int, max_chapters: int = 5) -> str:
         """格式化时间线信息用于提示词.
 

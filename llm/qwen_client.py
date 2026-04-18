@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, AsyncIterator, Optional
 
 import dashscope
@@ -12,6 +13,13 @@ from backend.config import settings
 from llm.token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
+
+# 【修复 Bug 5】全局共享线程池，限制 DashScope 同步调用的并发线程数
+# 默认 10 个线程，避免 run_in_executor 创建无限线程
+_dashscope_executor = ThreadPoolExecutor(
+    max_workers=10,
+    thread_name_prefix="dashscope",
+)
 
 
 class QwenClient:
@@ -199,7 +207,7 @@ class QwenClient:
                 if max_tokens is not None:
                     call_params["max_tokens"] = max_tokens
                 response = await loop.run_in_executor(
-                    None,
+                    _dashscope_executor,
                     lambda: Generation.call(**call_params),
                 )
 
@@ -260,7 +268,7 @@ class QwenClient:
             if max_tokens is not None:
                 call_params["max_tokens"] = max_tokens
             responses = await loop.run_in_executor(
-                None,
+                _dashscope_executor,
                 lambda: Generation.call(**call_params),
             )
 

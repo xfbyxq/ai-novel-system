@@ -19,8 +19,20 @@ class TestCharacterNameVersionService:
     @pytest.fixture
     async def sample_character(self, db_session: AsyncSession) -> Character:
         """创建测试角色."""
+        from core.models.novel import Novel
+
+        novel = Novel(
+            title="测试小说",
+            author="测试作者",
+            genre="都市",
+            status="draft",
+        )
+        db_session.add(novel)
+        await db_session.commit()
+        await db_session.refresh(novel)
+
         character = Character(
-            novel_id=uuid4(),
+            novel_id=novel.id,
             name="苏叶",
             role_type="protagonist",
             gender="female",
@@ -311,7 +323,7 @@ class TestCharacterNameVersionAPI:
 
 
 @pytest.fixture
-def sample_character(db_session: AsyncSession, test_novel) -> Character:
+async def sample_character(db_session: AsyncSession, test_novel) -> Character:
     """创建测试角色 fixture."""
     character = Character(
         novel_id=test_novel.id,
@@ -320,6 +332,6 @@ def sample_character(db_session: AsyncSession, test_novel) -> Character:
         gender="female",
     )
     db_session.add(character)
-    db_session.commit()
-    db_session.refresh(character)
+    await db_session.commit()
+    await db_session.refresh(character)
     return character

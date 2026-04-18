@@ -1,5 +1,6 @@
 """生成服务 - 连接 API 层和 Agent 层."""
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -33,6 +34,14 @@ from .chapter_data_processor import ChapterDataProcessor
 from .context_builder import ContextBuilder
 from .context_manager import UnifiedContextManager
 from .memory_service import get_novel_memory_service
+
+# Quality improvement checkers (lazy-loaded to avoid import overhead)
+# - GlobalConsistencyChecker: name/pronoun/timeline/fact consistency
+# - LexicalDiversityChecker: vocabulary repetition & sentence patterns
+# - EmotionDiversityChecker: character emotional diversity
+# - StyleConsistencyChecker: style matching target style
+# - SubplotTracker: subplot usage frequency tracking
+# - ChapterRhythmPlanner: chapter rhythm & type planning
 
 
 class GenerationService:
@@ -84,6 +93,8 @@ class GenerationService:
         self._chapter_write_counter: dict[str, int] = {}
         # 记录小说最后活跃时间，用于清理长期未使用的计数器
         self._last_active_time: dict[str, datetime] = {}
+        # 【修复 Bug 3】跟踪后台异步任务，防止 fire-and-forget 泄漏
+        self._background_tasks: set[asyncio.Task] = set()
 
         # 辅助类实例（委托调用）
         self.chapter_data_processor = ChapterDataProcessor()
@@ -835,6 +846,12 @@ class GenerationService:
                     f"{content_count} 个内容"
                 )
 
+                # 【修复 Bug 2】预加载后清理过期缓存
+                self.dispatcher.crew_manager._evict_stale_caches(
+                    current_novel_id=str(novel_id),
+                    chapter_number=chapter_number,
+                )
+
             # 执行写作阶段（传递 TeamContext）
             self.cost_tracker.reset()
             writing_result = await self.dispatcher.run_chapter_writing(
@@ -847,6 +864,28 @@ class GenerationService:
                 character_states=character_states,
                 team_context=team_context,
             )
+
+            # ===== 新增：质量改进检查（全局一致性/词汇/情感/风格/支线/节奏） =====
+            quality_reports = await self._run_quality_improvement_checks(
+                novel_id=novel_id,
+                novel_data=novel_data,
+                chapter_number=chapter_number,
+                writing_result=writing_result,
+            )
+            # 将质量检查结果写入 writing_result，供后续保存和返回
+            if quality_reports:
+                writing_result["quality_improvement_reports"] = quality_reports
+                # 如有严重问题，触发一轮修订
+                revised = await self._apply_quality_fixes(
+                    writing_result=writing_result,
+                    quality_reports=quality_reports,
+                    novel_data=novel_data,
+                )
+                if revised:
+                    logger.info(
+                        f"[质量闭环] 第{chapter_number}章已执行质量修订"
+                    )
+            # ===== 质量改进检查结束 =====
 
             # 保存章节（使用 upsert 避免重复记录）
             final_content = writing_result.get("final_content", "")
@@ -881,6 +920,26 @@ class GenerationService:
                 continuity_issues = continuity_report  # 直接是 issues 列表
             else:
                 continuity_issues = continuity_report.get("issues", [])
+
+            # 合并质量改进检查的问题到 continuity_issues
+            quality_reports = writing_result.get("quality_improvement_reports", {})
+            for check_name, check_report in quality_reports.items():
+                if isinstance(check_report, dict):
+                    # 提取 issues 字段
+                    check_issues = check_report.get("issues", [])
+                    if check_issues:
+                        for issue in check_issues:
+                            # 添加检查来源标记
+                            if isinstance(issue, dict):
+                                issue["check_source"] = check_name
+                            continuity_issues.append(issue)
+                    # 对于支线提醒等特殊报告，保留完整信息
+                    if check_name == "subplot_reminders" and check_report:
+                        continuity_issues.append({
+                            "check_source": "subplot_tracker",
+                            "type": "subplot_reminders",
+                            "reminders": check_report,
+                        })
 
             if chapter:
                 # 更新现有章节
@@ -1074,12 +1133,12 @@ class GenerationService:
 
             # ===== 新增：图数据库同步 =====
             # 章节生成后异步同步实体到Neo4j图数据库
-            # 使用 asyncio.create_task 实现非阻塞执行
+            # 【修复 Bug 3】跟踪异步任务，防止 fire-and-forget 资源泄漏
             if settings.ENABLE_GRAPH_DATABASE and settings.ENABLE_GRAPH_SYNC_ON_CHAPTER:
                 try:
                     import asyncio
 
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         self._sync_chapter_to_graph_safe(
                             novel_id=novel_id,
                             chapter_number=chapter_number,
@@ -1087,7 +1146,9 @@ class GenerationService:
                             chapter_plan=chapter_plan,
                         )
                     )
-                    logger.debug(f"[GraphSync] 第{chapter_number}章同步任务已提交")
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
+                    logger.debug(f"[GraphSync] 第{chapter_number}章同步任务已提交（已跟踪）")
                 except Exception as e:
                     logger.warning(f"[GraphSync] 同步任务提交失败: {e}")
             # ===== 图数据库同步结束 =====
@@ -1469,6 +1530,27 @@ class GenerationService:
             character_states=character_states,
         )
 
+        # ===== 新增：质量改进检查 =====
+        quality_reports = await self._run_quality_improvement_checks(
+            novel_id=novel_id,
+            novel_data=novel_data,
+            chapter_number=chapter_number,
+            writing_result=writing_result,
+        )
+        if quality_reports:
+            writing_result["quality_improvement_reports"] = quality_reports
+            # 如有严重问题，触发一轮修订
+            revised = await self._apply_quality_fixes(
+                writing_result=writing_result,
+                quality_reports=quality_reports,
+                novel_data=novel_data,
+            )
+            if revised:
+                logger.info(
+                    f"[质量闭环] 第{chapter_number}章（单章模式）已执行质量修订"
+                )
+        # ===== 质量改进检查结束 =====
+
         # 保存章节
         final_content = writing_result.get("final_content", "")
         word_count = len(final_content)
@@ -1476,7 +1558,21 @@ class GenerationService:
 
         # continuity_report 可能是 dict 或 list
         continuity_report = writing_result.get("continuity_report") or {}
-        continuity_issues = continuity_report if isinstance(continuity_report, list) else continuity_report.get("issues", [])
+        if isinstance(continuity_report, list):
+            continuity_issues = continuity_report
+        else:
+            continuity_issues = continuity_report.get("issues", [])
+
+        # 合并质量改进检查的问题到 continuity_issues
+        quality_reports = writing_result.get("quality_improvement_reports", {})
+        for check_name, check_report in quality_reports.items():
+            if isinstance(check_report, dict):
+                check_issues = check_report.get("issues", [])
+                if check_issues:
+                    for issue in check_issues:
+                        if isinstance(issue, dict):
+                            issue["check_source"] = check_name
+                        continuity_issues.append(issue)
 
         chapter = Chapter(
             novel_id=novel_id,
@@ -1721,7 +1817,7 @@ class GenerationService:
     # ==================== 辅助方法 ====================
 
     def _cleanup_expired_counters(self, max_inactive_hours: int = 24):
-        """清理长期未活跃的小说计数器，防止内存泄漏.
+        """清理长期未活跃的小说计数器和管理器，防止内存泄漏.
 
         Args:
             max_inactive_hours: 最大非活跃小时数，默认24小时
@@ -1735,11 +1831,13 @@ class GenerationService:
             if last_active < cutoff_time:
                 expired_novels.append(novel_id)
 
-        # 删除过期的小说计数器和活跃时间记录
+        # 删除过期的小说计数器、活跃时间记录和上下文管理器
         for novel_id in expired_novels:
             self._chapter_write_counter.pop(novel_id, None)
             self._last_active_time.pop(novel_id, None)
-            logger.debug(f"清理过期计数器: {novel_id}")
+            # 【修复 Bug 1】同时清理 context_managers，防止内存泄漏
+            removed = self._context_managers.pop(novel_id, None)
+            logger.debug(f"清理过期计数器: {novel_id} (context_manager={'已释放' if removed else '无'})")
 
     # ==================== 新增：持久化记忆集成方法 ====================
 
@@ -1774,6 +1872,500 @@ class GenerationService:
         )
 
         logger.info(f"Initialized persistent memory for novel {novel_id}")
+
+    # =========================================================================
+    # 质量改进检查（基于《剑神归来》前6章质量分析报告）
+    # =========================================================================
+
+    # =========================================================================
+
+    async def _apply_quality_fixes(
+        self,
+        writing_result: dict,
+        quality_reports: dict,
+        novel_data: dict,
+    ) -> bool:
+        """根据质量检查报告执行一轮修订，修复严重问题.
+
+        仅在以下情况触发修订：
+        1. GlobalConsistencyChecker 检测到 high severity 问题
+        2. LexicalDiversityChecker 未通过（大量重复词汇）
+
+        最多执行 1 轮修订，避免成本过高。
+
+        Args:
+            writing_result: 写作结果字典（将直接修改其 final_content）
+            quality_reports: 质量检查报告
+            novel_data: 小说数据
+
+        Returns:
+            是否执行了修订
+        """
+        final_content = writing_result.get("final_content", "")
+        if not final_content:
+            return False
+
+        # 收集需要修复的问题
+        fix_instructions: list[str] = []
+
+        # 1. 检查全局一致性报告中的 high severity 问题
+        gc_report = quality_reports.get("global_consistency", {})
+        if isinstance(gc_report, dict) and not gc_report.get("passed", True):
+            issues = gc_report.get("issues", [])
+            high_issues = [
+                i for i in issues
+                if isinstance(i, dict) and i.get("severity") == "high"
+            ]
+            for issue in high_issues:
+                desc = issue.get("description", "")
+                suggestion = issue.get("suggestion", "")
+                if desc:
+                    fix_instructions.append(
+                        f"【一致性修复】{desc}"
+                        + (f"，建议：{suggestion}" if suggestion else "")
+                    )
+
+        # 2. 检查词汇多样性报告
+        lex_report = quality_reports.get("lexical_diversity", {})
+        if isinstance(lex_report, dict) and not lex_report.get("passed", True):
+            repetitions = lex_report.get("repetition_issues", [])
+            for rep in repetitions[:5]:  # 最多取前5个重复问题
+                if isinstance(rep, dict):
+                    phrase = rep.get("phrase", "")
+                    alternatives = rep.get("alternatives", [])
+                    if phrase and alternatives:
+                        fix_instructions.append(
+                            f"【词汇修复】“{phrase}”出现过多，"
+                            f"请用以下词汇替换部分出现：{'/'  .join(alternatives[:3])}"
+                        )
+            patterns = lex_report.get("pattern_issues", [])
+            for pat in patterns[:3]:  # 最多取前3个句式问题
+                if isinstance(pat, dict):
+                    pattern_desc = pat.get("description", "") or pat.get("pattern", "")
+                    if pattern_desc:
+                        fix_instructions.append(
+                            f"【句式修复】{pattern_desc}"
+                        )
+
+        # 如果没有需要修复的问题，跳过修订
+        if not fix_instructions:
+            return False
+
+        logger.info(
+            f"[质量修订] 检测到 {len(fix_instructions)} 个需要修复的问题，执行一轮修订"
+        )
+
+        # 构建修订提示词
+        fix_prompt = f"""请对以下章节内容进行局部修订，修复以下问题。
+保持整体故事结构和情节不变，仅修复指出的具体问题。
+
+【需要修复的问题】
+{chr(10).join(fix_instructions)}
+
+【原文内容】
+{final_content}
+
+请直接输出修订后的完整章节内容，不要输出JSON或其他格式标记。"""
+
+        try:
+            # 调用 Writer Agent 执行修订
+            revised_content = await self.dispatcher.crew_manager._call_agent(
+                agent_name="质量修订师",
+                system_prompt=(
+                    "你是一位专业的小说编辑，负责对章节内容进行精确修订。"
+                    "你的修订必须保持故事整体结构不变，仅针对指出的具体问题进行局部修改。"
+                    "输出完整的修订后内容，不要添加任何格式标记。"
+                ),
+                task_prompt=fix_prompt,
+                temperature=0.3,  # 低温度确保精确修订
+                max_tokens=8192,
+                expect_json=False,
+            )
+
+            if isinstance(revised_content, str) and len(revised_content) > 100:
+                writing_result["final_content"] = revised_content
+                writing_result["quality_revision_applied"] = True
+                writing_result["quality_fix_count"] = len(fix_instructions)
+                logger.info(
+                    f"[质量修订] 修订完成，修复了 {len(fix_instructions)} 个问题，"
+                    f"修订前字数={len(final_content)}, "
+                    f"修订后字数={len(revised_content)}"
+                )
+                return True
+            else:
+                logger.warning(
+                    "[质量修订] 修订结果异常（内容过短或类型错误），保留原文"
+                )
+                return False
+
+        except Exception as e:
+            logger.warning(f"[质量修订] 修订失败（保留原文）: {e}")
+            return False
+
+    async def _run_quality_improvement_checks(
+        self,
+        novel_id: UUID,
+        novel_data: dict,
+        chapter_number: int,
+        writing_result: dict,
+    ) -> dict:
+        """执行所有质量改进检查，返回各检查器的报告.
+
+        在 Editor 审查循环之后、入库之前运行，使用确定性规则检测
+        以下质量问题：
+        1. 全局一致性（名字/代词/时间线/事实）
+        2. 词汇多样性（短语重复/句式模板化）
+        3. 角色情感多样性
+        4. 风格一致性
+        5. 支线情节追踪
+        6. 章节节奏规划
+
+        Args:
+            novel_id: 小说ID
+            novel_data: 小说数据（包含角色、大纲等）
+            chapter_number: 当前章节号
+            writing_result: 写作结果（包含 final_content 等）
+
+        Returns:
+            包含各检查器报告的字典
+        """
+        final_content = writing_result.get("final_content", "")
+        if not final_content:
+            return {}
+
+        reports: dict = {}
+
+        # 加载前序章节内容（供需要历史上下文的检查器使用）
+        previous_chapters_content = await self._load_previous_chapters_content(
+            novel_id=novel_id,
+            chapter_number=chapter_number,
+            limit=settings.LEXICAL_CHECK_WINDOW,
+        )
+
+        # 1. 全局一致性检查
+        if settings.ENABLE_GLOBAL_CONSISTENCY_CHECK:
+            try:
+                from agents.global_consistency_checker import (
+                    EntityProfile,
+                    GlobalConsistencyChecker,
+                )
+
+                checker = GlobalConsistencyChecker()
+                # 注册角色实体
+                for char_data in novel_data.get("characters", []):
+                    char_name = char_data.get("name", "")
+                    if not char_name:
+                        continue
+                    gender_str = char_data.get("gender", "unknown")
+                    gender_map = {"male": "male", "female": "female"}
+                    power_level = char_data.get(
+                        "power_level",
+                        char_data.get("current_power_level", ""),
+                    )
+                    profile = EntityProfile(
+                        name=char_name,
+                        gender=gender_map.get(gender_str, "unknown"),
+                        current_power_level=power_level,
+                    )
+                    checker.register_entity(profile)
+
+                # 注册历史战力等级记录（用于境界提升速度检测）
+                if settings.ENABLE_POWER_LEVEL_CHECK:
+                    for ch_num, ch_content in previous_chapters_content.items():
+                        for char_data in novel_data.get("characters", []):
+                            cn = char_data.get("name", "")
+                            pl = char_data.get("power_level", "")
+                            if cn and pl:
+                                checker.record_power_level(
+                                    ch_num, cn, pl
+                                )
+
+                result = await checker.check(
+                    content=final_content,
+                    chapter_number=chapter_number,
+                )
+                reports["global_consistency"] = result.to_dict()
+                if not result.passed:
+                    logger.warning(
+                        f"[QualityCheck] 全局一致性未通过: "
+                        f"高={result.high_count}, 中={result.medium_count}, "
+                        f"低={result.low_count}"
+                    )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 全局一致性检查失败: {e}")
+
+        # 2. 词汇多样性检查
+        if settings.ENABLE_LEXICAL_CHECK:
+            try:
+                from agents.lexical_diversity_checker import LexicalDiversityChecker
+
+                checker = LexicalDiversityChecker(
+                    window_chapters=settings.LEXICAL_CHECK_WINDOW,
+                    phrase_threshold=settings.PHRASE_REPEAT_THRESHOLD,
+                )
+                report = checker.check(
+                    content=final_content,
+                    chapter_number=chapter_number,
+                    previous_chapters=previous_chapters_content,
+                )
+                reports["lexical_diversity"] = report.to_dict()
+                if not report.passed:
+                    checker.generate_editor_suggestions(report)
+                    logger.warning(
+                        f"[QualityCheck] 词汇多样性未通过: "
+                        f"评分={report.diversity_score:.1f}, "
+                        f"问题数={report.issue_count}"
+                    )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 词汇多样性检查失败: {e}")
+
+        # 3. 角色情感多样性检查
+        if settings.ENABLE_EMOTION_DIVERSITY_CHECK:
+            try:
+                from agents.emotion_diversity_checker import (
+                    CharacterEmotionalProfile,
+                    EmotionDiversityChecker,
+                )
+
+                checker = EmotionDiversityChecker(
+                    window_chapters=settings.EMOTION_DIVERSITY_WINDOW,
+                    min_emotion_variety=settings.MIN_EMOTION_VARIETY,
+                )
+                # 注册主角情感档案
+                for char_data in novel_data.get("characters", []):
+                    char_name = char_data.get("name", "")
+                    role_type = char_data.get("role_type", "minor")
+                    if not char_name:
+                        continue
+                    if role_type == "protagonist":
+                        profile = CharacterEmotionalProfile.default_for_protagonist(
+                            char_name
+                        )
+                    elif role_type == "supporting":
+                        profile = CharacterEmotionalProfile.default_for_supporting(
+                            char_name
+                        )
+                    else:
+                        continue
+                    checker.register_profile(profile)
+
+                # 检查每个已注册的角色
+                for char_data in novel_data.get("characters", []):
+                    char_name = char_data.get("name", "")
+                    role_type = char_data.get("role_type", "minor")
+                    if role_type not in ("protagonist", "supporting"):
+                        continue
+                    report = checker.check(
+                        content=final_content,
+                        character_name=char_name,
+                        chapter_number=chapter_number,
+                        previous_chapters=previous_chapters_content,
+                    )
+                    reports[f"emotion_{char_name}"] = report.to_dict()
+                    if not report.passed:
+                        logger.warning(
+                            f"[QualityCheck] 角色{char_name}情感多样性未通过: "
+                            f"评分={report.diversity_score:.1f}"
+                        )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 情感多样性检查失败: {e}")
+
+        # 4. 风格一致性检查
+        if settings.ENABLE_STYLE_CONSISTENCY_CHECK:
+            try:
+                from agents.style_consistency_checker import StyleConsistencyChecker
+
+                checker = StyleConsistencyChecker(
+                    target_style=settings.STYLE_TARGET,
+                )
+                report = checker.check(
+                    content=final_content,
+                    chapter_number=chapter_number,
+                )
+                reports["style_consistency"] = report.to_dict()
+                if not report.passed:
+                    logger.warning(
+                        f"[QualityCheck] 风格一致性未通过: "
+                        f"匹配度={report.style_match_score:.1%}, "
+                        f"幽默元素={report.humor_count}个"
+                    )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 风格一致性检查失败: {e}")
+
+        # 5. 支线情节追踪
+        if settings.ENABLE_SUBPLOT_TRACKING:
+            try:
+                from agents.subplot_tracker import SubplotInfo, SubplotTracker
+
+                tracker = SubplotTracker(
+                    max_chapters_without_appearance=settings.MAX_CHAPTERS_WITHOUT_SUBPLOT,
+                )
+                # 从大纲中提取支线
+                plot_outline = novel_data.get("plot_outline", {})
+                for sub_plot in plot_outline.get("sub_plots", []):
+                    if isinstance(sub_plot, dict):
+                        subplot_name = sub_plot.get("name", "") or sub_plot.get(
+                            "title", ""
+                        )
+                        if subplot_name:
+                            info = SubplotInfo(
+                                name=subplot_name,
+                                description=sub_plot.get("description", ""),
+                                importance=sub_plot.get("importance", 5),
+                                trigger_chapter=sub_plot.get(
+                                    "trigger_chapter", chapter_number
+                                ),
+                            )
+                            tracker.register_subplot(info)
+
+                # 记录本章出现的支线
+                chapter_plan = writing_result.get("chapter_plan", {})
+                subplot_in_chapter = chapter_plan.get("subplots", [])
+                if subplot_in_chapter:
+                    tracker.record_appearance(
+                        chapter_number=chapter_number,
+                        subplot_names=subplot_in_chapter,
+                    )
+
+                # 生成支线提醒
+                reminders = tracker.check_and_remind(current_chapter=chapter_number)
+                if reminders:
+                    reports["subplot_reminders"] = [
+                        r.to_dict() for r in reminders
+                    ]
+                    for reminder in reminders:
+                        logger.info(
+                            f"[QualityCheck] 支线提醒: {reminder.subplot_name} "
+                            f"(紧急度={reminder.urgency})"
+                        )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 支线追踪失败: {e}")
+
+        # 6. 章节节奏合规验证（节奏规划已前置到 crew_manager 中，此处仅做事后验证）
+        if settings.ENABLE_RHYTHM_PLANNING:
+            try:
+                from agents.chapter_rhythm_planner import (
+                    ChapterRhythmPlanner,
+                )
+
+                planner = ChapterRhythmPlanner(
+                    max_consecutive_battles=settings.MAX_CONSECUTIVE_BATTLE_CHAPTERS,
+                    min_daily_per_5=settings.MIN_DAILY_CHAPTERS_PER_5,
+                )
+
+                # 从前序章节推导类型列表
+                previous_types = self._infer_previous_chapter_types(
+                    previous_chapters_content
+                )
+                # 将当前章节内容也加入推断，验证实际写出的内容是否符合规划
+                actual_types = previous_types.copy()
+                current_inferred = self._infer_previous_chapter_types(
+                    {chapter_number: final_content}
+                )
+                if current_inferred:
+                    actual_types.extend(current_inferred)
+
+                plan = planner.plan_chapter(
+                    chapter_number=chapter_number,
+                    previous_types=previous_types,
+                )
+                reports["chapter_rhythm"] = {
+                    **plan.to_dict(),
+                    "validation_mode": True,
+                    "actual_chapter_type": (
+                        current_inferred[0].value if current_inferred else "unknown"
+                    ),
+                }
+                logger.info(
+                    f"[QualityCheck] 节奏合规验证: 第{chapter_number}章 "
+                    f"规划类型={plan.chapter_type.value}, "
+                    f"实际类型={current_inferred[0].value if current_inferred else 'unknown'}"
+                )
+            except Exception as e:
+                logger.warning(f"[QualityCheck] 节奏合规验证失败: {e}")
+
+        return reports
+
+    async def _load_previous_chapters_content(
+        self,
+        novel_id: UUID,
+        chapter_number: int,
+        limit: int = 10,
+    ) -> dict:
+        """加载前N章内容，供质量检查器使用.
+
+        Args:
+            novel_id: 小说ID
+            chapter_number: 当前章节号
+            limit: 加载的章节数量
+
+        Returns:
+            {章节号: 内容} 字典
+        """
+        content_dict = {}
+        try:
+            result = await self.db.execute(
+                select(Chapter)
+                .where(
+                    Chapter.novel_id == novel_id,
+                    Chapter.chapter_number < chapter_number,
+                )
+                .order_by(Chapter.chapter_number.desc())
+                .limit(limit)
+            )
+            chapters = result.scalars().all()
+            for ch in chapters:
+                if ch.content:
+                    content_dict[ch.chapter_number] = ch.content
+        except Exception as e:
+            logger.warning(f"[QualityCheck] 加载前序章节内容失败: {e}")
+        return content_dict
+
+    def _infer_previous_chapter_types(
+        self, previous_chapters_content: dict
+    ) -> list:
+        """从前序章节内容推断章节类型.
+
+        简单启发式推断：
+        - 包含大量战斗相关词汇 → BATTLE
+        - 包含修炼/突破等词汇 → TRAINING
+        - 包含探索/发现等词汇 → EXPLORATION
+        - 日常对话/互动为主 → DAILY
+
+        Args:
+            previous_chapters_content: {章节号: 内容}
+
+        Returns:
+            章节类型列表（按章节号排序）
+        """
+        from agents.chapter_rhythm_planner import ChapterType
+
+        battle_keywords = ["战斗", "攻击", "斩杀", "击杀", "一拳", "一剑", "出手", "大战"]
+        training_keywords = ["修炼", "突破", "境界", "灵力", "修炼室", "冥想"]
+        exploration_keywords = ["探索", "发现", "秘境", "遗迹", "调查", "寻找"]
+        daily_keywords = ["闲聊", "喝茶", "吃饭", "散步", "日常", "聊天"]
+
+        result = []
+        for ch_num in sorted(previous_chapters_content.keys()):
+            content = previous_chapters_content[ch_num]
+            battle_score = sum(content.count(kw) for kw in battle_keywords)
+            training_score = sum(content.count(kw) for kw in training_keywords)
+            exploration_score = sum(content.count(kw) for kw in exploration_keywords)
+            daily_score = sum(content.count(kw) for kw in daily_keywords)
+
+            scores = {
+                ChapterType.BATTLE: battle_score,
+                ChapterType.TRAINING: training_score,
+                ChapterType.EXPLORATION: exploration_score,
+                ChapterType.DAILY: daily_score,
+            }
+            best_type = max(scores, key=scores.get)
+            if scores[best_type] > 0:
+                result.append(best_type)
+            else:
+                result.append(ChapterType.BATTLE)  # 默认
+
+        return result
 
     # =========================================================================
     # 图数据库同步方法

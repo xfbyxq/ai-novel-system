@@ -86,6 +86,36 @@ async def test_client(db_session):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture
+async def client(test_client):
+    """client 别名，指向 test_client."""
+    yield test_client
+
+
+# ---------------------------------------------------------------------------
+# 共享测试数据 fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def test_novel(db_session):
+    """创建测试用小说."""
+    from core.models.novel import Novel
+
+    novel = Novel(
+        title="测试小说",
+        author="测试作者",
+        genre="都市",
+        tags=["测试"],
+        synopsis="这是一部测试用小说",
+        status="draft",
+    )
+    db_session.add(novel)
+    await db_session.commit()
+    await db_session.refresh(novel)
+    return novel
+
+
 # ---------------------------------------------------------------------------
 # 真实 HTTP 客户端（场景测试用）
 # ---------------------------------------------------------------------------

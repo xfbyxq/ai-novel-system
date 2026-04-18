@@ -206,14 +206,16 @@ class NovelTeamContext:
         # 情节大纲
         self.plot_outline: Dict[str, Any] = {}
 
-        # Agent输出历史
+        # 【修复 Bug 4】Agent输出历史，限制大小防止内存泄漏
         self.agent_outputs: List[AgentOutput] = []
+        self._max_agent_outputs = 50  # 最多保留最近50条输出
 
         # 角色状态追踪
         self.character_states: Dict[str, CharacterState] = {}
 
         # 时间线追踪
         self.timeline: List[TimelineEvent] = []
+        self._max_timeline_events = 100  # 最多保留100个时间线事件
         self.current_story_day: int = 1
 
         # 当前章节信息
@@ -230,14 +232,17 @@ class NovelTeamContext:
         # 伏笔追踪器引用（由外部注入）
         self.foreshadowing_tracker = None
 
-        # Agent审查反馈记录
+        # 【修复 Bug 4】Agent审查反馈记录，限制大小
         self.agent_reviews: List[AgentReview] = []
+        self._max_agent_reviews = 100  # 最多保留100条审查记录
 
-        # 迭代日志：记录 Writer-Editor 等循环的每轮信息
+        # 【修复 Bug 4】迭代日志，限制大小
         self.iteration_logs: List[Dict[str, Any]] = []
+        self._max_iteration_logs = 200  # 最多保留200条迭代日志
 
         # 投票记录
         self.voting_records: List[Dict[str, Any]] = []
+        self._max_voting_records = 50  # 最多保留50条投票记录
 
         logger.info(f"NovelTeamContext initialized for novel: {novel_id}")
 
@@ -309,6 +314,9 @@ class NovelTeamContext:
         """
         agent_output = AgentOutput(agent_name, output, subtask)
         self.agent_outputs.append(agent_output)
+        # 【修复 Bug 4】限制列表大小
+        if len(self.agent_outputs) > self._max_agent_outputs:
+            self.agent_outputs = self.agent_outputs[-self._max_agent_outputs:]
         self.current_steps += 1
         logger.debug(f"Agent output added: {agent_name}, steps: {self.current_steps}")
 
@@ -319,6 +327,9 @@ class NovelTeamContext:
         async with self._write_lock():
             agent_output = AgentOutput(agent_name, output, subtask)
             self.agent_outputs.append(agent_output)
+            # 【修复 Bug 4】限制列表大小，保留最新的 N 条
+            if len(self.agent_outputs) > self._max_agent_outputs:
+                self.agent_outputs = self.agent_outputs[-self._max_agent_outputs:]
             self.current_steps += 1
             logger.debug(
                 f"Agent output added (async): {agent_name}, steps: {self.current_steps}"
@@ -420,6 +431,9 @@ class NovelTeamContext:
             location=location,
         )
         self.timeline.append(timeline_event)
+        # 【修复 Bug 4】限制列表大小
+        if len(self.timeline) > self._max_timeline_events:
+            self.timeline = self.timeline[-self._max_timeline_events:]
         logger.info(
             f"[Timeline] 事件添加: 第{chapter_number}章, 故事第{self.current_story_day}天"
         )
@@ -441,6 +455,9 @@ class NovelTeamContext:
                 location=location,
             )
             self.timeline.append(timeline_event)
+            # 【修复 Bug 4】限制列表大小
+            if len(self.timeline) > self._max_timeline_events:
+                self.timeline = self.timeline[-self._max_timeline_events:]
             logger.info(
                 f"[Timeline] 事件添加(async): 第{chapter_number}章, 故事第{self.current_story_day}天"
             )
@@ -488,6 +505,9 @@ class NovelTeamContext:
     def add_review(self, review: "AgentReview"):
         """记录一次 Agent 审查反馈（同步版本）."""
         self.agent_reviews.append(review)
+        # 【修复 Bug 4】限制列表大小
+        if len(self.agent_reviews) > self._max_agent_reviews:
+            self.agent_reviews = self.agent_reviews[-self._max_agent_reviews:]
         logger.debug(
             f"Review added: {review.reviewer} -> {review.target_agent}, "
             f"score={review.score}, passed={review.passed}"
@@ -497,6 +517,9 @@ class NovelTeamContext:
         """记录一次 Agent 审查反馈（异步版本，线程安全）."""
         async with self._write_lock():
             self.agent_reviews.append(review)
+            # 【修复 Bug 4】限制列表大小
+            if len(self.agent_reviews) > self._max_agent_reviews:
+                self.agent_reviews = self.agent_reviews[-self._max_agent_reviews:]
             logger.debug(
                 f"Review added (async): {review.reviewer} -> {review.target_agent}, "
                 f"score={review.score}, passed={review.passed}"
@@ -510,23 +533,35 @@ class NovelTeamContext:
         """记录一次迭代信息（同步版本）."""
         log_entry.setdefault("timestamp", datetime.now().isoformat())
         self.iteration_logs.append(log_entry)
+        # 【修复 Bug 4】限制列表大小
+        if len(self.iteration_logs) > self._max_iteration_logs:
+            self.iteration_logs = self.iteration_logs[-self._max_iteration_logs:]
 
     async def add_iteration_log_async(self, log_entry: Dict[str, Any]):
         """记录一次迭代信息（异步版本，线程安全）."""
         async with self._write_lock():
             log_entry.setdefault("timestamp", datetime.now().isoformat())
             self.iteration_logs.append(log_entry)
+            # 【修复 Bug 4】限制列表大小
+            if len(self.iteration_logs) > self._max_iteration_logs:
+                self.iteration_logs = self.iteration_logs[-self._max_iteration_logs:]
 
     def add_voting_record(self, record: Dict[str, Any]):
         """记录一次投票结果（同步版本）."""
         record.setdefault("timestamp", datetime.now().isoformat())
         self.voting_records.append(record)
+        # 【修复 Bug 4】限制列表大小
+        if len(self.voting_records) > self._max_voting_records:
+            self.voting_records = self.voting_records[-self._max_voting_records:]
 
     async def add_voting_record_async(self, record: Dict[str, Any]):
         """记录一次投票结果（异步版本，线程安全）."""
         async with self._write_lock():
             record.setdefault("timestamp", datetime.now().isoformat())
             self.voting_records.append(record)
+            # 【修复 Bug 4】限制列表大小
+            if len(self.voting_records) > self._max_voting_records:
+                self.voting_records = self.voting_records[-self._max_voting_records:]
 
     def build_enhanced_context(self, chapter_number: int) -> str:
         """

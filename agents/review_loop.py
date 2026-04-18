@@ -24,7 +24,7 @@ from llm.qwen_client import QwenClient
 EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查章节内容并给出详细评分和润色.
 
 你的工作包含两个部分：
-1. 对内容进行多维度精确评分（5个维度）
+1. 对内容进行多维度精确评分（7个维度）
 2. 润色并输出修改后的完整内容
 
 【精确评分维度】（1-10分）：
@@ -33,6 +33,8 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 - pacing（节奏感）：叙事张弛是否有度？紧张与舒缓是否交替得当？详略安排是否合理？场景切换是否流畅？情绪曲线是否有起伏？
 - setting_consistency（设定一致性）：世界观是否前后一致？时间线是否清晰？力量体系是否遵循规则？
 - immersion（代入感）：角色内心活动是否真实可信？情感铺垫是否到位？读者是否能产生共鸣？对话是否推动情感发展？
+- style_consistency（风格一致性）：章节整体风格是否符合小说定位（如"轻松幽默"）？是否包含适度的幽默元素？有无风格偏离？
+- character_agency（角色主动性）：重要配角是否有主动行为（而非全程被动）？每个角色是否展现了情感多样性？
 
 【评分锚点示例】：
 - 6.0分：基本合格，逻辑无硬伤，但描写平淡、节奏平板、情感苍白
@@ -49,7 +51,16 @@ EDITOR_REVIEW_SYSTEM = """你是一位资深的网络小说编辑，负责审查
 1. location: 问题位置（如：第3段、开篇场景、结尾转折）
 2. description: 问题描述（精炼概括，20字以内）
 3. severity: 严重程度（high/medium/low）
-4. suggestion: 修订建议（具体可操作）"""
+4. suggestion: 修订建议（具体可操作）
+
+【重点检查项】：
+1. 词汇重复：同一短语/比喻是否在连续章节中反复出现（如"瞳孔微缩"、"指节泛白"、"古井般的眼神"）
+2. 句式模板化：是否大量使用"XX，目光YY"等固定句式
+3. 情感单调：主角是否只有单一情感状态（如只有"冷静"），缺乏愤怒/温柔/幽默等变化
+4. 配角被动：配角是否全程只有被动反应（害怕/哭泣），缺乏主动行为
+5. 风格偏离：章节是否偏离了"轻松幽默"的风格定位，缺少幽默元素
+6. 章节边界：本章开头是否自然承接上一章结尾？有无重复前章内容？
+7. 设定展示：世界观信息是否通过角色行动/对话自然展现？有无百科式说明段落？"""
 
 EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
 
@@ -73,7 +84,9 @@ EDITOR_REVIEW_TASK = """请审查并润色以下章节内容.
         "vividness": 分数,
         "pacing": 分数,
         "setting_consistency": 分数,
-        "immersion": 分数
+        "immersion": 分数,
+        "style_consistency": 分数,
+        "character_agency": 分数
     }},
     "overall_assessment": "整体评价（1-2句话概括章节质量）",
     "issues": [
@@ -235,6 +248,8 @@ class ReviewLoopHandler(BaseReviewLoopHandler[str, ReviewLoopResult, ChapterQual
             "pacing": "节奏感",
             "setting_consistency": "设定一致性",
             "immersion": "代入感",
+            "style_consistency": "风格一致性",
+            "character_agency": "角色主动性",
         }
 
     def _build_reviewer_task_prompt(

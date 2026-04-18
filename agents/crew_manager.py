@@ -192,9 +192,11 @@ class NovelCrewManager:
         )
 
         # 章节数据缓存（供压缩器和相似度检测器使用）
+        # 【修复 Bug 2】添加缓存大小限制，防止内存泄漏
         self._chapter_summaries: dict[int, dict] = {}
         self._chapter_contents: dict[int, str] = {}
         self._chapter_detailed_outlines: dict[int, dict] = {}
+        self._max_chapter_cache_size = 20  # 最多缓存最近20章
 
         # 跨章节人物关系累积（用于关系确认）
         self._character_relationship_accumulator: dict[tuple[str, str], dict] = {}
@@ -215,10 +217,13 @@ class NovelCrewManager:
         self.reflection_agent = None
 
         # 连贯性模块缓存（按小说ID缓存）
+        # 【修复 Bug 2】限制缓存大小
         self._continuity_modules: dict[str, Any] = {}
+        self._max_continuity_cache_size = 5  # 最多缓存5个小说的连贯性模块
 
         # 伏笔追踪器缓存（按小说ID缓存）
         self._foreshadowing_trackers: dict[str, Any] = {}
+        self._max_foreshadowing_cache_size = 5  # 最多缓存5个小说的伏笔追踪器
 
     def _get_continuity_module(self, novel_id: str, novel_data: dict) -> Any:
         """获取或创建连贯性模块.
@@ -237,7 +242,52 @@ class NovelCrewManager:
                 novel_id, novel_data, qwen_client=self.client
             )
             logger.info(f"创建连贯性模块: novel_id={novel_id}")
+            # 【修复 Bug 2】创建后检查缓存大小
+            self._evict_stale_caches(novel_data.get("id", ""), chapter_number=0)
         return self._continuity_modules[novel_id]
+
+    def _evict_stale_caches(self, current_novel_id: str = "", chapter_number: int = 0) -> None:
+        """清理过期的缓存，防止内存泄漏.
+
+        【修复 Bug 2】在缓存增长时自动清理旧数据。
+
+        Args:
+            current_novel_id: 当前小说ID（保留不清理）
+            chapter_number: 当前章节号（用于决定哪些章节缓存可以清理）
+        """
+        # 清理章节缓存：保留最近 N 章
+        for cache_name, cache_dict in [
+            ("_chapter_summaries", self._chapter_summaries),
+            ("_chapter_contents", self._chapter_contents),
+            ("_chapter_detailed_outlines", self._chapter_detailed_outlines),
+        ]:
+            if len(cache_dict) > self._max_chapter_cache_size:
+                # 保留最大的 N 个章节号
+                keys_to_keep = set(sorted(cache_dict.keys(), reverse=True)[:self._max_chapter_cache_size])
+                keys_to_remove = set(cache_dict.keys()) - keys_to_keep
+                for key in keys_to_remove:
+                    del cache_dict[key]
+                if keys_to_remove:
+                    logger.debug(f"[CacheEvict] {cache_name}: 清理 {len(keys_to_remove)} 个过期条目")
+
+        # 清理连贯性模块缓存：保留最多 N 个
+        if len(self._continuity_modules) > self._max_continuity_cache_size:
+            # 保留当前小说和最近使用的 N-1 个
+            keys = list(self._continuity_modules.keys())
+            keys_to_remove = [k for k in keys if k != current_novel_id][:-max(0, self._max_continuity_cache_size - 1)]
+            for key in keys_to_remove:
+                del self._continuity_modules[key]
+            if keys_to_remove:
+                logger.debug(f"[CacheEvict] _continuity_modules: 清理 {len(keys_to_remove)} 个过期模块")
+
+        # 清理伏笔追踪器缓存：保留最多 N 个
+        if len(self._foreshadowing_trackers) > self._max_foreshadowing_cache_size:
+            keys = list(self._foreshadowing_trackers.keys())
+            keys_to_remove = [k for k in keys if k != current_novel_id][:-max(0, self._max_foreshadowing_cache_size - 1)]
+            for key in keys_to_remove:
+                del self._foreshadowing_trackers[key]
+            if keys_to_remove:
+                logger.debug(f"[CacheEvict] _foreshadowing_trackers: 清理 {len(keys_to_remove)} 个过期追踪器")
 
     # ============================================================
     # Agent 调用基础方法
@@ -787,6 +837,75 @@ class NovelCrewManager:
                         f"[连贯性] 从第 {chapter_number - 1} 章提取 {len(constraints)} 个约束"
                     )
 
+        # ── 0.8 节奏规划（前置于策划之前） ──────────────────────
+        rhythm_guidance = ""
+        from backend.config import settings as app_settings
+        if app_settings.ENABLE_RHYTHM_PLANNING:
+            try:
+                from agents.chapter_rhythm_planner import ChapterRhythmPlanner
+
+                rhythm_planner = ChapterRhythmPlanner(
+                    max_consecutive_battles=app_settings.MAX_CONSECUTIVE_BATTLE_CHAPTERS,
+                    min_daily_per_5=app_settings.MIN_DAILY_CHAPTERS_PER_5,
+                )
+                # 从已缓存的章节内容推断前序章节类型
+                previous_types = self._infer_chapter_types_from_cache(chapter_number)
+                rhythm_plan = rhythm_planner.plan_chapter(
+                    chapter_number=chapter_number,
+                    previous_types=previous_types,
+                )
+                rhythm_guidance = rhythm_planner.build_planner_prompt(rhythm_plan)
+                logger.info(
+                    f"🎵 节奏规划：第{chapter_number}章 类型={rhythm_plan.chapter_type.value}, "
+                    f"紧张度={rhythm_plan.tension_level.name}"
+                )
+            except Exception as e:
+                logger.warning(f"节奏规划失败（不影响主流程）: {e}")
+
+        # ── 0.9 支线情节提醒（前置于策划之前） ────────────────────
+        subplot_reminder_text = ""
+        if app_settings.ENABLE_SUBPLOT_TRACKING:
+            try:
+                from agents.subplot_tracker import SubplotInfo, SubplotTracker
+
+                subplot_tracker = SubplotTracker(
+                    max_chapters_without_appearance=app_settings.MAX_CHAPTERS_WITHOUT_SUBPLOT,
+                )
+                # 从大纲中提取支线并注册
+                sub_plots = plot_outline.get("sub_plots", [])
+                for sp in sub_plots:
+                    if isinstance(sp, dict):
+                        sp_name = sp.get("name", "") or sp.get("title", "")
+                        if sp_name:
+                            info = SubplotInfo(
+                                name=sp_name,
+                                description=sp.get("description", ""),
+                                importance=sp.get("importance", 5),
+                                trigger_chapter=sp.get("trigger_chapter", 1),
+                                involved_characters=sp.get("involved_characters", []),
+                            )
+                            subplot_tracker.register_subplot(info)
+
+                # 生成支线提醒
+                reminders = subplot_tracker.check_and_remind(
+                    current_chapter=chapter_number
+                )
+                if reminders:
+                    lines = ["\n【支线情节插入提醒】"]
+                    for r in reminders:
+                        lines.append(
+                            f"- 支线「{r.subplot_name}」（紧急度={r.urgency}）"
+                            f"：{r.reason}"
+                        )
+                        if r.suggested_scene:
+                            lines.append(f"  建议：{r.suggested_scene}")
+                    subplot_reminder_text = "\n".join(lines)
+                    logger.info(
+                        f"📖 支线提醒：第{chapter_number}章生成 {len(reminders)} 个提醒"
+                    )
+            except Exception as e:
+                logger.warning(f"支线提醒生成失败（不影响主流程）: {e}")
+
         # ── 1. 章节策划 ──────────────────────────────────────
         planner_task = self.pm.format(
             self.pm.CHAPTER_PLANNER_TASK,
@@ -798,6 +917,10 @@ class NovelCrewManager:
             previous_summary=previous_chapters_summary or "（本章为第一章）",
             character_states=character_states or "（初始状态）",
             continuity_constraints=continuity_constraints,
+            rhythm_plan=rhythm_guidance,
+            subplot_reminder=subplot_reminder_text,
+            time_constraint="",
+            previous_time_mark=self._get_previous_time_mark(chapter_number),
         )
 
         chapter_plan = await self._call_agent(
@@ -1059,6 +1182,74 @@ class NovelCrewManager:
             volume_summaries=volume_summaries,
         )
 
+        # ── [Task 3] 角色情感约束生成（注入 Writer 提示词） ──────────
+        emotion_constraints_text = ""
+        if app_settings.ENABLE_EMOTION_DIVERSITY_CHECK:
+            try:
+                from agents.emotion_diversity_checker import (
+                    CharacterEmotionalProfile,
+                    EmotionDiversityChecker,
+                )
+
+                emotion_checker = EmotionDiversityChecker(
+                    window_chapters=app_settings.EMOTION_DIVERSITY_WINDOW,
+                    min_emotion_variety=app_settings.MIN_EMOTION_VARIETY,
+                )
+                # 注册主角和重要配角的情感档案
+                for char in characters:
+                    if not isinstance(char, dict):
+                        continue
+                    char_name = char.get("name", "")
+                    role_type = char.get("role_type", "minor")
+                    if not char_name:
+                        continue
+                    if role_type == "protagonist":
+                        profile = CharacterEmotionalProfile.default_for_protagonist(
+                            char_name
+                        )
+                    elif role_type == "supporting":
+                        profile = CharacterEmotionalProfile.default_for_supporting(
+                            char_name
+                        )
+                    else:
+                        continue
+                    emotion_checker.register_profile(profile)
+
+                # 收集前序章节内容用于情感分析
+                prev_chapters_for_emotion = {
+                    ch_num: content
+                    for ch_num, content in self._chapter_contents.items()
+                    if ch_num < chapter_number
+                }
+                constraint_lines = []
+                for char in characters:
+                    if not isinstance(char, dict):
+                        continue
+                    char_name = char.get("name", "")
+                    role_type = char.get("role_type", "minor")
+                    if role_type not in ("protagonist", "supporting") or not char_name:
+                        continue
+                    # 检查前序章节中的情感多样性
+                    report = emotion_checker.check(
+                        content="",  # 当前章还未写，传空串
+                        character_name=char_name,
+                        chapter_number=chapter_number,
+                        previous_chapters=prev_chapters_for_emotion,
+                    )
+                    # 构建约束文本
+                    prompt_text = emotion_checker.build_writer_prompt(report)
+                    if prompt_text:
+                        constraint_lines.append(prompt_text)
+
+                if constraint_lines:
+                    emotion_constraints_text = "\n\n".join(constraint_lines)
+                    logger.info(
+                        f"🎭 情感约束：为第{chapter_number}章生成 "
+                        f"{len(constraint_lines)} 个角色情感约束"
+                    )
+            except Exception as e:
+                logger.warning(f"情感约束生成失败（不影响主流程）: {e}")
+
         # 选择带查询能力的 Writer prompt 还是普通的
         if self.enable_query:
             writer_system = self.pm.format(
@@ -1078,6 +1269,7 @@ class NovelCrewManager:
                 previous_key_events=previous_key_events,
                 compressed_context=compressed.to_prompt(),
                 foreshadowing_reminder=foreshadowing_reminder,
+                emotion_constraints=emotion_constraints_text,
             )
         else:
             writer_system = self.pm.format(self.pm.WRITER_SYSTEM, genre=genre)
@@ -1093,6 +1285,7 @@ class NovelCrewManager:
                 previous_key_events=previous_key_events,
                 compressed_context=compressed.to_prompt(),
                 foreshadowing_reminder=foreshadowing_reminder,
+                emotion_constraints=emotion_constraints_text,
             )
 
         draft = await self._call_agent(
@@ -1784,6 +1977,73 @@ class NovelCrewManager:
                     elif isinstance(ms, dict):
                         parts.append(f"    - {ms.get('event', str(ms))}")
         return parts
+
+    def _get_previous_time_mark(self, chapter_number: int) -> str:
+        """获取上一章的时间标记，用于时间单调性约束.
+
+        从章节摘要缓存中提取时间信息，如果没有则返回默认提示。
+
+        Args:
+            chapter_number: 当前章节号
+
+        Returns:
+            时间标记字符串
+        """
+        prev_ch = chapter_number - 1
+        if prev_ch < 1:
+            return "本章为第一章，无时间约束"
+
+        prev_summary = self._chapter_summaries.get(prev_ch, {})
+        # 尝试从摘要中提取时间相关信息
+        time_mark = prev_summary.get("time_mark", "")
+        if time_mark:
+            return f"第{prev_ch}章结束时间标记：{time_mark}"
+
+        # 从摘要文本中推断时间
+        summary_text = prev_summary.get("summary", "")
+        time_keywords = [
+            "深夜", "夜晚", "働晚", "清晨", "上午", "中午",
+            "下午", "黄昏", "凌晨", "早晨", "次日", "翠日",
+        ]
+        found_times = [kw for kw in time_keywords if kw in summary_text]
+        if found_times:
+            return f"第{prev_ch}章结束时段：{found_times[-1]}"
+
+        return f"第{prev_ch}章时间未明确标注，请注意时间逻辑一致性"
+
+    def _infer_chapter_types_from_cache(self, chapter_number: int) -> list:
+        """从已缓存的章节内容推断前序章节类型.
+
+        使用简单启发式关键词匹配推断章节类型，供 ChapterRhythmPlanner 使用。
+
+        Args:
+            chapter_number: 当前章节号
+
+        Returns:
+            前序章节的 ChapterType 列表
+        """
+        from agents.chapter_rhythm_planner import ChapterType
+
+        battle_kw = ["战斗", "攻击", "斩杀", "击杀", "一拳", "一剑", "出手", "大战"]
+        training_kw = ["修炼", "突破", "境界", "灵力", "修炼室", "冥想"]
+        exploration_kw = ["探索", "发现", "秘境", "遗迹", "调查", "寻找"]
+        daily_kw = ["闲聊", "喝茶", "吃饭", "散步", "日常", "聊天"]
+
+        result = []
+        for ch_num in sorted(self._chapter_contents.keys()):
+            if ch_num >= chapter_number:
+                break
+            content = self._chapter_contents[ch_num]
+            scores = {
+                ChapterType.BATTLE: sum(content.count(kw) for kw in battle_kw),
+                ChapterType.TRAINING: sum(content.count(kw) for kw in training_kw),
+                ChapterType.EXPLORATION: sum(content.count(kw) for kw in exploration_kw),
+                ChapterType.DAILY: sum(content.count(kw) for kw in daily_kw),
+            }
+            best_type = max(scores, key=scores.get)  # type: ignore[arg-type]
+            result.append(best_type if scores[best_type] > 0 else ChapterType.BATTLE)
+
+        return result
 
     def _build_previous_key_events(self, chapter_number: int) -> str:
         """构建前几章的关键事件列表（用于防止重复）."""
